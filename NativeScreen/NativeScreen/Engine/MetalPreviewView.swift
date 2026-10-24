@@ -195,7 +195,7 @@ public struct MetalPreviewView: NSViewRepresentable {
 
                 let nextTimelineMs = session.playheadTimelineMs + dtMs
                 if nextTimelineMs >= session.timeMapper.totalTimelineDurationMs {
-                    session.playheadTimelineMs = 0.0
+                    session.playheadTimelineMs = session.timeMapper.totalTimelineDurationMs
                     session.isPlaying = false
                     view.isPaused = true
                     view.enableSetNeedsDisplay = true

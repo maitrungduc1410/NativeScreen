@@ -13,8 +13,9 @@ public struct ProjectEditorWindowView: View {
     @State private var draftProjectName = ""
     @State private var isHoveringTitle = false
     @State private var titleBarFrameInWindow: CGRect = .zero
-    @State private var trafficLightCenterY: CGFloat = 19.0
-    @State private var trafficLightRightEdgeX: CGFloat = 78.0
+    @State private var trafficLightCenterY: CGFloat = 26.0
+    @State private var trafficLightRightEdgeX: CGFloat = 82.0
+    @State private var cropModalSourceImage: NSImage?
     @FocusState private var isTitleFieldFocused: Bool
 
     @State private var isShowingExportSheet = false
@@ -201,7 +202,7 @@ public struct ProjectEditorWindowView: View {
                 }
                 .padding(.trailing, 14)
             }
-            .frame(height: max(36, trafficLightCenterY * 2.0))
+            .frame(height: max(50, trafficLightCenterY * 2.0))
             .background(Color(red: 0.05, green: 0.05, blue: 0.07))
             .zIndex(80)
 
@@ -210,8 +211,9 @@ public struct ProjectEditorWindowView: View {
             // 2. CENTER WORKSPACE: Preview Canvas + Floating Left Quick Dock + Right Inspector Sidebar
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    // Top Sub-Toolbar Right Above Preview Canvas (layout: Aspect Ratio + Preview Quality)
-                    HStack(spacing: 16) {
+                    // Top Sub-Toolbar Right Above Preview Canvas (Aspect Ratio + Crop + Reel Mode + Extract Frame)
+                    HStack(spacing: 10) {
+                        // 1. Aspect Ratio Menu
                         Menu {
                             Button("Auto (Match Source)") {
                                 session.mutate { $0.canvas.aspectRatioMode = .auto }
@@ -226,39 +228,143 @@ public struct ProjectEditorWindowView: View {
                                 }
                             }
                         } label: {
-                            HStack(spacing: 5) {
+                            HStack(spacing: 6) {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 11.5))
                                     .foregroundStyle(.white.opacity(0.75))
                                 Text(session.document.canvas.aspectRatioMode == .auto
                                      ? "Auto Aspect"
                                      : session.document.canvas.aspectRatioPreset.label)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
                                     .lineLimit(1)
                             }
                             .fixedSize()
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         }
                         .menuStyle(.borderlessButton)
                         .fixedSize()
 
-                        HStack(spacing: 5) {
-                            Image(systemName: "dial.high")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            Text("Preview quality")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            Text("Full")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.85))
+                        // 2. Crop Button (Opens Interactive Crop Modal)
+                        let hasCustomCrop = (session.document.canvas.cropRect01 != .full)
+                        Button {
+                            session.isPlaying = false
+                            Task {
+                                cropModalSourceImage = await session.extractRawSourceFrameNSImage()
+                                session.isCropModalActive = true
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "crop")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Crop")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(hasCustomCrop ? Color(red: 0.62, green: 0.52, blue: 1.0) : .white.opacity(0.88))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(
+                                hasCustomCrop
+                                    ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.20)
+                                    : Color.white.opacity(0.06),
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(
+                                        hasCustomCrop ? Color(red: 0.54, green: 0.44, blue: 1.0).opacity(0.6) : Color.clear,
+                                        lineWidth: 1
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        // 3. Reel Mode Button (TikTok & Instagram Reels Safe-Zone Overlay & 2)
+                        HStack(spacing: 4) {
+                            Button {
+                                withAnimation(.easeOut(duration: 0.16)) {
+                                    session.isReelModeActive.toggle()
+                                    if session.isReelModeActive {
+                                        session.mutate {
+                                            $0.canvas.aspectRatioMode = .preset
+                                            $0.canvas.aspectRatioPreset = .vertical9x16
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "iphone")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Reel mode")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundStyle(
+                                    session.isReelModeActive
+                                        ? Color(red: 0.65, green: 0.56, blue: 1.0)
+                                        : .white.opacity(0.88)
+                                )
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 6)
+                                .background(
+                                    session.isReelModeActive
+                                        ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.22)
+                                        : Color.white.opacity(0.06),
+                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .strokeBorder(
+                                            session.isReelModeActive
+                                                ? Color(red: 0.54, green: 0.44, blue: 1.0).opacity(0.65)
+                                                : Color.clear,
+                                            lineWidth: 1
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            if session.isReelModeActive {
+                                Picker("", selection: $session.reelPlatformStyle) {
+                                    ForEach(ReelPlatformStyle.allCases) { style in
+                                        Text(style.rawValue).tag(style)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+                                .frame(width: 112)
+                                .controlSize(.small)
+                            }
+                        }
+
+                        // 4. Extract Current Frame Button (Save PNG or Copy to Clipboard)
+                        Button {
+                            session.saveCurrentFrameAsPNG()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "camera.viewfinder")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Save frame")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(.white.opacity(0.88))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Save Current Frame as PNG…") {
+                                session.saveCurrentFrameAsPNG()
+                            }
+                            Button("Copy Current Frame to Clipboard") {
+                                session.copyCurrentFrameToClipboard()
+                            }
                         }
                     }
-                    .padding(.top, 10)
-                    .padding(.bottom, 4)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
                     .frame(maxWidth: .infinity)
                     .background(Color(red: 0.03, green: 0.03, blue: 0.04))
 
@@ -272,10 +378,14 @@ public struct ProjectEditorWindowView: View {
                         ZStack {
                             Color(red: 0.03, green: 0.03, blue: 0.04)
 
-                            // GPU Preview + Clean Source-Locked Mask Handle Overlay
+                            // GPU Preview + Clean Source-Locked Mask Handle Overlay + Reel Safe-Zone Overlay
                             ZStack {
                                 MetalPreviewView(session: session)
                                 InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
+
+                                if session.isReelModeActive {
+                                    ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
+                                }
                             }
                             .frame(width: fittedSize.width, height: fittedSize.height)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -330,53 +440,153 @@ public struct ProjectEditorWindowView: View {
 
                                 Spacer()
                             }
+
+                            // Interactive Crop Modal Overlay
+                            if session.isCropModalActive {
+                                InteractiveCropModalOverlayView(
+                                    session: session,
+                                    uncroppedScreenImage: cropModalSourceImage
+                                )
+                                .zIndex(150)
+                                .transition(.opacity)
+                            }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
 
-                    // Transport Playback Bar
-                    HStack(spacing: 22) {
-                        Text(formatTimecode(session.effectivePreviewTimelineMs))
-                            .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
-                            .foregroundStyle(.secondary)
+                    // Unified Transport Playback & Timeline Bar (layout:
+                    // Left = Split Tool `✂️` | Center = Timecodes + Jump Start / Play / Jump End with Top Tooltips | Right = Extract Frame + Timeline Zoom Slider)
+                    ZStack {
+                        // Left: Split Tool Button (`✂️`)
+                        HStack(spacing: 8) {
+                            InstantTooltipButton(
+                                tooltip: session.isSplitModeActive ? "Exit Split Tool (ESC)" : "Split clip, zoom, or mask",
+                                edge: .top,
+                                isActive: session.isSplitModeActive,
+                                size: 32,
+                                cornerRadius: 8
+                            ) {
+                                session.isSplitModeActive.toggle()
+                            } label: {
+                                Image(systemName: "scissors")
+                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .foregroundStyle(session.isSplitModeActive ? .white : .white.opacity(0.80))
+                            }
 
-                        Button {
-                            session.isPlaying = false
-                            session.seek(toTimelineMs: 0.0)
-                        } label: {
-                            Image(systemName: "backward.end")
-                                .font(.system(size: 13.5, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.78))
+                            if session.selectedMaskId != nil || session.selectedZoomId != nil || (session.selectedSliceId != nil && session.document.timeline.slices.count > 1) {
+                                InstantTooltipButton(
+                                    tooltip: "Delete selected item (Backspace)",
+                                    edge: .top,
+                                    size: 32,
+                                    cornerRadius: 8
+                                ) {
+                                    session.deleteSelectedTimelineItem()
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(.red.opacity(0.88))
+                                }
+                            }
+
+                            Spacer()
                         }
-                        .buttonStyle(.plain)
+                        .padding(.leading, 14)
 
-                        Button {
-                            session.isPlaying.toggle()
-                        } label: {
-                            Image(systemName: session.isPlaying ? "pause.circle" : "play.circle")
-                                .font(.system(size: 27, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.95))
+                        // Center: Timecode + 3 Transport Buttons with Hover Highlight & Top Tooltips
+                        HStack(spacing: 16) {
+                            Text(formatTimecode(session.effectivePreviewTimelineMs))
+                                .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 64, alignment: .trailing)
+
+                            InstantTooltipButton(
+                                tooltip: "Jump to start",
+                                edge: .top,
+                                size: 32,
+                                cornerRadius: 8
+                            ) {
+                                session.isPlaying = false
+                                session.seek(toTimelineMs: 0.0)
+                            } label: {
+                                Image(systemName: "backward.end")
+                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+
+                            InstantTooltipButton(
+                                tooltip: session.isPlaying ? "Pause (Space)" : "Play (Space)",
+                                edge: .top,
+                                size: 36,
+                                cornerRadius: 9
+                            ) {
+                                session.togglePlayPause()
+                            } label: {
+                                Image(systemName: session.isPlaying ? "pause.circle" : "play.circle")
+                                    .font(.system(size: 26, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.95))
+                            }
+                            .keyboardShortcut(.space, modifiers: [])
+
+                            InstantTooltipButton(
+                                tooltip: "Jump to end",
+                                edge: .top,
+                                size: 32,
+                                cornerRadius: 8
+                            ) {
+                                session.isPlaying = false
+                                session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
+                            } label: {
+                                Image(systemName: "forward.end")
+                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+
+                            Text(formatTimecode(session.timeMapper.totalTimelineDurationMs))
+                                .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
+                                .foregroundStyle(.secondary.opacity(0.75))
+                                .frame(width: 64, alignment: .leading)
                         }
-                        .buttonStyle(.plain)
-                        .keyboardShortcut(.space, modifiers: [])
 
-                        Button {
-                            session.isPlaying = false
-                            session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
-                        } label: {
-                            Image(systemName: "forward.end")
-                                .font(.system(size: 13.5, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.78))
+                        // Right: Extract Current Frame Icon + Timeline Zoom Slider
+                        HStack(spacing: 10) {
+                            Spacer()
+
+                            InstantTooltipButton(
+                                tooltip: "Save current frame as PNG",
+                                edge: .top,
+                                size: 32,
+                                cornerRadius: 8
+                            ) {
+                                session.saveCurrentFrameAsPNG()
+                            } label: {
+                                Image(systemName: "camera.viewfinder")
+                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.82))
+                            }
+                            .contextMenu {
+                                Button("Save Current Frame as PNG…") {
+                                    session.saveCurrentFrameAsPNG()
+                                }
+                                Button("Copy Current Frame to Clipboard") {
+                                    session.copyCurrentFrameToClipboard()
+                                }
+                            }
+
+                            Text(String(format: "%.0fx", session.timelineZoom))
+                                .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 24, alignment: .trailing)
+
+                            Slider(value: $session.timelineZoom, in: 1.0...6.0)
+                                .frame(width: 96)
+                                .controlSize(.small)
                         }
-                        .buttonStyle(.plain)
-
-                        Text(formatTimecode(session.timeMapper.totalTimelineDurationMs))
-                            .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
-                            .foregroundStyle(.secondary.opacity(0.75))
+                        .padding(.trailing, 14)
                     }
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
                     .background(Color(red: 0.03, green: 0.03, blue: 0.04))
+                    .zIndex(70)
                 }
                 .zIndex(1)
 
@@ -656,7 +866,7 @@ private struct WindowTitlebarCleaner: NSViewRepresentable {
                         CGPoint(x: zoomBtn.bounds.maxX, y: zoomBtn.bounds.midY),
                         to: nil
                     )
-                    let centerYFromTop = max(14.0, min(28.0, window.frame.height - closeCenterInWin.y))
+                    let centerYFromTop = max(20.0, min(32.0, window.frame.height - closeCenterInWin.y))
                     let rightX = max(68.0, min(104.0, zoomRightInWin.x))
                     self.onMetricsChanged?(centerYFromTop, rightX)
                 }

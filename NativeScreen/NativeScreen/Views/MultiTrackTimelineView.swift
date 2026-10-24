@@ -10,7 +10,6 @@ import AppKit
 /// - **Universal Split Blade (`✂️`)** + Cross-track vertical drag for Masks + Auto-prune empty tracks.
 public struct MultiTrackTimelineView: View {
     @Bindable var session: ProjectSession
-    @State private var timelineZoom: Double = 1.0
     @State private var pinchBaseZoom: Double?
 
     // Track scroll offsets for synchronized Sticky Ruler & Slim 4pt Scrollbars
@@ -32,101 +31,7 @@ public struct MultiTrackTimelineView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // 1. Sleek Icon-Only Action Bar with Instant Hover Tooltips
-            HStack(spacing: 6) {
-                InstantTooltipButton(
-                    tooltip: session.isSplitModeActive ? "Exit Split Tool (ESC)" : "Split Tool (Click any Clip, Zoom, or Mask)",
-                    edge: .trailing,
-                    isActive: session.isSplitModeActive,
-                    size: 28,
-                    cornerRadius: 7
-                ) {
-                    session.isSplitModeActive.toggle()
-                } label: {
-                    Image(systemName: "scissors")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(session.isSplitModeActive ? .white : .secondary)
-                }
-
-                Divider()
-                    .frame(height: 16)
-                    .padding(.horizontal, 2)
-
-                InstantTooltipButton(
-                    tooltip: "Add Zoom at Playhead",
-                    edge: .trailing,
-                    size: 28,
-                    cornerRadius: 7
-                ) {
-                    session.addZoomAtPlayhead()
-                } label: {
-                    Image(systemName: "plus.magnifyingglass")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                InstantTooltipButton(
-                    tooltip: "Sensitive data mask",
-                    edge: .trailing,
-                    size: 28,
-                    cornerRadius: 7
-                ) {
-                    session.addMaskAtPlayhead(type: .blur, style: .gaussian)
-                } label: {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                InstantTooltipButton(
-                    tooltip: "Spotlight mask",
-                    edge: .trailing,
-                    size: 28,
-                    cornerRadius: 7
-                ) {
-                    session.addMaskAtPlayhead(type: .spotlight, style: .dim)
-                } label: {
-                    Image(systemName: "viewfinder.rectangular")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                if session.selectedMaskId != nil || session.selectedZoomId != nil || (session.selectedSliceId != nil && session.document.timeline.slices.count > 1) {
-                    InstantTooltipButton(
-                        tooltip: "Delete Selected (Backspace)",
-                        edge: .trailing,
-                        size: 28,
-                        cornerRadius: 7
-                    ) {
-                        session.deleteSelectedTimelineItem()
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.red.opacity(0.85))
-                    }
-                }
-
-                Spacer()
-
-                // Timeline Zoom Slider (`1x` - `6x`)
-                HStack(spacing: 6) {
-                    Text(String(format: "%.1fx", timelineZoom))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-
-                    Slider(value: $timelineZoom, in: 1.0...6.0)
-                        .frame(width: 96)
-                        .controlSize(.mini)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 5)
-            .background(Color(red: 0.05, green: 0.05, blue: 0.07))
-            .zIndex(30)
-
-            Divider()
-
-            // 2. 2D Pinned Timeline Area:
+            // 2D Pinned Timeline Area:
             // - Left Column (`labelColumnWidth`) is fixed horizontally.
             // - Top Ruler (`rulerHeight`) is fixed vertically.
             // - Right Track Canvas scrolls both ways with slim 4pt scroll indicators.
@@ -134,7 +39,7 @@ public struct MultiTrackTimelineView: View {
                 let viewportWidth = max(300, outerGeo.size.width - labelColumnWidth)
                 let viewportHeight = max(80, outerGeo.size.height - rulerHeight)
                 let baseTrackWidth = max(260, viewportWidth - trackHorizontalInset * 2)
-                let contentWidth = baseTrackWidth * CGFloat(timelineZoom)
+                let contentWidth = baseTrackWidth * CGFloat(session.timelineZoom)
                 let totalDocumentWidth = contentWidth + trackHorizontalInset * 2
                 let totalTimelineMs = max(1000.0, session.timeMapper.totalTimelineDurationMs)
 
@@ -421,10 +326,10 @@ public struct MultiTrackTimelineView: View {
                     MagnifyGesture()
                         .onChanged { value in
                             if pinchBaseZoom == nil {
-                                pinchBaseZoom = timelineZoom
+                                pinchBaseZoom = session.timelineZoom
                             }
                             if let base = pinchBaseZoom {
-                                timelineZoom = max(1.0, min(6.0, base * Double(value.magnification)))
+                                session.timelineZoom = max(1.0, min(6.0, base * Double(value.magnification)))
                             }
                         }
                         .onEnded { _ in

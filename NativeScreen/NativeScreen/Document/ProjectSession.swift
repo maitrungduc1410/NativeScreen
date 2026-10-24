@@ -2,6 +2,9 @@ import Foundation
 import SwiftUI
 import Observation
 import AppKit
+import AVFoundation
+import CoreImage
+import UniformTypeIdentifiers
 
 /// Per-window isolated NLE Project Session with Value-Type Snapshot Undo/Redo (`⌘Z` / `⇧⌘Z`)
 /// and `.nativescreen` package persistence.
@@ -21,6 +24,10 @@ public final class ProjectSession: Identifiable {
     public var hoverSkimTimelineMs: Double? = nil
     public var isPlaying: Bool = false
     public var isSplitModeActive: Bool = false
+    public var timelineZoom: Double = 1.0
+    public var isReelModeActive: Bool = false
+    public var reelPlatformStyle: ReelPlatformStyle = .tiktok
+    public var isCropModalActive: Bool = false
     public var selectedSliceId: String?
     public var selectedZoomId: String?
     public var selectedMaskId: String?
@@ -886,5 +893,104 @@ public final class ProjectSession: Identifiable {
             }
         }
         try? saveNow()
+    }
+
+    // MARK: - Playback Toggle & Current Frame Extraction
+
+    public func togglePlayPause() {
+        if !isPlaying {
+            // If playhead is already at the very end, restart from 0:00 when pressing Play
+            if playheadTimelineMs >= timeMapper.totalTimelineDurationMs - 15.0 {
+                playheadTimelineMs = 0.0
+                renderRevision &+= 1
+            }
+            isPlaying = true
+        } else {
+            isPlaying = false
+        }
+    }
+
+    public func extractRawSourceFrameNSImage() async -> NSImage? {
+        let url = videoFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let asset = AVURLAsset(url: url)
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        gen.requestedTimeToleranceBefore = .zero
+        gen.requestedTimeToleranceAfter = .zero
+        let cmTime = CMTime(seconds: currentSourceTimeMs / 1000.0, preferredTimescale: 600)
+        guard let (cgImg, _) = try? await gen.image(at: cmTime) else { return nil }
+        return NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
+    }
+
+    public func renderCurrentCompositedCGImage() async -> CGImage? {
+        guard let compositor = MetalFrameCompositor() else { return nil }
+        let sourceMs = currentSourceTimeMs
+        var sourceCI: CIImage?
+
+        let url = videoFileURL
+        if FileManager.default.fileExists(atPath: url.path) {
+            let asset = AVURLAsset(url: url)
+            let gen = AVAssetImageGenerator(asset: asset)
+            gen.appliesPreferredTrackTransform = true
+            gen.requestedTimeToleranceBefore = .zero
+            gen.requestedTimeToleranceAfter = .zero
+            let cmTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
+            if let (cgImg, _) = try? await gen.image(at: cmTime) {
+                sourceCI = CIImage(cgImage: cgImg)
+            }
+        }
+
+        let srcW = Double(max(1280, metadata.captureTarget.pixelSize.width))
+        let srcH = Double(max(720, metadata.captureTarget.pixelSize.height))
+        let aspect = document.canvas.effectiveAspectRatio(sourceWidth: srcW, sourceHeight: srcH)
+        let outH = 1440.0
+        let outW = max(200.0, round(outH * aspect))
+        let outputSize = CGSize(width: outW, height: outH)
+
+        let composited = compositor.composeFrame(
+            sourceVideoFrame: sourceCI,
+            sourceTimeMs: sourceMs,
+            session: self,
+            outputSize: outputSize
+        )
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        return compositor.ciContext.createCGImage(
+            composited,
+            from: CGRect(origin: .zero, size: outputSize),
+            format: .RGBA8,
+            colorSpace: colorSpace
+        )
+    }
+
+    public func saveCurrentFrameAsPNG() {
+        isPlaying = false
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.png]
+        let totalSec = Int(effectivePreviewTimelineMs / 1000.0)
+        let timeStr = String(format: "%02dm%02ds", totalSec / 60, totalSec % 60)
+        savePanel.nameFieldStringValue = "\(document.name) - Frame \(timeStr).png"
+
+        guard savePanel.runModal() == .OK, let outURL = savePanel.url else { return }
+
+        Task {
+            guard let cgImg = await renderCurrentCompositedCGImage() else { return }
+            let bitmap = NSBitmapImageRep(cgImage: cgImg)
+            if let pngData = bitmap.representation(using: .png, properties: [:]) {
+                try? pngData.write(to: outURL, options: .atomic)
+                NSWorkspace.shared.activateFileViewerSelecting([outURL])
+            }
+        }
+    }
+
+    public func copyCurrentFrameToClipboard() {
+        isPlaying = false
+        Task {
+            guard let cgImg = await renderCurrentCompositedCGImage() else { return }
+            let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.writeObjects([nsImg])
+        }
     }
 }

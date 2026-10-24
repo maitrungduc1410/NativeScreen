@@ -98,7 +98,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         let toolbar = NSToolbar(identifier: "NativeScreenUnifiedToolbar-\(session.id.uuidString)")
         toolbar.showsBaselineSeparator = false
         window.toolbar = toolbar
-        window.toolbarStyle = .unifiedCompact
+        window.toolbarStyle = .unified
 
         window.delegate = self
         window.center()
