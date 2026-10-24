@@ -51,19 +51,9 @@ public struct InteractiveMaskCanvasOverlayView: View {
                     let isHovered = (hoveredMaskId == mask.id)
 
                     ZStack {
-                        // Solid clean border (NO dashed stroke!)
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(
-                                isSelected
-                                    ? Color.white.opacity(0.90)
-                                    : (isHovered ? Color.white.opacity(0.45) : Color.white.opacity(0.16)),
-                                lineWidth: isSelected ? 1.5 : 1.0
-                            )
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.001))
-                            )
-                            .shadow(color: .black.opacity(isSelected ? 0.35 : 0.0), radius: 3)
+                        // Zero outline around the mask body — only an invisible hit-testing rectangle for dragging
+                        Rectangle()
+                            .fill(Color.white.opacity(0.001))
                             .contentShape(Rectangle())
                             .onHover { hovering in
                                 withAnimation(.easeOut(duration: 0.14)) {
