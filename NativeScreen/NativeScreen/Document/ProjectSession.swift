@@ -762,4 +762,32 @@ public final class ProjectSession: Identifiable {
             .appendingPathComponent("recording", isDirectory: true)
             .appendingPathComponent(metadata.tracks.displayVideo)
     }
+
+    /// Renames the project in-place (`document.name` + `.nativescreen` bundle folder on disk).
+    public func renameProject(to rawName: String) {
+        let trimmed = rawName
+            .replacingOccurrences(of: ".nativescreen", with: "")
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        mutate { doc in
+            doc.name = trimmed
+        }
+
+        let parentDir = packageURL.deletingLastPathComponent()
+        let newPackageURL = parentDir.appendingPathComponent("\(trimmed).nativescreen", isDirectory: true)
+        if newPackageURL.standardizedFileURL != packageURL.standardizedFileURL,
+           !FileManager.default.fileExists(atPath: newPackageURL.path) {
+            do {
+                try FileManager.default.moveItem(at: packageURL, to: newPackageURL)
+                packageURL = newPackageURL
+                ProjectWorkspaceStore.shared.addRecentProject(newPackageURL)
+            } catch {
+                // Keep existing packageURL if file move is blocked, but save updated document name
+            }
+        }
+        try? saveNow()
+    }
 }

@@ -30,11 +30,12 @@ struct NativeScreenApp: App {
             }
         }
 
-        // 2. Multi-Window Project Editor Scene (Each `.nativescreen` project opens in its own independent window!)
+        // 2. Multi-Window Project Editor Scene (Borderless Unified Titlebar!)
         WindowGroup("NativeScreen Editor", id: "project-editor", for: UUID.self) { $sessionID in
             if let id = sessionID, let session = workspace.session(for: id) {
                 ProjectEditorWindowView(session: session)
-                    .frame(minWidth: 1040, minHeight: 680)
+                    .ignoresSafeArea(.container, edges: .top)
+                    .frame(minWidth: 1080, minHeight: 720)
                     .onDisappear {
                         session.isPlaying = false
                         try? session.saveNow()
@@ -50,6 +51,7 @@ struct NativeScreenApp: App {
                 .frame(minWidth: 600, minHeight: 400)
             }
         }
-        .defaultSize(width: 1240, height: 780)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1280, height: 820)
     }
 }
