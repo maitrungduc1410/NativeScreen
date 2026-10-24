@@ -837,11 +837,11 @@ public final class ProjectSession: Identifiable {
         let destURL = assetsDir.appendingPathComponent(destFileName)
 
         if !FileManager.default.fileExists(atPath: destURL.path) {
-            if let nsImage = NSImage(contentsOf: item.fullImageURL),
-               let tiff = nsImage.tiffRepresentation,
-               let bitmap = NSBitmapImageRep(data: tiff),
-               let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.88]) {
-                try? jpgData.write(to: destURL, options: .atomic)
+            if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: item.fullImageURL, maxPixelSize: 2560) {
+                let bitmap = NSBitmapImageRep(cgImage: cgImage)
+                if let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.88]) {
+                    try? jpgData.write(to: destURL, options: .atomic)
+                }
             } else {
                 try? FileManager.default.copyItem(at: item.fullImageURL, to: destURL)
             }

@@ -365,7 +365,13 @@ public final class MetalFrameCompositor {
     private func loadCachedWallpaper(url: URL, targetRect: CGRect) -> CIImage? {
         if cachedWallpaperURL != url || cachedWallpaperCIImage == nil {
             cachedWallpaperURL = url
-            cachedWallpaperCIImage = CIImage(contentsOf: url)
+            // Decode and downsample once into an immediately-cached `CGImage` (capped at 2560px)
+            // so CoreImage NEVER re-decodes multi-megabyte 6K `.heic`/`.jpg` data on every frame!
+            if let cgImg = SystemWallpaperCatalog.downsampleCGImage(at: url, maxPixelSize: 2560) {
+                cachedWallpaperCIImage = CIImage(cgImage: cgImg)
+            } else {
+                cachedWallpaperCIImage = CIImage(contentsOf: url)
+            }
         }
         guard let raw = cachedWallpaperCIImage else { return nil }
         let scaleX = targetRect.width / max(1.0, raw.extent.width)

@@ -173,7 +173,7 @@ public struct InspectorSidebarView: View {
                                 session.selectSystemWallpaper(item)
                             } label: {
                                 VStack(spacing: 4) {
-                                    if let nsImg = NSImage(contentsOf: item.thumbnailURL) {
+                                    if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
                                         Image(nsImage: nsImg)
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)

@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import ImageIO
 
 /// Built-in Mesh Gradient & Color Palette presets + macOS System Wallpaper loader (`/System/Library/Desktop Pictures`).
 public struct MeshPreset: Identifiable, Equatable, Sendable {
@@ -75,14 +76,24 @@ public struct SystemWallpaperItem: Identifiable, Equatable, Sendable {
 }
 
 public enum SystemWallpaperCatalog {
-    /// Discovers built-in macOS wallpapers from `/System/Library/Desktop Pictures/` without bundling proprietary files in the repo.
+    private static var cachedItems: [SystemWallpaperItem]?
+    private static var thumbnailCache: [String: NSImage] = [:]
+    private static let lock = NSLock()
+
+    /// Discovers built-in macOS wallpapers from `/System/Library/Desktop Pictures/` once and caches the list.
     public static func discoverSystemWallpapers() -> [SystemWallpaperItem] {
+        lock.lock()
+        if let existing = cachedItems {
+            lock.unlock()
+            return existing
+        }
+        lock.unlock()
+
         var items: [SystemWallpaperItem] = []
         let fm = FileManager.default
         let desktopPicturesDir = URL(fileURLWithPath: "/System/Library/Desktop Pictures", isDirectory: true)
         let thumbnailsDir = desktopPicturesDir.appendingPathComponent(".thumbnails", isDirectory: true)
 
-        // 1. Include user's current active desktop wallpaper first if available
         if let mainScreen = NSScreen.main,
            let currentURL = NSWorkspace.shared.desktopImageURL(for: mainScreen),
            fm.fileExists(atPath: currentURL.path) {
@@ -96,7 +107,6 @@ public enum SystemWallpaperCatalog {
             )
         }
 
-        // 2. Scan `/System/Library/Desktop Pictures`
         let allowedExtensions: Set<String> = ["heic", "jpg", "jpeg", "png"]
         if let contents = try? fm.contentsOfDirectory(
             at: desktopPicturesDir,
@@ -126,9 +136,52 @@ public enum SystemWallpaperCatalog {
                         thumbnailURL: thumbURL
                     )
                 )
-                if items.count >= 28 { break }
+                if items.count >= 24 { break }
             }
         }
+
+        lock.lock()
+        cachedItems = items
+        lock.unlock()
         return items
+    }
+
+    /// Returns a fast in-memory cached `NSImage` thumbnail (200px max dimension) so SwiftUI `body` evaluation
+    /// never touches the disk or decodes multi-megabyte `.heic` files when dragging sliders!
+    public static func cachedThumbnailImage(for item: SystemWallpaperItem) -> NSImage? {
+        lock.lock()
+        if let hit = thumbnailCache[item.id] {
+            lock.unlock()
+            return hit
+        }
+        lock.unlock()
+
+        guard let cgImg = downsampleCGImage(at: item.thumbnailURL, maxPixelSize: 200)
+                ?? downsampleCGImage(at: item.fullImageURL, maxPixelSize: 200) else {
+            return nil
+        }
+        let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
+
+        lock.lock()
+        thumbnailCache[item.id] = nsImg
+        lock.unlock()
+        return nsImg
+    }
+
+    /// Uses `ImageIO` hardware thumbnailing to decode & downsample any `.heic`/`.jpg` into an immediately-cached `CGImage`.
+    public static func downsampleCGImage(at url: URL, maxPixelSize: Int) -> CGImage? {
+        let sourceOptions: [CFString: Any] = [
+            kCGImageSourceShouldCache: false
+        ]
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions as CFDictionary) else {
+            return nil
+        }
+        let thumbOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary)
     }
 }
