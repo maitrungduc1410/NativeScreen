@@ -502,7 +502,7 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    // MARK: - Non-Overlapping Move & Edge Resize Actions
+    // MARK: - Dedicated Move (Constant Duration) vs. Edge Resize Actions
 
     public func updateSliceSourceRange(id: String, newSourceStartMs: Double, newSourceEndMs: Double) {
         let maxDur = metadata.durationMs
@@ -516,8 +516,40 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    public func updateZoomRange(id: String, newStartMs: Double, newEndMs: Double) {
-        let maxDur = metadata.durationMs
+    /// Moves a ZoomBlock horizontally while strictly preserving its exact `durationMs` (NEVER resizes!).
+    public func moveZoom(id: String, desiredStartMs: Double, durationMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
+        let minGap = 40.0
+        let span = max(300.0, durationMs)
+
+        mutate { doc in
+            let sorted = doc.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
+            guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
+
+            let lowerBound = sortedIdx > 0
+                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs + minGap)
+                : earliestSourceMs
+            let upperBound = sortedIdx + 1 < sorted.count
+                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs - minGap)
+                : latestSourceMs
+            guard upperBound - lowerBound >= span else { return }
+
+            let clampedStart = max(lowerBound, min(upperBound - span, desiredStartMs))
+            let clampedEnd = clampedStart + span
+
+            if let realIdx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
+                doc.timeline.zooms[realIdx].sourceStartMs = clampedStart
+                doc.timeline.zooms[realIdx].sourceEndMs = clampedEnd
+            }
+            doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+    }
+
+    /// Resizes ONLY the left/start or right/end edge of a ZoomBlock (only triggered by the 2 edge handles).
+    public func resizeZoom(id: String, newStartMs: Double, newEndMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
         let minDuration = 300.0
         let minGap = 40.0
 
@@ -525,15 +557,25 @@ public final class ProjectSession: Identifiable {
             let sorted = doc.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
             guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
 
-            let lowerBound = sortedIdx > 0 ? (sorted[sortedIdx - 1].sourceEndMs + minGap) : 0.0
-            let upperBound = sortedIdx + 1 < sorted.count ? (sorted[sortedIdx + 1].sourceStartMs - minGap) : maxDur
+            let lowerBound = sortedIdx > 0
+                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs + minGap)
+                : earliestSourceMs
+            let upperBound = sortedIdx + 1 < sorted.count
+                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs - minGap)
+                : latestSourceMs
             guard upperBound - lowerBound >= minDuration else { return }
 
-            var start = max(lowerBound, min(upperBound - minDuration, newStartMs))
-            var end = max(start + minDuration, min(upperBound, newEndMs))
-            if end > upperBound {
-                end = upperBound
-                start = max(lowerBound, end - max(minDuration, newEndMs - newStartMs))
+            let current = sorted[sortedIdx]
+            let isResizingLeft = abs(newEndMs - current.sourceEndMs) < 0.5
+
+            let start: Double
+            let end: Double
+            if isResizingLeft {
+                end = current.sourceEndMs
+                start = max(lowerBound, min(end - minDuration, newStartMs))
+            } else {
+                start = current.sourceStartMs
+                end = max(start + minDuration, min(upperBound, newEndMs))
             }
 
             if let realIdx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
@@ -544,8 +586,47 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    public func updateMaskRange(id: String, newStartMs: Double, newEndMs: Double) {
-        let maxDur = metadata.durationMs
+    /// Moves a MaskItem horizontally while strictly preserving its exact `durationMs` (NEVER resizes!).
+    public func moveMask(id: String, desiredStartMs: Double, durationMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
+        let minGap = 30.0
+        let span = max(250.0, durationMs)
+
+        mutate { doc in
+            for tIdx in doc.timeline.maskTracks.indices {
+                let items = doc.timeline.maskTracks[tIdx].items.sorted { $0.sourceStartMs < $1.sourceStartMs }
+                guard let sortedIdx = items.firstIndex(where: { $0.id == id }) else { continue }
+
+                let lowerBound = sortedIdx > 0
+                    ? max(earliestSourceMs, items[sortedIdx - 1].sourceEndMs + minGap)
+                    : earliestSourceMs
+                let upperBound = sortedIdx + 1 < items.count
+                    ? min(latestSourceMs, items[sortedIdx + 1].sourceStartMs - minGap)
+                    : latestSourceMs
+                guard upperBound - lowerBound >= span else { return }
+
+                let clampedStart = max(lowerBound, min(upperBound - span, desiredStartMs))
+                let clampedEnd = clampedStart + span
+
+                if let realIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {
+                    let delta = clampedStart - doc.timeline.maskTracks[tIdx].items[realIdx].sourceStartMs
+                    doc.timeline.maskTracks[tIdx].items[realIdx].sourceStartMs = clampedStart
+                    doc.timeline.maskTracks[tIdx].items[realIdx].sourceEndMs = clampedEnd
+                    for kIdx in doc.timeline.maskTracks[tIdx].items[realIdx].keyframes.indices {
+                        doc.timeline.maskTracks[tIdx].items[realIdx].keyframes[kIdx].sourceMs += delta
+                    }
+                }
+                doc.timeline.maskTracks[tIdx].items.sort { $0.sourceStartMs < $1.sourceStartMs }
+                return
+            }
+        }
+    }
+
+    /// Resizes ONLY the left/start or right/end edge of a MaskItem (only triggered by the 2 edge handles).
+    public func resizeMask(id: String, newStartMs: Double, newEndMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
         let minDuration = 250.0
         let minGap = 30.0
 
@@ -554,15 +635,25 @@ public final class ProjectSession: Identifiable {
                 let items = doc.timeline.maskTracks[tIdx].items.sorted { $0.sourceStartMs < $1.sourceStartMs }
                 guard let sortedIdx = items.firstIndex(where: { $0.id == id }) else { continue }
 
-                let lowerBound = sortedIdx > 0 ? (items[sortedIdx - 1].sourceEndMs + minGap) : 0.0
-                let upperBound = sortedIdx + 1 < items.count ? (items[sortedIdx + 1].sourceStartMs - minGap) : maxDur
+                let lowerBound = sortedIdx > 0
+                    ? max(earliestSourceMs, items[sortedIdx - 1].sourceEndMs + minGap)
+                    : earliestSourceMs
+                let upperBound = sortedIdx + 1 < items.count
+                    ? min(latestSourceMs, items[sortedIdx + 1].sourceStartMs - minGap)
+                    : latestSourceMs
                 guard upperBound - lowerBound >= minDuration else { return }
 
-                var start = max(lowerBound, min(upperBound - minDuration, newStartMs))
-                var end = max(start + minDuration, min(upperBound, newEndMs))
-                if end > upperBound {
-                    end = upperBound
-                    start = max(lowerBound, end - max(minDuration, newEndMs - newStartMs))
+                let current = items[sortedIdx]
+                let isResizingLeft = abs(newEndMs - current.sourceEndMs) < 0.5
+
+                let start: Double
+                let end: Double
+                if isResizingLeft {
+                    end = current.sourceEndMs
+                    start = max(lowerBound, min(end - minDuration, newStartMs))
+                } else {
+                    start = current.sourceStartMs
+                    end = max(start + minDuration, min(upperBound, newEndMs))
                 }
 
                 if let realIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {

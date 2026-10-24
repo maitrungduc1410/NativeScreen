@@ -487,7 +487,8 @@ public struct MultiTrackTimelineView: View {
                     onBeginInteractive: {
                         session.beginInteractiveEdit()
                     },
-                    onChangeRange: { newStart, newEnd in
+                    onMoveBody: { _, _ in },
+                    onResizeRange: { newStart, newEnd in
                         session.updateSliceSourceRange(
                             id: mapped.slice.id,
                             newSourceStartMs: newStart,
@@ -556,10 +557,14 @@ public struct MultiTrackTimelineView: View {
                             }
                         },
                         onBeginInteractive: {
+                            session.selectZoom(zoom.id)
                             session.beginInteractiveEdit()
                         },
-                        onChangeRange: { newStart, newEnd in
-                            session.updateZoomRange(id: zoom.id, newStartMs: newStart, newEndMs: newEnd)
+                        onMoveBody: { desiredStartMs, durationMs in
+                            session.moveZoom(id: zoom.id, desiredStartMs: desiredStartMs, durationMs: durationMs)
+                        },
+                        onResizeRange: { newStart, newEnd in
+                            session.resizeZoom(id: zoom.id, newStartMs: newStart, newEndMs: newEnd)
                         },
                         onMoveVerticalTracks: { _ in },
                         onEndInteractive: {
@@ -633,10 +638,14 @@ public struct MultiTrackTimelineView: View {
                             }
                         },
                         onBeginInteractive: {
+                            session.selectMask(item.id)
                             session.beginInteractiveEdit()
                         },
-                        onChangeRange: { newStart, newEnd in
-                            session.updateMaskRange(id: item.id, newStartMs: newStart, newEndMs: newEnd)
+                        onMoveBody: { desiredStartMs, durationMs in
+                            session.moveMask(id: item.id, desiredStartMs: desiredStartMs, durationMs: durationMs)
+                        },
+                        onResizeRange: { newStart, newEnd in
+                            session.resizeMask(id: item.id, newStartMs: newStart, newEndMs: newEnd)
                         },
                         onMoveVerticalTracks: { trackDelta in
                             let targetIdx = trackIndex + trackDelta
@@ -755,9 +764,15 @@ private struct SmoothTimeRulerView: View {
     }
 }
 
-// MARK: - Interactive Segment Block with Smooth Fade Edge Resize Handles, Split Blade, & Vertical Track Drag
+// MARK: - Interactive Segment Block with Strictly Separated Edge Resize vs. Body Move
 
 private struct TimelineInteractiveSegmentView: View {
+    private enum SegmentDragMode {
+        case resizeLeft
+        case resizeRight
+        case moveBody
+    }
+
     let topTitle: String
     let subtitle: String?
     let gradientColors: [Color]
@@ -775,20 +790,28 @@ private struct TimelineInteractiveSegmentView: View {
     let allowVerticalTrackDrag: Bool
     let onClickAtLocalX: (CGFloat) -> Void
     let onBeginInteractive: () -> Void
-    let onChangeRange: (Double, Double) -> Void
+    let onMoveBody: (Double, Double) -> Void
+    let onResizeRange: (Double, Double) -> Void
     let onMoveVerticalTracks: (Int) -> Void
     let onEndInteractive: () -> Void
     let onDelete: () -> Void
 
     @State private var isHovered = false
+    @State private var lastHoverLocalX: CGFloat = 0.0
+    @State private var activeDragMode: SegmentDragMode? = nil
+    @State private var pressLocalX: CGFloat = 0.0
+    @State private var hasExceededClickSlop = false
     @State private var dragInitialStartMs: Double?
     @State private var dragInitialEndMs: Double?
     @State private var verticalDragOffset: CGFloat = 0.0
     @State private var hoverSplitX: CGFloat?
 
-    private let edgeHandleWidth: CGFloat = 10.0
+    private let edgeHandleWidth: CGFloat = 11.0
 
     var body: some View {
+        let segWidth = max(6, width - 1.5)
+        let showHandles = !isSplitMode && segWidth >= 26 && (isSelected || isHovered)
+
         ZStack(alignment: .leading) {
             // Segment Pill Body
             RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -811,14 +834,14 @@ private struct TimelineInteractiveSegmentView: View {
                 .opacity(isDimmed ? 0.35 : 1.0)
 
             // Centered Title & Subtitle
-            if width > 42 {
+            if segWidth > 42 {
                 VStack(spacing: 2) {
                     Text(topTitle)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.88))
                         .lineLimit(1)
 
-                    if let sub = subtitle, width > 78 {
+                    if let sub = subtitle, segWidth > 78 {
                         Text(sub)
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.88))
@@ -827,7 +850,6 @@ private struct TimelineInteractiveSegmentView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 10)
-                .allowsHitTesting(false)
             }
 
             // Interactive Split Mode Cut Line Indicator
@@ -836,156 +858,157 @@ private struct TimelineInteractiveSegmentView: View {
                     .fill(Color.white.opacity(0.92))
                     .frame(width: 1.5, height: height)
                     .offset(x: splitX)
-                    .allowsHitTesting(false)
             }
 
-            // Left & Right Edge Resize Handles (Smoothly fade in/out on hover or selection!)
-            if !isSplitMode && width >= 26 {
-                let showHandles = isSelected || isHovered
+            // Left & Right Edge Resize Visual Indicators (Smoothly fade in/out on hover or selection)
+            if !isSplitMode && segWidth >= 26 {
                 HStack(spacing: 0) {
-                    // Left Resize Handle
-                    Rectangle()
-                        .fill(Color.white.opacity(0.001))
-                        .frame(width: edgeHandleWidth, height: height)
-                        .overlay(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.78))
-                                .frame(width: 3, height: max(8, height - 14))
-                                .padding(.leading, 3.5)
-                                .opacity(showHandles ? 1.0 : 0.0)
-                                .animation(.easeInOut(duration: 0.16), value: showHandles)
-                        }
-                        .onHover { inside in
-                            if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                        }
-                        .highPriorityGesture(
-                            DragGesture(minimumDistance: 1, coordinateSpace: .named("timelineContentSpace"))
-                                .onChanged { value in
-                                    if dragInitialStartMs == nil {
-                                        onBeginInteractive()
-                                        dragInitialStartMs = startMs
-                                        dragInitialEndMs = endMs
-                                    }
-                                    guard let s0 = dragInitialStartMs, let e0 = dragInitialEndMs else { return }
-                                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
-                                    let newStart = max(0.0, min(e0 - 300.0, s0 + deltaMs))
-                                    onChangeRange(newStart, e0)
-                                }
-                                .onEnded { _ in
-                                    dragInitialStartMs = nil
-                                    dragInitialEndMs = nil
-                                    onEndInteractive()
-                                }
-                        )
+                    Capsule()
+                        .fill(Color.white.opacity(0.82))
+                        .frame(width: 3, height: max(8, height - 14))
+                        .padding(.leading, 4)
 
                     Spacer(minLength: 4)
 
-                    // Right Resize Handle
-                    Rectangle()
-                        .fill(Color.white.opacity(0.001))
-                        .frame(width: edgeHandleWidth, height: height)
-                        .overlay(alignment: .trailing) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.78))
-                                .frame(width: 3, height: max(8, height - 14))
-                                .padding(.trailing, 3.5)
-                                .opacity(showHandles ? 1.0 : 0.0)
-                                .animation(.easeInOut(duration: 0.16), value: showHandles)
-                        }
-                        .onHover { inside in
-                            if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                        }
-                        .highPriorityGesture(
-                            DragGesture(minimumDistance: 1, coordinateSpace: .named("timelineContentSpace"))
-                                .onChanged { value in
-                                    if dragInitialStartMs == nil {
-                                        onBeginInteractive()
-                                        dragInitialStartMs = startMs
-                                        dragInitialEndMs = endMs
-                                    }
-                                    guard let s0 = dragInitialStartMs, let e0 = dragInitialEndMs else { return }
-                                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
-                                    let newEnd = max(s0 + 300.0, min(trackTotalDurationMs, e0 + deltaMs))
-                                    onChangeRange(s0, newEnd)
-                                }
-                                .onEnded { _ in
-                                    dragInitialStartMs = nil
-                                    dragInitialEndMs = nil
-                                    onEndInteractive()
-                                }
-                        )
+                    Capsule()
+                        .fill(Color.white.opacity(0.82))
+                        .frame(width: 3, height: max(8, height - 14))
+                        .padding(.trailing, 4)
                 }
+                .opacity(showHandles ? 1.0 : 0.0)
+                .animation(.easeInOut(duration: 0.15), value: showHandles)
             }
         }
-        .frame(width: max(6, width - 1.5), height: height)
+        .frame(width: segWidth, height: height)
+        .contentShape(Rectangle())
         .offset(x: xOffset, y: verticalDragOffset)
-        .zIndex(verticalDragOffset != 0 ? 50 : 1)
+        .zIndex(activeDragMode != nil ? 60 : 1)
         .onContinuousHover { phase in
             switch phase {
             case .active(let pt):
+                lastHoverLocalX = pt.x
                 if !isHovered {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         isHovered = true
                     }
                 }
                 if isSplitMode {
-                    hoverSplitX = max(2, min(width - 2, pt.x))
+                    hoverSplitX = max(2, min(segWidth - 2, pt.x))
                     NSCursor.crosshair.set()
                 } else {
                     hoverSplitX = nil
+                    if segWidth >= 26 && (pt.x <= edgeHandleWidth || pt.x >= segWidth - edgeHandleWidth) {
+                        NSCursor.resizeLeftRight.set()
+                    } else if allowDragMove {
+                        NSCursor.openHand.set()
+                    } else {
+                        NSCursor.arrow.set()
+                    }
                 }
             case .ended:
                 withAnimation(.easeInOut(duration: 0.15)) {
                     isHovered = false
                 }
                 hoverSplitX = nil
-                if isSplitMode {
+                if activeDragMode == nil {
                     NSCursor.arrow.set()
                 }
             }
         }
-        .simultaneousGesture(
-            SpatialTapGesture(coordinateSpace: .local)
-                .onEnded { event in
-                    onClickAtLocalX(event.location.x)
-                }
-        )
-        .gesture(
-            DragGesture(minimumDistance: 3, coordinateSpace: .named("timelineContentSpace"))
+        // Single Unified High-Priority Gesture:
+        // - Determines whether the user grabbed the Left Handle (`.resizeLeft`), Right Handle (`.resizeRight`), or Center Body (`.moveBody`).
+        // - `.moveBody` ONLY moves the segment and NEVER resizes it.
+        // - `.resizeLeft` / `.resizeRight` ONLY resize the grabbed edge.
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named("timelineContentSpace"))
                 .onChanged { value in
-                    guard allowDragMove, !isSplitMode else { return }
-                    if dragInitialStartMs == nil {
-                        onBeginInteractive()
+                    if activeDragMode == nil {
+                        // Compute local X inside this segment at the exact moment of mouse-down
+                        let startInLane = value.startLocation.x - 10.0 // subtract `trackHorizontalInset`
+                        let computedLocalX = startInLane - xOffset
+                        let localX = (computedLocalX >= -4 && computedLocalX <= segWidth + 4)
+                            ? max(0, min(segWidth, computedLocalX))
+                            : lastHoverLocalX
+
+                        pressLocalX = localX
+                        hasExceededClickSlop = false
                         dragInitialStartMs = startMs
                         dragInitialEndMs = endMs
-                    }
-                    guard let s0 = dragInitialStartMs, let e0 = dragInitialEndMs else { return }
-                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
-                    let span = e0 - s0
-                    let newStart = max(0.0, min(trackTotalDurationMs - span, s0 + deltaMs))
-                    onChangeRange(newStart, newStart + span)
 
-                    if allowVerticalTrackDrag {
-                        verticalDragOffset = value.translation.height
+                        if !isSplitMode && segWidth >= 26 && localX <= edgeHandleWidth {
+                            activeDragMode = .resizeLeft
+                            NSCursor.resizeLeftRight.set()
+                        } else if !isSplitMode && segWidth >= 26 && localX >= segWidth - edgeHandleWidth {
+                            activeDragMode = .resizeRight
+                            NSCursor.resizeLeftRight.set()
+                        } else {
+                            activeDragMode = .moveBody
+                            if allowDragMove && !isSplitMode {
+                                NSCursor.closedHand.set()
+                            }
+                        }
+                    }
+
+                    let dragDist = hypot(value.translation.width, value.translation.height)
+                    if !hasExceededClickSlop {
+                        guard dragDist >= 2.5, !isSplitMode else { return }
+                        hasExceededClickSlop = true
+                        onBeginInteractive()
+                    }
+
+                    guard let s0 = dragInitialStartMs,
+                          let e0 = dragInitialEndMs,
+                          let mode = activeDragMode else { return }
+
+                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
+
+                    switch mode {
+                    case .resizeLeft:
+                        let newStart = max(0.0, min(e0 - 300.0, s0 + deltaMs))
+                        onResizeRange(newStart, e0)
+
+                    case .resizeRight:
+                        let newEnd = max(s0 + 300.0, s0 + (e0 - s0) + deltaMs)
+                        onResizeRange(s0, newEnd)
+
+                    case .moveBody:
+                        guard allowDragMove else { return }
+                        let constantDurationMs = e0 - s0
+                        onMoveBody(s0 + deltaMs, constantDurationMs)
+
+                        if allowVerticalTrackDrag {
+                            verticalDragOffset = value.translation.height
+                        }
                     }
                 }
                 .onEnded { value in
-                    guard allowDragMove, !isSplitMode else { return }
-                    if allowVerticalTrackDrag {
-                        let rowDelta = Int(round(value.translation.height / 38.0))
-                        verticalDragOffset = 0.0
-                        if rowDelta != 0 {
-                            onMoveVerticalTracks(rowDelta)
+                    let wasDrag = hasExceededClickSlop
+                    let localX = pressLocalX
+
+                    if wasDrag {
+                        if activeDragMode == .moveBody && allowVerticalTrackDrag {
+                            let rowDelta = Int(round(value.translation.height / 38.0))
+                            verticalDragOffset = 0.0
+                            if rowDelta != 0 {
+                                onMoveVerticalTracks(rowDelta)
+                            }
                         }
+                        onEndInteractive()
+                    } else {
+                        onClickAtLocalX(localX)
                     }
+
+                    activeDragMode = nil
+                    hasExceededClickSlop = false
                     dragInitialStartMs = nil
                     dragInitialEndMs = nil
-                    onEndInteractive()
+                    verticalDragOffset = 0.0
+                    NSCursor.arrow.set()
                 }
         )
         .contextMenu {
             Button {
-                onClickAtLocalX(width * 0.5)
+                onClickAtLocalX(segWidth * 0.5)
             } label: {
                 Label("Seek Here", systemImage: "arrow.down.to.line")
             }
