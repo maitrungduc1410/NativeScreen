@@ -16,6 +16,27 @@ public final class MetalFrameCompositor {
     private var cachedWallpaperCIImage: CIImage?
     private var syntheticScreenTexture: CIImage?
 
+    // Smooth GPU Background Crossfade State (320ms cubic ease-out transition when changing backgrounds)
+    private struct BackgroundIdentityKey: Equatable {
+        let type: BackgroundType
+        let solidColor: String
+        let gradient: GradientConfig
+        let meshPresetId: String?
+        let wallpaperRelativePath: String?
+    }
+
+    private var currentBackgroundKey: BackgroundIdentityKey?
+    private var currentUnblurredBackgroundImage: CIImage?
+    private var previousUnblurredBackgroundImage: CIImage?
+    private var backgroundTransitionStartUptime: TimeInterval = 0.0
+    private let backgroundTransitionDurationSec: TimeInterval = 0.34
+
+    public var isAnimatingBackgroundTransition: Bool {
+        guard previousUnblurredBackgroundImage != nil else { return false }
+        let elapsed = ProcessInfo.processInfo.systemUptime - backgroundTransitionStartUptime
+        return elapsed >= 0.0 && elapsed < backgroundTransitionDurationSec
+    }
+
     public init?() {
         guard let dev = MTLCreateSystemDefaultDevice(),
               let queue = dev.makeCommandQueue() else {
@@ -178,12 +199,61 @@ public final class MetalFrameCompositor {
 
     private func renderBackgroundLayer(doc: ProjectDocument, session: ProjectSession, canvasRect: CGRect) -> CIImage {
         let bg = doc.background
-        var base: CIImage
+        let newKey = BackgroundIdentityKey(
+            type: bg.type,
+            solidColor: bg.solidColor,
+            gradient: bg.gradient,
+            meshPresetId: bg.meshPresetId,
+            wallpaperRelativePath: bg.wallpaperRelativePath
+        )
 
+        let rawTarget = buildRawBackgroundImage(bg: bg, session: session, canvasRect: canvasRect)
+
+        if let existingKey = currentBackgroundKey {
+            if existingKey != newKey {
+                // Capture current blended or active background as `previous` and start smooth crossfade
+                previousUnblurredBackgroundImage = currentUnblurredBackgroundImage
+                currentUnblurredBackgroundImage = rawTarget
+                currentBackgroundKey = newKey
+                backgroundTransitionStartUptime = ProcessInfo.processInfo.systemUptime
+            } else {
+                currentUnblurredBackgroundImage = rawTarget
+            }
+        } else {
+            currentBackgroundKey = newKey
+            currentUnblurredBackgroundImage = rawTarget
+        }
+
+        var base = rawTarget
+        if let prev = previousUnblurredBackgroundImage {
+            let elapsed = ProcessInfo.processInfo.systemUptime - backgroundTransitionStartUptime
+            if elapsed < backgroundTransitionDurationSec {
+                let t = max(0.0, min(1.0, elapsed / backgroundTransitionDurationSec))
+                // Smooth cubic ease-out (`1 - (1 - t)^3`)
+                let eased = CGFloat(1.0 - pow(1.0 - t, 3.0))
+                let fadedNew = rawTarget.applyingFilter("CIColorMatrix", parameters: [
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: eased)
+                ])
+                base = fadedNew.composited(over: prev).cropped(to: canvasRect)
+            } else {
+                previousUnblurredBackgroundImage = nil
+            }
+        }
+
+        if bg.blurRadius > 0.5 {
+            base = base
+                .clampedToExtent()
+                .applyingGaussianBlur(sigma: bg.blurRadius * 0.4)
+                .cropped(to: canvasRect)
+        }
+        return base
+    }
+
+    private func buildRawBackgroundImage(bg: BackgroundConfig, session: ProjectSession, canvasRect: CGRect) -> CIImage {
         switch bg.type {
         case .solid:
             let color = CIColor(hexString: bg.solidColor)
-            base = CIImage(color: color).cropped(to: canvasRect)
+            return CIImage(color: color).cropped(to: canvasRect)
 
         case .gradient:
             let c0 = CIColor(hexString: bg.gradient.stops.first?.color ?? "#4776E6")
@@ -196,7 +266,7 @@ public final class MetalFrameCompositor {
                 "inputColor0": c0,
                 "inputColor1": c1
             ])
-            base = (filter?.outputImage ?? CIImage(color: c0)).cropped(to: canvasRect)
+            return (filter?.outputImage ?? CIImage(color: c0)).cropped(to: canvasRect)
 
         case .mesh:
             let preset = MeshPreset.preset(withId: bg.meshPresetId)
@@ -219,31 +289,19 @@ public final class MetalFrameCompositor {
             ])?.outputImage?.cropped(to: canvasRect)
 
             if let rad = radial {
-                base = rad.composited(over: grad1).cropped(to: canvasRect)
-            } else {
-                base = grad1
+                return rad.composited(over: grad1).cropped(to: canvasRect)
             }
+            return grad1
 
         case .wallpaper, .image:
             if let relPath = bg.wallpaperRelativePath {
                 let url = session.packageURL.appendingPathComponent(relPath)
                 if let img = loadCachedWallpaper(url: url, targetRect: canvasRect) {
-                    base = img
-                } else {
-                    base = CIImage(color: CIColor(hexString: "#1E1E2E")).cropped(to: canvasRect)
+                    return img
                 }
-            } else {
-                base = CIImage(color: CIColor(hexString: "#1E1E2E")).cropped(to: canvasRect)
             }
+            return CIImage(color: CIColor(hexString: "#1E1E2E")).cropped(to: canvasRect)
         }
-
-        if bg.blurRadius > 0.5 {
-            base = base
-                .clampedToExtent()
-                .applyingGaussianBlur(sigma: bg.blurRadius * 0.4)
-                .cropped(to: canvasRect)
-        }
-        return base
     }
 
     private func loadCachedWallpaper(url: URL, targetRect: CGRect) -> CIImage? {
@@ -410,26 +468,34 @@ public final class MetalFrameCompositor {
             }
         }
 
-        // 2. High-Contrast Smooth Cursor Pointer
-        let cursorRadius = 11.0 * canvasScale * CGFloat(cursorConfig.scale)
-        let outerRect = CGRect(x: cx - cursorRadius, y: cy - cursorRadius, width: cursorRadius * 2, height: cursorRadius * 2)
-        let innerRadius = cursorRadius * 0.72
-        let innerRect = CGRect(x: cx - innerRadius, y: cy - innerRadius, width: innerRadius * 2, height: innerRadius * 2)
+        // 2. High-DPI Vector Cursor Sprite (macOS Tahoe, Classic, White Studio, Figma Dart, Bold Outline, Touch Circle, Retro Pixel, Pointing Hand, I-Beam)
+        let (rawSprite, hotspot01) = CursorSpriteProvider.shared.ciCursorImage(
+            themeId: cursorConfig.themeId,
+            cursorType: cursorState.cursorType
+        )
+        let targetSpriteHeight = 32.0 * canvasScale * CGFloat(cursorConfig.scale)
+        let spriteScale = targetSpriteHeight / max(1.0, rawSprite.extent.height)
 
-        if let outerCircle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-            "inputExtent": CIVector(cgRect: outerRect),
-            "inputRadius": cursorRadius,
-            "inputColor": CIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: CGFloat(0.65 * cursorState.opacity))
-        ])?.outputImage,
-           let innerCircle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-            "inputExtent": CIVector(cgRect: innerRect),
-            "inputRadius": innerRadius,
-            "inputColor": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: CGFloat(cursorState.opacity))
-        ])?.outputImage {
-            result = outerCircle.composited(over: result)
-            result = innerCircle.composited(over: result)
+        // Anchor rotation and position around the cursor's exact hotspot `(hotspotX, hotspotY)` in CoreImage bottom-left coordinates
+        let hotspotX = CGFloat(hotspot01.x) * rawSprite.extent.width
+        let hotspotY = CGFloat(1.0 - hotspot01.y) * rawSprite.extent.height
+
+        var transform = CGAffineTransform.identity
+        transform = transform.translatedBy(x: cx, y: cy)
+        if abs(cursorState.rotationRadians) > 0.002 {
+            transform = transform.rotated(by: CGFloat(cursorState.rotationRadians))
+        }
+        transform = transform.scaledBy(x: spriteScale, y: spriteScale)
+        transform = transform.translatedBy(x: -hotspotX, y: -hotspotY)
+
+        var transformedCursor = rawSprite.transformed(by: transform)
+        if cursorState.opacity < 0.99 {
+            transformedCursor = transformedCursor.applyingFilter("CIColorMatrix", parameters: [
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(cursorState.opacity))
+            ])
         }
 
+        result = transformedCursor.composited(over: result)
         return result
     }
 

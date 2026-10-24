@@ -264,6 +264,55 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private var cursorInspector: some View {
         VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Cursor Style")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                    ForEach(CursorThemePreset.allThemes) { theme in
+                        let currentId = session.document.cursor.themeId == "macos-default"
+                            ? "macos-tahoe"
+                            : session.document.cursor.themeId
+                        let isSelected = (currentId == theme.id)
+
+                        Button {
+                            session.mutate { $0.cursor.themeId = theme.id }
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(nsImage: CursorSpriteProvider.shared.previewNSImage(themeId: theme.id))
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .frame(width: 28, height: 28)
+
+                                Text(theme.name)
+                                    .font(.system(size: 9, weight: .medium))
+                                    .lineLimit(1)
+                                    .foregroundStyle(isSelected ? .white : .secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(
+                                isSelected
+                                    ? Color(red: 0.44, green: 0.34, blue: 0.96).opacity(0.26)
+                                    : Color.white.opacity(0.04),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(
+                                        isSelected ? Color(red: 0.54, green: 0.44, blue: 1.0) : Color.white.opacity(0.08),
+                                        lineWidth: isSelected ? 1.5 : 0.8
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Divider()
+
             Toggle("Hide cursor", isOn: Binding(
                 get: { session.document.cursor.hidden },
                 set: { v in session.mutate { $0.cursor.hidden = v } }
@@ -279,6 +328,12 @@ public struct InspectorSidebarView: View {
                 range: 0.5...3.5,
                 defaultValue: 1.6
             )
+
+            Toggle("Rotate cursor with velocity", isOn: Binding(
+                get: { session.document.cursor.velocityRotationEnabled },
+                set: { v in session.mutate { $0.cursor.velocityRotationEnabled = v } }
+            ))
+            .font(.system(size: 12))
 
             Divider()
 

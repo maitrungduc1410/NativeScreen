@@ -207,6 +207,20 @@ public struct MetalPreviewView: NSViewRepresentable {
 
             commandBuffer.present(drawable)
             commandBuffer.commit()
+
+            // If a smooth background crossfade transition is in progress while video playback is paused,
+            // briefly unpause `MTKView` for the 340ms transition and automatically re-pause at 0.0% CPU once complete!
+            if !session.isPlaying {
+                if compositor.isAnimatingBackgroundTransition {
+                    if view.isPaused {
+                        view.enableSetNeedsDisplay = false
+                        view.isPaused = false
+                    }
+                } else if !view.isPaused {
+                    view.isPaused = true
+                    view.enableSetNeedsDisplay = true
+                }
+            }
         }
     }
 }

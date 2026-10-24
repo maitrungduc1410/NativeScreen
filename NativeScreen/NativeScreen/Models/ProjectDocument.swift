@@ -346,7 +346,7 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
     public init(
         hidden: Bool = false,
         scale: Double = 1.6,
-        themeId: String = "macos-default",
+        themeId: String = "macos-tahoe",
         smoothMovementEnabled: Bool = true,
         spring: SpringConfig = .defaultCursor,
         removeShakeThresholdPx: Double = 4.0,
