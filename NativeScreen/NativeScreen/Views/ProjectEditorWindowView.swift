@@ -643,26 +643,9 @@ private struct WindowTitlebarCleaner: NSViewRepresentable {
             configureWindowAndMeasure()
         }
 
-        override func layout() {
-            super.layout()
-            configureWindowAndMeasure()
-        }
-
         func configureWindowAndMeasure() {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self, let window = self.window else { return }
-                window.titleVisibility = .hidden
-                window.titlebarAppearsTransparent = true
-                window.styleMask.insert(.fullSizeContentView)
-                window.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
-
-                if window.toolbar == nil {
-                    let toolbar = NSToolbar(identifier: "NativeScreenUnifiedHeaderToolbar")
-                    toolbar.showsBaselineSeparator = false
-                    window.toolbar = toolbar
-                    window.toolbarStyle = .unifiedCompact
-                }
-
                 if let closeBtn = window.standardWindowButton(.closeButton),
                    let zoomBtn = window.standardWindowButton(.zoomButton) {
                     let closeCenterInWin = closeBtn.convert(

@@ -51,6 +51,7 @@ public final class RecordingCoordinator {
                 backing: .buffered,
                 defer: false
             )
+            panel.isReleasedWhenClosed = false
             panel.isFloatingPanel = true
             panel.level = .screenSaver
             panel.backgroundColor = .clear
@@ -60,6 +61,7 @@ public final class RecordingCoordinator {
             panel.isMovableByWindowBackground = true
 
             let hostingView = NSHostingView(rootView: RecordingHUDBarView(coordinator: self))
+            hostingView.sizingOptions = []
             panel.contentView = hostingView
             self.hudPanel = panel
         }
@@ -157,14 +159,16 @@ public final class RecordingCoordinator {
     private func startPickerOverlaysAcrossAllScreens() {
         stopPickerOverlay()
 
-        // Create one overlay window per connected monitor (`NSScreen.screens`)
+        // Create one overlay panel per connected monitor (`NSScreen.screens`)
         for screen in NSScreen.screens {
-            let overlay = NSWindow(
+            let overlay = NSPanel(
                 contentRect: screen.frame,
-                styleMask: [.borderless],
+                styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
             )
+            overlay.isReleasedWhenClosed = false
+            overlay.isFloatingPanel = true
             overlay.isOpaque = false
             overlay.backgroundColor = .clear
             overlay.hasShadow = false
@@ -172,9 +176,11 @@ public final class RecordingCoordinator {
             overlay.ignoresMouseEvents = false
             overlay.acceptsMouseMovedEvents = true
             overlay.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            overlay.contentView = NSHostingView(
+            let hosting = NSHostingView(
                 rootView: WindowAndAreaPickerOverlayView(coordinator: self, screen: screen)
             )
+            hosting.sizingOptions = []
+            overlay.contentView = hosting
             overlay.setFrame(screen.frame, display: true)
             overlay.orderFrontRegardless()
             pickerOverlayWindows.append(overlay)
@@ -655,9 +661,7 @@ public struct RecordingHUDBarView: View {
                     }
 
                     Button("Create Interactive Showcase Project") {
-                        if let demo = coordinator.createInteractiveSampleProject() {
-                            coordinator.onRecordingCompleted?(demo)
-                        }
+                        _ = coordinator.createInteractiveSampleProject()
                     }
 
                     if !workspace.recentProjectURLs.isEmpty {
