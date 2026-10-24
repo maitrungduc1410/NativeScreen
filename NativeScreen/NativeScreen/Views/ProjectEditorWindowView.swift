@@ -157,47 +157,48 @@ public struct ProjectEditorWindowView: View {
                             )
                             .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
 
-                            // Floating Left Quick Dock (Icon-only with Tooltips)
+                            // Floating Left Quick Dock (Instant Tooltip + Smooth Highlight)
                             HStack {
-                                VStack(spacing: 10) {
+                                VStack(spacing: 8) {
                                     quickDockIconButton(
                                         icon: "plus.magnifyingglass",
-                                        tooltip: "Add Zoom at Playhead"
+                                        tooltip: "Zoom"
                                     ) {
                                         session.addZoomAtPlayhead()
                                     }
 
                                     quickDockIconButton(
+                                        icon: "sparkle.magnifyingglass",
+                                        tooltip: "Auto-cluster zooms"
+                                    ) {
+                                        session.regenerateAutoZooms()
+                                    }
+
+                                    quickDockIconButton(
                                         icon: "eye.slash",
-                                        tooltip: "Add Gaussian Blur Mask"
+                                        tooltip: "Sensitive data mask"
                                     ) {
                                         session.addMaskAtPlayhead(type: .blur, style: .gaussian)
                                     }
 
                                     quickDockIconButton(
-                                        icon: "square.grid.3x3",
-                                        tooltip: "Add Pixelate Mask"
-                                    ) {
-                                        session.addMaskAtPlayhead(type: .blur, style: .pixelate)
-                                    }
-
-                                    quickDockIconButton(
-                                        icon: "flashlight.on.fill",
-                                        tooltip: "Add Spotlight Mask"
+                                        icon: "viewfinder.rectangular",
+                                        tooltip: "Spotlight mask"
                                     ) {
                                         session.addMaskAtPlayhead(type: .spotlight, style: .dim)
                                     }
                                 }
-                                .padding(8)
+                                .padding(7)
                                 .background(
-                                    Color(red: 0.11, green: 0.11, blue: 0.15).opacity(0.90),
-                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    Color(red: 0.11, green: 0.11, blue: 0.14).opacity(0.94),
+                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                                         .strokeBorder(.white.opacity(0.10), lineWidth: 1)
                                 )
                                 .padding(.leading, 14)
+                                .zIndex(60)
 
                                 Spacer()
                             }
@@ -319,15 +320,17 @@ public struct ProjectEditorWindowView: View {
 
     @ViewBuilder
     private func quickDockIconButton(icon: String, tooltip: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        InstantTooltipButton(
+            tooltip: tooltip,
+            edge: .trailing,
+            size: 32,
+            cornerRadius: 9,
+            action: action
+        ) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.82))
-                .frame(width: 28, height: 28)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.90))
         }
-        .buttonStyle(.plain)
-        .help(tooltip)
     }
 
     // MARK: - Hardware Export Sheet

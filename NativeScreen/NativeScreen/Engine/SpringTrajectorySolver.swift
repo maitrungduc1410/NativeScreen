@@ -169,7 +169,9 @@ public struct SpringTrajectorySolver: Sendable {
         var camVelY = 0.0
         var camScaleVel = 0.0
 
-        let activeZooms = document.timeline.zooms.filter { !$0.disabled }
+        let activeZooms = document.timeline.isZoomTrackHidden
+            ? []
+            : document.timeline.zooms.filter { !$0.disabled }
 
         for step in 0..<totalSteps {
             let tMs = Double(step) * stepMs

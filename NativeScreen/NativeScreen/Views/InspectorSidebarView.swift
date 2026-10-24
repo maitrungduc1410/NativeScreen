@@ -13,26 +13,24 @@ public struct InspectorSidebarView: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            // Vertical Icon Navigation Rail
+            // Vertical Icon Navigation Rail with Instant Speech-Bubble Tooltips (Left side, style)
             VStack(spacing: 10) {
                 ForEach(ProjectSession.InspectorTab.allCases) { tab in
                     let isSelected = (session.selectedInspectorTab == tab)
-                    Button {
+                    InstantTooltipButton(
+                        tooltip: tab.rawValue,
+                        edge: .leading,
+                        isActive: isSelected,
+                        activeColor: Color.white.opacity(0.18),
+                        size: 36,
+                        cornerRadius: 9
+                    ) {
                         session.selectedInspectorTab = tab
                     } label: {
                         Image(systemName: tab.systemImage)
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(isSelected ? Color(red: 0.56, green: 0.48, blue: 1.0) : .secondary)
-                            .frame(width: 34, height: 34)
-                            .background(
-                                isSelected
-                                    ? Color(red: 0.44, green: 0.36, blue: 0.96).opacity(0.22)
-                                    : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            )
+                            .foregroundStyle(isSelected ? .white : .secondary)
                     }
-                    .buttonStyle(.plain)
-                    .help(tab.rawValue)
                 }
                 Spacer()
             }
@@ -40,6 +38,7 @@ public struct InspectorSidebarView: View {
             .padding(.horizontal, 7)
             .frame(maxHeight: .infinity)
             .background(Color(red: 0.07, green: 0.07, blue: 0.09))
+            .zIndex(50)
 
             Divider()
 

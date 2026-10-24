@@ -2,15 +2,15 @@ import SwiftUI
 import AppKit
 
 /// Clean, zero-jitter interactive mask handle overlay on the Preview Canvas.
-/// - Uses `CanvasCoordinateTransform` so mask handles move and scale with the Virtual Camera Zoom & Pan
-///   (staying 100% locked to the source clip's coordinates).
-/// - Uses a fixed parent `.coordinateSpace(name: "previewCanvasSpace")` so dragging never oscillates or jitters.
-/// - Displays zero text badges on the preview canvas (only clean border + corner handles when selected and paused).
+/// - Uses `CanvasCoordinateTransform` so mask handles move and scale with the Virtual Camera Zoom & Pan.
+/// - Solid subtle border (no dashed lines!) when hovered or selected.
+/// - Displays zero text badges on the preview canvas.
 public struct InteractiveMaskCanvasOverlayView: View {
     @Bindable var session: ProjectSession
     let canvasSize: CGSize
 
     @State private var dragStartRect01: Rect01?
+    @State private var hoveredMaskId: String?
 
     public init(session: ProjectSession, canvasSize: CGSize) {
         self.session = session
@@ -48,23 +48,32 @@ public struct InteractiveMaskCanvasOverlayView: View {
                     let boxW = max(16.0, mappedRect.width)
                     let boxH = max(16.0, mappedRect.height)
                     let isSelected = (session.selectedMaskId == mask.id)
+                    let isHovered = (hoveredMaskId == mask.id)
 
                     ZStack {
-                        // Clean selection frame without any text/badge clutter
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        // Solid clean border (NO dashed stroke!)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(
-                                isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.32),
-                                style: StrokeStyle(
-                                    lineWidth: isSelected ? 1.5 : 1.0,
-                                    dash: isSelected ? [] : [4, 4]
-                                )
+                                isSelected
+                                    ? Color.white.opacity(0.90)
+                                    : (isHovered ? Color.white.opacity(0.45) : Color.white.opacity(0.16)),
+                                lineWidth: isSelected ? 1.5 : 1.0
                             )
                             .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .fill(Color.white.opacity(0.001))
                             )
-                            .shadow(color: .black.opacity(isSelected ? 0.45 : 0.0), radius: 3)
+                            .shadow(color: .black.opacity(isSelected ? 0.35 : 0.0), radius: 3)
                             .contentShape(Rectangle())
+                            .onHover { hovering in
+                                withAnimation(.easeOut(duration: 0.14)) {
+                                    if hovering {
+                                        hoveredMaskId = mask.id
+                                    } else if hoveredMaskId == mask.id {
+                                        hoveredMaskId = nil
+                                    }
+                                }
+                            }
                             .onTapGesture {
                                 session.selectMask(mask.id)
                             }
@@ -94,8 +103,8 @@ public struct InteractiveMaskCanvasOverlayView: View {
                                     }
                             )
 
-                        // 4 Corner Resize Handles (Only shown when selected)
-                        if isSelected {
+                        // 4 Corner Resize Handles (Smooth fade in/out when selected or hovered)
+                        Group {
                             cornerHandle(
                                 maskId: mask.id,
                                 currentRect01: rect01,
@@ -136,6 +145,8 @@ public struct InteractiveMaskCanvasOverlayView: View {
                             )
                             .position(x: boxW, y: boxH)
                         }
+                        .opacity(isSelected || isHovered ? 1.0 : 0.0)
+                        .animation(.easeOut(duration: 0.14), value: isSelected || isHovered)
                     }
                     .frame(width: boxW, height: boxH)
                     .position(x: mappedRect.minX + boxW * 0.5, y: mappedRect.minY + boxH * 0.5)
@@ -158,7 +169,7 @@ public struct InteractiveMaskCanvasOverlayView: View {
     ) -> some View {
         Circle()
             .fill(Color.white)
-            .frame(width: 10, height: 10)
+            .frame(width: 9, height: 9)
             .overlay(Circle().stroke(Color.indigo, lineWidth: 2))
             .shadow(color: .black.opacity(0.4), radius: 2)
             .gesture(

@@ -737,30 +737,57 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
 public struct MaskTrack: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var id: String
     public var name: String
+    public var isHidden: Bool
     public var items: [MaskItem]
 
-    public init(id: String = UUID().uuidString, name: String, items: [MaskItem] = []) {
+    public init(id: String = UUID().uuidString, name: String, isHidden: Bool = false, items: [MaskItem] = []) {
         self.id = id
         self.name = name
+        self.isHidden = isHidden
         self.items = items
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, isHidden, items
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
+        self.items = try container.decodeIfPresent([MaskItem].self, forKey: .items) ?? []
     }
 }
 
 public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
     public var slices: [ClipSlice]
     public var zooms: [ZoomBlock]
+    public var isZoomTrackHidden: Bool
     public var maskTracks: [MaskTrack]
 
     public init(
         slices: [ClipSlice] = [],
         zooms: [ZoomBlock] = [],
-        maskTracks: [MaskTrack] = [
-            MaskTrack(id: "mask-track-1", name: "Blur Track 1")
-        ]
+        isZoomTrackHidden: Bool = false,
+        maskTracks: [MaskTrack] = []
     ) {
         self.slices = slices
         self.zooms = zooms
+        self.isZoomTrackHidden = isZoomTrackHidden
         self.maskTracks = maskTracks
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case slices, zooms, isZoomTrackHidden, maskTracks
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.slices = try container.decodeIfPresent([ClipSlice].self, forKey: .slices) ?? []
+        self.zooms = try container.decodeIfPresent([ZoomBlock].self, forKey: .zooms) ?? []
+        self.isZoomTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isZoomTrackHidden) ?? false
+        self.maskTracks = try container.decodeIfPresent([MaskTrack].self, forKey: .maskTracks) ?? []
     }
 }
 

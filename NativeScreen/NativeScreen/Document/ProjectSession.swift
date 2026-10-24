@@ -16,8 +16,9 @@ public final class ProjectSession: Identifiable {
     public var clickEvents: [ClickEvent]
     public var keyEvents: [KeyStrokeEvent]
 
-    // Playback, Tool Mode & Selection State
+    // Playback, Hover Skimming, Tool Mode & Selection State
     public var playheadTimelineMs: Double = 0.0
+    public var hoverSkimTimelineMs: Double? = nil
     public var isPlaying: Bool = false
     public var isSplitModeActive: Bool = false
     public var selectedSliceId: String?
@@ -29,11 +30,10 @@ public final class ProjectSession: Identifiable {
     public private(set) var timeMapper: NLETimeMapper
     public private(set) var trajectorySolver: SpringTrajectorySolver
 
-    // Track last parameters used to build `trajectorySolver` so we NEVER recompute 120Hz springs
-    // when dragging a Blur Mask or adjusting background/frame/audio sliders!
     private var lastSolverCursorConfig: CursorConfig
     private var lastSolverMotionConfig: MotionConfig
     private var lastSolverZooms: [ZoomBlock]
+    private var lastSolverZoomTrackHidden: Bool
 
     // Value-Type Snapshot Undo/Redo Stack
     private var undoStack: [ProjectDocument] = []
@@ -42,7 +42,7 @@ public final class ProjectSession: Identifiable {
     private let maxUndoDepth = 150
     private var saveTask: Task<Void, Never>?
 
-    // Incrementing token used to notify the Metal preview view (`MTKView.needsDisplay = true`) on any state/scrub change
+    // Incrementing token used to notify the Metal preview view (`MTKView.needsDisplay = true`) on any state/scrub/skim change
     public var renderRevision: UInt64 = 0
 
     public enum InspectorTab: String, CaseIterable, Identifiable {
@@ -73,23 +73,27 @@ public final class ProjectSession: Identifiable {
         clickEvents: [ClickEvent] = [],
         keyEvents: [KeyStrokeEvent] = []
     ) {
+        var cleanedDoc = document
+        cleanedDoc.timeline.maskTracks.removeAll { $0.items.isEmpty }
+
         self.packageURL = packageURL
-        self.document = document
+        self.document = cleanedDoc
         self.metadata = metadata
         self.cursorEvents = cursorEvents
         self.clickEvents = clickEvents
         self.keyEvents = keyEvents
-        self.timeMapper = NLETimeMapper(slices: document.timeline.slices)
-        self.lastSolverCursorConfig = document.cursor
-        self.lastSolverMotionConfig = document.motion
-        self.lastSolverZooms = document.timeline.zooms
+        self.timeMapper = NLETimeMapper(slices: cleanedDoc.timeline.slices)
+        self.lastSolverCursorConfig = cleanedDoc.cursor
+        self.lastSolverMotionConfig = cleanedDoc.motion
+        self.lastSolverZooms = cleanedDoc.timeline.zooms
+        self.lastSolverZoomTrackHidden = cleanedDoc.timeline.isZoomTrackHidden
         self.trajectorySolver = SpringTrajectorySolver(
             durationMs: metadata.durationMs,
             cursorEvents: cursorEvents,
             clickEvents: clickEvents,
-            document: document
+            document: cleanedDoc
         )
-        self.selectedSliceId = document.timeline.slices.first?.id
+        self.selectedSliceId = cleanedDoc.timeline.slices.first?.id
     }
 
     // MARK: - Load & Save `.nativescreen` Bundle
@@ -120,11 +124,11 @@ public final class ProjectSession: Identifiable {
             )
         }
 
-        // Normalize zoom blocks on load so legacy/edited projects never have overlapping zoom blocks
         document.timeline.zooms = AutoZoomClusterGenerator.normalizeNonOverlappingZooms(
             document.timeline.zooms,
             durationMs: metadata.durationMs
         )
+        document.timeline.maskTracks.removeAll { $0.items.isEmpty }
 
         let cursorURL = recordingDir.appendingPathComponent(metadata.tracks.cursorTelemetry)
         let clicksURL = recordingDir.appendingPathComponent(metadata.tracks.clicksTelemetry)
@@ -196,6 +200,12 @@ public final class ProjectSession: Identifiable {
         let before = interactiveEditSnapshot ?? document
         var next = document
         mutation(&next)
+        // Automatically prune any MaskTrack that has become completely empty!
+        next.timeline.maskTracks.removeAll { $0.items.isEmpty }
+        for idx in next.timeline.maskTracks.indices {
+            next.timeline.maskTracks[idx].name = idx == 0 ? "Masks" : "Masks \(idx + 1)"
+        }
+
         guard next != document else { return }
         if interactiveEditSnapshot == nil {
             pushUndoSnapshot(before)
@@ -238,11 +248,13 @@ public final class ProjectSession: Identifiable {
             || document.cursor != lastSolverCursorConfig
             || document.motion != lastSolverMotionConfig
             || document.timeline.zooms != lastSolverZooms
+            || document.timeline.isZoomTrackHidden != lastSolverZoomTrackHidden
 
         if needsSpringRebuild {
             lastSolverCursorConfig = document.cursor
             lastSolverMotionConfig = document.motion
             lastSolverZooms = document.timeline.zooms
+            lastSolverZoomTrackHidden = document.timeline.isZoomTrackHidden
             trajectorySolver = SpringTrajectorySolver(
                 durationMs: metadata.durationMs,
                 cursorEvents: cursorEvents,
@@ -257,14 +269,26 @@ public final class ProjectSession: Identifiable {
         renderRevision &+= 1
     }
 
-    // MARK: - Current Playhead Helpers
+    // MARK: - Current Playhead & Live Hover Skimming Helpers
+
+    /// When hovering over the timeline while paused, the preview renders at `hoverSkimTimelineMs` in real time!
+    public var effectivePreviewTimelineMs: Double {
+        if !isPlaying, let hoverMs = hoverSkimTimelineMs {
+            return max(0.0, min(timeMapper.totalTimelineDurationMs, hoverMs))
+        }
+        return playheadTimelineMs
+    }
 
     public var currentSourceTimeMs: Double {
+        timeMapper.sourceTime(forTimelineMs: effectivePreviewTimelineMs).sourceMs
+    }
+
+    public var committedSourceTimeMs: Double {
         timeMapper.sourceTime(forTimelineMs: playheadTimelineMs).sourceMs
     }
 
     public var currentActiveSlice: ClipSlice? {
-        timeMapper.sourceTime(forTimelineMs: playheadTimelineMs).slice
+        timeMapper.sourceTime(forTimelineMs: effectivePreviewTimelineMs).slice
     }
 
     public func seek(toTimelineMs timelineMs: Double) {
@@ -272,6 +296,16 @@ public final class ProjectSession: Identifiable {
         if abs(clamped - playheadTimelineMs) > 0.01 {
             playheadTimelineMs = clamped
             renderRevision &+= 1
+        }
+    }
+
+    public func setHoverSkimTimelineMs(_ timelineMs: Double?) {
+        let next = timelineMs.map { max(0.0, min(timeMapper.totalTimelineDurationMs, $0)) }
+        if next != hoverSkimTimelineMs {
+            hoverSkimTimelineMs = next
+            if !isPlaying {
+                renderRevision &+= 1
+            }
         }
     }
 
@@ -299,7 +333,6 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Deletes whichever timeline item (Mask, Zoom, or Clip Slice) is currently selected.
     public func deleteSelectedTimelineItem() {
         if let maskId = selectedMaskId {
             deleteMask(maskId: maskId)
@@ -316,11 +349,10 @@ public final class ProjectSession: Identifiable {
 
     // MARK: - Universal Split Tool Actions (Works on Clip Slices, Zoom Blocks, AND Blur/Spotlight Masks!)
 
-    /// Splits a specific ClipSlice at `timelineMs` (or at the current playhead).
     public func splitSlice(id: String, atTimelineMs timelineMs: Double) {
         guard let index = timeMapper.mappedSlices.firstIndex(where: { $0.slice.id == id }) else { return }
         let mapped = timeMapper.mappedSlices[index]
-        guard timelineMs > mapped.timelineStartMs + 120.0 && timelineMs < mapped.timelineEndMs - 120.0 else { return }
+        guard timelineMs > mapped.timelineStartMs + 100.0 && timelineMs < mapped.timelineEndMs - 100.0 else { return }
 
         let offsetTimeline = timelineMs - mapped.timelineStartMs
         let splitSourceMs = mapped.slice.sourceStartMs + offsetTimeline * mapped.slice.speed
@@ -338,24 +370,24 @@ public final class ProjectSession: Identifiable {
             doc.timeline.slices.replaceSubrange(index...index, with: [firstHalf, secondHalf])
             selectedSliceId = secondHalf.id
         }
+        seek(toTimelineMs: timelineMs)
     }
 
     public func splitSliceAtPlayhead() {
         let currentTimeline = playheadTimelineMs
         if let hit = timeMapper.mappedSlices.first(where: {
-            currentTimeline > $0.timelineStartMs + 120.0 && currentTimeline < $0.timelineEndMs - 120.0
+            currentTimeline > $0.timelineStartMs + 100.0 && currentTimeline < $0.timelineEndMs - 100.0
         }) {
             splitSlice(id: hit.slice.id, atTimelineMs: currentTimeline)
         }
     }
 
-    /// Splits a ZoomBlock into two independent ZoomBlocks at `sourceMs`.
     public func splitZoom(id: String, atSourceMs sourceMs: Double) {
         mutate { doc in
             guard let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) else { return }
             let original = doc.timeline.zooms[idx]
             let gap = 40.0
-            guard sourceMs > original.sourceStartMs + 250.0 && sourceMs < original.sourceEndMs - 250.0 else { return }
+            guard sourceMs > original.sourceStartMs + 200.0 && sourceMs < original.sourceEndMs - 200.0 else { return }
 
             var firstHalf = original
             firstHalf.id = UUID().uuidString
@@ -370,14 +402,13 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Splits a Blur or Spotlight MaskItem into two independent MaskItems at `sourceMs`.
     public func splitMask(id: String, atSourceMs sourceMs: Double) {
         mutate { doc in
             for tIdx in doc.timeline.maskTracks.indices {
                 if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {
                     let original = doc.timeline.maskTracks[tIdx].items[mIdx]
                     let gap = 40.0
-                    guard sourceMs > original.sourceStartMs + 200.0 && sourceMs < original.sourceEndMs - 200.0 else { return }
+                    guard sourceMs > original.sourceStartMs + 180.0 && sourceMs < original.sourceEndMs - 180.0 else { return }
 
                     let rectAtSplit = original.interpolatedRect(at: sourceMs)
                     var firstHalf = original
@@ -397,6 +428,74 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    // MARK: - Move Mask Between Tracks (Cross-Track Vertical Drag & Auto-Prune Empty Tracks)
+
+    /// Moves a `MaskItem` vertically to `targetTrackIndex` (or creates a new track if dragged below all existing tracks).
+    /// Any track left with 0 items is automatically deleted inside `mutate(...)`.
+    public func moveMaskToTrack(maskId: String, targetTrackIndex: Int) {
+        mutate { doc in
+            var extractedMask: MaskItem?
+            var sourceTrackIdx: Int?
+
+            for tIdx in doc.timeline.maskTracks.indices {
+                if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == maskId }) {
+                    extractedMask = doc.timeline.maskTracks[tIdx].items.remove(at: mIdx)
+                    sourceTrackIdx = tIdx
+                    break
+                }
+            }
+
+            guard let mask = extractedMask else { return }
+
+            if targetTrackIndex < 0 {
+                // Insert a new track at top
+                let newTrack = MaskTrack(name: "Masks", items: [mask])
+                doc.timeline.maskTracks.insert(newTrack, at: 0)
+                return
+            }
+
+            if targetTrackIndex >= doc.timeline.maskTracks.count {
+                // Append a new track at bottom
+                let newTrack = MaskTrack(name: "Masks \(doc.timeline.maskTracks.count + 1)", items: [mask])
+                doc.timeline.maskTracks.append(newTrack)
+                return
+            }
+
+            // Check if target track has an overlapping item; if not, place directly in targetTrackIndex
+            let hasOverlap = doc.timeline.maskTracks[targetTrackIndex].items.contains { other in
+                !(mask.sourceEndMs <= other.sourceStartMs + 20.0 || mask.sourceStartMs >= other.sourceEndMs - 20.0)
+            }
+
+            if !hasOverlap {
+                doc.timeline.maskTracks[targetTrackIndex].items.append(mask)
+                doc.timeline.maskTracks[targetTrackIndex].items.sort { $0.sourceStartMs < $1.sourceStartMs }
+            } else if let origIdx = sourceTrackIdx, origIdx < doc.timeline.maskTracks.count {
+                // Put back in original track if target track is occupied at that timestamp
+                doc.timeline.maskTracks[origIdx].items.append(mask)
+                doc.timeline.maskTracks[origIdx].items.sort { $0.sourceStartMs < $1.sourceStartMs }
+            } else {
+                let newTrack = MaskTrack(name: "Masks", items: [mask])
+                doc.timeline.maskTracks.append(newTrack)
+            }
+        }
+    }
+
+    // MARK: - Track Visibility Toggles
+
+    public func toggleZoomTrackVisibility() {
+        mutate { doc in
+            doc.timeline.isZoomTrackHidden.toggle()
+        }
+    }
+
+    public func toggleMaskTrackVisibility(trackId: String) {
+        mutate { doc in
+            if let idx = doc.timeline.maskTracks.firstIndex(where: { $0.id == trackId }) {
+                doc.timeline.maskTracks[idx].isHidden.toggle()
+            }
+        }
+    }
+
     // MARK: - Non-Overlapping Move & Edge Resize Actions
 
     public func updateSliceSourceRange(id: String, newSourceStartMs: Double, newSourceEndMs: Double) {
@@ -411,7 +510,6 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Updates a ZoomBlock's `[sourceStartMs, sourceEndMs]` while clamping against adjacent ZoomBlocks so they NEVER overlap.
     public func updateZoomRange(id: String, newStartMs: Double, newEndMs: Double) {
         let maxDur = metadata.durationMs
         let minDuration = 300.0
@@ -440,7 +538,6 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Updates a MaskItem's `[sourceStartMs, sourceEndMs]` while clamping against adjacent MaskItems on the same track.
     public func updateMaskRange(id: String, newStartMs: Double, newEndMs: Double) {
         let maxDur = metadata.durationMs
         let minDuration = 250.0
@@ -472,7 +569,7 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    // MARK: - Add / Delete / Duplicate Zooms, Masks & Tracks
+    // MARK: - Add / Delete Zooms & Masks
 
     public func deleteSelectedSlice() {
         guard let sliceId = selectedSliceId, document.timeline.slices.count > 1 else { return }
@@ -492,11 +589,10 @@ public final class ProjectSession: Identifiable {
     }
 
     public func addZoomAtPlayhead() {
-        let srcMs = currentSourceTimeMs
+        let srcMs = committedSourceTimeMs
         let maxDur = metadata.durationMs
         let cursorState = trajectorySolver.evaluate(atSourceMs: srcMs).cursor
 
-        // Find available non-overlapping window around `srcMs`
         let sorted = document.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
         if let containing = sorted.first(where: { srcMs >= $0.sourceStartMs && srcMs <= $0.sourceEndMs }) {
             selectZoom(containing.id)
@@ -523,6 +619,7 @@ public final class ProjectSession: Identifiable {
             manualCenter01: cursorState.position01
         )
         mutate { doc in
+            doc.timeline.isZoomTrackHidden = false
             doc.timeline.zooms.append(newZoom)
             doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
         }
@@ -537,19 +634,17 @@ public final class ProjectSession: Identifiable {
             defaultScale: 1.8
         )
         mutate { doc in
+            doc.timeline.isZoomTrackHidden = false
             doc.timeline.zooms = generated
         }
     }
 
-    /// Adds a new Blur or Spotlight Mask at the current playhead, centered right inside the current camera viewport
-    /// so it is immediately visible even when zoomed in!
     public func addMaskAtPlayhead(type: MaskType = .blur, style: MaskStyle = .gaussian) {
-        let srcMs = currentSourceTimeMs
+        let srcMs = committedSourceTimeMs
         let maxDur = metadata.durationMs
         let endMs = min(maxDur, srcMs + 4500.0)
         let startMs = max(0.0, min(srcMs, endMs - 1200.0))
 
-        // Place new mask centered around current camera focus, scaled by `1 / camera.scale`
         let camState = trajectorySolver.evaluate(atSourceMs: srcMs).camera
         let invScale = 1.0 / max(1.0, camState.scale)
         let existingCount = activeMasks(atSourceMs: srcMs).count
@@ -575,25 +670,20 @@ public final class ProjectSession: Identifiable {
             if let freeTrackIndex = doc.timeline.maskTracks.firstIndex(where: { track in
                 !track.items.contains(where: { !(endMs <= $0.sourceStartMs + 30.0 || startMs >= $0.sourceEndMs - 30.0) })
             }) {
+                doc.timeline.maskTracks[freeTrackIndex].isHidden = false
                 doc.timeline.maskTracks[freeTrackIndex].items.append(item)
                 doc.timeline.maskTracks[freeTrackIndex].items.sort { $0.sourceStartMs < $1.sourceStartMs }
             } else {
                 let newTrackNumber = doc.timeline.maskTracks.count + 1
                 let newTrack = MaskTrack(
-                    name: "Mask Track \(newTrackNumber)",
+                    name: newTrackNumber == 1 ? "Masks" : "Masks \(newTrackNumber)",
+                    isHidden: false,
                     items: [item]
                 )
                 doc.timeline.maskTracks.append(newTrack)
             }
         }
         selectMask(item.id)
-    }
-
-    public func addEmptyMaskTrack() {
-        mutate { doc in
-            let nextNum = doc.timeline.maskTracks.count + 1
-            doc.timeline.maskTracks.append(MaskTrack(name: "Mask Track \(nextNum)"))
-        }
     }
 
     public func deleteMaskTrack(trackId: String) {
@@ -604,15 +694,12 @@ public final class ProjectSession: Identifiable {
                 selectedMaskId = nil
             }
             doc.timeline.maskTracks.removeAll { $0.id == trackId }
-            if doc.timeline.maskTracks.isEmpty {
-                doc.timeline.maskTracks.append(MaskTrack(name: "Mask Track 1"))
-            }
         }
     }
 
     public func activeMasks(atSourceMs sourceMs: Double) -> [MaskItem] {
         var result: [MaskItem] = []
-        for track in document.timeline.maskTracks {
+        for track in document.timeline.maskTracks where !track.isHidden {
             for item in track.items where !item.disabled {
                 if sourceMs >= item.sourceStartMs && sourceMs <= item.sourceEndMs {
                     result.append(item)

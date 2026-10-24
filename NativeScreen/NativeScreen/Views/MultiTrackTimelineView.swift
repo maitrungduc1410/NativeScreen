@@ -2,15 +2,21 @@ import SwiftUI
 import AppKit
 
 /// NativeScreen-grade Multi-Track NLE Timeline:
-/// - Universal Interactive Split Tool (`✂️` splits Clips, Zooms, AND Blur/Spotlight Masks at cursor position)
-/// - Left & Right Edge Resize Handles (`NSCursor.resizeLeftRight`) on every block
-/// - Non-overlapping neighbor clamping on Zoom and Mask tracks
-/// - Fixed-interval jitter-free Time Ruler + Trackpad Pinch-to-Zoom (`MagnifyGesture`)
-/// - Icon-only toolbar with tooltips + `Delete`/`Backspace` & `ESC` hotkeys + Context Menus
+/// - Sticky Fixed Time Ruler at top (`LazyVStack(pinnedViews: [.sectionHeaders])`) so vertical scrolling never hides the ruler.
+/// - Live Hover Skimming with translucent teardrop Ghost Playhead teardrop marker).
+/// - Click ANYWHERE (on tracks, empty space, or inside segments) to both seek playhead AND select the segment.
+/// - Universal Split Blade (`✂️`) with exact timelines/source coordinate math (zero offset drift after cutting clips!).
+/// - Cross-track vertical drag for Masks (drag a mask up/down between tracks; empty tracks auto-delete!).
+/// - Visibility eye toggle on Zoom and Mask tracks.
+/// - Smooth fade-in/out (`0.15s`) for segment edge resize handles on hover/select.
 public struct MultiTrackTimelineView: View {
     @Bindable var session: ProjectSession
     @State private var timelineZoom: Double = 1.0
     @State private var pinchBaseZoom: Double?
+
+    private let labelColumnWidth: CGFloat = 96
+    private let horizontalPadding: CGFloat = 14
+    private let maskRowStride: CGFloat = 31
 
     public init(session: ProjectSession) {
         self.session = session
@@ -18,76 +24,78 @@ public struct MultiTrackTimelineView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Sleek Icon-Only Action Bar (style)
-            HStack(spacing: 8) {
-                // 1. Universal Split / Blade Tool Toggle (`✂️`)
-                Button {
+            // Top Icon Toolbar with Instant Hover Tooltips
+            HStack(spacing: 6) {
+                InstantTooltipButton(
+                    tooltip: session.isSplitModeActive ? "Exit Split Tool (ESC)" : "Split Tool (Click any Clip, Zoom, or Mask)",
+                    edge: .trailing,
+                    isActive: session.isSplitModeActive,
+                    size: 28,
+                    cornerRadius: 7
+                ) {
                     session.isSplitModeActive.toggle()
                 } label: {
                     Image(systemName: "scissors")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(session.isSplitModeActive ? .white : .secondary)
-                        .frame(width: 28, height: 26)
-                        .background(
-                            session.isSplitModeActive
-                                ? Color(red: 0.48, green: 0.38, blue: 0.96)
-                                : Color.white.opacity(0.05),
-                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        )
                 }
-                .buttonStyle(.plain)
-                .help("Split Tool (Click any Clip, Zoom, or Mask block to split • Press ESC to exit)")
 
                 Divider()
                     .frame(height: 16)
+                    .padding(.horizontal, 2)
 
-                // 2. Add Zoom Block Icon Button
-                iconActionButton(
-                    systemImage: "plus.magnifyingglass",
-                    tooltip: "Add Zoom at Playhead"
+                InstantTooltipButton(
+                    tooltip: "Add Zoom at Playhead",
+                    edge: .trailing,
+                    size: 28,
+                    cornerRadius: 7
                 ) {
                     session.addZoomAtPlayhead()
+                } label: {
+                    Image(systemName: "plus.magnifyingglass")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
 
-                // 3. Add Blur Mask Icon Button
-                iconActionButton(
-                    systemImage: "eye.slash.fill",
-                    tooltip: "Add Blur Mask at Playhead"
+                InstantTooltipButton(
+                    tooltip: "Sensitive data mask",
+                    edge: .trailing,
+                    size: 28,
+                    cornerRadius: 7
                 ) {
                     session.addMaskAtPlayhead(type: .blur, style: .gaussian)
+                } label: {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
 
-                // 4. Add Spotlight Mask Icon Button
-                iconActionButton(
-                    systemImage: "flashlight.on.fill",
-                    tooltip: "Add Spotlight Mask at Playhead"
+                InstantTooltipButton(
+                    tooltip: "Spotlight mask",
+                    edge: .trailing,
+                    size: 28,
+                    cornerRadius: 7
                 ) {
                     session.addMaskAtPlayhead(type: .spotlight, style: .dim)
+                } label: {
+                    Image(systemName: "viewfinder.rectangular")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
 
-                // 5. Add Parallel Mask Track Row Icon Button
-                iconActionButton(
-                    systemImage: "rectangle.stack.badge.plus",
-                    tooltip: "Add New Parallel Mask Track"
-                ) {
-                    session.addEmptyMaskTrack()
-                }
-
-                // 6. Delete Selected Item Icon Button
                 if session.selectedMaskId != nil || session.selectedZoomId != nil || (session.selectedSliceId != nil && session.document.timeline.slices.count > 1) {
-                    iconActionButton(
-                        systemImage: "trash",
-                        tooltip: "Delete Selected Item (Delete / Backspace)"
+                    InstantTooltipButton(
+                        tooltip: "Delete Selected (Backspace)",
+                        edge: .trailing,
+                        size: 28,
+                        cornerRadius: 7
                     ) {
                         session.deleteSelectedTimelineItem()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.red.opacity(0.85))
                     }
-                }
-
-                if session.isSplitModeActive {
-                    Text("Split Mode Active — Click any Clip, Zoom, or Mask block to cut (ESC to exit)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
-                        .padding(.leading, 6)
                 }
 
                 Spacer()
@@ -101,270 +109,119 @@ public struct MultiTrackTimelineView: View {
                     Slider(value: $timelineZoom, in: 1.0...6.0)
                         .frame(width: 96)
                         .controlSize(.mini)
-                        .help("Timeline Zoom (or pinch with 2 fingers on trackpad)")
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, 5)
             .background(Color(red: 0.06, green: 0.06, blue: 0.08))
+            .zIndex(20)
 
             Divider()
 
-            // Main Multi-Track Canvas Area
+            // Timeline Area with Sticky Top Ruler & Scrollable Tracks
             GeometryReader { outerGeo in
-                let labelColumnWidth: CGFloat = 86
-                let baseTrackWidth = max(320, outerGeo.size.width - labelColumnWidth - 28)
+                let baseTrackWidth = max(320, outerGeo.size.width - labelColumnWidth - horizontalPadding * 2)
                 let contentWidth = baseTrackWidth * CGFloat(timelineZoom)
                 let totalTimelineMs = max(1000.0, session.timeMapper.totalTimelineDurationMs)
-                let sourceDurationMs = max(1000.0, session.metadata.durationMs)
 
-                ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                ScrollView(.horizontal, showsIndicators: true) {
                     ZStack(alignment: .topLeading) {
-                        VStack(alignment: .leading, spacing: 7) {
-                            // 1. Smooth Fixed-Interval Time Ruler
+                        VStack(alignment: .leading, spacing: 0) {
+                            // 1. STICKY TIME RULER HEADER (Always stays fixed at the top when scrolling tracks vertically!)
                             HStack(spacing: 0) {
                                 Color.clear
-                                    .frame(width: labelColumnWidth, height: 22)
+                                    .frame(width: labelColumnWidth, height: 26)
 
                                 SmoothTimeRulerView(
                                     totalDurationMs: totalTimelineMs,
                                     width: contentWidth
-                                ) { seekMs in
-                                    session.isPlaying = false
-                                    session.seek(toTimelineMs: seekMs)
-                                }
+                                )
                             }
-                            .frame(height: 22)
+                            .padding(.horizontal, horizontalPadding)
+                            .frame(height: 26)
+                            .background(Color(red: 0.05, green: 0.05, blue: 0.07).opacity(0.96))
+                            .zIndex(10)
 
-                            // 2. Screen Clip Track (Warm Amber-Gold
-                            HStack(spacing: 0) {
-                                Text("Clip")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary.opacity(0.8))
-                                    .frame(width: labelColumnWidth, alignment: .leading)
+                            // 2. VERTICALLY SCROLLABLE TRACKS BELOW FIXED RULER
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(alignment: .leading, spacing: 7) {
+                                    // Track A: Screen Clips Track (Always present)
+                                    clipTrackRow(
+                                        contentWidth: contentWidth,
+                                        totalTimelineMs: totalTimelineMs
+                                    )
 
-                                ZStack(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                        .fill(Color.white.opacity(0.025))
+                                    // Track B: Auto-Zoom Track (With visibility eye toggle)
+                                    zoomTrackRow(
+                                        contentWidth: contentWidth,
+                                        totalTimelineMs: totalTimelineMs
+                                    )
 
-                                    ForEach(session.timeMapper.mappedSlices, id: \.slice.id) { mapped in
-                                        let xStart = CGFloat(mapped.timelineStartMs / totalTimelineMs) * contentWidth
-                                        let blockW = max(16.0, CGFloat((mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs) * contentWidth)
-                                        let isSelected = (session.selectedSliceId == mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
-
-                                        TimelineInteractiveSegmentView(
-                                            topTitle: "Clip",
-                                            subtitle: formatClipSubtitle(durationMs: mapped.slice.timelineDurationMs, speed: mapped.slice.speed),
-                                            gradientColors: [
-                                                Color(red: 0.85, green: 0.53, blue: 0.16),
-                                                Color(red: 0.70, green: 0.40, blue: 0.09)
-                                            ],
-                                            isSelected: isSelected,
-                                            isSplitMode: session.isSplitModeActive,
-                                            xOffset: xStart,
-                                            width: blockW,
-                                            height: 36,
-                                            totalWidth: contentWidth,
-                                            totalDurationMs: sourceDurationMs,
-                                            startMs: mapped.slice.sourceStartMs,
-                                            endMs: mapped.slice.sourceEndMs,
-                                            allowDragMove: false,
-                                            onSelect: {
-                                                session.selectSlice(mapped.slice.id)
-                                            },
-                                            onSplitAtFraction: { localFraction in
-                                                let clickedTimelineMs = mapped.timelineStartMs + localFraction * (mapped.timelineEndMs - mapped.timelineStartMs)
-                                                session.splitSlice(id: mapped.slice.id, atTimelineMs: clickedTimelineMs)
-                                            },
-                                            onBeginInteractive: {
-                                                session.beginInteractiveEdit()
-                                            },
-                                            onChangeRange: { newStart, newEnd in
-                                                session.updateSliceSourceRange(
-                                                    id: mapped.slice.id,
-                                                    newSourceStartMs: newStart,
-                                                    newSourceEndMs: newEnd
-                                                )
-                                            },
-                                            onEndInteractive: {
-                                                session.endInteractiveEdit()
-                                            },
-                                            onDelete: {
-                                                session.selectSlice(mapped.slice.id)
-                                                session.deleteSelectedSlice()
-                                            }
+                                    // Track C: Dynamic Mask Tracks (Auto-removed when empty; supports moving masks across tracks)
+                                    ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
+                                        maskTrackRow(
+                                            track: track,
+                                            trackIndex: trackIdx,
+                                            contentWidth: contentWidth,
+                                            totalTimelineMs: totalTimelineMs
                                         )
                                     }
                                 }
-                                .frame(width: contentWidth, height: 36)
-                            }
-
-                            // 3. Auto-Zoom Track (Electric Violet
-                            HStack(spacing: 0) {
-                                Text("Zoom")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary.opacity(0.8))
-                                    .frame(width: labelColumnWidth, alignment: .leading)
-
-                                ZStack(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                        .fill(Color.white.opacity(0.025))
-
-                                    ForEach(session.document.timeline.zooms) { zoom in
-                                        let xStart = CGFloat(zoom.sourceStartMs / sourceDurationMs) * contentWidth
-                                        let blockW = max(18.0, CGFloat((zoom.sourceEndMs - zoom.sourceStartMs) / sourceDurationMs) * contentWidth)
-                                        let isSelected = (session.selectedZoomId == zoom.id)
-
-                                        TimelineInteractiveSegmentView(
-                                            topTitle: "Zoom",
-                                            subtitle: String(format: "🔍 %.1fx  %@", zoom.scale, zoom.mode == .followCursor ? "Auto" : "Manual"),
-                                            gradientColors: zoom.disabled
-                                                ? [Color.gray.opacity(0.45), Color.gray.opacity(0.35)]
-                                                : [
-                                                    Color(red: 0.45, green: 0.35, blue: 0.92),
-                                                    Color(red: 0.36, green: 0.26, blue: 0.78)
-                                                ],
-                                            isSelected: isSelected,
-                                            isSplitMode: session.isSplitModeActive,
-                                            xOffset: xStart,
-                                            width: blockW,
-                                            height: 34,
-                                            totalWidth: contentWidth,
-                                            totalDurationMs: sourceDurationMs,
-                                            startMs: zoom.sourceStartMs,
-                                            endMs: zoom.sourceEndMs,
-                                            allowDragMove: true,
-                                            onSelect: {
-                                                session.selectZoom(zoom.id)
-                                            },
-                                            onSplitAtFraction: { localFraction in
-                                                let splitSourceMs = zoom.sourceStartMs + localFraction * (zoom.sourceEndMs - zoom.sourceStartMs)
-                                                session.splitZoom(id: zoom.id, atSourceMs: splitSourceMs)
-                                            },
-                                            onBeginInteractive: {
-                                                session.beginInteractiveEdit()
-                                            },
-                                            onChangeRange: { newStart, newEnd in
-                                                session.updateZoomRange(id: zoom.id, newStartMs: newStart, newEndMs: newEnd)
-                                            },
-                                            onEndInteractive: {
-                                                session.endInteractiveEdit()
-                                            },
-                                            onDelete: {
-                                                session.deleteZoom(zoomId: zoom.id)
-                                            }
-                                        )
-                                    }
-                                }
-                                .frame(width: contentWidth, height: 34)
-                            }
-
-                            // 4. Unlimited Parallel Mask Tracks (Rose-Plum / Teal Pills)
-                            ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { index, track in
-                                HStack(spacing: 0) {
-                                    HStack(spacing: 4) {
-                                        Text(index == 0 ? "Masks" : "Masks \(index + 1)")
-                                            .font(.system(size: 10, weight: .medium))
-                                            .foregroundStyle(.secondary.opacity(0.8))
-                                            .lineLimit(1)
-
-                                        if session.document.timeline.maskTracks.count > 1 || !track.items.isEmpty {
-                                            Button {
-                                                session.deleteMaskTrack(trackId: track.id)
-                                            } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .font(.system(size: 10))
-                                                    .foregroundStyle(.secondary.opacity(0.5))
-                                            }
-                                            .buttonStyle(.plain)
-                                            .help("Remove Mask Track")
-                                        }
-                                    }
-                                    .frame(width: labelColumnWidth, alignment: .leading)
-                                    .contextMenu {
-                                        Button("Add Blur Mask to Track") {
-                                            session.addMaskAtPlayhead(type: .blur, style: .gaussian)
-                                        }
-                                        Button("Delete Track", role: .destructive) {
-                                            session.deleteMaskTrack(trackId: track.id)
-                                        }
-                                    }
-
-                                    ZStack(alignment: .leading) {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color.white.opacity(0.02))
-
-                                        ForEach(track.items) { item in
-                                            let xStart = CGFloat(item.sourceStartMs / sourceDurationMs) * contentWidth
-                                            let blockW = max(18.0, CGFloat((item.sourceEndMs - item.sourceStartMs) / sourceDurationMs) * contentWidth)
-                                            let isSelected = (session.selectedMaskId == item.id)
-
-                                            TimelineInteractiveSegmentView(
-                                                topTitle: item.type == .blur ? item.style.rawValue.capitalized : "Spotlight",
-                                                subtitle: nil,
-                                                gradientColors: item.type == .blur
-                                                    ? [
-                                                        Color(red: 0.56, green: 0.22, blue: 0.39),
-                                                        Color(red: 0.44, green: 0.16, blue: 0.30)
-                                                    ]
-                                                    : [
-                                                        Color(red: 0.16, green: 0.52, blue: 0.54),
-                                                        Color(red: 0.12, green: 0.38, blue: 0.40)
-                                                    ],
-                                                isSelected: isSelected,
-                                                isSplitMode: session.isSplitModeActive,
-                                                xOffset: xStart,
-                                                width: blockW,
-                                                height: 24,
-                                                totalWidth: contentWidth,
-                                                totalDurationMs: sourceDurationMs,
-                                                startMs: item.sourceStartMs,
-                                                endMs: item.sourceEndMs,
-                                                allowDragMove: true,
-                                                onSelect: {
-                                                    session.selectMask(item.id)
-                                                },
-                                                onSplitAtFraction: { localFraction in
-                                                    let splitSourceMs = item.sourceStartMs + localFraction * (item.sourceEndMs - item.sourceStartMs)
-                                                    session.splitMask(id: item.id, atSourceMs: splitSourceMs)
-                                                },
-                                                onBeginInteractive: {
-                                                    session.beginInteractiveEdit()
-                                                },
-                                                onChangeRange: { newStart, newEnd in
-                                                    session.updateMaskRange(id: item.id, newStartMs: newStart, newEndMs: newEnd)
-                                                },
-                                                onEndInteractive: {
-                                                    session.endInteractiveEdit()
-                                                },
-                                                onDelete: {
-                                                    session.deleteMask(maskId: item.id)
-                                                }
-                                            )
-                                        }
-                                    }
-                                    .frame(width: contentWidth, height: 24)
-                                }
+                                .padding(.horizontal, horizontalPadding)
+                                .padding(.vertical, 8)
                             }
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
 
-                        // Sleek Purple/Indigo Playhead (style)
-                        let playheadX = 14 + labelColumnWidth + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
-                        VStack(spacing: 0) {
-                            Circle()
-                                .fill(Color(red: 0.48, green: 0.38, blue: 0.98))
-                                .frame(width: 9, height: 9)
-                            Rectangle()
-                                .fill(Color(red: 0.48, green: 0.38, blue: 0.98))
-                                .frame(width: 1.5)
+                        // 3. GHOST HOVER PLAYHEAD (translucent teardrop marker when skimming)
+                        if let hoverMs = session.hoverSkimTimelineMs, !session.isPlaying {
+                            let hoverX = horizontalPadding + labelColumnWidth + CGFloat(hoverMs / totalTimelineMs) * contentWidth
+                            TeardropPlayheadLine(
+                                color: Color.white.opacity(0.26),
+                                headColor: Color(red: 0.24, green: 0.26, blue: 0.34),
+                                height: outerGeo.size.height
+                            )
+                            .offset(x: hoverX - 6, y: 2)
+                            .allowsHitTesting(false)
                         }
-                        .frame(height: CGFloat(120 + session.document.timeline.maskTracks.count * 31))
-                        .offset(x: playheadX - 4.5, y: 4)
+
+                        // 4. COMMITTED PURPLE PLAYHEAD (electric violet teardrop)
+                        let playheadX = horizontalPadding + labelColumnWidth + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
+                        TeardropPlayheadLine(
+                            color: Color(red: 0.44, green: 0.32, blue: 1.0),
+                            headColor: Color(red: 0.44, green: 0.32, blue: 1.0),
+                            height: outerGeo.size.height
+                        )
+                        .offset(x: playheadX - 6, y: 2)
                         .allowsHitTesting(false)
                     }
-                    // Trackpad 2-Finger Pinch-to-Zoom Gesture on Timeline
+                    .coordinateSpace(name: "timelineContentSpace")
+                    // Continuous Hover Skimming across the entire timeline!
+                    .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
+                        switch phase {
+                        case .active(let pt):
+                            let trackX = pt.x - horizontalPadding - labelColumnWidth
+                            if trackX >= 0 && trackX <= contentWidth {
+                                let frac = Double(trackX / max(1.0, contentWidth))
+                                session.setHoverSkimTimelineMs(frac * totalTimelineMs)
+                            } else {
+                                session.setHoverSkimTimelineMs(nil)
+                            }
+                        case .ended:
+                            session.setHoverSkimTimelineMs(nil)
+                        }
+                    }
+                    // Click anywhere on ruler or empty track background to seek immediately
+                    .simultaneousGesture(
+                        SpatialTapGesture(coordinateSpace: .named("timelineContentSpace"))
+                            .onEnded { event in
+                                let trackX = event.location.x - horizontalPadding - labelColumnWidth
+                                guard trackX >= 0 && trackX <= contentWidth else { return }
+                                let frac = max(0.0, min(1.0, Double(trackX / max(1.0, contentWidth))))
+                                session.isPlaying = false
+                                session.seek(toTimelineMs: frac * totalTimelineMs)
+                            }
+                    )
+                    // Trackpad 2-Finger Pinch-to-Zoom Gesture
                     .gesture(
                         MagnifyGesture()
                             .onChanged { value in
@@ -382,20 +239,296 @@ public struct MultiTrackTimelineView: View {
                 }
             }
         }
-        .background(Color(red: 0.05, green: 0.05, blue: 0.07))
+        .background(Color(red: 0.04, green: 0.04, blue: 0.06))
     }
 
+    // MARK: - 1. Screen Clips Track Row
+
     @ViewBuilder
-    private func iconActionButton(systemImage: String, tooltip: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 26)
-                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    private func clipTrackRow(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
+        HStack(spacing: 0) {
+            Text("Clip")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary.opacity(0.75))
+                .frame(width: labelColumnWidth, alignment: .leading)
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.white.opacity(0.02))
+
+                ForEach(session.timeMapper.mappedSlices, id: \.slice.id) { mapped in
+                    let xStart = CGFloat(mapped.timelineStartMs / totalTimelineMs) * contentWidth
+                    let blockW = max(12.0, CGFloat((mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs) * contentWidth)
+                    let isSelected = (session.selectedSliceId == mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
+
+                    TimelineInteractiveSegmentView(
+                        topTitle: "Clip",
+                        subtitle: formatClipSubtitle(durationMs: mapped.slice.timelineDurationMs, speed: mapped.slice.speed),
+                        gradientColors: [
+                            Color(red: 0.72, green: 0.45, blue: 0.08),
+                            Color(red: 0.58, green: 0.35, blue: 0.05)
+                        ],
+                        isSelected: isSelected,
+                        isDimmed: false,
+                        isSplitMode: session.isSplitModeActive,
+                        xOffset: xStart,
+                        width: blockW,
+                        height: 38,
+                        totalWidth: contentWidth,
+                        trackTotalDurationMs: mapped.slice.sourceDurationMs / max(0.001, (mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs),
+                        startMs: mapped.slice.sourceStartMs,
+                        endMs: mapped.slice.sourceEndMs,
+                        allowDragMove: false,
+                        allowVerticalTrackDrag: false,
+                        onClickAtLocalX: { localX in
+                            let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
+                            let clickedTimelineMs = mapped.timelineStartMs + frac * (mapped.timelineEndMs - mapped.timelineStartMs)
+                            session.isPlaying = false
+                            session.seek(toTimelineMs: clickedTimelineMs)
+                            if session.isSplitModeActive {
+                                session.splitSlice(id: mapped.slice.id, atTimelineMs: clickedTimelineMs)
+                            } else {
+                                session.selectSlice(mapped.slice.id)
+                            }
+                        },
+                        onBeginInteractive: {
+                            session.beginInteractiveEdit()
+                        },
+                        onChangeRange: { newStart, newEnd in
+                            session.updateSliceSourceRange(
+                                id: mapped.slice.id,
+                                newSourceStartMs: newStart,
+                                newSourceEndMs: newEnd
+                            )
+                        },
+                        onMoveVerticalTracks: { _ in },
+                        onEndInteractive: {
+                            session.endInteractiveEdit()
+                        },
+                        onDelete: {
+                            session.selectSlice(mapped.slice.id)
+                            session.deleteSelectedSlice()
+                        }
+                    )
+                }
+            }
+            .frame(width: contentWidth, height: 38)
         }
-        .buttonStyle(.plain)
-        .help(tooltip)
+    }
+
+    // MARK: - 2. Zoom Track Row (Mapped via `timeMapper` so cutting clips NEVER misaligns Zoom blocks!)
+
+    @ViewBuilder
+    private func zoomTrackRow(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
+        let isHidden = session.document.timeline.isZoomTrackHidden
+
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Button {
+                    session.toggleZoomTrackVisibility()
+                } label: {
+                    Image(systemName: isHidden ? "eye.slash" : "eye")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.secondary.opacity(isHidden ? 0.38 : 0.85))
+                }
+                .buttonStyle(.plain)
+
+                Text("Zoom")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.secondary.opacity(isHidden ? 0.38 : 0.75))
+            }
+            .frame(width: labelColumnWidth, alignment: .leading)
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.white.opacity(0.02))
+
+                ForEach(session.document.timeline.zooms) { zoom in
+                    if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: zoom.sourceStartMs, sourceEndMs: zoom.sourceEndMs) {
+                        let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                        let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
+                        let isSelected = (session.selectedZoomId == zoom.id)
+
+                        TimelineInteractiveSegmentView(
+                            topTitle: "Zoom",
+                            subtitle: String(format: "🔍 %.1fx  %@", zoom.scale, zoom.mode == .followCursor ? "Auto" : "Manual"),
+                            gradientColors: [
+                                Color(red: 0.42, green: 0.30, blue: 0.96),
+                                Color(red: 0.34, green: 0.23, blue: 0.84)
+                            ],
+                            isSelected: isSelected,
+                            isDimmed: isHidden || zoom.disabled,
+                            isSplitMode: session.isSplitModeActive,
+                            xOffset: xStart,
+                            width: blockW,
+                            height: 34,
+                            totalWidth: contentWidth,
+                            trackTotalDurationMs: totalTimelineMs,
+                            startMs: zoom.sourceStartMs,
+                            endMs: zoom.sourceEndMs,
+                            allowDragMove: true,
+                            allowVerticalTrackDrag: false,
+                            onClickAtLocalX: { localX in
+                                let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
+                                let clickedTimelineMs = tStartMs + frac * (tEndMs - tStartMs)
+                                session.isPlaying = false
+                                session.seek(toTimelineMs: clickedTimelineMs)
+                                if session.isSplitModeActive {
+                                    let splitSourceMs = session.timeMapper.sourceTime(forTimelineMs: clickedTimelineMs).sourceMs
+                                    session.splitZoom(id: zoom.id, atSourceMs: splitSourceMs)
+                                } else {
+                                    session.selectZoom(zoom.id)
+                                }
+                            },
+                            onBeginInteractive: {
+                                session.beginInteractiveEdit()
+                            },
+                            onChangeRange: { newStart, newEnd in
+                                session.updateZoomRange(id: zoom.id, newStartMs: newStart, newEndMs: newEnd)
+                            },
+                            onMoveVerticalTracks: { _ in },
+                            onEndInteractive: {
+                                session.endInteractiveEdit()
+                            },
+                            onDelete: {
+                                session.deleteZoom(zoomId: zoom.id)
+                            }
+                        )
+                    }
+                }
+            }
+            .frame(width: contentWidth, height: 34)
+        }
+    }
+
+    // MARK: - 3. Dynamic Mask Track Row (Mapped via `timeMapper` + Vertical Track Drag + Visibility Toggle)
+
+    @ViewBuilder
+    private func maskTrackRow(
+        track: MaskTrack,
+        trackIndex: Int,
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> some View {
+        let isHidden = track.isHidden
+
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Button {
+                    session.toggleMaskTrackVisibility(trackId: track.id)
+                } label: {
+                    Image(systemName: isHidden ? "eye.slash" : "eye")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.secondary.opacity(isHidden ? 0.38 : 0.85))
+                }
+                .buttonStyle(.plain)
+
+                Text(track.name)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.secondary.opacity(isHidden ? 0.38 : 0.75))
+                    .lineLimit(1)
+            }
+            .frame(width: labelColumnWidth, alignment: .leading)
+            .contextMenu {
+                Button(isHidden ? "Show Track" : "Hide Track") {
+                    session.toggleMaskTrackVisibility(trackId: track.id)
+                }
+                Button("Delete Track", role: .destructive) {
+                    session.deleteMaskTrack(trackId: track.id)
+                }
+            }
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.018))
+
+                ForEach(track.items) { item in
+                    if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: item.sourceStartMs, sourceEndMs: item.sourceEndMs) {
+                        let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                        let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
+                        let isSelected = (session.selectedMaskId == item.id)
+
+                        TimelineInteractiveSegmentView(
+                            topTitle: item.type == .blur ? item.style.rawValue.capitalized : "Spotlight",
+                            subtitle: nil,
+                            gradientColors: item.type == .blur
+                                ? [
+                                    Color(red: 0.56, green: 0.22, blue: 0.39),
+                                    Color(red: 0.44, green: 0.16, blue: 0.30)
+                                ]
+                                : [
+                                    Color(red: 0.16, green: 0.52, blue: 0.54),
+                                    Color(red: 0.12, green: 0.38, blue: 0.40)
+                                ],
+                            isSelected: isSelected,
+                            isDimmed: isHidden || item.disabled,
+                            isSplitMode: session.isSplitModeActive,
+                            xOffset: xStart,
+                            width: blockW,
+                            height: 24,
+                            totalWidth: contentWidth,
+                            trackTotalDurationMs: totalTimelineMs,
+                            startMs: item.sourceStartMs,
+                            endMs: item.sourceEndMs,
+                            allowDragMove: true,
+                            allowVerticalTrackDrag: true,
+                            onClickAtLocalX: { localX in
+                                let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
+                                let clickedTimelineMs = tStartMs + frac * (tEndMs - tStartMs)
+                                session.isPlaying = false
+                                session.seek(toTimelineMs: clickedTimelineMs)
+                                if session.isSplitModeActive {
+                                    let splitSourceMs = session.timeMapper.sourceTime(forTimelineMs: clickedTimelineMs).sourceMs
+                                    session.splitMask(id: item.id, atSourceMs: splitSourceMs)
+                                } else {
+                                    session.selectMask(item.id)
+                                }
+                            },
+                            onBeginInteractive: {
+                                session.beginInteractiveEdit()
+                            },
+                            onChangeRange: { newStart, newEnd in
+                                session.updateMaskRange(id: item.id, newStartMs: newStart, newEndMs: newEnd)
+                            },
+                            onMoveVerticalTracks: { trackDelta in
+                                let targetIdx = trackIndex + trackDelta
+                                session.moveMaskToTrack(maskId: item.id, targetTrackIndex: targetIdx)
+                            },
+                            onEndInteractive: {
+                                session.endInteractiveEdit()
+                            },
+                            onDelete: {
+                                session.deleteMask(maskId: item.id)
+                            }
+                        )
+                    }
+                }
+            }
+            .frame(width: contentWidth, height: 24)
+        }
+    }
+
+    /// Maps a source-time range `[sourceStartMs, sourceEndMs]` onto the edited timeline `[timelineStartMs, timelineEndMs]`
+    /// so Zoom and Mask blocks ALWAYS line up with the playhead even after cutting/deleting clip slices!
+    private func timelineSpan(forSourceStartMs sourceStartMs: Double, sourceEndMs: Double) -> (Double, Double)? {
+        var earliestTimelineMs: Double?
+        var latestTimelineMs: Double?
+
+        for mapped in session.timeMapper.mappedSlices {
+            let overlapStart = max(sourceStartMs, mapped.slice.sourceStartMs)
+            let overlapEnd = min(sourceEndMs, mapped.slice.sourceEndMs)
+            if overlapEnd > overlapStart {
+                let t0 = mapped.timelineStartMs + (overlapStart - mapped.slice.sourceStartMs) / max(0.1, mapped.slice.speed)
+                let t1 = mapped.timelineStartMs + (overlapEnd - mapped.slice.sourceStartMs) / max(0.1, mapped.slice.speed)
+                earliestTimelineMs = min(earliestTimelineMs ?? t0, t0)
+                latestTimelineMs = max(latestTimelineMs ?? t1, t1)
+            }
+        }
+
+        if let t0 = earliestTimelineMs, let t1 = latestTimelineMs, t1 > t0 {
+            return (t0, t1)
+        }
+        return nil
     }
 
     private func formatClipSubtitle(durationMs: Double, speed: Double) -> String {
@@ -404,39 +537,72 @@ public struct MultiTrackTimelineView: View {
         let secs = totalSec % 60
         let timeStr = mins > 0 ? "\(mins)m \(secs)s" : "\(secs)s"
         if abs(speed - 1.0) > 0.05 {
-            return String(format: "%@ • %.1fx", timeStr, speed)
+            return String(format: "%@  ⏱ %.1fx", timeStr, speed)
         }
-        return "\(timeStr) • 1x"
+        return "\(timeStr)  ⏱ 1x"
     }
 }
 
-// MARK: - Smooth Fixed-Interval Time Ruler (Zero Jitter When Zooming)
+// MARK: - NativeScreen-Style Teardrop Playhead Line (Used for both Committed & Hover Ghost Playheads)
+
+private struct TeardropPlayheadLine: View {
+    let color: Color
+    let headColor: Color
+    let height: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TeardropHeadShape()
+                .fill(headColor)
+                .frame(width: 12, height: 14)
+
+            Rectangle()
+                .fill(color)
+                .frame(width: 1.5, height: max(20, height - 14))
+        }
+    }
+}
+
+private struct TeardropHeadShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let r = rect.width * 0.5
+        path.addArc(
+            center: CGPoint(x: rect.midX, y: r),
+            radius: r,
+            startAngle: .degrees(150),
+            endAngle: .degrees(30),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Smooth Fixed-Interval Time Ruler
 
 private struct SmoothTimeRulerView: View {
     let totalDurationMs: Double
     let width: CGFloat
-    let onSeek: (Double) -> Void
 
     var body: some View {
         Canvas { context, size in
             let totalSec = max(1.0, totalDurationMs / 1000.0)
             let pxPerSec = Double(size.width) / totalSec
 
-            // Choose a clean fixed time interval so labels are ~70-130px apart and NEVER jump weirdly
             let candidateStepsSec: [Double] = [0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0]
             let majorStepSec = candidateStepsSec.first(where: { $0 * pxPerSec >= 68.0 }) ?? 60.0
             let minorStepSec = majorStepSec / 2.0
 
-            // Draw minor subdivision dots
             var tMinor = 0.0
             while tMinor <= totalSec {
                 let x = CGFloat(tMinor / totalSec) * size.width
-                let dotRect = CGRect(x: x - 1, y: size.height - 4, width: 2, height: 2)
-                context.fill(Path(ellipseIn: dotRect), with: .color(.white.opacity(0.18)))
+                let dotRect = CGRect(x: x - 1.2, y: size.height - 5, width: 2.4, height: 2.4)
+                context.fill(Path(ellipseIn: dotRect), with: .color(.white.opacity(0.22)))
                 tMinor += minorStepSec
             }
 
-            // Draw major timecode labels (`0:05`, `0:10`, `0:15`...)
             var tMajor = 0.0
             while tMajor <= totalSec + 0.001 {
                 let x = CGFloat(tMajor / totalSec) * size.width
@@ -451,57 +617,53 @@ private struct SmoothTimeRulerView: View {
                 }
 
                 let text = Text(labelStr)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .foregroundColor(.white.opacity(0.45))
                 let clampedX = min(size.width - 16, max(14, x))
-                context.draw(text, at: CGPoint(x: clampedX, y: 8))
+                context.draw(text, at: CGPoint(x: clampedX, y: 9))
                 tMajor += majorStepSec
             }
         }
-        .frame(width: width, height: 22)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let frac = max(0.0, min(1.0, Double(value.location.x / max(1.0, width))))
-                    onSeek(frac * totalDurationMs)
-                }
-        )
+        .frame(width: width, height: 26)
     }
 }
 
-// MARK: - Interactive Segment Block with Left/Right Edge Resizing, Split Mode Blade & Context Menu
+// MARK: - Interactive Segment Block with Smooth Fade Edge Resize Handles, Split Blade, & Vertical Track Drag
 
 private struct TimelineInteractiveSegmentView: View {
     let topTitle: String
     let subtitle: String?
     let gradientColors: [Color]
     let isSelected: Bool
+    let isDimmed: Bool
     let isSplitMode: Bool
     let xOffset: CGFloat
     let width: CGFloat
     let height: CGFloat
     let totalWidth: CGFloat
-    let totalDurationMs: Double
+    let trackTotalDurationMs: Double
     let startMs: Double
     let endMs: Double
     let allowDragMove: Bool
-    let onSelect: () -> Void
-    let onSplitAtFraction: (Double) -> Void
+    let allowVerticalTrackDrag: Bool
+    let onClickAtLocalX: (CGFloat) -> Void
     let onBeginInteractive: () -> Void
     let onChangeRange: (Double, Double) -> Void
+    let onMoveVerticalTracks: (Int) -> Void
     let onEndInteractive: () -> Void
     let onDelete: () -> Void
 
+    @State private var isHovered = false
     @State private var dragInitialStartMs: Double?
     @State private var dragInitialEndMs: Double?
+    @State private var verticalDragOffset: CGFloat = 0.0
     @State private var hoverSplitX: CGFloat?
 
-    private let edgeHandleWidth: CGFloat = 9.0
+    private let edgeHandleWidth: CGFloat = 10.0
 
     var body: some View {
         ZStack(alignment: .leading) {
-            // Segment Pill Body (Zero ugly white border on unselected blocks!)
+            // Segment Pill Body
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
                     LinearGradient(
@@ -513,68 +675,72 @@ private struct TimelineInteractiveSegmentView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .strokeBorder(
-                            isSelected ? Color.white.opacity(0.75) : Color.white.opacity(0.08),
-                            lineWidth: isSelected ? 1.5 : 0.5
+                            isSelected
+                                ? Color.white.opacity(0.65)
+                                : (isHovered ? Color.white.opacity(0.28) : Color.white.opacity(0.10)),
+                            lineWidth: isSelected ? 1.4 : 0.8
                         )
                 )
+                .opacity(isDimmed ? 0.35 : 1.0)
 
-            // Centered Title & Subtitle (style)
+            // Centered Title & Subtitle
             if width > 42 {
                 VStack(spacing: 1) {
                     Text(topTitle)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.white.opacity(0.88))
                         .lineLimit(1)
 
                     if let sub = subtitle, width > 78 {
                         Text(sub)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.72))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
                             .lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 10)
+                .allowsHitTesting(false)
             }
 
             // Interactive Split Mode Cut Line Indicator
             if isSplitMode, let splitX = hoverSplitX {
                 Rectangle()
-                    .fill(Color.white)
-                    .frame(width: 2, height: height)
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 1.5, height: height)
                     .offset(x: splitX)
                     .allowsHitTesting(false)
             }
 
-            // Left & Right Edge Resize Handles (when not in Split Mode)
+            // Left & Right Edge Resize Handles (Smoothly fade in/out on hover or selection!)
             if !isSplitMode && width >= 26 {
+                let showHandles = isSelected || isHovered
                 HStack(spacing: 0) {
                     // Left Resize Handle
                     Rectangle()
                         .fill(Color.white.opacity(0.001))
                         .frame(width: edgeHandleWidth, height: height)
                         .overlay(alignment: .leading) {
-                            if isSelected {
-                                Capsule()
-                                    .fill(Color.white.opacity(0.65))
-                                    .frame(width: 3, height: max(8, height - 12))
-                                    .padding(.leading, 3)
-                            }
+                            Capsule()
+                                .fill(Color.white.opacity(0.75))
+                                .frame(width: 3, height: max(8, height - 12))
+                                .padding(.leading, 3.5)
+                                .opacity(showHandles ? 1.0 : 0.0)
+                                .animation(.easeInOut(duration: 0.16), value: showHandles)
                         }
                         .onHover { inside in
                             if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
                         }
-                        .gesture(
-                            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .highPriorityGesture(
+                            DragGesture(minimumDistance: 1, coordinateSpace: .named("timelineContentSpace"))
                                 .onChanged { value in
-                                    onSelect()
                                     if dragInitialStartMs == nil {
                                         onBeginInteractive()
                                         dragInitialStartMs = startMs
                                         dragInitialEndMs = endMs
                                     }
                                     guard let s0 = dragInitialStartMs, let e0 = dragInitialEndMs else { return }
-                                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * totalDurationMs
+                                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
                                     let newStart = max(0.0, min(e0 - 300.0, s0 + deltaMs))
                                     onChangeRange(newStart, e0)
                                 }
@@ -592,28 +758,27 @@ private struct TimelineInteractiveSegmentView: View {
                         .fill(Color.white.opacity(0.001))
                         .frame(width: edgeHandleWidth, height: height)
                         .overlay(alignment: .trailing) {
-                            if isSelected {
-                                Capsule()
-                                    .fill(Color.white.opacity(0.65))
-                                    .frame(width: 3, height: max(8, height - 12))
-                                    .padding(.trailing, 3)
-                            }
+                            Capsule()
+                                .fill(Color.white.opacity(0.75))
+                                .frame(width: 3, height: max(8, height - 12))
+                                .padding(.trailing, 3.5)
+                                .opacity(showHandles ? 1.0 : 0.0)
+                                .animation(.easeInOut(duration: 0.16), value: showHandles)
                         }
                         .onHover { inside in
                             if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
                         }
-                        .gesture(
-                            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .highPriorityGesture(
+                            DragGesture(minimumDistance: 1, coordinateSpace: .named("timelineContentSpace"))
                                 .onChanged { value in
-                                    onSelect()
                                     if dragInitialStartMs == nil {
                                         onBeginInteractive()
                                         dragInitialStartMs = startMs
                                         dragInitialEndMs = endMs
                                     }
                                     guard let s0 = dragInitialStartMs, let e0 = dragInitialEndMs else { return }
-                                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * totalDurationMs
-                                    let newEnd = max(s0 + 300.0, min(totalDurationMs, e0 + deltaMs))
+                                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
+                                    let newEnd = max(s0 + 300.0, min(trackTotalDurationMs, e0 + deltaMs))
                                     onChangeRange(s0, newEnd)
                                 }
                                 .onEnded { _ in
@@ -626,52 +791,68 @@ private struct TimelineInteractiveSegmentView: View {
             }
         }
         .frame(width: max(6, width - 1.5), height: height)
-        .offset(x: xOffset)
+        .offset(x: xOffset, y: verticalDragOffset)
+        .zIndex(verticalDragOffset != 0 ? 50 : 1)
         .onContinuousHover { phase in
             switch phase {
             case .active(let pt):
+                if !isHovered {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHovered = true
+                    }
+                }
                 if isSplitMode {
-                    hoverSplitX = max(4, min(width - 4, pt.x))
+                    hoverSplitX = max(2, min(width - 2, pt.x))
                     NSCursor.crosshair.set()
                 } else {
                     hoverSplitX = nil
                 }
             case .ended:
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHovered = false
+                }
                 hoverSplitX = nil
                 if isSplitMode {
                     NSCursor.arrow.set()
                 }
             }
         }
+        // Clicking anywhere on a segment BOTH seeks playhead to that exact spot AND selects/splits the segment!
         .simultaneousGesture(
-            SpatialTapGesture()
+            SpatialTapGesture(coordinateSpace: .local)
                 .onEnded { event in
-                    if isSplitMode {
-                        let frac = max(0.05, min(0.95, Double(event.location.x / max(1.0, width))))
-                        onSplitAtFraction(frac)
-                    } else {
-                        onSelect()
-                    }
+                    onClickAtLocalX(event.location.x)
                 }
         )
+        // Dragging body horizontally moves timestamp; dragging vertically moves Mask across tracks!
         .gesture(
-            DragGesture(minimumDistance: 3, coordinateSpace: .global)
+            DragGesture(minimumDistance: 3, coordinateSpace: .named("timelineContentSpace"))
                 .onChanged { value in
                     guard allowDragMove, !isSplitMode else { return }
-                    onSelect()
                     if dragInitialStartMs == nil {
                         onBeginInteractive()
                         dragInitialStartMs = startMs
                         dragInitialEndMs = endMs
                     }
                     guard let s0 = dragInitialStartMs, let e0 = dragInitialEndMs else { return }
-                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * totalDurationMs
+                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
                     let span = e0 - s0
-                    let newStart = max(0.0, min(totalDurationMs - span, s0 + deltaMs))
+                    let newStart = max(0.0, min(trackTotalDurationMs - span, s0 + deltaMs))
                     onChangeRange(newStart, newStart + span)
+
+                    if allowVerticalTrackDrag {
+                        verticalDragOffset = value.translation.height
+                    }
                 }
-                .onEnded { _ in
+                .onEnded { value in
                     guard allowDragMove, !isSplitMode else { return }
+                    if allowVerticalTrackDrag {
+                        let rowDelta = Int(round(value.translation.height / 31.0))
+                        verticalDragOffset = 0.0
+                        if rowDelta != 0 {
+                            onMoveVerticalTracks(rowDelta)
+                        }
+                    }
                     dragInitialStartMs = nil
                     dragInitialEndMs = nil
                     onEndInteractive()
@@ -679,9 +860,9 @@ private struct TimelineInteractiveSegmentView: View {
         )
         .contextMenu {
             Button {
-                onSplitAtFraction(0.5)
+                onClickAtLocalX(width * 0.5)
             } label: {
-                Label("Split in Half", systemImage: "scissors")
+                Label("Seek to Middle", systemImage: "arrow.down.to.line")
             }
 
             Divider()
