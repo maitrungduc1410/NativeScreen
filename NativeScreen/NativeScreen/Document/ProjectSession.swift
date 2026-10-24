@@ -30,6 +30,7 @@ public final class ProjectSession: Identifiable {
     public private(set) var timeMapper: NLETimeMapper
     public private(set) var trajectorySolver: SpringTrajectorySolver
 
+    private var lastMappedSlices: [ClipSlice]
     private var lastSolverCursorConfig: CursorConfig
     private var lastSolverMotionConfig: MotionConfig
     private var lastSolverZooms: [ZoomBlock]
@@ -83,6 +84,7 @@ public final class ProjectSession: Identifiable {
         self.clickEvents = clickEvents
         self.keyEvents = keyEvents
         self.timeMapper = NLETimeMapper(slices: cleanedDoc.timeline.slices)
+        self.lastMappedSlices = cleanedDoc.timeline.slices
         self.lastSolverCursorConfig = cleanedDoc.cursor
         self.lastSolverMotionConfig = cleanedDoc.motion
         self.lastSolverZooms = cleanedDoc.timeline.zooms
@@ -200,10 +202,11 @@ public final class ProjectSession: Identifiable {
         let before = interactiveEditSnapshot ?? document
         var next = document
         mutation(&next)
-        // Automatically prune any MaskTrack that has become completely empty!
-        next.timeline.maskTracks.removeAll { $0.items.isEmpty }
-        for idx in next.timeline.maskTracks.indices {
-            next.timeline.maskTracks[idx].name = idx == 0 ? "Masks" : "Masks \(idx + 1)"
+        if next.timeline.maskTracks != document.timeline.maskTracks {
+            next.timeline.maskTracks.removeAll { $0.items.isEmpty }
+            for idx in next.timeline.maskTracks.indices {
+                next.timeline.maskTracks[idx].name = idx == 0 ? "Masks" : "Masks \(idx + 1)"
+            }
         }
 
         guard next != document else { return }
@@ -242,7 +245,10 @@ public final class ProjectSession: Identifiable {
     }
 
     private func rebuildDerivedState(forceSpringRebuild: Bool = false) {
-        timeMapper = NLETimeMapper(slices: document.timeline.slices)
+        if forceSpringRebuild || document.timeline.slices != lastMappedSlices {
+            lastMappedSlices = document.timeline.slices
+            timeMapper = NLETimeMapper(slices: document.timeline.slices)
+        }
 
         let needsSpringRebuild = forceSpringRebuild
             || document.cursor != lastSolverCursorConfig

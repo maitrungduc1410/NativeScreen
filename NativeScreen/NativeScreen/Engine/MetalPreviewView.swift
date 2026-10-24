@@ -5,13 +5,18 @@ import AVFoundation
 import CoreImage
 
 /// Zero-Idle-CPU `MTKView` wrapper for SwiftUI.
-/// - When `session.isPlaying == false`, `mtkView.isPaused = true` and `enableSetNeedsDisplay = true` -> **0.0% CPU / 0.0% GPU**.
-/// - Redraws on demand (`needsDisplay = true`) whenever the user scrubs the timeline or edits any inspector/mask property.
+/// - Explicitly observes `session.renderRevision` and `session.isPlaying` so slider drags update at 120Hz with zero lag.
+/// - Never re-seeks `AVPlayer` when `sourceTimeMs` is unchanged (e.g. while dragging Padding, Corners, Shadow, or Blur sliders!).
+/// - Coalesces video decoder seeks during fast timeline hover-skimming.
 public struct MetalPreviewView: NSViewRepresentable {
     public var session: ProjectSession
+    public var renderRevision: UInt64
+    public var isPlaying: Bool
 
     public init(session: ProjectSession) {
         self.session = session
+        self.renderRevision = session.renderRevision
+        self.isPlaying = session.isPlaying
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -27,9 +32,8 @@ public struct MetalPreviewView: NSViewRepresentable {
         mtkView.framebufferOnly = false
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.clearColor = MTLClearColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
-        mtkView.preferredFramesPerSecond = 60
+        mtkView.preferredFramesPerSecond = 120
 
-        // Crucial for 0.0% Idle CPU when paused:
         mtkView.isPaused = !session.isPlaying
         mtkView.enableSetNeedsDisplay = !session.isPlaying
 
@@ -55,6 +59,9 @@ public struct MetalPreviewView: NSViewRepresentable {
         private var videoOutput: AVPlayerItemVideoOutput?
         private var loadedVideoURL: URL?
         private var lastDecodedFrame: CIImage?
+        private var lastSeekedSourceMs: Double = -1.0
+        private var isDecoderSeeking: Bool = false
+        private var pendingSeekSourceMs: Double? = nil
 
         init(session: ProjectSession) {
             self.session = session
@@ -78,13 +85,21 @@ public struct MetalPreviewView: NSViewRepresentable {
                     mtkView.isPaused = false
                 }
             } else {
-                if !mtkView.isPaused {
+                let animatingBg = compositor?.isAnimatingBackgroundTransition ?? false
+                if !animatingBg && !mtkView.isPaused {
                     mtkView.isPaused = true
                     mtkView.enableSetNeedsDisplay = true
                 }
                 if lastRenderedRevision != newSession.renderRevision {
                     lastRenderedRevision = newSession.renderRevision
-                    seekDecoder(toSourceMs: newSession.currentSourceTimeMs)
+                    let targetSourceMs = newSession.currentSourceTimeMs
+
+                    // ONLY seek the hardware video decoder if the playhead/skim timestamp actually changed!
+                    // When dragging Padding, Shadow, Rounded Corners, Background Blur, or Mask handles,
+                    // `targetSourceMs` is unchanged, so we redraw immediately in <0.5ms without touching AVPlayer!
+                    if abs(targetSourceMs - lastSeekedSourceMs) > 0.5 {
+                        seekDecoderCoalesced(toSourceMs: targetSourceMs)
+                    }
                     mtkView.needsDisplay = true
                 }
             }
@@ -93,6 +108,10 @@ public struct MetalPreviewView: NSViewRepresentable {
         private func setupVideoDecoderIfNeeded(for url: URL) {
             guard loadedVideoURL != url else { return }
             loadedVideoURL = url
+            lastSeekedSourceMs = -1.0
+            isDecoderSeeking = false
+            pendingSeekSourceMs = nil
+
             guard FileManager.default.fileExists(atPath: url.path) else {
                 player = nil
                 videoOutput = nil
@@ -112,21 +131,38 @@ public struct MetalPreviewView: NSViewRepresentable {
             avPlayer.isMuted = true
             self.player = avPlayer
             self.videoOutput = output
-            seekDecoder(toSourceMs: session.currentSourceTimeMs)
+            seekDecoderCoalesced(toSourceMs: session.currentSourceTimeMs)
         }
 
-        private func seekDecoder(toSourceMs sourceMs: Double) {
+        private func seekDecoderCoalesced(toSourceMs sourceMs: Double) {
             guard let player = player else { return }
+            if isDecoderSeeking {
+                pendingSeekSourceMs = sourceMs
+                return
+            }
+
+            isDecoderSeeking = true
+            lastSeekedSourceMs = sourceMs
             let cmTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
+
             player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard let self = self, let view = self.mtkView else { return }
-                    let targetTime = CMTime(seconds: self.session.currentSourceTimeMs / 1000.0, preferredTimescale: 600)
+                    guard let self = self else { return }
+                    self.isDecoderSeeking = false
+
+                    let actualTime = CMTime(seconds: self.lastSeekedSourceMs / 1000.0, preferredTimescale: 600)
                     if let output = self.videoOutput,
-                       let pb = output.copyPixelBuffer(forItemTime: targetTime, itemTimeForDisplay: nil) {
+                       let pb = output.copyPixelBuffer(forItemTime: actualTime, itemTimeForDisplay: nil) {
                         self.lastDecodedFrame = CIImage(cvPixelBuffer: pb)
+                        self.mtkView?.needsDisplay = true
                     }
-                    view.needsDisplay = true
+
+                    if let nextMs = self.pendingSeekSourceMs {
+                        self.pendingSeekSourceMs = nil
+                        if abs(nextMs - self.lastSeekedSourceMs) > 0.5 {
+                            self.seekDecoderCoalesced(toSourceMs: nextMs)
+                        }
+                    }
                 }
             }
         }
@@ -152,7 +188,6 @@ public struct MetalPreviewView: NSViewRepresentable {
                 return
             }
 
-            // Advance timeline playhead if actively playing
             if session.isPlaying {
                 let now = ProcessInfo.processInfo.systemUptime
                 let dtMs = max(0.0, min(50.0, (now - lastFrameTickUptime) * 1000.0))
@@ -183,6 +218,7 @@ public struct MetalPreviewView: NSViewRepresentable {
                 if output.hasNewPixelBuffer(forItemTime: targetCMTime),
                    let pixelBuffer = output.copyPixelBuffer(forItemTime: targetCMTime, itemTimeForDisplay: nil) {
                     lastDecodedFrame = CIImage(cvPixelBuffer: pixelBuffer)
+                    lastSeekedSourceMs = sourceMs
                 }
             }
 
@@ -208,8 +244,6 @@ public struct MetalPreviewView: NSViewRepresentable {
             commandBuffer.present(drawable)
             commandBuffer.commit()
 
-            // If a smooth background crossfade transition is in progress while video playback is paused,
-            // briefly unpause `MTKView` for the 340ms transition and automatically re-pause at 0.0% CPU once complete!
             if !session.isPlaying {
                 if compositor.isAnimatingBackgroundTransition {
                     if view.isPaused {

@@ -16,20 +16,41 @@ public final class MetalFrameCompositor {
     private var cachedWallpaperCIImage: CIImage?
     private var syntheticScreenTexture: CIImage?
 
-    // Smooth GPU Background Crossfade State (320ms cubic ease-out transition when changing backgrounds)
+    // Smooth GPU Background Crossfade & Texture Cache
     private struct BackgroundIdentityKey: Equatable {
         let type: BackgroundType
         let solidColor: String
         let gradient: GradientConfig
         let meshPresetId: String?
         let wallpaperRelativePath: String?
+        let canvasWidth: Int
+        let canvasHeight: Int
+    }
+
+    private struct BlurredBackgroundCacheKey: Equatable {
+        let identity: BackgroundIdentityKey
+        let blurRadiusQuantized: Int
     }
 
     private var currentBackgroundKey: BackgroundIdentityKey?
     private var currentUnblurredBackgroundImage: CIImage?
     private var previousUnblurredBackgroundImage: CIImage?
     private var backgroundTransitionStartUptime: TimeInterval = 0.0
-    private let backgroundTransitionDurationSec: TimeInterval = 0.34
+    private let backgroundTransitionDurationSec: TimeInterval = 0.32
+
+    private var lastBlurredBgCacheKey: BlurredBackgroundCacheKey?
+    private var cachedBlurredBackgroundImage: CIImage?
+
+    // Pass 2 (Masked & Cropped Screen) Cache — avoids re-running Gaussian blur masks when adjusting Padding/Shadow/Corners/Background!
+    private struct MaskedScreenCacheKey: Equatable {
+        let framePtr: ObjectIdentifier?
+        let sourceTimeQuantized: Int
+        let masks: [MaskItem]
+        let cropRect01: Rect01
+    }
+
+    private var lastMaskedScreenKey: MaskedScreenCacheKey?
+    private var cachedMaskedScreenImage: CIImage?
 
     public var isAnimatingBackgroundTransition: Bool {
         guard previousUnblurredBackgroundImage != nil else { return false }
@@ -46,7 +67,8 @@ public final class MetalFrameCompositor {
         self.commandQueue = queue
         self.ciContext = CIContext(mtlDevice: dev, options: [
             .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
-            .cacheIntermediates: false
+            .cacheIntermediates: true,
+            .priorityRequestLow: false
         ])
     }
 
@@ -63,38 +85,53 @@ public final class MetalFrameCompositor {
         let cursorState = eval.cursor
         let cameraState = eval.camera
 
-        // --- PASS 1: Background Layer (Mesh / Wallpaper / Gradient / Solid + Blur + Anti-banding Noise) ---
+        // --- PASS 1: Cached Background Layer (Mesh / Wallpaper / Gradient / Solid + Crossfade + Blur) ---
         var composite = renderBackgroundLayer(doc: doc, session: session, canvasRect: canvasRect)
 
-        // --- PASS 2: Source Screen Frame + Atomic Multi-Track Blur & Spotlight Masks (Pre-Zoom Space) ---
-        let rawScreen = (sourceVideoFrame ?? fallbackSyntheticScreenImage(size: CGSize(
-            width: max(640, session.metadata.captureTarget.pixelSize.width),
-            height: max(400, session.metadata.captureTarget.pixelSize.height)
-        )))
-        let screenExtent = rawScreen.extent
-
-        var maskedScreen = applyMultiTrackMasks(
-            to: rawScreen,
-            screenExtent: screenExtent,
-            activeMasks: session.activeMasks(atSourceMs: sourceTimeMs),
-            sourceTimeMs: sourceTimeMs
+        // --- PASS 2: Cached Source Screen Frame + Atomic Multi-Track Blur & Spotlight Masks ---
+        let activeMasks = session.activeMasks(atSourceMs: sourceTimeMs)
+        let crop01 = doc.canvas.cropRect01
+        let maskCacheKey = MaskedScreenCacheKey(
+            framePtr: sourceVideoFrame.map { ObjectIdentifier($0) },
+            sourceTimeQuantized: activeMasks.count > 0 ? Int(round(sourceTimeMs / 8.0)) : 0,
+            masks: activeMasks,
+            cropRect01: crop01
         )
 
-        // Apply Canvas Crop if configured
-        let crop01 = doc.canvas.cropRect01
-        if crop01 != .full {
-            let cropRect = CGRect(
-                x: screenExtent.minX + CGFloat(crop01.x) * screenExtent.width,
-                y: screenExtent.minY + CGFloat(1.0 - crop01.y - crop01.height) * screenExtent.height,
-                width: max(16.0, CGFloat(crop01.width) * screenExtent.width),
-                height: max(16.0, CGFloat(crop01.height) * screenExtent.height)
+        let maskedScreen: CIImage
+        if maskCacheKey == lastMaskedScreenKey, let cached = cachedMaskedScreenImage {
+            maskedScreen = cached
+        } else {
+            let rawScreen = (sourceVideoFrame ?? fallbackSyntheticScreenImage(size: CGSize(
+                width: max(640, session.metadata.captureTarget.pixelSize.width),
+                height: max(400, session.metadata.captureTarget.pixelSize.height)
+            )))
+            let screenExtent = rawScreen.extent
+
+            var computed = applyMultiTrackMasks(
+                to: rawScreen,
+                screenExtent: screenExtent,
+                activeMasks: activeMasks,
+                sourceTimeMs: sourceTimeMs
             )
-            maskedScreen = maskedScreen
-                .cropped(to: cropRect)
-                .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
+
+            if crop01 != .full {
+                let cropRect = CGRect(
+                    x: screenExtent.minX + CGFloat(crop01.x) * screenExtent.width,
+                    y: screenExtent.minY + CGFloat(1.0 - crop01.y - crop01.height) * screenExtent.height,
+                    width: max(16.0, CGFloat(crop01.width) * screenExtent.width),
+                    height: max(16.0, CGFloat(crop01.height) * screenExtent.height)
+                )
+                computed = computed
+                    .cropped(to: cropRect)
+                    .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
+            }
+            lastMaskedScreenKey = maskCacheKey
+            cachedMaskedScreenImage = computed
+            maskedScreen = computed
         }
 
-        // --- PASS 3: Screen Rounded Corners, Inset, Drop Shadow & Camera Zoom/Pan Transform ---
+        // --- PASS 3: Screen Rounded Corners, Drop Shadow & Camera Zoom/Pan Transform ---
         let screenFrameRect = calculateFittedScreenRect(
             sourceSize: maskedScreen.extent.size,
             inCanvas: canvasRect,
@@ -105,32 +142,34 @@ public final class MetalFrameCompositor {
         let scaleY = screenFrameRect.height / max(1.0, maskedScreen.extent.height)
         var scaledScreen = maskedScreen.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
 
-        // Rounded Corners Mask
         let scaledRadius = CGFloat(doc.frameStyle.borderRadius) * (outputSize.height / 900.0)
-        scaledScreen = applyRoundedCorners(to: scaledScreen, rect: CGRect(origin: .zero, size: screenFrameRect.size), radius: scaledRadius)
+        scaledScreen = applyRoundedCorners(
+            to: scaledScreen,
+            rect: CGRect(origin: .zero, size: screenFrameRect.size),
+            radius: scaledRadius
+        )
 
-        // Position screen at center of canvas
         var positionedScreen = scaledScreen.transformed(
             by: CGAffineTransform(translationX: screenFrameRect.minX, y: screenFrameRect.minY)
         )
 
-        // Apply Drop Shadow before Virtual Camera Transform
+        // Fast GPU Rounded-Rectangle Drop Shadow (Generates shadow directly from `screenFrameRect` shape)
         if doc.frameStyle.shadow.enabled && doc.frameStyle.shadow.intensity > 0.01 {
             let shadowOffset = CGFloat(doc.frameStyle.shadow.distance) * (outputSize.height / 900.0)
             let shadowBlur = CGFloat(doc.frameStyle.shadow.blur) * (outputSize.height / 900.0)
             let shadowAlpha = CGFloat(doc.frameStyle.shadow.intensity)
-            let shadowImage = positionedScreen
-                .applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                    "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: shadowAlpha)
-                ])
-                .transformed(by: CGAffineTransform(translationX: 0, y: -shadowOffset * 0.5))
-                .applyingGaussianBlur(sigma: Double(max(1.0, shadowBlur * 0.45)))
-                .cropped(to: canvasRect)
+            let shadowRect = screenFrameRect.offsetBy(dx: 0, dy: -shadowOffset * 0.45)
 
-            positionedScreen = positionedScreen.composited(over: shadowImage)
+            if let shadowBox = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                "inputExtent": CIVector(cgRect: shadowRect),
+                "inputRadius": scaledRadius,
+                "inputColor": CIColor(red: 0, green: 0, blue: 0, alpha: shadowAlpha)
+            ])?.outputImage {
+                let blurredShadow = shadowBox
+                    .applyingGaussianBlur(sigma: Double(max(1.0, shadowBlur * 0.42)))
+                    .cropped(to: canvasRect)
+                positionedScreen = positionedScreen.composited(over: blurredShadow)
+            }
         }
 
         // --- PASS 4: Cursor Sprite & Click Ripple in Screen Space ---
@@ -204,49 +243,68 @@ public final class MetalFrameCompositor {
             solidColor: bg.solidColor,
             gradient: bg.gradient,
             meshPresetId: bg.meshPresetId,
-            wallpaperRelativePath: bg.wallpaperRelativePath
+            wallpaperRelativePath: bg.wallpaperRelativePath,
+            canvasWidth: Int(canvasRect.width),
+            canvasHeight: Int(canvasRect.height)
         )
-
-        let rawTarget = buildRawBackgroundImage(bg: bg, session: session, canvasRect: canvasRect)
 
         if let existingKey = currentBackgroundKey {
             if existingKey != newKey {
-                // Capture current blended or active background as `previous` and start smooth crossfade
                 previousUnblurredBackgroundImage = currentUnblurredBackgroundImage
+                let rawTarget = buildRawBackgroundImage(bg: bg, session: session, canvasRect: canvasRect)
                 currentUnblurredBackgroundImage = rawTarget
                 currentBackgroundKey = newKey
                 backgroundTransitionStartUptime = ProcessInfo.processInfo.systemUptime
-            } else {
-                currentUnblurredBackgroundImage = rawTarget
+                lastBlurredBgCacheKey = nil
+                cachedBlurredBackgroundImage = nil
             }
         } else {
+            let rawTarget = buildRawBackgroundImage(bg: bg, session: session, canvasRect: canvasRect)
             currentBackgroundKey = newKey
             currentUnblurredBackgroundImage = rawTarget
         }
 
-        var base = rawTarget
+        let rawTarget = currentUnblurredBackgroundImage ?? buildRawBackgroundImage(bg: bg, session: session, canvasRect: canvasRect)
+
+        // If crossfading between two backgrounds, blend dynamically
         if let prev = previousUnblurredBackgroundImage {
             let elapsed = ProcessInfo.processInfo.systemUptime - backgroundTransitionStartUptime
             if elapsed < backgroundTransitionDurationSec {
                 let t = max(0.0, min(1.0, elapsed / backgroundTransitionDurationSec))
-                // Smooth cubic ease-out (`1 - (1 - t)^3`)
                 let eased = CGFloat(1.0 - pow(1.0 - t, 3.0))
                 let fadedNew = rawTarget.applyingFilter("CIColorMatrix", parameters: [
                     "inputAVector": CIVector(x: 0, y: 0, z: 0, w: eased)
                 ])
-                base = fadedNew.composited(over: prev).cropped(to: canvasRect)
+                var blended = fadedNew.composited(over: prev).cropped(to: canvasRect)
+                if bg.blurRadius > 0.5 {
+                    blended = blended
+                        .clampedToExtent()
+                        .applyingGaussianBlur(sigma: bg.blurRadius * 0.4)
+                        .cropped(to: canvasRect)
+                }
+                return blended
             } else {
                 previousUnblurredBackgroundImage = nil
             }
         }
 
+        // Fast path: return cached background (including blur) when background & blur haven't changed!
+        let blurQuantized = Int(round(bg.blurRadius * 2.0))
+        let blurCacheKey = BlurredBackgroundCacheKey(identity: newKey, blurRadiusQuantized: blurQuantized)
+        if blurCacheKey == lastBlurredBgCacheKey, let cachedBg = cachedBlurredBackgroundImage {
+            return cachedBg
+        }
+
+        var finalBg = rawTarget
         if bg.blurRadius > 0.5 {
-            base = base
+            finalBg = finalBg
                 .clampedToExtent()
                 .applyingGaussianBlur(sigma: bg.blurRadius * 0.4)
                 .cropped(to: canvasRect)
         }
-        return base
+        lastBlurredBgCacheKey = blurCacheKey
+        cachedBlurredBackgroundImage = finalBg
+        return finalBg
     }
 
     private func buildRawBackgroundImage(bg: BackgroundConfig, session: ProjectSession, canvasRect: CGRect) -> CIImage {
@@ -321,8 +379,6 @@ public final class MetalFrameCompositor {
             .cropped(to: targetRect)
     }
 
-    /// Pass 2: Atomically applies all active Multi-Track Blur / Pixelate / Spotlight Masks in the same GPU command buffer.
-    /// Guarantees zero-frame lag during fast scrubbing!
     private func applyMultiTrackMasks(
         to screenImage: CIImage,
         screenExtent: CGRect,
@@ -334,7 +390,6 @@ public final class MetalFrameCompositor {
 
         for mask in activeMasks {
             let r01 = mask.interpolatedRect(at: sourceTimeMs)
-            // Convert top-left normalized [0..1] to CoreImage bottom-left pixel coordinates
             let pixelRect = CGRect(
                 x: screenExtent.minX + CGFloat(r01.x) * screenExtent.width,
                 y: screenExtent.minY + CGFloat(1.0 - r01.y - r01.height) * screenExtent.height,
@@ -368,7 +423,6 @@ public final class MetalFrameCompositor {
                         .cropped(to: screenExtent)
                 }
 
-                // Crop filtered region to `pixelRect` with rounded corners and composite directly over `output`
                 let scaledCornerRadius = CGFloat(mask.cornerRadius) * (screenExtent.height / 900.0)
                 if scaledCornerRadius > 0.5,
                    let roundedStencil = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
@@ -468,7 +522,7 @@ public final class MetalFrameCompositor {
             }
         }
 
-        // 2. High-DPI Vector Cursor Sprite (macOS Tahoe, Classic, White Studio, Figma Dart, Bold Outline, Touch Circle, Retro Pixel, Pointing Hand, I-Beam)
+        // 2. High-DPI Vector Cursor Sprite
         let (rawSprite, hotspot01) = CursorSpriteProvider.shared.ciCursorImage(
             themeId: cursorConfig.themeId,
             cursorType: cursorState.cursorType
@@ -476,7 +530,6 @@ public final class MetalFrameCompositor {
         let targetSpriteHeight = 32.0 * canvasScale * CGFloat(cursorConfig.scale)
         let spriteScale = targetSpriteHeight / max(1.0, rawSprite.extent.height)
 
-        // Anchor rotation and position around the cursor's exact hotspot `(hotspotX, hotspotY)` in CoreImage bottom-left coordinates
         let hotspotX = CGFloat(hotspot01.x) * rawSprite.extent.width
         let hotspotY = CGFloat(1.0 - hotspot01.y) * rawSprite.extent.height
 
@@ -499,7 +552,6 @@ public final class MetalFrameCompositor {
         return result
     }
 
-    /// Generates a rich synthetic macOS browser/code window when viewing an interactive demo project without an external `.mp4`.
     private func fallbackSyntheticScreenImage(size: CGSize) -> CIImage {
         if let existing = syntheticScreenTexture, existing.extent.size == size {
             return existing
@@ -507,12 +559,10 @@ public final class MetalFrameCompositor {
         let rect = CGRect(origin: .zero, size: size)
         var base = CIImage(color: CIColor(red: 0.09, green: 0.10, blue: 0.14, alpha: 1.0)).cropped(to: rect)
 
-        // Header bar
         let headerRect = CGRect(x: 0, y: size.height * 0.90, width: size.width, height: size.height * 0.10)
         let header = CIImage(color: CIColor(red: 0.14, green: 0.16, blue: 0.22, alpha: 1.0)).cropped(to: headerRect)
         base = header.composited(over: base)
 
-        // Simulated cards & sensitive blocks to showcase Auto-Zoom and Multi-Track Blur
         let blocks: [(CGRect, CIColor)] = [
             (CGRect(x: size.width * 0.06, y: size.height * 0.66, width: size.width * 0.40, height: size.height * 0.18),
              CIColor(red: 0.22, green: 0.34, blue: 0.68, alpha: 1.0)),

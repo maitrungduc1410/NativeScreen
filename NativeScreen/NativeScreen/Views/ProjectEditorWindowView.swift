@@ -13,6 +13,8 @@ public struct ProjectEditorWindowView: View {
     @State private var draftProjectName = ""
     @State private var isHoveringTitle = false
     @State private var titleBarFrameInWindow: CGRect = .zero
+    @State private var trafficLightCenterY: CGFloat = 19.0
+    @State private var trafficLightRightEdgeX: CGFloat = 78.0
     @FocusState private var isTitleFieldFocused: Bool
 
     @State private var isShowingExportSheet = false
@@ -62,7 +64,7 @@ public struct ProjectEditorWindowView: View {
 
                     Spacer()
                 }
-                .padding(.leading, 78)
+                .padding(.leading, trafficLightRightEdgeX + 10)
 
                 // Center: In-Place Editable Project Title (`Name` bright + `.nativescreen` dimmed)
                 HStack(spacing: 0) {
@@ -199,7 +201,7 @@ public struct ProjectEditorWindowView: View {
                 }
                 .padding(.trailing, 14)
             }
-            .frame(height: 44)
+            .frame(height: max(36, trafficLightCenterY * 2.0))
             .background(Color(red: 0.05, green: 0.05, blue: 0.07))
             .zIndex(80)
 
@@ -388,7 +390,16 @@ public struct ProjectEditorWindowView: View {
             MultiTrackTimelineView(session: session)
                 .frame(height: 235)
         }
-        .background(WindowTitlebarCleaner())
+        .background(
+            WindowTitlebarCleaner { centerY, rightX in
+                if abs(centerY - trafficLightCenterY) > 0.5 {
+                    trafficLightCenterY = centerY
+                }
+                if abs(rightX - trafficLightRightEdgeX) > 0.5 {
+                    trafficLightRightEdgeX = rightX
+                }
+            }
+        )
         .preferredColorScheme(.dark)
         .sheet(isPresented: $isShowingExportSheet) {
             exportModalSheet
@@ -603,26 +614,66 @@ public struct ProjectEditorWindowView: View {
     }
 }
 
-/// Configures the hosting `NSWindow` to hide the default system title text and merge the titlebar seamlessly into our dark header.
+/// Configures the hosting `NSWindow` to hide the default system title text, merge the titlebar seamlessly into our dark header,
+/// and report the exact pixel vertical center (`centerYFromTop`) and right edge (`rightEdgeX`) of the native `🔴 🟡 🟢` traffic lights.
 private struct WindowTitlebarCleaner: NSViewRepresentable {
+    var onMetricsChanged: (CGFloat, CGFloat) -> Void
+
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                window.titleVisibility = .hidden
-                window.titlebarAppearsTransparent = true
-                window.styleMask.insert(.fullSizeContentView)
-                window.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
-            }
-        }
+        let view = TrafficLightMeasuringView()
+        view.onMetricsChanged = onMetricsChanged
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            if let window = nsView.window {
+        if let view = nsView as? TrafficLightMeasuringView {
+            view.onMetricsChanged = onMetricsChanged
+            view.configureWindowAndMeasure()
+        }
+    }
+
+    private final class TrafficLightMeasuringView: NSView {
+        var onMetricsChanged: ((CGFloat, CGFloat) -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configureWindowAndMeasure()
+        }
+
+        override func layout() {
+            super.layout()
+            configureWindowAndMeasure()
+        }
+
+        func configureWindowAndMeasure() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let window = self.window else { return }
                 window.titleVisibility = .hidden
                 window.titlebarAppearsTransparent = true
+                window.styleMask.insert(.fullSizeContentView)
+                window.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
+
+                if window.toolbar == nil {
+                    let toolbar = NSToolbar(identifier: "NativeScreenUnifiedHeaderToolbar")
+                    toolbar.showsBaselineSeparator = false
+                    window.toolbar = toolbar
+                    window.toolbarStyle = .unifiedCompact
+                }
+
+                if let closeBtn = window.standardWindowButton(.closeButton),
+                   let zoomBtn = window.standardWindowButton(.zoomButton) {
+                    let closeCenterInWin = closeBtn.convert(
+                        CGPoint(x: closeBtn.bounds.midX, y: closeBtn.bounds.midY),
+                        to: nil
+                    )
+                    let zoomRightInWin = zoomBtn.convert(
+                        CGPoint(x: zoomBtn.bounds.maxX, y: zoomBtn.bounds.midY),
+                        to: nil
+                    )
+                    let centerYFromTop = max(14.0, min(28.0, window.frame.height - closeCenterInWin.y))
+                    let rightX = max(68.0, min(104.0, zoomRightInWin.x))
+                    self.onMetricsChanged?(centerYFromTop, rightX)
+                }
             }
         }
     }
