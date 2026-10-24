@@ -79,13 +79,15 @@
   - [x] Auto-hide cursor when idle (`hideWhenIdleAfterMs`).
   - [x] Loop cursor position back to start (`loopBackToStartMs`) for seamless looping videos/GIFs.
   - [x] Click ripple animations & synthesized mechanical/Magic Mouse click sound effects.
-  - [ ] Capture and render actual macOS cursor shapes (`arrow`, `pointingHand`, `iBeam`, `crosshair`, `resize`).
+  - [x] Capture and render actual macOS cursor shapes (`arrow`, `pointingHand`, `iBeam`, `crosshair`, `resize`).
 - [ ] **Audio Enhancements:**
   - [ ] Audio waveform visualization on the timeline.
   - [ ] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
   - [ ] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
   - [ ] Post-recording Voiceover recording directly onto the timeline.
-- [ ] **Canvas Crop Tool:** Interactive crop overlay to trim unwanted margins of the recorded screen/window.
+- [x] **Canvas Crop Tool:** Interactive crop overlay to trim unwanted margins of the recorded screen/window.
+- [x] **Reel Mode Safe-Zone Overlay:** Interactive TikTok & Instagram Reels safe-zone preview overlay.
+- [x] **Extract Current Frame:** Export or copy the current composited GPU frame as a high-res PNG.
 - [ ] **Presets System:** Save and apply reusable style presets (Background + Padding + Shadow + Cursor + Zoom settings).
 - [ ] **Quick Export & GIF Export:**
   - [ ] High-quality GIF export.
