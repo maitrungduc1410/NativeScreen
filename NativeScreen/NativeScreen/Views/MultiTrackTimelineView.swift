@@ -19,6 +19,7 @@ public struct MultiTrackTimelineView: View {
     @State private var verticalContentHeight: CGFloat = 180.0
 
     private let labelColumnWidth: CGFloat = 94
+    private let trackHorizontalInset: CGFloat = 10
     private let rulerHeight: CGFloat = 26
     private let clipRowHeight: CGFloat = 46
     private let zoomRowHeight: CGFloat = 40
@@ -132,7 +133,9 @@ public struct MultiTrackTimelineView: View {
             GeometryReader { outerGeo in
                 let viewportWidth = max(300, outerGeo.size.width - labelColumnWidth)
                 let viewportHeight = max(80, outerGeo.size.height - rulerHeight)
-                let contentWidth = max(viewportWidth, (viewportWidth - 20) * CGFloat(timelineZoom))
+                let baseTrackWidth = max(260, viewportWidth - trackHorizontalInset * 2)
+                let contentWidth = baseTrackWidth * CGFloat(timelineZoom)
+                let totalDocumentWidth = contentWidth + trackHorizontalInset * 2
                 let totalTimelineMs = max(1000.0, session.timeMapper.totalTimelineDurationMs)
 
                 ZStack(alignment: .bottomTrailing) {
@@ -157,15 +160,18 @@ public struct MultiTrackTimelineView: View {
                             .zIndex(20)
 
                             // Top-Right Horizontally Synced Time Ruler + Playhead Teardrop Caps
+                            // `trackHorizontalInset` (10pt) guarantees that at 0.00s and at end duration,
+                            // the 11pt teardrop playhead cap is 100% visible and never clipped!
                             ZStack(alignment: .topLeading) {
                                 SmoothTimeRulerView(
                                     totalDurationMs: totalTimelineMs,
                                     width: contentWidth
                                 )
+                                .offset(x: trackHorizontalInset)
 
                                 // Ghost Hover Teardrop Cap in Ruler
                                 if let hoverMs = session.hoverSkimTimelineMs, !session.isPlaying {
-                                    let hoverX = CGFloat(hoverMs / totalTimelineMs) * contentWidth
+                                    let hoverX = trackHorizontalInset + CGFloat(hoverMs / totalTimelineMs) * contentWidth
                                     TeardropHeadShape()
                                         .fill(Color(red: 0.28, green: 0.30, blue: 0.38))
                                         .frame(width: 11, height: 13)
@@ -174,13 +180,14 @@ public struct MultiTrackTimelineView: View {
                                 }
 
                                 // Committed Playhead Teardrop Cap in Ruler
-                                let playheadX = CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
+                                let playheadX = trackHorizontalInset + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
                                 TeardropHeadShape()
                                     .fill(Color(red: 0.46, green: 0.34, blue: 1.0))
                                     .frame(width: 11, height: 13)
                                     .offset(x: playheadX - 5.5, y: 2)
                                     .allowsHitTesting(false)
                             }
+                            .frame(width: totalDocumentWidth, height: rulerHeight, alignment: .leading)
                             .offset(x: -horizontalScrollOffset)
                             .frame(width: viewportWidth, height: rulerHeight, alignment: .leading)
                             .clipped()
@@ -188,7 +195,7 @@ public struct MultiTrackTimelineView: View {
                             .onContinuousHover { phase in
                                 switch phase {
                                 case .active(let pt):
-                                    let absoluteX = pt.x + horizontalScrollOffset
+                                    let absoluteX = pt.x + horizontalScrollOffset - trackHorizontalInset
                                     let frac = max(0.0, min(1.0, Double(absoluteX / max(1.0, contentWidth))))
                                     session.setHoverSkimTimelineMs(frac * totalTimelineMs)
                                 case .ended:
@@ -198,7 +205,7 @@ public struct MultiTrackTimelineView: View {
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
-                                        let absoluteX = value.location.x + horizontalScrollOffset
+                                        let absoluteX = value.location.x + horizontalScrollOffset - trackHorizontalInset
                                         let frac = max(0.0, min(1.0, Double(absoluteX / max(1.0, contentWidth))))
                                         session.isPlaying = false
                                         session.seek(toTimelineMs: frac * totalTimelineMs)
@@ -312,10 +319,11 @@ public struct MultiTrackTimelineView: View {
                                             }
                                         }
                                         .padding(.vertical, 10)
+                                        .padding(.horizontal, trackHorizontalInset)
 
                                         // Ghost Hover Playhead Line across all lanes
                                         if let hoverMs = session.hoverSkimTimelineMs, !session.isPlaying {
-                                            let hoverX = CGFloat(hoverMs / totalTimelineMs) * contentWidth
+                                            let hoverX = trackHorizontalInset + CGFloat(hoverMs / totalTimelineMs) * contentWidth
                                             Rectangle()
                                                 .fill(Color.white.opacity(0.24))
                                                 .frame(width: 1.5)
@@ -325,7 +333,7 @@ public struct MultiTrackTimelineView: View {
                                         }
 
                                         // Committed Playhead Line across all lanes
-                                        let playheadX = CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
+                                        let playheadX = trackHorizontalInset + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
                                         Rectangle()
                                             .fill(Color(red: 0.46, green: 0.34, blue: 1.0))
                                             .frame(width: 1.5)
@@ -333,12 +341,13 @@ public struct MultiTrackTimelineView: View {
                                             .offset(x: playheadX - 0.75)
                                             .allowsHitTesting(false)
                                     }
-                                    .frame(width: contentWidth)
+                                    .frame(width: totalDocumentWidth)
                                     .coordinateSpace(name: "timelineContentSpace")
                                     .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
                                         switch phase {
                                         case .active(let pt):
-                                            let frac = max(0.0, min(1.0, Double(pt.x / max(1.0, contentWidth))))
+                                            let localTrackX = pt.x - trackHorizontalInset
+                                            let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
                                             session.setHoverSkimTimelineMs(frac * totalTimelineMs)
                                         case .ended:
                                             session.setHoverSkimTimelineMs(nil)
@@ -347,7 +356,8 @@ public struct MultiTrackTimelineView: View {
                                     .simultaneousGesture(
                                         SpatialTapGesture(coordinateSpace: .named("timelineContentSpace"))
                                             .onEnded { event in
-                                                let frac = max(0.0, min(1.0, Double(event.location.x / max(1.0, contentWidth))))
+                                                let localTrackX = event.location.x - trackHorizontalInset
+                                                let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
                                                 session.isPlaying = false
                                                 session.seek(toTimelineMs: frac * totalTimelineMs)
                                             }
@@ -369,10 +379,10 @@ public struct MultiTrackTimelineView: View {
                     }
 
                     // C. SLIM 4pt HORIZONTAL SCROLLBAR PILL (Only shown when zoomed > 1.0x)
-                    if contentWidth > viewportWidth + 4 {
-                        let ratio = viewportWidth / contentWidth
+                    if totalDocumentWidth > viewportWidth + 4 {
+                        let ratio = viewportWidth / totalDocumentWidth
                         let thumbW = max(36, viewportWidth * ratio)
-                        let maxScroll = max(1, contentWidth - viewportWidth)
+                        let maxScroll = max(1, totalDocumentWidth - viewportWidth)
                         let scrollFrac = min(1, max(0, horizontalScrollOffset / maxScroll))
                         let thumbX = labelColumnWidth + scrollFrac * (viewportWidth - thumbW - 8)
 
