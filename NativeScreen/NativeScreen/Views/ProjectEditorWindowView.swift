@@ -12,6 +12,7 @@ public struct ProjectEditorWindowView: View {
     @State private var isEditingProjectName = false
     @State private var draftProjectName = ""
     @State private var isHoveringTitle = false
+    @State private var titleBarFrameInWindow: CGRect = .zero
     @FocusState private var isTitleFieldFocused: Bool
 
     @State private var isShowingExportSheet = false
@@ -21,6 +22,7 @@ public struct ProjectEditorWindowView: View {
     @State private var exportProgress: Double = 0.0
     @State private var exportError: String?
     @State private var keyEventMonitor: Any?
+    @State private var mouseDownMonitor: Any?
 
     public init(session: ProjectSession) {
         self.session = session
@@ -83,8 +85,16 @@ public struct ProjectEditorWindowView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(Color.white.opacity(0.10))
+                            GeometryReader { proxy in
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.white.opacity(0.10))
+                                    .onAppear {
+                                        titleBarFrameInWindow = proxy.frame(in: .global)
+                                    }
+                                    .onChange(of: proxy.frame(in: .global)) { _, newFrame in
+                                        titleBarFrameInWindow = newFrame
+                                    }
+                            }
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -94,7 +104,9 @@ public struct ProjectEditorWindowView: View {
                         Button {
                             draftProjectName = session.document.name
                             isEditingProjectName = true
-                            isTitleFieldFocused = true
+                            DispatchQueue.main.async {
+                                isTitleFieldFocused = true
+                            }
                         } label: {
                             HStack(spacing: 1) {
                                 Text(session.document.name)
@@ -395,7 +407,10 @@ public struct ProjectEditorWindowView: View {
     }
 
     private func commitProjectRename() {
+        guard isEditingProjectName else { return }
         isEditingProjectName = false
+        isTitleFieldFocused = false
+        NSApp.keyWindow?.makeFirstResponder(nil)
         session.renameProject(to: draftProjectName)
     }
 
@@ -404,14 +419,30 @@ public struct ProjectEditorWindowView: View {
         NSApp.keyWindow?.close()
     }
 
-    // MARK: - Keyboard Shortcuts (`Delete`/`Backspace`, `ESC`)
+    // MARK: - Keyboard Shortcuts (`Delete`/`Backspace`, `ESC`) & Outside Click Title Commit
 
     private func installEditorKeyMonitor() {
         removeEditorKeyMonitor()
+
+        // Commit in-place filename edit immediately when clicking anywhere outside the title box!
+        mouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            if isEditingProjectName, let win = event.window, let contentView = win.contentView {
+                // Convert NSEvent window point (bottom-left origin) to SwiftUI top-left global coordinate
+                let ptInWindow = event.locationInWindow
+                let topBasedPoint = CGPoint(x: ptInWindow.x, y: contentView.bounds.height - ptInWindow.y)
+                if !titleBarFrameInWindow.insetBy(dx: -8, dy: -8).contains(topBasedPoint) {
+                    commitProjectRename()
+                }
+            }
+            return event
+        }
+
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if let responder = event.window?.firstResponder, responder is NSTextView {
                 if event.keyCode == 53 { // ESC while editing title
                     isEditingProjectName = false
+                    isTitleFieldFocused = false
+                    event.window?.makeFirstResponder(nil)
                     return nil
                 }
                 return event
@@ -444,6 +475,10 @@ public struct ProjectEditorWindowView: View {
         if let monitor = keyEventMonitor {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil
+        }
+        if let mMonitor = mouseDownMonitor {
+            NSEvent.removeMonitor(mMonitor)
+            mouseDownMonitor = nil
         }
     }
 

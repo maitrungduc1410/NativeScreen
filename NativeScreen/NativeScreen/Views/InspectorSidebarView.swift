@@ -693,12 +693,14 @@ public struct InspectorSidebarView: View {
         range: ClosedRange<Double>,
         defaultValue: Double
     ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.88))
+        let isModified = abs(value.wrappedValue - defaultValue) > 0.005
 
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.90))
+
+            HStack(spacing: 10) {
                 Slider(value: value, in: range) { editing in
                     if editing {
                         session.beginInteractiveEdit()
@@ -706,20 +708,30 @@ public struct InspectorSidebarView: View {
                         session.endInteractiveEdit()
                     }
                 }
-                .tint(Color(red: 0.52, green: 0.42, blue: 0.98))
+                .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
                 .controlSize(.small)
 
-                Button("Reset") {
-                    value.wrappedValue = defaultValue
+                Button {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        value.wrappedValue = defaultValue
+                    }
+                } label: {
+                    Text("Reset")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
+                        .frame(width: 60, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
-                .opacity(abs(value.wrappedValue - defaultValue) > 0.005 ? 1.0 : 0.35)
-                .disabled(abs(value.wrappedValue - defaultValue) <= 0.005)
+                .disabled(!isModified)
             }
         }
     }

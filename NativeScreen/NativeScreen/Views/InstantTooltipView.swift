@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// instant hover tooltip & button highlight modifier.
-/// Shows a dark speech-bubble tooltip with a pointer triangle immediately on mouse hover (zero OS delay!)
-/// and smoothly highlights the button background.
+/// Places the speech-bubble tooltip cleanly outside the button's highlight border (zero overlap with the icon
+/// and zero clipping against window edges!).
 public enum TooltipEdge: Sendable {
     case leading
     case trailing
@@ -61,13 +61,34 @@ public struct InstantTooltipButton<LabelContent: View>: View {
             if isHovered && !tooltip.isEmpty {
                 InstantTooltipBubble(text: tooltip, edge: edge)
                     .fixedSize()
-                    .offset(x: tooltipOffsetX, y: tooltipOffsetY)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                    .alignmentGuide(horizontalAlignmentGuide) { d in
+                        switch edge {
+                        case .trailing:
+                            // Place the left tip of the bubble 6pt to the RIGHT of the button's trailing edge
+                            return d[.leading] - 6
+                        case .leading:
+                            // Place the right tip of the bubble 6pt to the LEFT of the button's leading edge
+                            return d[.trailing] + 6
+                        case .top, .bottom:
+                            return d[HorizontalAlignment.center]
+                        }
+                    }
+                    .alignmentGuide(verticalAlignmentGuide) { d in
+                        switch edge {
+                        case .top:
+                            return d[.bottom] + 6
+                        case .bottom:
+                            return d[.top] - 6
+                        case .leading, .trailing:
+                            return d[VerticalAlignment.center]
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     .zIndex(999)
                     .allowsHitTesting(false)
             }
         }
-        .zIndex(isHovered ? 100 : 1)
+        .zIndex(isHovered ? 200 : 1)
     }
 
     private var backgroundColor: Color {
@@ -86,19 +107,19 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         }
     }
 
-    private var tooltipOffsetX: CGFloat {
+    private var horizontalAlignmentGuide: HorizontalAlignment {
         switch edge {
-        case .leading: return -(size + 8)
-        case .trailing: return (size + 8)
-        case .top, .bottom: return 0
+        case .leading: return .leading
+        case .trailing: return .trailing
+        case .top, .bottom: return .center
         }
     }
 
-    private var tooltipOffsetY: CGFloat {
+    private var verticalAlignmentGuide: VerticalAlignment {
         switch edge {
-        case .top: return -(size + 6)
-        case .bottom: return (size + 6)
-        case .leading, .trailing: return 0
+        case .top: return .top
+        case .bottom: return .bottom
+        case .leading, .trailing: return .center
         }
     }
 }
@@ -107,42 +128,64 @@ public struct InstantTooltipBubble: View {
     let text: String
     let edge: TooltipEdge
 
+    private let bubbleFill = Color(red: 0.14, green: 0.15, blue: 0.19)
+
     public var body: some View {
-        HStack(spacing: 0) {
-            if edge == .trailing {
-                TooltipTriangle(direction: .left)
-                    .fill(Color(red: 0.14, green: 0.15, blue: 0.19))
-                    .frame(width: 6, height: 10)
-            }
-
-            Text(text)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color(red: 0.14, green: 0.15, blue: 0.19))
-                        .shadow(color: .black.opacity(0.45), radius: 8, y: 3)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(.white.opacity(0.14), lineWidth: 0.8)
-                )
-
-            if edge == .leading {
-                TooltipTriangle(direction: .right)
-                    .fill(Color(red: 0.14, green: 0.15, blue: 0.19))
-                    .frame(width: 6, height: 10)
+        Group {
+            switch edge {
+            case .trailing:
+                HStack(spacing: -1) {
+                    TooltipPointerTriangle(direction: .left)
+                        .fill(bubbleFill)
+                        .frame(width: 6, height: 11)
+                    bubbleBox
+                }
+            case .leading:
+                HStack(spacing: -1) {
+                    bubbleBox
+                    TooltipPointerTriangle(direction: .right)
+                        .fill(bubbleFill)
+                        .frame(width: 6, height: 11)
+                }
+            case .top:
+                VStack(spacing: -1) {
+                    bubbleBox
+                    TooltipPointerTriangle(direction: .down)
+                        .fill(bubbleFill)
+                        .frame(width: 11, height: 6)
+                }
+            case .bottom:
+                VStack(spacing: -1) {
+                    TooltipPointerTriangle(direction: .up)
+                        .fill(bubbleFill)
+                        .frame(width: 11, height: 6)
+                    bubbleBox
+                }
             }
         }
+        .shadow(color: .black.opacity(0.50), radius: 8, y: 3)
+    }
+
+    private var bubbleBox: some View {
+        Text(text)
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(bubbleFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(.white.opacity(0.14), lineWidth: 0.8)
+            )
     }
 }
 
-private struct TooltipTriangle: Shape {
+private struct TooltipPointerTriangle: Shape {
     enum Direction {
-        case left
-        case right
+        case left, right, up, down
     }
     let direction: Direction
 
@@ -157,6 +200,14 @@ private struct TooltipTriangle: Shape {
             path.move(to: CGPoint(x: rect.minX, y: rect.minY))
             path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
             path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        case .up:
+            path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        case .down:
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
         }
         path.closeSubpath()
         return path
