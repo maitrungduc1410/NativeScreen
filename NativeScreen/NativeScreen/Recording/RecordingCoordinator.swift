@@ -46,7 +46,7 @@ public final class RecordingCoordinator {
     public func showRecordingHUD() {
         if hudPanel == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 760, height: 64),
+                contentRect: NSRect(x: 0, y: 0, width: 840, height: 66),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -67,8 +67,8 @@ public final class RecordingCoordinator {
         let targetScreen = WindowDiscoveryService.screenUnderMouse() ?? NSScreen.main
         if let screen = targetScreen, let panel = hudPanel {
             let screenFrame = screen.visibleFrame
-            let panelW: CGFloat = 760
-            let panelH: CGFloat = 64
+            let panelW: CGFloat = 840
+            let panelH: CGFloat = 66
             let x = screenFrame.midX - panelW * 0.5
             let y = screenFrame.minY + 42
             panel.setFrame(NSRect(x: x, y: y, width: panelW, height: panelH), display: true)
@@ -548,10 +548,11 @@ public final class RecordingCoordinator {
     }
 }
 
-// MARK: - Floating Recording HUD Bar View (`NSPanel` Content — Single-Line Responsive Pills)
+// MARK: - Floating Recording HUD Bar View (`NSPanel` Content — Matches the Recording Bar)
 
 public struct RecordingHUDBarView: View {
     @Bindable var coordinator: RecordingCoordinator
+    @Bindable private var workspace = ProjectWorkspaceStore.shared
 
     public var body: some View {
         HStack(spacing: 12) {
@@ -566,14 +567,13 @@ public struct RecordingHUDBarView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white.opacity(0.9))
-                    .frame(width: 26, height: 26)
+                    .frame(width: 28, height: 28)
                     .background(.white.opacity(0.14), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("Cancel (ESC)")
 
             Divider()
-                .frame(height: 24)
+                .frame(height: 26)
 
             if !coordinator.isRecording {
                 // Capture Target Mode Buttons (Display, Window, Area, Device)
@@ -583,20 +583,20 @@ public struct RecordingHUDBarView: View {
                         Button {
                             coordinator.selectMode(mode)
                         } label: {
-                            VStack(spacing: 3) {
+                            VStack(spacing: 4) {
                                 Image(systemName: mode.systemImage)
-                                    .font(.system(size: 15, weight: .medium))
+                                    .font(.system(size: 16, weight: .medium))
                                 Text(mode.title)
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(.system(size: 11, weight: .medium))
                                     .lineLimit(1)
                             }
-                            .foregroundStyle(isSelected ? .white : .white.opacity(0.62))
-                            .frame(width: 54, height: 42)
+                            .foregroundStyle(isSelected ? .white : .white.opacity(0.65))
+                            .frame(width: 58, height: 46)
                             .background(
                                 isSelected
                                     ? Color.white.opacity(0.16)
                                     : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                             )
                         }
                         .buttonStyle(.plain)
@@ -604,7 +604,7 @@ public struct RecordingHUDBarView: View {
                 }
 
                 Divider()
-                    .frame(height: 24)
+                    .frame(height: 26)
 
                 // Single-Line Microphone & System Audio Pills
                 HStack(spacing: 8) {
@@ -613,13 +613,13 @@ public struct RecordingHUDBarView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: coordinator.captureMicrophone ? "mic.fill" : "mic.slash")
-                                .font(.system(size: 12))
+                                .font(.system(size: 13))
                             Text(coordinator.captureMicrophone ? "Microphone" : "No microphone")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 12.5, weight: .medium))
                                 .lineLimit(1)
                         }
                         .fixedSize(horizontal: true, vertical: false)
-                        .foregroundStyle(coordinator.captureMicrophone ? .white : .white.opacity(0.58))
+                        .foregroundStyle(coordinator.captureMicrophone ? .white : .white.opacity(0.60))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
                         .background(.white.opacity(coordinator.captureMicrophone ? 0.14 : 0.06), in: Capsule())
@@ -631,13 +631,13 @@ public struct RecordingHUDBarView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: coordinator.captureSystemAudio ? "speaker.wave.2.fill" : "speaker.slash")
-                                .font(.system(size: 12))
+                                .font(.system(size: 13))
                             Text(coordinator.captureSystemAudio ? "System Audio" : "No audio")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 12.5, weight: .medium))
                                 .lineLimit(1)
                         }
                         .fixedSize(horizontal: true, vertical: false)
-                        .foregroundStyle(coordinator.captureSystemAudio ? .white : .white.opacity(0.58))
+                        .foregroundStyle(coordinator.captureSystemAudio ? .white : .white.opacity(0.60))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
                         .background(.white.opacity(coordinator.captureSystemAudio ? 0.14 : 0.06), in: Capsule())
@@ -646,7 +646,43 @@ public struct RecordingHUDBarView: View {
                 }
 
                 Divider()
-                    .frame(height: 24)
+                    .frame(height: 26)
+
+                // Projects Folder Menu (Like the 📁 icon right on the Recording Bar!)
+                Menu {
+                    Button("Open .nativescreen Project…") {
+                        workspace.promptOpenProjectDialog()
+                    }
+
+                    Button("Create Interactive Showcase Project") {
+                        if let demo = coordinator.createInteractiveSampleProject() {
+                            coordinator.onRecordingCompleted?(demo)
+                        }
+                    }
+
+                    if !workspace.recentProjectURLs.isEmpty {
+                        Divider()
+                        Section("Recent Projects") {
+                            ForEach(workspace.recentProjectURLs.prefix(10), id: \.path) { url in
+                                Button(url.deletingPathExtension().lastPathComponent) {
+                                    _ = workspace.openOrFocusProject(at: url)
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
+                    Button("Show Projects Folder in Finder") {
+                        NSWorkspace.shared.open(ProjectWorkspaceStore.defaultProjectsDirectory)
+                    }
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .frame(width: 34, height: 34)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
 
                 // Record Button
                 Button {
@@ -657,12 +693,12 @@ public struct RecordingHUDBarView: View {
                             .fill(.red)
                             .frame(width: 9, height: 9)
                         Text("Record")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 12.5, weight: .semibold))
                             .lineLimit(1)
                     }
                     .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 8)
                     .background(Color.indigo, in: Capsule())
                     .foregroundStyle(.white)
                 }
@@ -674,13 +710,13 @@ public struct RecordingHUDBarView: View {
                         .fill(.red)
                         .frame(width: 9, height: 9)
                     Text(formatElapsed(coordinator.recordingElapsedSeconds))
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 13.5, weight: .semibold).monospacedDigit())
                         .foregroundStyle(.white)
                     Button {
                         Task { await coordinator.stopRecordingAndOpenEditor() }
                     } label: {
                         Label("Stop Recording", systemImage: "stop.fill")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 12.5, weight: .semibold))
                             .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 7)
@@ -691,12 +727,12 @@ public struct RecordingHUDBarView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color(red: 0.11, green: 0.12, blue: 0.16).opacity(0.92), in: Capsule())
+        .padding(.horizontal, 18)
+        .padding(.vertical, 9)
+        .background(Color(red: 0.11, green: 0.12, blue: 0.16).opacity(0.94), in: Capsule())
         .overlay(
             Capsule()
-                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                .strokeBorder(.white.opacity(0.15), lineWidth: 1)
         )
     }
 

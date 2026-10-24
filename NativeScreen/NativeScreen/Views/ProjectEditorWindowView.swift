@@ -335,9 +335,9 @@ public struct ProjectEditorWindowView: View {
                     }
 
                     // Transport Playback Bar
-                    HStack(spacing: 18) {
+                    HStack(spacing: 22) {
                         Text(formatTimecode(session.effectivePreviewTimelineMs))
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
                             .foregroundStyle(.secondary)
 
                         Button {
@@ -345,8 +345,8 @@ public struct ProjectEditorWindowView: View {
                             session.seek(toTimelineMs: 0.0)
                         } label: {
                             Image(systemName: "backward.end")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.78))
                         }
                         .buttonStyle(.plain)
 
@@ -354,8 +354,8 @@ public struct ProjectEditorWindowView: View {
                             session.isPlaying.toggle()
                         } label: {
                             Image(systemName: session.isPlaying ? "pause.circle" : "play.circle")
-                                .font(.system(size: 24, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .font(.system(size: 27, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.95))
                         }
                         .buttonStyle(.plain)
                         .keyboardShortcut(.space, modifiers: [])
@@ -365,16 +365,16 @@ public struct ProjectEditorWindowView: View {
                             session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
                         } label: {
                             Image(systemName: "forward.end")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.78))
                         }
                         .buttonStyle(.plain)
 
                         Text(formatTimecode(session.timeMapper.totalTimelineDurationMs))
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.secondary.opacity(0.7))
+                            .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
+                            .foregroundStyle(.secondary.opacity(0.75))
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 10)
                     .frame(maxWidth: .infinity)
                     .background(Color(red: 0.03, green: 0.03, blue: 0.04))
                 }
@@ -391,7 +391,7 @@ public struct ProjectEditorWindowView: View {
 
             // 3. BOTTOM MULTI-TRACK NLE TIMELINE
             MultiTrackTimelineView(session: session)
-                .frame(height: 235)
+                .frame(height: 255)
         }
         .background(
             WindowTitlebarCleaner { centerY, rightX in

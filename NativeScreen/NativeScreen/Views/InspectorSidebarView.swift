@@ -44,9 +44,9 @@ public struct InspectorSidebarView: View {
 
             // Active Inspector Content Panel
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 20) {
                     Text(session.selectedInspectorTab.rawValue)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white)
 
                     switch session.selectedInspectorTab {
@@ -62,10 +62,10 @@ public struct InspectorSidebarView: View {
                         audioAndSliceInspector
                     }
                 }
-                .padding(16)
+                .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 304)
+            .frame(width: 332)
             .background(Color(red: 0.09, green: 0.09, blue: 0.12))
         }
         .onAppear {
@@ -88,19 +88,19 @@ public struct InspectorSidebarView: View {
                         session.mutate { $0.background.type = mode }
                     } label: {
                         Text(mode.label)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .lineLimit(1)
                             .foregroundStyle(isSelected ? .white : .secondary)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
+                            .padding(.vertical, 8)
                             .background(
                                 isSelected
                                     ? Color.white.opacity(0.14)
                                     : Color.white.opacity(0.04),
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
                                     .strokeBorder(isSelected ? Color.white.opacity(0.28) : Color.clear, lineWidth: 1)
                             )
                     }
@@ -688,12 +688,12 @@ public struct InspectorSidebarView: View {
     ) -> some View {
         let isModified = abs(value.wrappedValue - defaultValue) > 0.005
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.90))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.92))
 
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Slider(value: value, in: range) { editing in
                     if editing {
                         session.beginInteractiveEdit()
@@ -702,7 +702,7 @@ public struct InspectorSidebarView: View {
                     }
                 }
                 .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
-                .controlSize(.small)
+                .controlSize(.regular)
 
                 Button {
                     withAnimation(.easeOut(duration: 0.14)) {
@@ -710,18 +710,18 @@ public struct InspectorSidebarView: View {
                     }
                 } label: {
                     Text("Reset")
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
-                        .frame(width: 60, height: 28)
+                        .frame(width: 66, height: 32)
                         .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
                         )
-                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!isModified)

@@ -18,13 +18,13 @@ public struct MultiTrackTimelineView: View {
     @State private var verticalScrollOffset: CGFloat = 0.0
     @State private var verticalContentHeight: CGFloat = 180.0
 
-    private let labelColumnWidth: CGFloat = 94
-    private let trackHorizontalInset: CGFloat = 10
-    private let rulerHeight: CGFloat = 26
-    private let clipRowHeight: CGFloat = 46
-    private let zoomRowHeight: CGFloat = 40
-    private let maskRowHeight: CGFloat = 30
-    private let rowSpacing: CGFloat = 8
+    private let labelColumnWidth: CGFloat = 104
+    private let trackHorizontalInset: CGFloat = 12
+    private let rulerHeight: CGFloat = 30
+    private let clipRowHeight: CGFloat = 52
+    private let zoomRowHeight: CGFloat = 46
+    private let maskRowHeight: CGFloat = 34
+    private let rowSpacing: CGFloat = 9
 
     public init(session: ProjectSession) {
         self.session = session
@@ -753,14 +753,14 @@ private struct SmoothTimeRulerView: View {
                 }
 
                 let text = Text(labelStr)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.45))
-                let clampedX = min(size.width - 18, max(16, x))
-                context.draw(text, at: CGPoint(x: clampedX, y: 10))
+                    .font(.system(size: 11.5, weight: .medium, design: .default).monospacedDigit())
+                    .foregroundColor(.white.opacity(0.62))
+                let clampedX = min(size.width - 20, max(16, x))
+                context.draw(text, at: CGPoint(x: clampedX, y: 11))
                 tMajor += majorStepSec
             }
         }
-        .frame(width: width, height: 26)
+        .frame(width: width, height: 30)
     }
 }
 
@@ -837,13 +837,13 @@ private struct TimelineInteractiveSegmentView: View {
             if segWidth > 42 {
                 VStack(spacing: 2) {
                     Text(topTitle)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
                         .lineLimit(1)
 
                     if let sub = subtitle, segWidth > 78 {
                         Text(sub)
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white.opacity(0.88))
                             .lineLimit(1)
                     }
@@ -924,7 +924,7 @@ private struct TimelineInteractiveSegmentView: View {
                 .onChanged { value in
                     if activeDragMode == nil {
                         // Compute local X inside this segment at the exact moment of mouse-down
-                        let startInLane = value.startLocation.x - 10.0 // subtract `trackHorizontalInset`
+                        let startInLane = value.startLocation.x - 12.0 // subtract `trackHorizontalInset`
                         let computedLocalX = startInLane - xOffset
                         let localX = (computedLocalX >= -4 && computedLocalX <= segWidth + 4)
                             ? max(0, min(segWidth, computedLocalX))
