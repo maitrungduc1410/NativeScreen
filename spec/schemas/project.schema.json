@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nativescreen.dev/schemas/project.schema.json",
+  "title": "NativeScreen Project Document",
+  "description": "Cross-platform non-linear editing state for a .nativescreen project package.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "createdAt",
+    "updatedAt",
+    "canvas",
+    "background",
+    "frameStyle",
+    "cursor",
+    "camera",
+    "motion",
+    "audio",
+    "captions",
+    "timeline"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0.0" },
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "canvas": {
+      "type": "object",
+      "required": ["aspectRatioMode", "aspectRatioPreset", "paddingRatio", "cropRect01"],
+      "properties": {
+        "aspectRatioMode": { "type": "string", "enum": ["auto", "preset", "custom"] },
+        "aspectRatioPreset": { "type": "string", "enum": ["16:9", "9:16", "1:1", "4:3", "16:10"] },
+        "customAspectRatio": {
+          "type": "object",
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "paddingRatio": { "type": "number", "minimum": 0, "maximum": 0.45 },
+        "cropRect01": { "$ref": "#/$defs/rect01" }
+      }
+    },
+    "background": {
+      "type": "object",
+      "required": ["type", "solidColor", "gradient", "blurRadius", "noiseIntensity"],
+      "properties": {
+        "type": { "type": "string", "enum": ["wallpaper", "mesh", "gradient", "solid", "image"] },
+        "solidColor": { "type": "string" },
+        "gradient": {
+          "type": "object",
+          "required": ["type", "start01", "end01", "stops"],
+          "properties": {
+            "type": { "type": "string", "enum": ["linear", "radial"] },
+            "start01": { "$ref": "#/$defs/point01" },
+            "end01": { "$ref": "#/$defs/point01" },
+            "stops": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["color", "location"],
+                "properties": {
+                  "color": { "type": "string" },
+                  "location": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              }
+            }
+          }
+        },
+        "meshPresetId": { "type": ["string", "null"] },
+        "wallpaperRelativePath": { "type": ["string", "null"] },
+        "systemWallpaperName": { "type": ["string", "null"] },
+        "blurRadius": { "type": "number", "minimum": 0, "maximum": 100 },
+        "noiseIntensity": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "frameStyle": {
+      "type": "object",
+      "required": ["borderRadius", "inset", "shadow", "deviceMockup"],
+      "properties": {
+        "borderRadius": { "type": "number", "minimum": 0 },
+        "inset": {
+          "type": "object",
+          "required": ["enabled", "size", "color", "opacity"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "size": { "type": "number", "minimum": 0 },
+            "color": { "type": "string" },
+            "opacity": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "shadow": {
+          "type": "object",
+          "required": ["enabled", "intensity", "blur", "distance", "angleDegrees"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "intensity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "blur": { "type": "number", "minimum": 0 },
+            "distance": { "type": "number", "minimum": 0 },
+            "angleDegrees": { "type": "number" }
+          }
+        },
+        "deviceMockup": {
+          "type": "object",
+          "required": ["enabled", "deviceId"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "deviceId": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "cursor": {
+      "type": "object",
+      "required": [
+        "hidden",
+        "scale",
+        "themeId",
+        "smoothMovementEnabled",
+        "spring",
+        "removeShakeThresholdPx",
+        "velocityRotationEnabled",
+        "velocityRotationIntensity",
+        "clickEffect"
+      ],
+      "properties": {
+        "hidden": { "type": "boolean" },
+        "scale": { "type": "number", "minimum": 0.25, "maximum": 5.0 },
+        "themeId": { "type": "string" },
+        "smoothMovementEnabled": { "type": "boolean" },
+        "spring": { "$ref": "#/$defs/springConfig" },
+        "removeShakeThresholdPx": { "type": "number", "minimum": 0 },
+        "velocityRotationEnabled": { "type": "boolean" },
+        "velocityRotationIntensity": { "type": "number", "minimum": 0, "maximum": 2 },
+        "hideWhenIdleAfterMs": { "type": ["number", "null"] },
+        "loopBackToStartMs": { "type": ["number", "null"] },
+        "clickEffect": {
+          "type": "object",
+          "required": ["visualStyle", "color", "soundSet", "soundVolume"],
+          "properties": {
+            "visualStyle": { "type": "string", "enum": ["none", "ripple", "pulse", "ring"] },
+            "color": { "type": "string" },
+            "soundSet": { "type": ["string", "null"] },
+            "soundVolume": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "layoutMode",
+        "mirror",
+        "position01",
+        "sizeRatio",
+        "scaleWhenZoomed",
+        "shape",
+        "borderRadiusRatio",
+        "shadowIntensity",
+        "backgroundBlur",
+        "aiPersonCutout"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "layoutMode": { "type": "string", "enum": ["overlay", "split-screen", "cutout"] },
+        "mirror": { "type": "boolean" },
+        "position01": { "$ref": "#/$defs/point01" },
+        "sizeRatio": { "type": "number", "minimum": 0.05, "maximum": 1.0 },
+        "scaleWhenZoomed": { "type": "number", "minimum": 0.1, "maximum": 2.0 },
+        "shape": { "type": "string", "enum": ["circle", "squircle", "rectangle"] },
+        "borderRadiusRatio": { "type": "number", "minimum": 0, "maximum": 0.5 },
+        "shadowIntensity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "backgroundBlur": { "type": "number", "minimum": 0, "maximum": 1 },
+        "aiPersonCutout": { "type": "boolean" }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "required": ["cameraSpring", "motionBlurIntensity", "avoidEmptyBoundsWhenZooming"],
+      "properties": {
+        "cameraSpring": { "$ref": "#/$defs/springConfig" },
+        "motionBlurIntensity": { "type": "number", "minimum": 0, "maximum": 2 },
+        "avoidEmptyBoundsWhenZooming": { "type": "boolean" }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "required": [
+        "masterVolume",
+        "microphoneVolume",
+        "muteMicrophone",
+        "voiceEnhancement",
+        "systemAudioVolume",
+        "muteSystemAudio",
+        "backgroundMusic"
+      ],
+      "properties": {
+        "masterVolume": { "type": "number", "minimum": 0, "maximum": 2 },
+        "microphoneVolume": { "type": "number", "minimum": 0, "maximum": 2 },
+        "muteMicrophone": { "type": "boolean" },
+        "voiceEnhancement": { "type": "boolean" },
+        "systemAudioVolume": { "type": "number", "minimum": 0, "maximum": 2 },
+        "muteSystemAudio": { "type": "boolean" },
+        "backgroundMusic": {
+          "type": "object",
+          "required": ["relativePath", "volume", "duckDuringSpeech"],
+          "properties": {
+            "relativePath": { "type": ["string", "null"] },
+            "volume": { "type": "number", "minimum": 0, "maximum": 1 },
+            "duckDuringSpeech": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "captions": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "showKeystrokes",
+        "keystrokesPosition01",
+        "fontFamily",
+        "fontSizeRatio",
+        "textColor",
+        "backgroundColor",
+        "position01",
+        "animationStyle",
+        "segments"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "showKeystrokes": { "type": "boolean" },
+        "keystrokesPosition01": { "$ref": "#/$defs/point01" },
+        "fontFamily": { "type": "string" },
+        "fontSizeRatio": { "type": "number", "minimum": 0.01, "maximum": 0.2 },
+        "textColor": { "type": "string" },
+        "backgroundColor": { "type": "string" },
+        "position01": { "$ref": "#/$defs/point01" },
+        "animationStyle": { "type": "string", "enum": ["appear", "word-by-word", "line-by-line"] },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "sourceStartMs", "sourceEndMs", "text"],
+            "properties": {
+              "id": { "type": "string" },
+              "sourceStartMs": { "type": "number" },
+              "sourceEndMs": { "type": "number" },
+              "text": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "required": ["slices", "zooms", "maskTracks"],
+      "properties": {
+        "slices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "sourceStartMs", "sourceEndMs", "speed", "muted", "hideCursor", "disableSmoothCursor"],
+            "properties": {
+              "id": { "type": "string" },
+              "sourceStartMs": { "type": "number", "minimum": 0 },
+              "sourceEndMs": { "type": "number", "minimum": 0 },
+              "speed": { "type": "number", "minimum": 0.1, "maximum": 16.0 },
+              "muted": { "type": "boolean" },
+              "hideCursor": { "type": "boolean" },
+              "disableSmoothCursor": { "type": "boolean" }
+            }
+          }
+        },
+        "zooms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "sourceStartMs", "sourceEndMs", "scale", "mode", "presentation", "manualCenter01", "disabled"],
+            "properties": {
+              "id": { "type": "string" },
+              "sourceStartMs": { "type": "number", "minimum": 0 },
+              "sourceEndMs": { "type": "number", "minimum": 0 },
+              "scale": { "type": "number", "minimum": 1.0, "maximum": 10.0 },
+              "mode": { "type": "string", "enum": ["follow-cursor", "manual"] },
+              "presentation": { "type": "string", "enum": ["screen", "loupe"] },
+              "manualCenter01": { "$ref": "#/$defs/point01" },
+              "loupe": {
+                "type": "object",
+                "required": ["radius01", "bevelRatio", "chromaticAberration"],
+                "properties": {
+                  "radius01": { "type": "number", "minimum": 0.05, "maximum": 0.9 },
+                  "bevelRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+                  "chromaticAberration": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              },
+              "disabled": { "type": "boolean" }
+            }
+          }
+        },
+        "maskTracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "items"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "sourceStartMs", "sourceEndMs", "type", "style", "intensity", "cornerRadius", "keyframes", "disabled"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "sourceStartMs": { "type": "number", "minimum": 0 },
+                    "sourceEndMs": { "type": "number", "minimum": 0 },
+                    "type": { "type": "string", "enum": ["blur", "spotlight"] },
+                    "style": { "type": "string", "enum": ["gaussian", "pixelate", "solid", "dim"] },
+                    "intensity": { "type": "number", "minimum": 0, "maximum": 100 },
+                    "cornerRadius": { "type": "number", "minimum": 0 },
+                    "keyframes": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "object",
+                        "required": ["sourceMs", "rect01"],
+                        "properties": {
+                          "sourceMs": { "type": "number", "minimum": 0 },
+                          "rect01": { "$ref": "#/$defs/rect01" }
+                        }
+                      }
+                    },
+                    "disabled": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "point01": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "rect01": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 },
+        "width": { "type": "number", "minimum": 0, "maximum": 1 },
+        "height": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "springConfig": {
+      "type": "object",
+      "required": ["stiffness", "damping", "mass"],
+      "properties": {
+        "stiffness": { "type": "number", "exclusiveMinimum": 0 },
+        "damping": { "type": "number", "exclusiveMinimum": 0 },
+        "mass": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+._*
+
+# Xcode user-specific data (never commit local usernames or window states)
+xcuserdata/
+*.xcuserdatad/
+*.xcscmblueprint
+*.xccheckout
+
+# Xcode build artifacts
+DerivedData/
+build/
+*.build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Sample / test recordings
+*.nativescreen/
+*.mp4
+*.mov
+*.m4s
+*.m3u8
