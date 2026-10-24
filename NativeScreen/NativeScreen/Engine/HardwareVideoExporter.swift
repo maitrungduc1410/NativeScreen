@@ -115,7 +115,7 @@ public final class HardwareVideoExporter {
             var sourceCIImage: CIImage?
             if let gen = imageGenerator {
                 let cmTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
-                if let cgImg = try? gen.copyCGImage(at: cmTime, actualTime: nil) {
+                if let (cgImg, _) = try? await gen.image(at: cmTime) {
                     sourceCIImage = CIImage(cgImage: cgImg)
                 }
             }
