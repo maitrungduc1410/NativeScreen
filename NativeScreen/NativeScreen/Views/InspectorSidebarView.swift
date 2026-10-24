@@ -21,15 +21,15 @@ public struct InspectorSidebarView: View {
                         tooltip: tab.rawValue,
                         edge: .leading,
                         isActive: isSelected,
-                        activeColor: Color.white.opacity(0.18),
-                        size: 36,
+                        activeColor: Color.white.opacity(0.11),
+                        size: 38,
                         cornerRadius: 9
                     ) {
                         session.selectedInspectorTab = tab
                     } label: {
                         Image(systemName: tab.systemImage)
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(isSelected ? .white : .secondary)
+                            .foregroundStyle(isSelected ? Color(red: 0.62, green: 0.52, blue: 1.0) : .secondary)
                     }
                 }
                 Spacer()

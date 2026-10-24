@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// instant hover tooltip & button highlight modifier.
-/// Places the speech-bubble tooltip cleanly outside the button's highlight border (zero overlap with the icon
-/// and zero clipping against window edges!).
+/// Uses explicit geometric offset (`(buttonSize + bubbleSize) * 0.5 + gap`) on a centered `.overlay`
+/// so the tooltip's pointer tip ALWAYS sits cleanly outside the button's highlight border on all 4 edges!
 public enum TooltipEdge: Sendable {
     case leading
     case trailing
@@ -21,6 +21,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     @ViewBuilder let label: () -> LabelContent
 
     @State private var isHovered = false
+    @State private var bubbleSize: CGSize = CGSize(width: 90, height: 28)
 
     public init(
         tooltip: String,
@@ -44,83 +45,87 @@ public struct InstantTooltipButton<LabelContent: View>: View {
 
     public var body: some View {
         Button(action: action) {
-            label()
-                .frame(width: size, height: size)
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(backgroundColor)
-                )
+            ZStack {
+                label()
+
+                // Active dot indicator on the right side for active rail tabs (style)
+                if isActive && edge == .leading {
+                    HStack {
+                        Spacer()
+                        Circle()
+                            .fill(Color(red: 0.60, green: 0.50, blue: 1.0))
+                            .frame(width: 4.5, height: 4.5)
+                            .padding(.trailing, 3)
+                    }
+                }
+            }
+            .frame(width: size, height: size)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(backgroundColor)
+            )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) {
+            withAnimation(.easeOut(duration: 0.10)) {
                 isHovered = hovering
             }
         }
-        .overlay(alignment: overlayAlignment) {
+        .overlay(alignment: .center) {
             if isHovered && !tooltip.isEmpty {
                 InstantTooltipBubble(text: tooltip, edge: edge)
                     .fixedSize()
-                    .alignmentGuide(horizontalAlignmentGuide) { d in
-                        switch edge {
-                        case .trailing:
-                            // Place the left tip of the bubble 6pt to the RIGHT of the button's trailing edge
-                            return d[.leading] - 6
-                        case .leading:
-                            // Place the right tip of the bubble 6pt to the LEFT of the button's leading edge
-                            return d[.trailing] + 6
-                        case .top, .bottom:
-                            return d[HorizontalAlignment.center]
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear
+                                .onAppear {
+                                    bubbleSize = geo.size
+                                }
+                                .onChange(of: geo.size) { _, newSize in
+                                    bubbleSize = newSize
+                                }
                         }
-                    }
-                    .alignmentGuide(verticalAlignmentGuide) { d in
-                        switch edge {
-                        case .top:
-                            return d[.bottom] + 6
-                        case .bottom:
-                            return d[.top] - 6
-                        case .leading, .trailing:
-                            return d[VerticalAlignment.center]
-                        }
-                    }
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    )
+                    .offset(x: computedOffsetX, y: computedOffsetY)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     .zIndex(999)
                     .allowsHitTesting(false)
             }
         }
-        .zIndex(isHovered ? 200 : 1)
+        .zIndex(isHovered ? 500 : 1)
+    }
+
+    private var computedOffsetX: CGFloat {
+        let gap: CGFloat = 6.0
+        switch edge {
+        case .leading:
+            // Move left by half the button width + half the bubble width + gap
+            return -((size * 0.5) + (bubbleSize.width * 0.5) + gap)
+        case .trailing:
+            // Move right by half the button width + half the bubble width + gap
+            return (size * 0.5) + (bubbleSize.width * 0.5) + gap
+        case .top, .bottom:
+            return 0.0
+        }
+    }
+
+    private var computedOffsetY: CGFloat {
+        let gap: CGFloat = 6.0
+        switch edge {
+        case .top:
+            return -((size * 0.5) + (bubbleSize.height * 0.5) + gap)
+        case .bottom:
+            return (size * 0.5) + (bubbleSize.height * 0.5) + gap
+        case .leading, .trailing:
+            return 0.0
+        }
     }
 
     private var backgroundColor: Color {
         if isActive {
-            return isHovered ? activeColor.opacity(0.95) : activeColor.opacity(0.80)
+            return isHovered ? activeColor.opacity(0.95) : activeColor
         }
         return isHovered ? Color.white.opacity(0.14) : Color.clear
-    }
-
-    private var overlayAlignment: Alignment {
-        switch edge {
-        case .leading: return .leading
-        case .trailing: return .trailing
-        case .top: return .top
-        case .bottom: return .bottom
-        }
-    }
-
-    private var horizontalAlignmentGuide: HorizontalAlignment {
-        switch edge {
-        case .leading: return .leading
-        case .trailing: return .trailing
-        case .top, .bottom: return .center
-        }
-    }
-
-    private var verticalAlignmentGuide: VerticalAlignment {
-        switch edge {
-        case .top: return .top
-        case .bottom: return .bottom
-        case .leading, .trailing: return .center
-        }
     }
 }
 
@@ -129,6 +134,7 @@ public struct InstantTooltipBubble: View {
     let edge: TooltipEdge
 
     private let bubbleFill = Color(red: 0.14, green: 0.15, blue: 0.19)
+    private let borderStroke = Color.white.opacity(0.15)
 
     public var body: some View {
         Group {
@@ -163,14 +169,14 @@ public struct InstantTooltipBubble: View {
                 }
             }
         }
-        .shadow(color: .black.opacity(0.50), radius: 8, y: 3)
+        .shadow(color: .black.opacity(0.55), radius: 8, y: 3)
     }
 
     private var bubbleBox: some View {
         Text(text)
             .font(.system(size: 11.5, weight: .semibold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -178,7 +184,7 @@ public struct InstantTooltipBubble: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(.white.opacity(0.14), lineWidth: 0.8)
+                    .strokeBorder(borderStroke, lineWidth: 0.8)
             )
     }
 }

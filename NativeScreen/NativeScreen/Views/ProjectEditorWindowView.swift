@@ -378,10 +378,13 @@ public struct ProjectEditorWindowView: View {
                     .frame(maxWidth: .infinity)
                     .background(Color(red: 0.03, green: 0.03, blue: 0.04))
                 }
+                .zIndex(1)
 
                 Divider()
+                    .zIndex(2)
 
                 InspectorSidebarView(session: session)
+                    .zIndex(90)
             }
 
             Divider()
