@@ -55,7 +55,8 @@ public final class MetalFrameCompositor {
         var maskedScreen = applyMultiTrackMasks(
             to: rawScreen,
             screenExtent: screenExtent,
-            activeMasks: session.activeMasks(atSourceMs: sourceTimeMs)
+            activeMasks: session.activeMasks(atSourceMs: sourceTimeMs),
+            sourceTimeMs: sourceTimeMs
         )
 
         // Apply Canvas Crop if configured
@@ -267,14 +268,14 @@ public final class MetalFrameCompositor {
     private func applyMultiTrackMasks(
         to screenImage: CIImage,
         screenExtent: CGRect,
-        activeMasks: [MaskItem]
+        activeMasks: [MaskItem],
+        sourceTimeMs: Double
     ) -> CIImage {
         guard !activeMasks.isEmpty else { return screenImage }
         var output = screenImage
 
         for mask in activeMasks {
-            // Interpolate keyframe rect at midpoint or start
-            let r01 = mask.interpolatedRect(at: mask.sourceStartMs)
+            let r01 = mask.interpolatedRect(at: sourceTimeMs)
             // Convert top-left normalized [0..1] to CoreImage bottom-left pixel coordinates
             let pixelRect = CGRect(
                 x: screenExtent.minX + CGFloat(r01.x) * screenExtent.width,
@@ -309,16 +310,23 @@ public final class MetalFrameCompositor {
                         .cropped(to: screenExtent)
                 }
 
-                // Smooth rounded rectangle mask for the blurred region
-                if let maskShape = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                    "inputExtent": CIVector(cgRect: pixelRect),
-                    "inputRadius": CGFloat(mask.cornerRadius),
-                    "inputColor": CIColor.white
-                ])?.outputImage {
-                    output = filteredFull.applyingFilter("CIBlendWithMask", parameters: [
-                        kCIInputBackgroundImageKey: output,
-                        kCIInputMaskImageKey: maskShape
-                    ]).cropped(to: screenExtent)
+                // Crop filtered region to `pixelRect` with rounded corners and composite directly over `output`
+                let scaledCornerRadius = CGFloat(mask.cornerRadius) * (screenExtent.height / 900.0)
+                if scaledCornerRadius > 0.5,
+                   let roundedStencil = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                       "inputExtent": CIVector(cgRect: pixelRect),
+                       "inputRadius": scaledCornerRadius,
+                       "inputColor": CIColor.white
+                   ])?.outputImage {
+                    let clearBG = CIImage.empty().cropped(to: pixelRect)
+                    let clippedBlur = filteredFull
+                        .cropped(to: pixelRect)
+                        .applyingFilter("CIBlendWithMask", parameters: [
+                            kCIInputBackgroundImageKey: clearBG,
+                            kCIInputMaskImageKey: roundedStencil
+                        ])
+                        .cropped(to: pixelRect)
+                    output = clippedBlur.composited(over: output)
                 } else {
                     let croppedRegion = filteredFull.cropped(to: pixelRect)
                     output = croppedRegion.composited(over: output)

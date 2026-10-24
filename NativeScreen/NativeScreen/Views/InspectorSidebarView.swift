@@ -1,12 +1,8 @@
 import SwiftUI
 import AppKit
 
-/// Native macOS Inspector Sidebar ("80% OS Native Controls") with tabs for:
-/// - Background (Mesh Presets, `/System/Library/Desktop Pictures` Wallpapers, Gradients, Padding, Corners, Shadow)
-/// - Cursor (Size, Spring Smoothness, Shake Filter, Click Ripple)
-/// - Zoom (Auto-Zoom Cluster Regeneration, Selected Zoom Scale & Mode, Motion Blur)
-/// - Multi-Track Masks (Add/Configure Unlimited Blur, Pixelate & Spotlight Regions)
-/// - Audio & Slice Speed
+/// Native macOS Inspector Sidebar with dark pill selectors,
+/// non-truncating responsive controls, and quick "Reset" buttons on sliders.
 public struct InspectorSidebarView: View {
     @Bindable var session: ProjectSession
     @State private var systemWallpapers: [SystemWallpaperItem] = []
@@ -17,21 +13,22 @@ public struct InspectorSidebarView: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            // Vertical Icon Rail right-side navigation rail)
-            VStack(spacing: 12) {
+            // Vertical Icon Navigation Rail
+            VStack(spacing: 10) {
                 ForEach(ProjectSession.InspectorTab.allCases) { tab in
+                    let isSelected = (session.selectedInspectorTab == tab)
                     Button {
                         session.selectedInspectorTab = tab
                     } label: {
                         Image(systemName: tab.systemImage)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(session.selectedInspectorTab == tab ? Color.accentColor : .secondary)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(isSelected ? Color(red: 0.56, green: 0.48, blue: 1.0) : .secondary)
                             .frame(width: 34, height: 34)
                             .background(
-                                session.selectedInspectorTab == tab
-                                    ? Color.accentColor.opacity(0.16)
+                                isSelected
+                                    ? Color(red: 0.44, green: 0.36, blue: 0.96).opacity(0.22)
                                     : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                             )
                     }
                     .buttonStyle(.plain)
@@ -40,16 +37,18 @@ public struct InspectorSidebarView: View {
                 Spacer()
             }
             .padding(.vertical, 14)
-            .padding(.horizontal, 6)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .padding(.horizontal, 7)
+            .frame(maxHeight: .infinity)
+            .background(Color(red: 0.07, green: 0.07, blue: 0.09))
 
             Divider()
 
-            // Active Inspector Panel
-            ScrollView {
+            // Active Inspector Content Panel
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(session.selectedInspectorTab.rawValue)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
 
                     switch session.selectedInspectorTab {
                     case .background:
@@ -65,9 +64,10 @@ public struct InspectorSidebarView: View {
                     }
                 }
                 .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 276)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .frame(width: 304)
+            .background(Color(red: 0.09, green: 0.09, blue: 0.12))
         }
         .onAppear {
             if systemWallpapers.isEmpty {
@@ -80,139 +80,182 @@ public struct InspectorSidebarView: View {
 
     @ViewBuilder
     private var backgroundInspector: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Picker("Mode", selection: Binding(
-                get: { session.document.background.type },
-                set: { newType in session.mutate { $0.background.type = newType } }
-            )) {
-                ForEach(BackgroundType.allCases) { mode in
-                    Text(mode.label).tag(mode)
+        VStack(alignment: .leading, spacing: 16) {
+            // Pill selector (Mesh, macOS, Gradient, Color)
+            HStack(spacing: 6) {
+                ForEach([BackgroundType.mesh, .wallpaper, .gradient, .solid]) { mode in
+                    let isSelected = (session.document.background.type == mode)
+                    Button {
+                        session.mutate { $0.background.type = mode }
+                    } label: {
+                        Text(mode.label)
+                            .font(.system(size: 11, weight: .semibold))
+                            .lineLimit(1)
+                            .foregroundStyle(isSelected ? .white : .secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .background(
+                                isSelected
+                                    ? Color.white.opacity(0.14)
+                                    : Color.white.opacity(0.04),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(isSelected ? Color.white.opacity(0.28) : Color.clear, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
 
             switch session.document.background.type {
             case .mesh:
-                Text("Mesh Gradient Presets")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 52), spacing: 8)], spacing: 8) {
-                    ForEach(MeshPreset.builtIn) { preset in
-                        let isSelected = (session.document.background.meshPresetId == preset.id)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Wallpaper Presets")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Spacer()
                         Button {
-                            session.mutate {
-                                $0.background.type = .mesh
-                                $0.background.meshPresetId = preset.id
+                            if let random = MeshPreset.builtIn.randomElement() {
+                                session.mutate {
+                                    $0.background.type = .mesh
+                                    $0.background.meshPresetId = random.id
+                                }
                             }
                         } label: {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: preset.colorsHex.map { Color(hex: $0) },
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(height: 36)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(isSelected ? Color.white : Color.clear, lineWidth: 2)
-                                )
+                            Label("Random", systemImage: "wand.and.stars")
+                                .font(.system(size: 10, weight: .medium))
                         }
-                        .buttonStyle(.plain)
-                        .help(preset.name)
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                        ForEach(MeshPreset.builtIn) { preset in
+                            let isSelected = (session.document.background.meshPresetId == preset.id)
+                            Button {
+                                session.mutate {
+                                    $0.background.type = .mesh
+                                    $0.background.meshPresetId = preset.id
+                                }
+                            } label: {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: preset.colorsHex.map { Color(hex: $0) },
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(height: 38)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 2 : 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .help(preset.name)
+                        }
                     }
                 }
 
             case .wallpaper:
-                Text("macOS System Wallpapers")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("macOS System Wallpapers")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
-                    ForEach(systemWallpapers) { item in
-                        let isSelected = (session.document.background.systemWallpaperName == item.name)
-                        Button {
-                            session.selectSystemWallpaper(item)
-                        } label: {
-                            VStack(spacing: 4) {
-                                if let nsImg = NSImage(contentsOf: item.thumbnailURL) {
-                                    Image(nsImage: nsImg)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 72, height: 44)
-                                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-                                        )
-                                } else {
-                                    RoundedRectangle(cornerRadius: 7)
-                                        .fill(Color.secondary.opacity(0.2))
-                                        .frame(width: 72, height: 44)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                        ForEach(systemWallpapers) { item in
+                            let isSelected = (session.document.background.systemWallpaperName == item.name)
+                            Button {
+                                session.selectSystemWallpaper(item)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    if let nsImg = NSImage(contentsOf: item.thumbnailURL) {
+                                        Image(nsImage: nsImg)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(height: 44)
+                                            .frame(maxWidth: .infinity)
+                                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                    .strokeBorder(isSelected ? Color.white : Color.clear, lineWidth: 2)
+                                            )
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 7)
+                                            .fill(Color.secondary.opacity(0.2))
+                                            .frame(height: 44)
+                                    }
+                                    Text(item.name)
+                                        .font(.system(size: 9))
+                                        .lineLimit(1)
+                                        .foregroundStyle(.secondary)
                                 }
-                                Text(item.name)
-                                    .font(.system(size: 9))
-                                    .lineLimit(1)
-                                    .foregroundStyle(.secondary)
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
 
             case .gradient, .solid, .image:
                 HStack {
-                    Text("Primary Color Hex")
-                        .font(.caption)
+                    Text("Hex Color")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
                     Spacer()
                     TextField("#1E1E2E", text: Binding(
                         get: { session.document.background.solidColor },
                         set: { hex in session.mutate { $0.background.solidColor = hex } }
                     ))
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 95)
+                    .frame(width: 96)
                 }
             }
 
             Divider()
 
             coalescedSlider(
-                title: "Background Blur",
+                title: "Background blur",
                 value: Binding(
                     get: { session.document.background.blurRadius },
                     set: { v in session.mutate { $0.background.blurRadius = v } }
                 ),
-                range: 0...60
+                range: 0...60,
+                defaultValue: 0.0
             )
 
             coalescedSlider(
-                title: "Canvas Padding",
+                title: "Padding",
                 value: Binding(
                     get: { session.document.canvas.paddingRatio },
                     set: { v in session.mutate { $0.canvas.paddingRatio = v } }
                 ),
-                range: 0.0...0.30
+                range: 0.0...0.30,
+                defaultValue: 0.10
             )
 
             coalescedSlider(
-                title: "Screen Rounded Corners",
+                title: "Screen rounded corners",
                 value: Binding(
                     get: { session.document.frameStyle.borderRadius },
                     set: { v in session.mutate { $0.frameStyle.borderRadius = v } }
                 ),
-                range: 0...44
+                range: 0...44,
+                defaultValue: 16.0
             )
 
             coalescedSlider(
-                title: "Shadow Intensity",
+                title: "Shadow intensity",
                 value: Binding(
                     get: { session.document.frameStyle.shadow.intensity },
                     set: { v in session.mutate { $0.frameStyle.shadow.intensity = v } }
                 ),
-                range: 0...1.0
+                range: 0...1.0,
+                defaultValue: 0.42
             )
         }
     }
@@ -222,58 +265,65 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private var cursorInspector: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Toggle("Hide Cursor", isOn: Binding(
+            Toggle("Hide cursor", isOn: Binding(
                 get: { session.document.cursor.hidden },
                 set: { v in session.mutate { $0.cursor.hidden = v } }
             ))
+            .font(.system(size: 12))
 
             coalescedSlider(
-                title: "Cursor Size",
+                title: "Cursor size",
                 value: Binding(
                     get: { session.document.cursor.scale },
                     set: { v in session.mutate { $0.cursor.scale = v } }
                 ),
-                range: 0.5...3.5
+                range: 0.5...3.5,
+                defaultValue: 1.6
             )
 
             Divider()
 
-            Toggle("Smooth Spring Glide", isOn: Binding(
+            Toggle("Smooth spring movement", isOn: Binding(
                 get: { session.document.cursor.smoothMovementEnabled },
                 set: { v in session.mutate { $0.cursor.smoothMovementEnabled = v } }
             ))
+            .font(.system(size: 12))
 
             coalescedSlider(
-                title: "Spring Stiffness",
+                title: "Spring stiffness",
                 value: Binding(
                     get: { session.document.cursor.spring.stiffness },
                     set: { v in session.mutate { $0.cursor.spring.stiffness = v } }
                 ),
-                range: 40...300
+                range: 40...300,
+                defaultValue: 125.0
             )
 
             coalescedSlider(
-                title: "Spring Damping",
+                title: "Spring damping",
                 value: Binding(
                     get: { session.document.cursor.spring.damping },
                     set: { v in session.mutate { $0.cursor.spring.damping = v } }
                 ),
-                range: 5...35
+                range: 5...35,
+                defaultValue: 12.0
             )
 
             coalescedSlider(
-                title: "Micro-Shake Filter (px)",
+                title: "Remove cursor shake",
                 value: Binding(
                     get: { session.document.cursor.removeShakeThresholdPx },
                     set: { v in session.mutate { $0.cursor.removeShakeThresholdPx = v } }
                 ),
-                range: 0...20
+                range: 0...20,
+                defaultValue: 4.0
             )
 
-            Toggle("Loop Cursor Position at End", isOn: Binding(
+            Toggle("Loop cursor position before end", isOn: Binding(
                 get: { session.document.cursor.loopBackToStartMs != nil },
                 set: { enabled in session.mutate { $0.cursor.loopBackToStartMs = enabled ? 800.0 : nil } }
             ))
+            .font(.system(size: 12))
         }
     }
 
@@ -282,19 +332,22 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private var zoomInspector: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
+            HStack(spacing: 8) {
                 Button {
                     session.addZoomAtPlayhead()
                 } label: {
-                    Label("Add Zoom Block", systemImage: "plus.magnifyingglass")
+                    Label("Add Zoom", systemImage: "plus.magnifyingglass")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.indigo)
                 .controlSize(.small)
 
                 Button {
                     session.regenerateAutoZooms()
                 } label: {
                     Label("Auto-Cluster", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -303,12 +356,12 @@ public struct InspectorSidebarView: View {
             if let zoomId = session.selectedZoomId,
                let zoom = session.document.timeline.zooms.first(where: { $0.id == zoomId }) {
                 Divider()
-                Text("Selected Zoom Block")
-                    .font(.caption)
+                Text("Selected Zoom")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
 
                 coalescedSlider(
-                    title: String(format: "Zoom Factor (%.1fx)", zoom.scale),
+                    title: String(format: "Zoom Depth (%.1fx)", zoom.scale),
                     value: Binding(
                         get: { zoom.scale },
                         set: { v in
@@ -319,31 +372,37 @@ public struct InspectorSidebarView: View {
                             }
                         }
                     ),
-                    range: 1.1...3.5
+                    range: 1.1...3.5,
+                    defaultValue: 1.8
                 )
 
-                Picker("Tracking", selection: Binding(
-                    get: { zoom.mode },
-                    set: { m in
-                        session.mutate { doc in
-                            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
-                                doc.timeline.zooms[idx].mode = m
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Focus Target")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: Binding(
+                        get: { zoom.mode },
+                        set: { m in
+                            session.mutate { doc in
+                                if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                    doc.timeline.zooms[idx].mode = m
+                                }
                             }
                         }
+                    )) {
+                        Text("Follow Cursor").tag(ZoomMode.followCursor)
+                        Text("Manual Center").tag(ZoomMode.manual)
                     }
-                )) {
-                    Text("Follow Cursor").tag(ZoomMode.followCursor)
-                    Text("Manual Center").tag(ZoomMode.manual)
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
-                .pickerStyle(.segmented)
 
                 Button(role: .destructive) {
-                    session.mutate { doc in
-                        doc.timeline.zooms.removeAll { $0.id == zoomId }
-                    }
-                    session.selectedZoomId = nil
+                    session.deleteZoom(zoomId: zoomId)
                 } label: {
-                    Label("Delete Zoom Block", systemImage: "trash")
+                    Label("Delete Selected Zoom", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -352,18 +411,20 @@ public struct InspectorSidebarView: View {
             Divider()
 
             coalescedSlider(
-                title: "Camera Motion Blur",
+                title: "Camera motion blur",
                 value: Binding(
                     get: { session.document.motion.motionBlurIntensity },
                     set: { v in session.mutate { $0.motion.motionBlurIntensity = v } }
                 ),
-                range: 0.0...1.5
+                range: 0.0...1.5,
+                defaultValue: 0.5
             )
 
-            Toggle("Clamp to Screen Edges", isOn: Binding(
+            Toggle("Avoid empty area when zooming", isOn: Binding(
                 get: { session.document.motion.avoidEmptyBoundsWhenZooming },
                 set: { v in session.mutate { $0.motion.avoidEmptyBoundsWhenZooming = v } }
             ))
+            .font(.system(size: 12))
         }
     }
 
@@ -372,87 +433,108 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private var masksInspector: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Unlimited parallel Blur, Pixelate & Spotlight tracks. Drag boxes directly on the preview canvas.")
-                .font(.caption)
+            Text("Masks stay locked to the source clip coordinates (even while zooming). Drag or resize directly on the preview.")
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 8) {
+            // Non-truncating 3-button row
+            HStack(spacing: 6) {
                 Button {
                     session.addMaskAtPlayhead(type: .blur, style: .gaussian)
                 } label: {
-                    Label("+ Blur", systemImage: "eye.slash.fill")
+                    Label("Blur", systemImage: "eye.slash.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.teal)
-                .controlSize(.small)
+                .tint(Color(red: 0.62, green: 0.23, blue: 0.44))
 
                 Button {
                     session.addMaskAtPlayhead(type: .blur, style: .pixelate)
                 } label: {
-                    Label("+ Pixelate", systemImage: "square.grid.3x3.fill")
+                    Label("Pixelate", systemImage: "square.grid.3x3.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
 
                 Button {
                     session.addMaskAtPlayhead(type: .spotlight, style: .dim)
                 } label: {
-                    Label("+ Spotlight", systemImage: "flashlight.on.fill")
+                    Label("Spotlight", systemImage: "flashlight.on.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
             }
 
             if let maskId = session.selectedMaskId,
                let mask = findMask(byId: maskId) {
                 Divider()
-                Text("Selected Mask Region")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
 
-                Picker("Type", selection: Binding(
-                    get: { mask.type },
-                    set: { newType in updateMask(id: maskId) { $0.type = newType } }
-                )) {
-                    Text("Blur / Redact").tag(MaskType.blur)
-                    Text("Spotlight").tag(MaskType.spotlight)
-                }
-                .pickerStyle(.segmented)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Mask Mode")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
 
-                if mask.type == .blur {
-                    Picker("Style", selection: Binding(
-                        get: { mask.style },
-                        set: { newStyle in updateMask(id: maskId) { $0.style = newStyle } }
+                    Picker("", selection: Binding(
+                        get: { mask.type },
+                        set: { newType in updateMask(id: maskId) { $0.type = newType } }
                     )) {
-                        Text("Gaussian").tag(MaskStyle.gaussian)
-                        Text("Pixelate").tag(MaskStyle.pixelate)
-                        Text("Solid Box").tag(MaskStyle.solid)
+                        Text("Blur / Redact").tag(MaskType.blur)
+                        Text("Spotlight").tag(MaskType.spotlight)
                     }
                     .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+
+                if mask.type == .blur {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Blur Filter Style")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+
+                        Picker("", selection: Binding(
+                            get: { mask.style },
+                            set: { newStyle in updateMask(id: maskId) { $0.style = newStyle } }
+                        )) {
+                            Text("Gaussian").tag(MaskStyle.gaussian)
+                            Text("Pixelate").tag(MaskStyle.pixelate)
+                            Text("Solid").tag(MaskStyle.solid)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
                 }
 
                 coalescedSlider(
-                    title: "Blur / Pixelate Intensity",
+                    title: "Intensity",
                     value: Binding(
                         get: { mask.intensity },
                         set: { v in updateMask(id: maskId) { $0.intensity = v } }
                     ),
-                    range: 6...80
+                    range: 6...80,
+                    defaultValue: 36.0
                 )
 
                 coalescedSlider(
-                    title: "Mask Corner Radius",
+                    title: "Corner radius",
                     value: Binding(
                         get: { mask.cornerRadius },
                         set: { v in updateMask(id: maskId) { $0.cornerRadius = v } }
                     ),
-                    range: 0...40
+                    range: 0...40,
+                    defaultValue: 10.0
                 )
 
                 Button(role: .destructive) {
                     session.deleteMask(maskId: maskId)
                 } label: {
                     Label("Delete Mask Region", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -466,37 +548,40 @@ public struct InspectorSidebarView: View {
     private var audioAndSliceInspector: some View {
         VStack(alignment: .leading, spacing: 14) {
             coalescedSlider(
-                title: "System Audio Volume",
+                title: "System audio volume",
                 value: Binding(
                     get: { session.document.audio.systemAudioVolume },
                     set: { v in session.mutate { $0.audio.systemAudioVolume = v } }
                 ),
-                range: 0...1.5
+                range: 0...1.5,
+                defaultValue: 1.0
             )
 
             coalescedSlider(
-                title: "Microphone Volume",
+                title: "Microphone volume",
                 value: Binding(
                     get: { session.document.audio.microphoneVolume },
                     set: { v in session.mutate { $0.audio.microphoneVolume = v } }
                 ),
-                range: 0...1.5
+                range: 0...1.5,
+                defaultValue: 1.0
             )
 
-            Toggle("Voice Enhancement", isOn: Binding(
+            Toggle("Voice enhancement", isOn: Binding(
                 get: { session.document.audio.voiceEnhancement },
                 set: { v in session.mutate { $0.audio.voiceEnhancement = v } }
             ))
+            .font(.system(size: 12))
 
             if let sliceId = session.selectedSliceId,
                let slice = session.document.timeline.slices.first(where: { $0.id == sliceId }) {
                 Divider()
                 Text("Selected Clip Slice")
-                    .font(.caption)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
 
                 coalescedSlider(
-                    title: String(format: "Clip Playback Speed (%.2fx)", slice.speed),
+                    title: String(format: "Playback speed (%.2fx)", slice.speed),
                     value: Binding(
                         get: { slice.speed },
                         set: { v in
@@ -507,7 +592,8 @@ public struct InspectorSidebarView: View {
                             }
                         }
                     ),
-                    range: 0.25...4.0
+                    range: 0.25...4.0,
+                    defaultValue: 1.0
                 )
 
                 if session.document.timeline.slices.count > 1 {
@@ -515,6 +601,7 @@ public struct InspectorSidebarView: View {
                         session.deleteSelectedSlice()
                     } label: {
                         Label("Delete Selected Clip", systemImage: "trash")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -546,24 +633,40 @@ public struct InspectorSidebarView: View {
     }
 
     @ViewBuilder
-    private func coalescedSlider(title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                Spacer()
-                Text(String(format: "%.2f", value.wrappedValue))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            Slider(value: value, in: range) { editing in
-                if editing {
-                    session.beginInteractiveEdit()
-                } else {
-                    session.endInteractiveEdit()
+    private func coalescedSlider(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        defaultValue: Double
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.88))
+
+            HStack(spacing: 8) {
+                Slider(value: value, in: range) { editing in
+                    if editing {
+                        session.beginInteractiveEdit()
+                    } else {
+                        session.endInteractiveEdit()
+                    }
                 }
+                .tint(Color(red: 0.52, green: 0.42, blue: 0.98))
+                .controlSize(.small)
+
+                Button("Reset") {
+                    value.wrappedValue = defaultValue
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+                .opacity(abs(value.wrappedValue - defaultValue) > 0.005 ? 1.0 : 0.35)
+                .disabled(abs(value.wrappedValue - defaultValue) <= 0.005)
             }
-            .controlSize(.small)
         }
     }
 }

@@ -4,8 +4,8 @@ import AppKit
 import Observation
 import ScreenCaptureKit
 
-/// Coordinates the floating Recording HUD (`NSPanel`), the interactive Window/Area Picker overlays,
-/// and the `ScreenCaptureEngine` + `TelemetryRecorder`.
+/// Coordinates the floating Recording HUD (`NSPanel`), multi-monitor interactive Window/Display/Area Picker overlays,
+/// `ESC` key cancellation, and the `ScreenCaptureEngine` + `TelemetryRecorder`.
 @Observable
 @MainActor
 public final class RecordingCoordinator {
@@ -18,19 +18,21 @@ public final class RecordingCoordinator {
     public var captureMicrophone: Bool = false
     public var captureSystemAudio: Bool = true
 
-    // Window & Area Picker State
+    // Multi-Monitor Window, Display & Area Picker State
     public var hoveredWindow: CapturableWindowInfo?
+    public var hoveredDisplayID: CGDirectDisplayID = CGMainDisplayID()
     public var selectedAreaRectQuartz: CGRect = CGRect(x: 240, y: 160, width: 1280, height: 720)
     public var lastErrorMessage: String?
 
-    // Callback triggered on the main actor when a new `.nativescreen` project finishes recording
     public var onRecordingCompleted: ((ProjectSession) -> Void)?
 
     private var hudPanel: NSPanel?
-    private var pickerOverlayWindow: NSWindow?
+    private var pickerOverlayWindows: [NSWindow] = []
     private var hoverTimer: Timer?
     private var recordingTimer: Timer?
     private var recordingStartUptime: TimeInterval = 0
+    private var escLocalMonitor: Any?
+    private var escGlobalMonitor: Any?
 
     private var captureEngine: ScreenCaptureEngine?
     private var telemetryRecorder: TelemetryRecorder?
@@ -44,13 +46,13 @@ public final class RecordingCoordinator {
     public func showRecordingHUD() {
         if hudPanel == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 760, height: 68),
+                contentRect: NSRect(x: 0, y: 0, width: 760, height: 64),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
             )
             panel.isFloatingPanel = true
-            panel.level = .statusBar
+            panel.level = .screenSaver
             panel.backgroundColor = .clear
             panel.isOpaque = false
             panel.hasShadow = true
@@ -62,30 +64,81 @@ public final class RecordingCoordinator {
             self.hudPanel = panel
         }
 
-        if let screen = NSScreen.main, let panel = hudPanel {
+        let targetScreen = WindowDiscoveryService.screenUnderMouse() ?? NSScreen.main
+        if let screen = targetScreen, let panel = hudPanel {
             let screenFrame = screen.visibleFrame
-            let x = screenFrame.midX - 380
-            let y = screenFrame.minY + 48
-            panel.setFrame(NSRect(x: x, y: y, width: 760, height: 68), display: true)
+            let panelW: CGFloat = 760
+            let panelH: CGFloat = 64
+            let x = screenFrame.midX - panelW * 0.5
+            let y = screenFrame.minY + 42
+            panel.setFrame(NSRect(x: x, y: y, width: panelW, height: panelH), display: true)
             panel.orderFrontRegardless()
         }
 
         isHUDVisible = true
+        installEscapeKeyMonitors()
         updatePickerOverlayForSelectedMode()
     }
 
     public func hideRecordingHUD() {
         stopPickerOverlay()
+        removeEscapeKeyMonitors()
         hudPanel?.orderOut(nil)
         isHUDVisible = false
     }
 
     public func selectMode(_ mode: CaptureTargetMode) {
         selectedMode = mode
+        if mode == .area, let screen = WindowDiscoveryService.screenUnderMouse() {
+            let qFrame = WindowDiscoveryService.quartzFrame(for: screen)
+            let w = min(1280.0, qFrame.width * 0.7)
+            let h = min(720.0, qFrame.height * 0.7)
+            selectedAreaRectQuartz = CGRect(
+                x: qFrame.midX - w * 0.5,
+                y: qFrame.midY - h * 0.5,
+                width: w,
+                height: h
+            )
+        }
         updatePickerOverlayForSelectedMode()
     }
 
-    // MARK: - Interactive Window / Area Picker Overlay
+    // MARK: - `ESC` Hotkey Monitor (Cancels Picker / Closes Recording HUD)
+
+    private func installEscapeKeyMonitors() {
+        removeEscapeKeyMonitors()
+        escLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // ESC key
+                Task { @MainActor [weak self] in
+                    guard let self = self, !self.isRecording else { return }
+                    self.hideRecordingHUD()
+                }
+                return nil
+            }
+            return event
+        }
+        escGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // ESC key
+                Task { @MainActor [weak self] in
+                    guard let self = self, !self.isRecording else { return }
+                    self.hideRecordingHUD()
+                }
+            }
+        }
+    }
+
+    private func removeEscapeKeyMonitors() {
+        if let local = escLocalMonitor {
+            NSEvent.removeMonitor(local)
+            escLocalMonitor = nil
+        }
+        if let global = escGlobalMonitor {
+            NSEvent.removeMonitor(global)
+            escGlobalMonitor = nil
+        }
+    }
+
+    // MARK: - Multi-Monitor Interactive Window / Display / Area Picker Overlays
 
     public func updatePickerOverlayForSelectedMode() {
         guard isHUDVisible, !isRecording else {
@@ -94,17 +147,18 @@ public final class RecordingCoordinator {
         }
 
         switch selectedMode {
-        case .window, .area:
-            startPickerOverlay()
-        case .display, .device:
+        case .window, .area, .display:
+            startPickerOverlaysAcrossAllScreens()
+        case .device:
             stopPickerOverlay()
         }
     }
 
-    private func startPickerOverlay() {
-        guard let screen = NSScreen.main else { return }
+    private func startPickerOverlaysAcrossAllScreens() {
+        stopPickerOverlay()
 
-        if pickerOverlayWindow == nil {
+        // Create one overlay window per connected monitor (`NSScreen.screens`)
+        for screen in NSScreen.screens {
             let overlay = NSWindow(
                 contentRect: screen.frame,
                 styleMask: [.borderless],
@@ -118,22 +172,32 @@ public final class RecordingCoordinator {
             overlay.ignoresMouseEvents = false
             overlay.acceptsMouseMovedEvents = true
             overlay.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            overlay.contentView = NSHostingView(rootView: WindowAndAreaPickerOverlayView(coordinator: self, screen: screen))
-            self.pickerOverlayWindow = overlay
+            overlay.contentView = NSHostingView(
+                rootView: WindowAndAreaPickerOverlayView(coordinator: self, screen: screen)
+            )
+            overlay.setFrame(screen.frame, display: true)
+            overlay.orderFrontRegardless()
+            pickerOverlayWindows.append(overlay)
         }
 
-        pickerOverlayWindow?.setFrame(screen.frame, display: true)
-        pickerOverlayWindow?.orderFrontRegardless()
         hudPanel?.orderFrontRegardless()
 
-        hoverTimer?.invalidate()
-        hoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        // Poll mouse across all connected displays at 60Hz for buttery-smooth window/display tracking
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self = self, self.selectedMode == .window, !self.isRecording else { return }
-                if let win = WindowDiscoveryService.topmostWindowUnderMouse() {
-                    if self.hoveredWindow != win {
-                        withAnimation(.spring(response: 0.22, dampingFraction: 0.84)) {
-                            self.hoveredWindow = win
+                guard let self = self, !self.isRecording else { return }
+                if let currentScreen = WindowDiscoveryService.screenUnderMouse() {
+                    let dispID = WindowDiscoveryService.displayID(for: currentScreen)
+                    if self.hoveredDisplayID != dispID {
+                        self.hoveredDisplayID = dispID
+                    }
+                }
+                if self.selectedMode == .window {
+                    if let win = WindowDiscoveryService.topmostWindowUnderMouse() {
+                        if self.hoveredWindow != win {
+                            withAnimation(.spring(response: 0.20, dampingFraction: 0.86)) {
+                                self.hoveredWindow = win
+                            }
                         }
                     }
                 }
@@ -144,10 +208,13 @@ public final class RecordingCoordinator {
     private func stopPickerOverlay() {
         hoverTimer?.invalidate()
         hoverTimer = nil
-        pickerOverlayWindow?.orderOut(nil)
+        for win in pickerOverlayWindows {
+            win.orderOut(nil)
+        }
+        pickerOverlayWindows.removeAll()
     }
 
-    // MARK: - Start & Stop Real Recording
+    // MARK: - Start & Stop Real Recording (Supports Any Connected Monitor)
 
     public func startRecording() async {
         guard !isRecording else { return }
@@ -155,23 +222,22 @@ public final class RecordingCoordinator {
 
         do {
             let shareable = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard let primaryDisplay = shareable.displays.first else {
+            guard !shareable.displays.isEmpty else {
                 lastErrorMessage = "No capturable display found."
                 return
             }
 
-            let screenScale = NSScreen.main?.backingScaleFactor ?? 2.0
+            let myPID = ProcessInfo.processInfo.processIdentifier
+            let ownWindows = shareable.windows.filter { $0.owningApplication?.processID == myPID }
+
             let filter: SCContentFilter
             let logicalBounds: CGRect
             let sourceRect: CGRect?
+            var targetDisplay = shareable.displays.first(where: { $0.displayID == hoveredDisplayID }) ?? shareable.displays[0]
             var targetWindowId: UInt32?
             var targetBundleId: String?
             var targetAppName: String?
             var targetWindowTitle: String?
-
-            // Exclude NativeScreen's own windows so HUD/Overlays never appear in the recording
-            let myPID = ProcessInfo.processInfo.processIdentifier
-            let ownWindows = shareable.windows.filter { $0.owningApplication?.processID == myPID }
 
             switch selectedMode {
             case .window:
@@ -185,22 +251,52 @@ public final class RecordingCoordinator {
                     targetBundleId = chosen.bundleId
                     targetAppName = chosen.appName
                     targetWindowTitle = chosen.title
+
+                    // Match display where window resides
+                    if let matchingScreen = NSScreen.screens.first(where: {
+                        WindowDiscoveryService.quartzFrame(for: $0).intersects(chosen.bounds)
+                    }) {
+                        let dID = WindowDiscoveryService.displayID(for: matchingScreen)
+                        if let scDisp = shareable.displays.first(where: { $0.displayID == dID }) {
+                            targetDisplay = scDisp
+                        }
+                    }
                 } else {
-                    filter = SCContentFilter(display: primaryDisplay, excludingWindows: ownWindows)
-                    logicalBounds = CGRect(x: 0, y: 0, width: primaryDisplay.width, height: primaryDisplay.height)
+                    filter = SCContentFilter(display: targetDisplay, excludingWindows: ownWindows)
+                    let screen = NSScreen.screens.first(where: { WindowDiscoveryService.displayID(for: $0) == targetDisplay.displayID })
+                    logicalBounds = screen.map { WindowDiscoveryService.quartzFrame(for: $0) }
+                        ?? CGRect(x: 0, y: 0, width: targetDisplay.width, height: targetDisplay.height)
                     sourceRect = nil
                 }
 
             case .area:
-                filter = SCContentFilter(display: primaryDisplay, excludingWindows: ownWindows)
+                if let matchingScreen = NSScreen.screens.first(where: {
+                    WindowDiscoveryService.quartzFrame(for: $0).intersects(selectedAreaRectQuartz)
+                }) {
+                    let dID = WindowDiscoveryService.displayID(for: matchingScreen)
+                    if let scDisp = shareable.displays.first(where: { $0.displayID == dID }) {
+                        targetDisplay = scDisp
+                    }
+                    let localRect = WindowDiscoveryService.localTopLeftRect(fromQuartzRect: selectedAreaRectQuartz, on: matchingScreen)
+                    sourceRect = localRect
+                } else {
+                    sourceRect = selectedAreaRectQuartz
+                }
+                filter = SCContentFilter(display: targetDisplay, excludingWindows: ownWindows)
                 logicalBounds = selectedAreaRectQuartz
-                sourceRect = selectedAreaRectQuartz
 
             case .display, .device:
-                filter = SCContentFilter(display: primaryDisplay, excludingWindows: ownWindows)
-                logicalBounds = CGRect(x: 0, y: 0, width: primaryDisplay.width, height: primaryDisplay.height)
+                filter = SCContentFilter(display: targetDisplay, excludingWindows: ownWindows)
+                let screen = NSScreen.screens.first(where: { WindowDiscoveryService.displayID(for: $0) == targetDisplay.displayID })
+                logicalBounds = screen.map { WindowDiscoveryService.quartzFrame(for: $0) }
+                    ?? CGRect(x: 0, y: 0, width: targetDisplay.width, height: targetDisplay.height)
                 sourceRect = nil
             }
+
+            let targetNSScreen = NSScreen.screens.first(where: {
+                WindowDiscoveryService.displayID(for: $0) == targetDisplay.displayID
+            }) ?? NSScreen.main
+            let screenScale = targetNSScreen?.backingScaleFactor ?? 2.0
 
             stopPickerOverlay()
 
@@ -222,7 +318,7 @@ public final class RecordingCoordinator {
 
             let targetMeta = CaptureTargetMetadata(
                 mode: selectedMode,
-                displayId: primaryDisplay.displayID,
+                displayId: targetDisplay.displayID,
                 windowId: targetWindowId,
                 appBundleId: targetBundleId,
                 appName: targetAppName,
@@ -309,7 +405,6 @@ public final class RecordingCoordinator {
             try? metaData.write(to: recordingDir.appendingPathComponent("metadata.json"), options: .atomic)
         }
 
-        // Load telemetry to generate initial Auto-Zoom blocks automatically!
         let clicksURL = recordingDir.appendingPathComponent(metadata.tracks.clicksTelemetry)
         let keysURL = recordingDir.appendingPathComponent(metadata.tracks.keysTelemetry)
         let clicks = JSONLinesCodec.load(ClickEvent.self, from: clicksURL)
@@ -330,7 +425,7 @@ public final class RecordingCoordinator {
                 slices: [initialSlice],
                 zooms: autoZooms,
                 maskTracks: [
-                    MaskTrack(id: "mask-track-1", name: "Blur Track 1")
+                    MaskTrack(id: "mask-track-1", name: "Mask Track 1")
                 ]
             )
         )
@@ -346,7 +441,7 @@ public final class RecordingCoordinator {
         }
     }
 
-    // MARK: - Create Instant Interactive Demo Project (For Testing Editor Without Screen Recording Permission)
+    // MARK: - Create Instant Interactive Demo Project
 
     public func createInteractiveSampleProject() -> ProjectSession? {
         let formatter = DateFormatter()
@@ -365,7 +460,6 @@ public final class RecordingCoordinator {
         let cursorAppender = JSONLinesAppender(fileURL: telemetryDir.appendingPathComponent("cursor.jsonl"))
         let clicksAppender = JSONLinesAppender(fileURL: telemetryDir.appendingPathComponent("clicks.jsonl"))
 
-        // Generate smooth figure-8 cursor path + sample clicks
         let totalSamples = Int(durationMs / 16.67)
         for i in 0...totalSamples {
             let t = Double(i) * 16.67
@@ -378,9 +472,8 @@ public final class RecordingCoordinator {
 
         let sampleClickTimes: [(Double, Double, Double)] = [
             (2200.0, 0.72, 0.34),
-            (3100.0, 0.74, 0.36),
             (8400.0, 0.28, 0.66),
-            (13200.0, 0.64, 0.42)
+            (13800.0, 0.64, 0.42)
         ]
         for (t, cx, cy) in sampleClickTimes {
             clicksAppender.append(ClickEvent(t: t, type: "down", button: "left", x: cx, y: cy, count: 1))
@@ -436,8 +529,8 @@ public final class RecordingCoordinator {
                 slices: [ClipSlice(sourceStartMs: 0.0, sourceEndMs: durationMs, speed: 1.0)],
                 zooms: autoZooms,
                 maskTracks: [
-                    MaskTrack(id: "mask-track-1", name: "Blur Track 1 (API Key)", items: [mask1]),
-                    MaskTrack(id: "mask-track-2", name: "Blur Track 2 (Personal Info)", items: [mask2])
+                    MaskTrack(id: "mask-track-1", name: "Mask Track 1", items: [mask1]),
+                    MaskTrack(id: "mask-track-2", name: "Mask Track 2", items: [mask2])
                 ]
             )
         )
@@ -455,14 +548,14 @@ public final class RecordingCoordinator {
     }
 }
 
-// MARK: - Floating Recording HUD Bar View (`NSPanel` Content)
+// MARK: - Floating Recording HUD Bar View (`NSPanel` Content — Single-Line Responsive Pills)
 
 public struct RecordingHUDBarView: View {
     @Bindable var coordinator: RecordingCoordinator
 
     public var body: some View {
-        HStack(spacing: 14) {
-            // Close button
+        HStack(spacing: 12) {
+            // Close button (ESC)
             Button {
                 if coordinator.isRecording {
                     Task { await coordinator.stopRecordingAndOpenEditor() }
@@ -471,36 +564,39 @@ public struct RecordingHUDBarView: View {
                 }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(width: 26, height: 26)
                     .background(.white.opacity(0.14), in: Circle())
             }
             .buttonStyle(.plain)
+            .help("Cancel (ESC)")
 
             Divider()
-                .frame(height: 28)
+                .frame(height: 24)
 
             if !coordinator.isRecording {
                 // Capture Target Mode Buttons (Display, Window, Area, Device)
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     ForEach(CaptureTargetMode.allCases) { mode in
+                        let isSelected = (coordinator.selectedMode == mode)
                         Button {
                             coordinator.selectMode(mode)
                         } label: {
                             VStack(spacing: 3) {
                                 Image(systemName: mode.systemImage)
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.system(size: 15, weight: .medium))
                                 Text(mode.title)
                                     .font(.system(size: 10, weight: .medium))
+                                    .lineLimit(1)
                             }
-                            .foregroundStyle(coordinator.selectedMode == mode ? .white : .secondary)
-                            .frame(width: 56, height: 46)
+                            .foregroundStyle(isSelected ? .white : .white.opacity(0.62))
+                            .frame(width: 54, height: 42)
                             .background(
-                                coordinator.selectedMode == mode
-                                    ? Color.accentColor.opacity(0.35)
+                                isSelected
+                                    ? Color.white.opacity(0.16)
                                     : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                             )
                         }
                         .buttonStyle(.plain)
@@ -508,43 +604,49 @@ public struct RecordingHUDBarView: View {
                 }
 
                 Divider()
-                    .frame(height: 28)
+                    .frame(height: 24)
 
-                // Microphone & System Audio Toggles
-                HStack(spacing: 10) {
+                // Single-Line Microphone & System Audio Pills
+                HStack(spacing: 8) {
                     Button {
                         coordinator.captureMicrophone.toggle()
                     } label: {
-                        Label(
-                            coordinator.captureMicrophone ? "Mic On" : "No mic",
-                            systemImage: coordinator.captureMicrophone ? "mic.fill" : "mic.slash"
-                        )
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(coordinator.captureMicrophone ? .white : .secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.white.opacity(0.08), in: Capsule())
+                        HStack(spacing: 6) {
+                            Image(systemName: coordinator.captureMicrophone ? "mic.fill" : "mic.slash")
+                                .font(.system(size: 12))
+                            Text(coordinator.captureMicrophone ? "Microphone" : "No microphone")
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundStyle(coordinator.captureMicrophone ? .white : .white.opacity(0.58))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(.white.opacity(coordinator.captureMicrophone ? 0.14 : 0.06), in: Capsule())
                     }
                     .buttonStyle(.plain)
 
                     Button {
                         coordinator.captureSystemAudio.toggle()
                     } label: {
-                        Label(
-                            coordinator.captureSystemAudio ? "System Audio" : "Muted",
-                            systemImage: coordinator.captureSystemAudio ? "speaker.wave.2.fill" : "speaker.slash"
-                        )
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(coordinator.captureSystemAudio ? .white : .secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.white.opacity(0.08), in: Capsule())
+                        HStack(spacing: 6) {
+                            Image(systemName: coordinator.captureSystemAudio ? "speaker.wave.2.fill" : "speaker.slash")
+                                .font(.system(size: 12))
+                            Text(coordinator.captureSystemAudio ? "System Audio" : "No audio")
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundStyle(coordinator.captureSystemAudio ? .white : .white.opacity(0.58))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(.white.opacity(coordinator.captureSystemAudio ? 0.14 : 0.06), in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
 
                 Divider()
-                    .frame(height: 28)
+                    .frame(height: 24)
 
                 // Record Button
                 Button {
@@ -553,13 +655,15 @@ public struct RecordingHUDBarView: View {
                     HStack(spacing: 6) {
                         Circle()
                             .fill(.red)
-                            .frame(width: 10, height: 10)
+                            .frame(width: 9, height: 9)
                         Text("Record")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
                     }
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor, in: Capsule())
+                    .padding(.vertical, 7)
+                    .background(Color.indigo, in: Capsule())
                     .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
@@ -568,15 +672,16 @@ public struct RecordingHUDBarView: View {
                 HStack(spacing: 12) {
                     Circle()
                         .fill(.red)
-                        .frame(width: 10, height: 10)
+                        .frame(width: 9, height: 9)
                     Text(formatElapsed(coordinator.recordingElapsedSeconds))
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.white)
                     Button {
                         Task { await coordinator.stopRecordingAndOpenEditor() }
                     } label: {
                         Label("Stop Recording", systemImage: "stop.fill")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
+                            .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 7)
                             .background(.red, in: Capsule())
@@ -586,12 +691,12 @@ public struct RecordingHUDBarView: View {
                 }
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(red: 0.11, green: 0.12, blue: 0.16).opacity(0.92), in: Capsule())
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+            Capsule()
+                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
         )
     }
 
@@ -603,19 +708,31 @@ public struct RecordingHUDBarView: View {
     }
 }
 
-// MARK: - Smart Window Picker & Area Selection Overlay View
+// MARK: - Multi-Monitor Smart Window Picker, Display Picker & Area Selection Overlay View
 
 public struct WindowAndAreaPickerOverlayView: View {
     @Bindable var coordinator: RecordingCoordinator
     let screen: NSScreen
 
+    private var screenDisplayID: CGDirectDisplayID {
+        WindowDiscoveryService.displayID(for: screen)
+    }
+
+    private var screenQuartzFrame: CGRect {
+        WindowDiscoveryService.quartzFrame(for: screen)
+    }
+
     public var body: some View {
         ZStack(alignment: .topLeading) {
-            Color.black.opacity(0.18)
+            Color.black.opacity(0.22)
                 .ignoresSafeArea()
 
-            if coordinator.selectedMode == .window, let win = coordinator.hoveredWindow {
-                let rect = win.bounds
+            // 1. WINDOW MODE (Works across all connected monitors!)
+            if coordinator.selectedMode == .window,
+               let win = coordinator.hoveredWindow,
+               screenQuartzFrame.intersects(win.bounds) {
+                let localRect = WindowDiscoveryService.localTopLeftRect(fromQuartzRect: win.bounds, on: screen)
+
                 ZStack {
                     RoundedRectangle(cornerRadius: win.borderRadius, style: .continuous)
                         .fill(Color.indigo.opacity(0.24))
@@ -637,13 +754,14 @@ public struct WindowAndAreaPickerOverlayView: View {
                         Text(win.appName)
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(.white)
+                            .lineLimit(1)
 
-                        HStack(spacing: 6) {
-                            Text("\(Int(rect.width)) × \(Int(rect.height))")
+                        HStack(spacing: 8) {
+                            Text("\(Int(win.bounds.width)) × \(Int(win.bounds.height))")
                                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.white.opacity(0.85))
 
-                            Menu("Resize") {
+                            Menu {
                                 ForEach(WindowSizePreset.presets) { preset in
                                     Button(preset.label) {
                                         WindowDiscoveryService.resizeWindow(
@@ -653,11 +771,14 @@ public struct WindowAndAreaPickerOverlayView: View {
                                         )
                                     }
                                 }
+                            } label: {
+                                Text("Resize")
+                                    .font(.system(size: 11, weight: .semibold))
                             }
                             .menuStyle(.borderlessButton)
-                            .font(.system(size: 11, weight: .semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
+                            .fixedSize()
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
                             .background(.white.opacity(0.18), in: Capsule())
                         }
 
@@ -679,13 +800,65 @@ public struct WindowAndAreaPickerOverlayView: View {
                         .buttonStyle(.plain)
                         .padding(.top, 4)
                     }
-                    .padding(20)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .padding(22)
+                    .background(Color(red: 0.12, green: 0.13, blue: 0.20).opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                    )
                 }
-                .frame(width: rect.width, height: rect.height)
-                .position(x: rect.midX, y: rect.midY)
-            } else if coordinator.selectedMode == .area {
-                let rect = coordinator.selectedAreaRectQuartz
+                .frame(width: localRect.width, height: localRect.height)
+                .position(x: localRect.midX, y: localRect.midY)
+            }
+
+            // 2. DISPLAY MODE (Allows selecting any connected monitor!)
+            else if coordinator.selectedMode == .display, coordinator.hoveredDisplayID == screenDisplayID {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.indigo, lineWidth: 4)
+                        .background(Color.indigo.opacity(0.10))
+
+                    VStack(spacing: 12) {
+                        Image(systemName: "display")
+                            .font(.system(size: 42))
+                            .foregroundStyle(.white)
+                        Text(screen.localizedName)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.white)
+                        Text("\(Int(screen.frame.width)) × \(Int(screen.frame.height)) • Press ESC to cancel")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.75))
+
+                        Button {
+                            Task { await coordinator.startRecording() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "record.circle")
+                                Text("Record This Display")
+                                    .fontWeight(.semibold)
+                            }
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(Color.indigo, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(24)
+                    .background(Color(red: 0.12, green: 0.13, blue: 0.20).opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // 3. AREA MODE
+            else if coordinator.selectedMode == .area,
+                    screenQuartzFrame.intersects(coordinator.selectedAreaRectQuartz) {
+                let localRect = WindowDiscoveryService.localTopLeftRect(
+                    fromQuartzRect: coordinator.selectedAreaRectQuartz,
+                    on: screen
+                )
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
@@ -693,7 +866,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                         .background(Color.indigo.opacity(0.12))
 
                     VStack(spacing: 10) {
-                        Text("Recording Area: \(Int(rect.width)) × \(Int(rect.height))")
+                        Text("\(Int(localRect.width)) × \(Int(localRect.height))")
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white)
 
@@ -723,21 +896,24 @@ public struct WindowAndAreaPickerOverlayView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(16)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(Color(red: 0.12, green: 0.13, blue: 0.20).opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .frame(width: rect.width, height: rect.height)
-                .position(x: rect.midX, y: rect.midY)
+                .frame(width: localRect.width, height: localRect.height)
+                .position(x: localRect.midX, y: localRect.midY)
                 .gesture(
-                    DragGesture()
+                    DragGesture(coordinateSpace: .named("screenOverlaySpace"))
                         .onChanged { value in
+                            let newLocalOriginX = max(0, value.location.x - localRect.width * 0.5)
+                            let newLocalOriginY = max(0, value.location.y - localRect.height * 0.5)
                             coordinator.selectedAreaRectQuartz.origin = CGPoint(
-                                x: max(0, value.location.x - rect.width * 0.5),
-                                y: max(0, value.location.y - rect.height * 0.5)
+                                x: screenQuartzFrame.origin.x + newLocalOriginX,
+                                y: screenQuartzFrame.origin.y + newLocalOriginY
                             )
                         }
                 )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .coordinateSpace(name: "screenOverlaySpace")
     }
 }

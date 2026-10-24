@@ -360,6 +360,36 @@ public enum AutoZoomClusterGenerator {
             )
         )
 
-        return blocks
+        return normalizeNonOverlappingZooms(blocks, durationMs: durationMs)
+    }
+
+    /// Ensures zoom blocks on the Zoom track are strictly sorted and non-overlapping.
+    public static func normalizeNonOverlappingZooms(_ blocks: [ZoomBlock], durationMs: Double) -> [ZoomBlock] {
+        let sorted = blocks.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        var result: [ZoomBlock] = []
+        let minGapMs = 60.0
+
+        for var block in sorted {
+            block.sourceStartMs = max(0.0, min(durationMs - 200.0, block.sourceStartMs))
+            block.sourceEndMs = max(block.sourceStartMs + 200.0, min(durationMs, block.sourceEndMs))
+
+            if var last = result.last {
+                if block.sourceStartMs < last.sourceEndMs + minGapMs {
+                    // Merge or clamp so they never overlap
+                    if block.sourceStartMs < last.sourceEndMs {
+                        last.sourceEndMs = max(last.sourceEndMs, block.sourceEndMs)
+                        result[result.count - 1] = last
+                        continue
+                    } else {
+                        block.sourceStartMs = last.sourceEndMs + minGapMs
+                        if block.sourceEndMs - block.sourceStartMs < 300.0 {
+                            continue
+                        }
+                    }
+                }
+            }
+            result.append(block)
+        }
+        return result
     }
 }

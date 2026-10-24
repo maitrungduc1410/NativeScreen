@@ -10,7 +10,7 @@ public struct CapturableWindowInfo: Identifiable, Equatable {
     public let title: String
     public let appName: String
     public let bundleId: String?
-    public let bounds: CGRect // Quartz global screen coordinates (origin top-left of main screen)
+    public let bounds: CGRect // Quartz global screen coordinates (origin top-left of primary screen)
     public let borderRadius: Double
 
     public var appIcon: NSImage? {
@@ -35,7 +35,44 @@ public struct WindowSizePreset: Identifiable {
 }
 
 public enum WindowDiscoveryService {
-    /// Lists all normal on-screen windows in front-to-back Z-order using `CGWindowListCopyWindowInfo`.
+    /// Returns the `CGDirectDisplayID` for a given `NSScreen`.
+    public static func displayID(for screen: NSScreen) -> CGDirectDisplayID {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? CGMainDisplayID()
+    }
+
+    /// Returns the global Quartz rectangle (origin at top-left of primary screen, Y increasing downwards) for any `NSScreen`.
+    public static func quartzFrame(for screen: NSScreen) -> CGRect {
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
+        let qx = screen.frame.minX
+        let qy = primaryHeight - screen.frame.maxY
+        return CGRect(x: qx, y: qy, width: screen.frame.width, height: screen.frame.height)
+    }
+
+    /// Converts a global Quartz rectangle into local SwiftUI top-left coordinates on the given `NSScreen`.
+    public static func localTopLeftRect(fromQuartzRect quartzRect: CGRect, on screen: NSScreen) -> CGRect {
+        let screenQuartz = quartzFrame(for: screen)
+        return CGRect(
+            x: quartzRect.origin.x - screenQuartz.origin.x,
+            y: quartzRect.origin.y - screenQuartz.origin.y,
+            width: quartzRect.width,
+            height: quartzRect.height
+        )
+    }
+
+    /// Current mouse location in global Quartz coordinates (origin top-left of primary display).
+    public static func currentMouseQuartzPoint() -> CGPoint {
+        let cocoaMouse = NSEvent.mouseLocation
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 1080.0
+        return CGPoint(x: cocoaMouse.x, y: primaryHeight - cocoaMouse.y)
+    }
+
+    /// Returns the `NSScreen` currently containing the mouse cursor.
+    public static func screenUnderMouse() -> NSScreen? {
+        let cocoaMouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(cocoaMouse, $0.frame, false) } ?? NSScreen.main
+    }
+
+    /// Lists all normal on-screen windows across ALL connected monitors in front-to-back Z-order using `CGWindowListCopyWindowInfo`.
     public static func listFrontToBackWindows(excludingPIDs: Set<pid_t> = [ProcessInfo.processInfo.processIdentifier]) -> [CapturableWindowInfo] {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
@@ -62,7 +99,6 @@ public enum WindowDiscoveryService {
             let runningApp = NSRunningApplication(processIdentifier: ownerPID)
             let bundleId = runningApp?.bundleIdentifier
 
-            // Skip system background processes
             if bundleId == "com.apple.dock" || bundleId == "com.apple.WindowManager" || bundleId == "com.apple.controlcenter" {
                 continue
             }
@@ -82,27 +118,11 @@ public enum WindowDiscoveryService {
         return results
     }
 
-    /// Hit-tests the topmost window under the current mouse location (converted to Quartz top-left coordinates).
+    /// Hit-tests the topmost window under the current mouse location across all connected monitors.
     public static func topmostWindowUnderMouse() -> CapturableWindowInfo? {
-        let cocoaMouse = NSEvent.mouseLocation
-        guard let primaryScreen = NSScreen.screens.first else { return nil }
-        let primaryHeight = primaryScreen.frame.height
-        let quartzPoint = CGPoint(x: cocoaMouse.x, y: primaryHeight - cocoaMouse.y)
-
+        let quartzPoint = currentMouseQuartzPoint()
         let windows = listFrontToBackWindows()
         return windows.first { $0.bounds.contains(quartzPoint) }
-    }
-
-    /// Converts Quartz global coordinates (top-left origin) to Cocoa screen coordinates (bottom-left origin) for a given `NSScreen`.
-    public static func cocoaRect(fromQuartzRect quartz: CGRect, on screen: NSScreen) -> CGRect {
-        guard let primaryScreen = NSScreen.screens.first else { return quartz }
-        let globalCocoaY = primaryScreen.frame.height - (quartz.origin.y + quartz.size.height)
-        return CGRect(
-            x: quartz.origin.x - screen.frame.origin.x,
-            y: globalCocoaY - screen.frame.origin.y,
-            width: quartz.size.width,
-            height: quartz.size.height
-        )
     }
 
     /// Brings the target application & window to the front before starting window capture.
@@ -112,7 +132,7 @@ public enum WindowDiscoveryService {
         }
     }
 
-    /// Resizes a target application's topmost window using macOS Accessibility API (`AXUIElement`).
+    /// Resizes a target application's window using macOS Accessibility API (`AXUIElement`).
     @discardableResult
     public static func resizeWindow(_ window: CapturableWindowInfo, toWidth width: Double, height: Double) -> Bool {
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary

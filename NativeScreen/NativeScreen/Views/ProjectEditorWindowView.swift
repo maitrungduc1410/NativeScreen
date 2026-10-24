@@ -3,7 +3,8 @@ import AppKit
 import UniformTypeIdentifiers
 
 /// Full Native macOS Editor Window for a single `.nativescreen` project session.
-/// Multiple instances of `ProjectEditorWindowView` can run concurrently for simultaneous multi-project editing.
+/// Matches the dark cinematic workspace while supporting multi-project windows,
+/// `Delete`/`Backspace` & `ESC` keyboard shortcuts, and floating quick tools.
 public struct ProjectEditorWindowView: View {
     @Bindable var session: ProjectSession
 
@@ -13,6 +14,7 @@ public struct ProjectEditorWindowView: View {
     @State private var isExporting = false
     @State private var exportProgress: Double = 0.0
     @State private var exportError: String?
+    @State private var keyEventMonitor: Any?
 
     public init(session: ProjectSession) {
         self.session = session
@@ -20,43 +22,71 @@ public struct ProjectEditorWindowView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Top Canvas Control Bar
-            HStack(spacing: 14) {
-                // Aspect Ratio Picker
-                Picker("Aspect Ratio", selection: Binding(
-                    get: { session.document.canvas.aspectRatioPreset },
-                    set: { preset in
-                        session.mutate {
-                            $0.canvas.aspectRatioMode = .preset
-                            $0.canvas.aspectRatioPreset = preset
-                        }
-                    }
-                )) {
-                    ForEach(AspectRatioPreset.allCases) { preset in
-                        Text(preset.label).tag(preset)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 150)
-
+            // Top Workspace Toolbar (Clean, non-truncating pills & icon buttons with tooltips)
+            HStack(spacing: 12) {
+                // Project Folder button
                 Button {
-                    session.addMaskAtPlayhead(type: .blur, style: .gaussian)
+                    NSWorkspace.shared.activateFileViewerSelecting([session.packageURL])
                 } label: {
-                    Label("Add Blur Region", systemImage: "eye.slash")
+                    Image(systemName: "folder")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.plain)
+                .help("Reveal .nativescreen Package in Finder")
 
                 Spacer()
 
-                // Snapshot Undo / Redo Buttons
+                // Aspect Ratio Menu Pill (Never truncates!)
+                Menu {
+                    Button("Auto (Match Source)") {
+                        session.mutate { $0.canvas.aspectRatioMode = .auto }
+                    }
+                    Divider()
+                    ForEach(AspectRatioPreset.allCases) { preset in
+                        Button(preset.label) {
+                            session.mutate {
+                                $0.canvas.aspectRatioMode = .preset
+                                $0.canvas.aspectRatioPreset = preset
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "aspectratio")
+                            .font(.system(size: 11))
+                        Text(session.document.canvas.aspectRatioMode == .auto
+                             ? "Auto Aspect"
+                             : session.document.canvas.aspectRatioPreset.label)
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Canvas Aspect Ratio")
+
+                Spacer()
+
+                // Icon-only Undo / Redo Buttons
                 HStack(spacing: 6) {
                     Button {
                         session.undo()
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 28, height: 26)
+                            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
                     }
+                    .buttonStyle(.plain)
                     .disabled(!session.canUndo)
+                    .opacity(session.canUndo ? 1.0 : 0.35)
                     .keyboardShortcut("z", modifiers: [.command])
                     .help("Undo (⌘Z)")
 
@@ -64,31 +94,46 @@ public struct ProjectEditorWindowView: View {
                         session.redo()
                     } label: {
                         Image(systemName: "arrow.uturn.forward")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 28, height: 26)
+                            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
                     }
+                    .buttonStyle(.plain)
                     .disabled(!session.canRedo)
+                    .opacity(session.canRedo ? 1.0 : 0.35)
                     .keyboardShortcut("Z", modifiers: [.command, .shift])
                     .help("Redo (⇧⌘Z)")
                 }
 
+                // Export Button
                 Button {
                     isShowingExportSheet = true
                 } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                        .fontWeight(.semibold)
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Export")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .fixedSize()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Color(red: 0.44, green: 0.34, blue: 0.96), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .foregroundStyle(.white)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.indigo)
+                .buttonStyle(.plain)
+                .help("Export Video (⌘E)")
+                .keyboardShortcut("e", modifiers: [.command])
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial)
+            .background(Color(red: 0.06, green: 0.06, blue: 0.08))
 
             Divider()
 
-            // Center Area: Metal GPU Preview Canvas + Right Inspector Sidebar
+            // Center Area: Metal GPU Preview Canvas + Floating Left Quick Dock + Right Inspector Sidebar
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    // GPU Preview Container
                     GeometryReader { geo in
                         let aspect = session.document.canvas.effectiveAspectRatio(
                             sourceWidth: Double(session.metadata.captureTarget.pixelSize.width),
@@ -97,8 +142,9 @@ public struct ProjectEditorWindowView: View {
                         let fittedSize = fitPreviewCanvas(in: geo.size, aspect: aspect)
 
                         ZStack {
-                            Color.black.opacity(0.92)
+                            Color(red: 0.04, green: 0.04, blue: 0.05)
 
+                            // GPU Preview + Clean Source-Locked Mask Handle Overlay
                             ZStack {
                                 MetalPreviewView(session: session)
                                 InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
@@ -107,9 +153,54 @@ public struct ProjectEditorWindowView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
                             )
-                            .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+                            .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+
+                            // Floating Left Quick Dock (Icon-only with Tooltips)
+                            HStack {
+                                VStack(spacing: 10) {
+                                    quickDockIconButton(
+                                        icon: "plus.magnifyingglass",
+                                        tooltip: "Add Zoom at Playhead"
+                                    ) {
+                                        session.addZoomAtPlayhead()
+                                    }
+
+                                    quickDockIconButton(
+                                        icon: "eye.slash",
+                                        tooltip: "Add Gaussian Blur Mask"
+                                    ) {
+                                        session.addMaskAtPlayhead(type: .blur, style: .gaussian)
+                                    }
+
+                                    quickDockIconButton(
+                                        icon: "square.grid.3x3",
+                                        tooltip: "Add Pixelate Mask"
+                                    ) {
+                                        session.addMaskAtPlayhead(type: .blur, style: .pixelate)
+                                    }
+
+                                    quickDockIconButton(
+                                        icon: "flashlight.on.fill",
+                                        tooltip: "Add Spotlight Mask"
+                                    ) {
+                                        session.addMaskAtPlayhead(type: .spotlight, style: .dim)
+                                    }
+                                }
+                                .padding(8)
+                                .background(
+                                    Color(red: 0.11, green: 0.11, blue: 0.15).opacity(0.90),
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+                                )
+                                .padding(.leading, 14)
+
+                                Spacer()
+                            }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -117,7 +208,7 @@ public struct ProjectEditorWindowView: View {
                     // Transport Playback Bar
                     HStack(spacing: 18) {
                         Text(formatTimecode(session.playheadTimelineMs))
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundStyle(.secondary)
 
                         Button {
@@ -125,34 +216,41 @@ public struct ProjectEditorWindowView: View {
                             session.seek(toTimelineMs: 0.0)
                         } label: {
                             Image(systemName: "backward.end.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
+                        .help("Jump to Start")
 
                         Button {
                             session.isPlaying.toggle()
                         } label: {
-                            Image(systemName: session.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                                .font(.system(size: 28))
+                            Image(systemName: session.isPlaying ? "pause.circle" : "play.circle")
+                                .font(.system(size: 24, weight: .regular))
                                 .foregroundStyle(.white)
                         }
                         .buttonStyle(.plain)
                         .keyboardShortcut(.space, modifiers: [])
+                        .help("Play / Pause (Space)")
 
                         Button {
                             session.isPlaying = false
                             session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
                         } label: {
                             Image(systemName: "forward.end.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
+                        .help("Jump to End")
 
                         Text(formatTimecode(session.timeMapper.totalTimelineDurationMs))
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background(Color(red: 0.05, green: 0.05, blue: 0.07))
                 }
 
                 Divider()
@@ -164,12 +262,72 @@ public struct ProjectEditorWindowView: View {
 
             // Bottom Multi-Track NLE Timeline
             MultiTrackTimelineView(session: session)
-                .frame(height: 225)
+                .frame(height: 215)
         }
+        .preferredColorScheme(.dark)
         .navigationTitle("\(session.document.name).nativescreen")
         .sheet(isPresented: $isShowingExportSheet) {
             exportModalSheet
         }
+        .onAppear {
+            installEditorKeyMonitor()
+        }
+        .onDisappear {
+            removeEditorKeyMonitor()
+        }
+    }
+
+    // MARK: - Keyboard Shortcuts (`Delete`/`Backspace`, `ESC`, `C` Split Tool)
+
+    private func installEditorKeyMonitor() {
+        removeEditorKeyMonitor()
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Ignore when typing inside a TextField
+            if let responder = event.window?.firstResponder, responder is NSTextView {
+                return event
+            }
+            switch event.keyCode {
+            case 53: // ESC: Exit Split Mode or clear selection
+                if session.isSplitModeActive {
+                    session.isSplitModeActive = false
+                    NSCursor.arrow.set()
+                    return nil
+                }
+                if session.selectedMaskId != nil || session.selectedZoomId != nil {
+                    session.selectedMaskId = nil
+                    session.selectedZoomId = nil
+                    return nil
+                }
+                return event
+
+            case 51, 117: // Delete / Forward Delete: Delete selected Mask, Zoom, or Clip Slice
+                session.deleteSelectedTimelineItem()
+                return nil
+
+            default:
+                return event
+            }
+        }
+    }
+
+    private func removeEditorKeyMonitor() {
+        if let monitor = keyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyEventMonitor = nil
+        }
+    }
+
+    @ViewBuilder
+    private func quickDockIconButton(icon: String, tooltip: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.82))
+                .frame(width: 28, height: 28)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
     }
 
     // MARK: - Hardware Export Sheet
@@ -258,7 +416,7 @@ public struct ProjectEditorWindowView: View {
     }
 
     private func fitPreviewCanvas(in container: CGSize, aspect: Double) -> CGSize {
-        let availW = max(120, container.width - 36)
+        let availW = max(160, container.width - 96)
         let availH = max(120, container.height - 28)
         var w = availW
         var h = w / max(0.2, aspect)

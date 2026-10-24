@@ -112,12 +112,23 @@ public struct MetalPreviewView: NSViewRepresentable {
             avPlayer.isMuted = true
             self.player = avPlayer
             self.videoOutput = output
+            seekDecoder(toSourceMs: session.currentSourceTimeMs)
         }
 
         private func seekDecoder(toSourceMs sourceMs: Double) {
             guard let player = player else { return }
             let cmTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
-            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self = self, let view = self.mtkView else { return }
+                    let targetTime = CMTime(seconds: self.session.currentSourceTimeMs / 1000.0, preferredTimescale: 600)
+                    if let output = self.videoOutput,
+                       let pb = output.copyPixelBuffer(forItemTime: targetTime, itemTimeForDisplay: nil) {
+                        self.lastDecodedFrame = CIImage(cvPixelBuffer: pb)
+                    }
+                    view.needsDisplay = true
+                }
+            }
         }
 
         // MARK: - MTKViewDelegate
