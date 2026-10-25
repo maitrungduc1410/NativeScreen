@@ -50,14 +50,22 @@ public struct SpringConfig: Codable, Equatable, Hashable, Sendable {
     public var damping: Double
     public var mass: Double
 
-    public init(stiffness: Double = 125.0, damping: Double = 12.0, mass: Double = 1.5) {
+    public init(stiffness: Double = 170.0, damping: Double = 50.0, mass: Double = 3.0) {
         self.stiffness = stiffness
         self.damping = damping
         self.mass = mass
     }
 
-    public static let defaultCursor = SpringConfig(stiffness: 125.0, damping: 12.0, mass: 1.5)
-    public static let defaultCamera = SpringConfig(stiffness: 125.0, damping: 14.0, mass: 1.5)
+    // Spring Presets:
+    // - Smooth Camera (`de`): `{ stiffness: 170, damping: 50, mass: 3.0 }` -> ζ ≈ 1.11 (Overdamped, zero bounce!)
+    // - Focused Camera (`Q`): `{ stiffness: 250, damping: 40, mass: 2.25 }` -> ζ ≈ 0.84 with clamp: true
+    // - Smooth Cursor (`fe`): `{ stiffness: 470, damping: 70, mass: 3.0 }` -> ζ ≈ 0.93
+    // - Medium Cursor (`Q`):  `{ stiffness: 340, damping: 60, mass: 3.0 }` -> ζ ≈ 0.94
+    // - Rapid Cursor (`pe`):  `{ stiffness: 530, damping: 40, mass: 1.0 }` -> ζ ≈ 0.87
+    public static let defaultCursor = SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
+    public static let defaultCamera = SpringConfig(stiffness: 170.0, damping: 50.0, mass: 3.0)
+    public static let focusedCamera = SpringConfig(stiffness: 250.0, damping: 40.0, mass: 2.25)
+    public static let smoothCamera = SpringConfig(stiffness: 170.0, damping: 50.0, mass: 3.0)
 }
 
 // MARK: - Canvas & Aspect Ratio

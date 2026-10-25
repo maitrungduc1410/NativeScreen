@@ -336,14 +336,39 @@ public struct InspectorSidebarView: View {
             ))
             .font(.system(size: 12))
 
+            // Cursor Animation Presets (`Smooth`, `Medium`, `Rapid`)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Cursor animation style")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    cursorSpringPresetButton(
+                        title: "Smooth",
+                        icon: "cursorarrow.click.2",
+                        preset: SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
+                    )
+                    cursorSpringPresetButton(
+                        title: "Medium",
+                        icon: "cursorarrow.click",
+                        preset: SpringConfig(stiffness: 340.0, damping: 60.0, mass: 3.0)
+                    )
+                    cursorSpringPresetButton(
+                        title: "Rapid",
+                        icon: "cursorarrow.motionlines",
+                        preset: SpringConfig(stiffness: 530.0, damping: 40.0, mass: 1.0)
+                    )
+                }
+            }
+
             coalescedSlider(
                 title: "Spring stiffness",
                 value: Binding(
                     get: { session.document.cursor.spring.stiffness },
                     set: { v in session.mutate { $0.cursor.spring.stiffness = v } }
                 ),
-                range: 40...300,
-                defaultValue: 125.0
+                range: 80...600,
+                defaultValue: 470.0
             )
 
             coalescedSlider(
@@ -352,8 +377,8 @@ public struct InspectorSidebarView: View {
                     get: { session.document.cursor.spring.damping },
                     set: { v in session.mutate { $0.cursor.spring.damping = v } }
                 ),
-                range: 5...35,
-                defaultValue: 12.0
+                range: 30...120,
+                defaultValue: 70.0
             )
 
             coalescedSlider(
@@ -457,6 +482,26 @@ public struct InspectorSidebarView: View {
 
             Divider()
 
+            // Camera Animation Presets
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Screen animation style")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    cameraSpringPresetButton(
+                        title: "Focused",
+                        icon: "scope",
+                        preset: .focusedCamera
+                    )
+                    cameraSpringPresetButton(
+                        title: "Smooth",
+                        icon: "point.topleft.down.to.point.bottomright.curvepath",
+                        preset: .smoothCamera
+                    )
+                }
+            }
+
             coalescedSlider(
                 title: "Camera motion blur",
                 value: Binding(
@@ -473,6 +518,62 @@ public struct InspectorSidebarView: View {
             ))
             .font(.system(size: 12))
         }
+    }
+
+    @ViewBuilder
+    private func cursorSpringPresetButton(title: String, icon: String, preset: SpringConfig) -> some View {
+        let cur = session.document.cursor.spring
+        let isSelected = abs(cur.stiffness - preset.stiffness) < 5.0 && abs(cur.damping - preset.damping) < 5.0
+        Button {
+            session.mutate { $0.cursor.spring = preset }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 10.5, weight: .medium))
+            }
+            .foregroundStyle(isSelected ? .white : .secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.28) : Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? Color(red: 0.54, green: 0.44, blue: 1.0) : Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func cameraSpringPresetButton(title: String, icon: String, preset: SpringConfig) -> some View {
+        let cam = session.document.motion.cameraSpring
+        let isSelected = abs(cam.stiffness - preset.stiffness) < 5.0 && abs(cam.damping - preset.damping) < 5.0
+        Button {
+            session.mutate { $0.motion.cameraSpring = preset }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(isSelected ? .white : .secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.28) : Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? Color(red: 0.54, green: 0.44, blue: 1.0) : Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 4. Multi-Track Masks & Sensitive Data Blur Inspector
