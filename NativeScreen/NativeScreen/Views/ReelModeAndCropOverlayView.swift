@@ -801,42 +801,45 @@ public struct ExportStillFrameModalView: View {
                         .menuStyle(.borderlessButton)
                     }
 
-                    // 4. Format (`PNG`, `JPEG`)
+                    // 4. Format (`PNG` | `JPEG` — 2 toggle pill buttons)
                     HStack(spacing: 16) {
                         Text("Format")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.white.opacity(0.85))
                             .frame(width: 96, alignment: .leading)
 
-                        Menu {
+                        HStack(spacing: 6) {
                             ForEach(StillFrameFormat.allCases) { fmt in
+                                let isSelected = (selectedFormat == fmt)
                                 Button {
-                                    selectedFormat = fmt
-                                } label: {
-                                    HStack {
-                                        if selectedFormat == fmt {
-                                            Image(systemName: "checkmark")
-                                        }
-                                        Text(fmt.rawValue)
+                                    withAnimation(.easeOut(duration: 0.14)) {
+                                        selectedFormat = fmt
                                     }
+                                } label: {
+                                    Text(fmt.rawValue)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.82))
+                                        .padding(.horizontal, 18)
+                                        .frame(height: 36)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                .fill(Color.white.opacity(isSelected ? 0.08 : 0.035))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                .strokeBorder(
+                                                    isSelected
+                                                        ? Color(red: 0.50, green: 0.44, blue: 0.78).opacity(0.88)
+                                                        : Color.white.opacity(0.05),
+                                                    lineWidth: 1.0
+                                                )
+                                        )
+                                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                                 }
+                                .buttonStyle(.plain)
                             }
-                        } label: {
-                            HStack {
-                                Text(selectedFormat.rawValue)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Spacer()
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            Spacer()
                         }
-                        .menuStyle(.borderlessButton)
                     }
                 }
                 .padding(.top, 10)
@@ -845,7 +848,7 @@ public struct ExportStillFrameModalView: View {
 
             Spacer(minLength: 8)
 
-            // Bottom Action Bar (`Cancel` + `Export`)
+            // Bottom Action Bar (`Cancel` + Theme Purple `Export`)
             HStack(spacing: 12) {
                 Spacer()
 
@@ -853,10 +856,14 @@ public struct ExportStillFrameModalView: View {
                     onDismiss()
                 } label: {
                     Text("Cancel")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white.opacity(0.88))
-                        .frame(width: 88, height: 32)
-                        .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .frame(width: 88, height: 34)
+                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
@@ -866,11 +873,11 @@ public struct ExportStillFrameModalView: View {
                 } label: {
                     Text(isExporting ? "Exporting…" : "Export")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.black.opacity(0.88))
-                        .frame(width: 88, height: 32)
+                        .foregroundStyle(.white)
+                        .frame(width: 92, height: 34)
                         .background(
-                            Color(red: 0.08, green: 0.78, blue: 0.85),
-                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            Color(red: 0.302, green: 0.184, blue: 0.961),
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                         )
                 }
                 .buttonStyle(.plain)
@@ -881,7 +888,7 @@ public struct ExportStillFrameModalView: View {
             .padding(.bottom, 20)
         }
         .frame(width: 660, height: 460)
-        .background(Color(red: 0.14, green: 0.15, blue: 0.17))
+        .background(Color(red: 0.08, green: 0.08, blue: 0.10))
         .preferredColorScheme(.dark)
         .task {
             let totalSec = Int(session.effectivePreviewTimelineMs / 1000.0)
