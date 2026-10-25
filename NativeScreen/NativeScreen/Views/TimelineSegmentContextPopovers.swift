@@ -832,22 +832,6 @@ extension NativeSegmentContextMenuPresenter {
             }
             item.state = isSelected ? .on : .off
             item.image = Self.makeAspectRatioIconNSImage(iconSize: preset.iconSize)
-
-            let attr = NSMutableAttributedString(
-                string: preset.titleName + " ",
-                attributes: [
-                    .font: NSFont.systemFont(ofSize: 13.0, weight: .regular),
-                    .foregroundColor: NSColor.white
-                ]
-            )
-            attr.append(NSAttributedString(
-                string: preset.ratioString,
-                attributes: [
-                    .font: NSFont.systemFont(ofSize: 13.0, weight: .regular),
-                    .foregroundColor: NSColor.white.withAlphaComponent(0.46)
-                ]
-            ))
-            item.attributedTitle = attr
             menu.addItem(item)
         }
 
@@ -948,11 +932,11 @@ extension NativeSegmentContextMenuPresenter {
             )
             let path = NSBezierPath(roundedRect: rect, xRadius: 2.0, yRadius: 2.0)
             path.lineWidth = 1.4
-            NSColor.white.withAlphaComponent(0.88).setStroke()
+            NSColor.black.setStroke()
             path.stroke()
             return true
         }
-        img.isTemplate = false
+        img.isTemplate = true
         return img
     }
 }
