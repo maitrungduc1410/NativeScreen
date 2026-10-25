@@ -481,6 +481,7 @@ public struct ProjectEditorWindowView: View {
                             }
 
                             Slider(value: $session.timelineZoom, in: 1.0...6.0)
+                                .tint(kNativeScreenPurpleAccent)
                                 .frame(width: 96)
                                 .controlSize(.small)
                         }

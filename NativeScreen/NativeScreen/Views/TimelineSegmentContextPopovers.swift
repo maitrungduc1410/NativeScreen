@@ -1,10 +1,14 @@
 import SwiftUI
 import AppKit
 
+/// Unified Purple Accent used across Background Padding, Inspector Sliders, and Context Menus.
+public let kNativeScreenPurpleAccent = Color(red: 0.44, green: 0.34, blue: 0.98)
+public let kNativeScreenPurpleHighlight = Color(red: 0.60, green: 0.50, blue: 1.00)
+
 /// Native macOS `NSMenu` Context Menu Presenter.
 /// - Uses a real macOS `NSMenu` popped up at the exact mouse cursor position (`menu.popUp(positioning: nil, at: mouseLocation, in: view)`).
 /// - Automatically receives macOS's genuine system Liquid Glass / Vibrancy material with ZERO popover arrow!
-/// - Embeds custom interactive rows (`PaletteRow`, `SliderRow`) via `NSMenuItem.view` alongside native `NSMenuItem` command rows.
+/// - Embeds custom interactive rows (`PaletteRow`, `SliderRow`, `AspectRatioRow`) via `NSMenuItem.view` alongside native `NSMenuItem` command rows.
 @MainActor
 public final class NativeSegmentContextMenuPresenter: NSObject {
     public static let shared = NativeSegmentContextMenuPresenter()
@@ -14,6 +18,11 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
     private override init() {
         super.init()
+    }
+
+    public func dismissActiveMenu() {
+        activeMenu?.cancelTracking()
+        activeMenu = nil
     }
 
     // MARK: - 1. Present Clip Slice Native Context Menu
@@ -66,7 +75,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         menu.addItem(.separator())
 
-        // 5. System audio volume SliderRow inside NSMenuItem.view
+        // 5. System audio volume SliderRow inside NSMenuItem.view (Uses unified Purple Accent!)
         let volumeItem = NSMenuItem()
         let volumeView = NSHostingView(
             rootView: MenuEmbeddedSliderRowView(
@@ -162,7 +171,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         menu.addItem(.separator())
 
-        // 2. Zoom level SliderRow (`100%` - `350%`)
+        // 2. Zoom level SliderRow (`100%` - `350%` — Uses unified Purple Accent!)
         let sliderItem = NSMenuItem()
         let sliderView = NSHostingView(
             rootView: MenuEmbeddedSliderRowView(
@@ -345,7 +354,7 @@ private final class ClosureMenuTarget: NSObject {
     }
 }
 
-// MARK: - Embedded `NSMenuItem.view` Custom Rows (PaletteRow & SliderRow)
+// MARK: - Embedded `NSMenuItem.view` Custom Rows (PaletteRow & Custom Purple SliderRow)
 
 private struct ZoomPaletteHeaderRowView: View {
     @Bindable var session: ProjectSession
@@ -391,13 +400,17 @@ private struct ZoomPaletteHeaderRowView: View {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
             }
-            .foregroundStyle(isSelected ? Color(red: 0.35, green: 0.65, blue: 1.0) : .white.opacity(0.88))
+            .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .white.opacity(0.88))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 isSelected
-                    ? Color.blue.opacity(0.24)
+                    ? kNativeScreenPurpleAccent.opacity(0.28)
                     : Color.white.opacity(0.05),
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? kNativeScreenPurpleHighlight.opacity(0.55) : Color.clear, lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -454,13 +467,17 @@ private struct MaskPaletteHeaderRowView: View {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
             }
-            .foregroundStyle(isSelected ? Color(red: 0.35, green: 0.65, blue: 1.0) : .white.opacity(0.88))
+            .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .white.opacity(0.88))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 isSelected
-                    ? Color.blue.opacity(0.24)
+                    ? kNativeScreenPurpleAccent.opacity(0.28)
                     : Color.white.opacity(0.05),
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? kNativeScreenPurpleHighlight.opacity(0.55) : Color.clear, lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -468,6 +485,8 @@ private struct MaskPaletteHeaderRowView: View {
     }
 }
 
+/// Custom Purple Slider Row for `NSMenuItem.view` — immune to AppKit `NSMenu` vibrancy cyan color distortion!
+/// Uses the exact same purple (`kNativeScreenPurpleAccent`) as Background Padding!
 private struct MenuEmbeddedSliderRowView: View {
     let title: String
     @State var currentValue: Double
@@ -475,6 +494,8 @@ private struct MenuEmbeddedSliderRowView: View {
     let formatValue: (Double) -> String
     let onEditingChanged: (Bool) -> Void
     let onValueChanged: (Double) -> Void
+
+    @State private var isDragging = false
 
     init(
         title: String,
@@ -493,37 +514,75 @@ private struct MenuEmbeddedSliderRowView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title)
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.white.opacity(0.95))
                 Spacer()
                 Text(formatValue(currentValue))
                     .font(.system(size: 13, weight: .regular).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.50))
             }
 
-            Slider(
-                value: Binding(
-                    get: { currentValue },
-                    set: { newVal in
-                        currentValue = newVal
-                        onValueChanged(newVal)
-                    }
-                ),
-                in: range,
-                onEditingChanged: onEditingChanged
-            )
-            .tint(.blue)
-            .controlSize(.small)
+            // Custom Smooth Purple Track + White Thumb Slider (Never distorted into cyan by NSMenu vibrancy!)
+            GeometryReader { geo in
+                let trackW = max(1.0, geo.size.width)
+                let thumbSize: CGFloat = 14.0
+                let span = max(0.0001, range.upperBound - range.lowerBound)
+                let frac = CGFloat(min(1.0, max(0.0, (currentValue - range.lowerBound) / span)))
+                let thumbCenterX = (thumbSize * 0.5) + frac * max(1.0, trackW - thumbSize)
+
+                ZStack(alignment: .leading) {
+                    // Unfilled Track
+                    Capsule()
+                        .fill(Color.white.opacity(0.18))
+                        .frame(height: 4.5)
+
+                    // Filled Track (Exact Background Padding Purple!)
+                    Capsule()
+                        .fill(kNativeScreenPurpleAccent)
+                        .frame(width: max(4.5, thumbCenterX), height: 4.5)
+
+                    // Crisp White Thumb
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: thumbSize, height: thumbSize)
+                        .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                        .offset(x: thumbCenterX - thumbSize * 0.5)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            if !isDragging {
+                                isDragging = true
+                                onEditingChanged(true)
+                            }
+                            let usableW = max(1.0, trackW - thumbSize)
+                            let clampedX = min(max(0.0, value.location.x - thumbSize * 0.5), usableW)
+                            let newFrac = Double(clampedX / usableW)
+                            let newVal = range.lowerBound + newFrac * (range.upperBound - range.lowerBound)
+                            currentValue = newVal
+                            onValueChanged(newVal)
+                        }
+                        .onEnded { _ in
+                            if isDragging {
+                                isDragging = false
+                                onEditingChanged(false)
+                            }
+                        }
+                )
+            }
+            .frame(height: 16)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
     }
 }
 
-// MARK: - 4. Output Aspect Ratio & Reel Mode Native `NSMenu` Presenters (Zero Arrow, Genuine macOS Liquid Glass!)
+// MARK: - 4. Output Aspect Ratio, Reel Mode & Playback Speed Native `NSMenu` Presenters ( 100%!)
 
 extension NativeSegmentContextMenuPresenter {
     public func presentAspectRatioMenu(session: ProjectSession, below buttonView: NSView?) {
@@ -531,60 +590,21 @@ extension NativeSegmentContextMenuPresenter {
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
-        let autoItem = makeCommandItem(title: "Auto", keyEquivalent: "", modifiers: []) {
-            session.mutate { $0.canvas.aspectRatioMode = .auto }
+        let contentItem = NSMenuItem()
+        let rootView = AspectRatioMenuContentView(session: session) { [weak self] in
+            self?.dismissActiveMenu()
         }
-        autoItem.state = (session.document.canvas.aspectRatioMode == .auto) ? .on : .off
-        menu.addItem(autoItem)
-
-        menu.addItem(.separator())
-
-        let presets: [AspectRatioPreset] = [
-            .widescreen16x9,
-            .square1x1,
-            .classic4x3,
-            .vertical9x16,
-            .tall3x4,
-            .portrait4x5
-        ]
-
-        for preset in presets {
-            let item = makeCommandItem(title: preset.label, keyEquivalent: "", modifiers: []) {
-                session.mutate {
-                    $0.canvas.aspectRatioMode = .preset
-                    $0.canvas.aspectRatioPreset = preset
-                }
-            }
-            let isSelected = (session.document.canvas.aspectRatioMode == .preset && session.document.canvas.aspectRatioPreset == preset)
-            item.state = isSelected ? .on : .off
-            item.image = renderAspectRatioIconNSImage(size: preset.iconSize)
-
-            let attr = NSMutableAttributedString(
-                string: "\(preset.titleName) ",
-                attributes: [
-                    .foregroundColor: NSColor.white,
-                    .font: NSFont.menuFont(ofSize: 13)
-                ]
-            )
-            attr.append(
-                NSAttributedString(
-                    string: preset.ratioString,
-                    attributes: [
-                        .foregroundColor: NSColor.white.withAlphaComponent(0.45),
-                        .font: NSFont.menuFont(ofSize: 13)
-                    ]
-                )
-            )
-            item.attributedTitle = attr
-            menu.addItem(item)
-        }
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 176, height: 228)
+        contentItem.view = hostingView
+        menu.addItem(contentItem)
 
         activeMenu = menu
         let mouseLoc = NSEvent.mouseLocation
         if let win = NSApp.keyWindow, let contentView = win.contentView {
             let ptInWin = win.convertPoint(fromScreen: mouseLoc)
             let ptInView = contentView.convert(ptInWin, from: nil)
-            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 24, y: ptInView.y - 12), in: contentView)
+            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 36, y: ptInView.y - 16), in: contentView)
         } else {
             menu.popUp(positioning: nil, at: mouseLoc, in: nil)
         }
@@ -595,48 +615,21 @@ extension NativeSegmentContextMenuPresenter {
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
-        let disableItem = makeCommandItem(title: "Disable", keyEquivalent: "", modifiers: []) {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                session.isReelModeActive = false
-            }
+        let contentItem = NSMenuItem()
+        let rootView = ReelModeMenuContentView(session: session) { [weak self] in
+            self?.dismissActiveMenu()
         }
-        disableItem.state = !session.isReelModeActive ? .on : .off
-        menu.addItem(disableItem)
-
-        menu.addItem(.separator())
-
-        let igItem = makeCommandItem(title: "Instagram", keyEquivalent: "", modifiers: []) {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                session.reelPlatformStyle = .instagramReels
-                session.isReelModeActive = true
-                session.mutate {
-                    $0.canvas.aspectRatioMode = .preset
-                    $0.canvas.aspectRatioPreset = .vertical9x16
-                }
-            }
-        }
-        igItem.state = (session.isReelModeActive && session.reelPlatformStyle == .instagramReels) ? .on : .off
-        menu.addItem(igItem)
-
-        let ttItem = makeCommandItem(title: "TikTok", keyEquivalent: "", modifiers: []) {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                session.reelPlatformStyle = .tiktok
-                session.isReelModeActive = true
-                session.mutate {
-                    $0.canvas.aspectRatioMode = .preset
-                    $0.canvas.aspectRatioPreset = .vertical9x16
-                }
-            }
-        }
-        ttItem.state = (session.isReelModeActive && session.reelPlatformStyle == .tiktok) ? .on : .off
-        menu.addItem(ttItem)
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 164, height: 108)
+        contentItem.view = hostingView
+        menu.addItem(contentItem)
 
         activeMenu = menu
         let mouseLoc = NSEvent.mouseLocation
         if let win = NSApp.keyWindow, let contentView = win.contentView {
             let ptInWin = win.convertPoint(fromScreen: mouseLoc)
             let ptInView = contentView.convert(ptInWin, from: nil)
-            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 24, y: ptInView.y - 12), in: contentView)
+            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 36, y: ptInView.y - 16), in: contentView)
         } else {
             menu.popUp(positioning: nil, at: mouseLoc, in: nil)
         }
@@ -647,43 +640,217 @@ extension NativeSegmentContextMenuPresenter {
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
-        let rates: [Double] = [0.25, 0.5, 1.0, 1.25, 1.5, 2.0]
-        for rate in rates {
-            let item = makeCommandItem(title: String(format: "%gx", rate), keyEquivalent: "", modifiers: []) {
-                session.previewPlaybackRate = rate
-            }
-            item.state = abs(session.previewPlaybackRate - rate) < 0.03 ? .on : .off
-            menu.addItem(item)
+        let contentItem = NSMenuItem()
+        let rootView = PlaybackSpeedMenuContentView(session: session) { [weak self] in
+            self?.dismissActiveMenu()
         }
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 124, height: 192)
+        contentItem.view = hostingView
+        menu.addItem(contentItem)
 
         activeMenu = menu
         let mouseLoc = NSEvent.mouseLocation
         if let win = NSApp.keyWindow, let contentView = win.contentView {
             let ptInWin = win.convertPoint(fromScreen: mouseLoc)
             let ptInView = contentView.convert(ptInWin, from: nil)
-            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 16, y: ptInView.y + 12), in: contentView)
+            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 24, y: ptInView.y + 12), in: contentView)
         } else {
             menu.popUp(positioning: nil, at: mouseLoc, in: nil)
         }
     }
+}
 
-    private func renderAspectRatioIconNSImage(size: CGSize) -> NSImage {
-        let canvasSize = NSSize(width: 18, height: 16)
-        let img = NSImage(size: canvasSize, flipped: false) { _ in
-            let rect = NSRect(
-                x: (18.0 - size.width) * 0.5,
-                y: (16.0 - size.height) * 0.5,
-                width: size.width,
-                height: size.height
-            )
-            let path = NSBezierPath(roundedRect: rect, xRadius: 2.2, yRadius: 2.2)
-            path.lineWidth = 1.4
-            NSColor.white.withAlphaComponent(0.9).setStroke()
-            path.stroke()
-            return true
+// MARK: - Custom `NSMenu` Content Views for Aspect Ratio, Reel Mode & Playback Speed
+
+private struct AspectRatioMenuContentView: View {
+    @Bindable var session: ProjectSession
+    let onDismiss: () -> Void
+
+    private let presets: [AspectRatioPreset] = [
+        .widescreen16x9,
+        .square1x1,
+        .classic4x3,
+        .vertical9x16,
+        .tall3x4,
+        .portrait4x5
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // 1. Auto Row (Left-aligned, bright white text, right checkmark when active)
+            let isAuto = (session.document.canvas.aspectRatioMode == .auto)
+            AspectRatioMenuRowButton(isSelected: isAuto) {
+                session.mutate { $0.canvas.aspectRatioMode = .auto }
+                onDismiss()
+            } content: {
+                Text("Auto")
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.96))
+            }
+
+            // 2. Preset Rows (Proportional Rectangle Icon on Left + Bright Title + Dimmed Ratio + Right Checkmark)
+            ForEach(presets) { preset in
+                let isSelected = (session.document.canvas.aspectRatioMode == .preset && session.document.canvas.aspectRatioPreset == preset)
+                AspectRatioMenuRowButton(isSelected: isSelected) {
+                    session.mutate {
+                        $0.canvas.aspectRatioMode = .preset
+                        $0.canvas.aspectRatioPreset = preset
+                    }
+                    onDismiss()
+                } content: {
+                    HStack(spacing: 10) {
+                        // Proportional Aspect Ratio Rectangle Icon
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 2.2, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.88), lineWidth: 1.4)
+                                .frame(width: preset.iconSize.width, height: preset.iconSize.height)
+                        }
+                        .frame(width: 18, height: 16, alignment: .center)
+
+                        HStack(spacing: 5) {
+                            Text(preset.titleName)
+                                .font(.system(size: 13.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.96))
+
+                            Text(preset.ratioString)
+                                .font(.system(size: 13.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.45))
+                        }
+                    }
+                }
+            }
         }
-        img.isTemplate = true
-        return img
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+}
+
+private struct ReelModeMenuContentView: View {
+    @Bindable var session: ProjectSession
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            AspectRatioMenuRowButton(isSelected: !session.isReelModeActive) {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    session.isReelModeActive = false
+                }
+                onDismiss()
+            } content: {
+                Text("Disable")
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.96))
+            }
+
+            Divider()
+                .padding(.vertical, 3)
+
+            AspectRatioMenuRowButton(isSelected: session.isReelModeActive && session.reelPlatformStyle == .instagramReels) {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    session.reelPlatformStyle = .instagramReels
+                    session.isReelModeActive = true
+                    session.mutate {
+                        $0.canvas.aspectRatioMode = .preset
+                        $0.canvas.aspectRatioPreset = .vertical9x16
+                    }
+                }
+                onDismiss()
+            } content: {
+                HStack(spacing: 8) {
+                    Image(systemName: "camera.aperture")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.88))
+                    Text("Instagram")
+                        .font(.system(size: 13.5, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.96))
+                }
+            }
+
+            AspectRatioMenuRowButton(isSelected: session.isReelModeActive && session.reelPlatformStyle == .tiktok) {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    session.reelPlatformStyle = .tiktok
+                    session.isReelModeActive = true
+                    session.mutate {
+                        $0.canvas.aspectRatioMode = .preset
+                        $0.canvas.aspectRatioPreset = .vertical9x16
+                    }
+                }
+                onDismiss()
+            } content: {
+                HStack(spacing: 8) {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.88))
+                    Text("TikTok")
+                        .font(.system(size: 13.5, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.96))
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+}
+
+private struct PlaybackSpeedMenuContentView: View {
+    @Bindable var session: ProjectSession
+    let onDismiss: () -> Void
+
+    private let rates: [Double] = [0.25, 0.5, 1.0, 1.25, 1.5, 2.0]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(rates, id: \.self) { rate in
+                let isSelected = abs(session.previewPlaybackRate - rate) < 0.03
+                AspectRatioMenuRowButton(isSelected: isSelected) {
+                    session.previewPlaybackRate = rate
+                    onDismiss()
+                } content: {
+                    Text(String(format: "%gx", rate))
+                        .font(.system(size: 13.5, weight: .regular).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.96))
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+}
+
+private struct AspectRatioMenuRowButton<RowContent: View>: View {
+    let isSelected: Bool
+    let action: () -> Void
+    @ViewBuilder let content: () -> RowContent
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                content()
+
+                Spacer(minLength: 8)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.96))
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 
