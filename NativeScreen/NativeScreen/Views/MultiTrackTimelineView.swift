@@ -790,9 +790,9 @@ private struct SmoothTimeRulerView: View {
     }
 }
 
-// MARK: - Clip Segment Decoration (Ruler Tick Lines + Audio Waveform Curve)
+// MARK: - Clip Segment Decoration (Ruler Tick Lines + Audio Waveform Curve — Equatable so Canvas never redraws on hover skim!)
 
-private struct ClipSegmentDecoration {
+private struct ClipSegmentDecoration: Equatable, View {
     let timelineStartMs: Double
     let timelineEndMs: Double
     let totalTimelineMs: Double
@@ -801,6 +801,75 @@ private struct ClipSegmentDecoration {
     let sourceEndMs: Double
     let totalSourceMs: Double
     let waveformSamples: [Float]
+
+    var body: some View {
+        Canvas { context, size in
+            // A. Audio Waveform along bottom of Clip
+            if !waveformSamples.isEmpty && totalSourceMs > 1.0 {
+                let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
+                let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
+                let totalBuckets = waveformSamples.count
+
+                let stepPx: CGFloat = 4.0
+                let pointCount = max(2, min(320, Int(size.width / stepPx)))
+                var wavePath = Path()
+                wavePath.move(to: CGPoint(x: 0, y: size.height))
+
+                for i in 0...pointCount {
+                    let localFrac = Double(i) / Double(pointCount)
+                    let globalFrac = startFrac + localFrac * (endFrac - startFrac)
+                    let exactBucket = globalFrac * Double(totalBuckets - 1)
+                    let b0 = max(0, min(totalBuckets - 1, Int(exactBucket)))
+                    let b1 = min(totalBuckets - 1, b0 + 1)
+                    let t = Float(exactBucket - Double(b0))
+                    let amp = waveformSamples[b0] * (1.0 - t) + waveformSamples[b1] * t
+
+                    let x = CGFloat(localFrac) * size.width
+                    let waveH = CGFloat(amp) * (size.height * 0.44)
+                    wavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
+                }
+                wavePath.addLine(to: CGPoint(x: size.width, y: size.height))
+                wavePath.closeSubpath()
+
+                context.fill(
+                    wavePath,
+                    with: .linearGradient(
+                        Gradient(colors: [
+                            Color(red: 0.56, green: 0.38, blue: 0.68).opacity(0.62),
+                            Color(red: 0.45, green: 0.28, blue: 0.54).opacity(0.45)
+                        ]),
+                        startPoint: CGPoint(x: 0, y: size.height * 0.5),
+                        endPoint: CGPoint(x: 0, y: size.height)
+                    )
+                )
+            }
+
+            // B. Vertical Ruler Tick Lines at every minor/major ruler dot
+            let stepMs = minorTickStepSec * 1000.0
+            let sliceSpanMs = max(1.0, timelineEndMs - timelineStartMs)
+            var tickMs = ceil(timelineStartMs / stepMs) * stepMs
+            while tickMs < timelineEndMs {
+                let localX = CGFloat((tickMs - timelineStartMs) / sliceSpanMs) * size.width
+                if localX > 4 && localX < size.width - 4 {
+                    let tickRect = CGRect(x: localX - 0.5, y: 0, width: 1.0, height: size.height * 0.65)
+                    context.fill(
+                        Path(tickRect),
+                        with: .linearGradient(
+                            Gradient(colors: [
+                                Color.white.opacity(0.18),
+                                Color.white.opacity(0.0)
+                            ]),
+                            startPoint: CGPoint(x: localX, y: 0),
+                            endPoint: CGPoint(x: localX, y: size.height * 0.65)
+                        )
+                    )
+                }
+                tickMs += stepMs
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .allowsHitTesting(false)
+    }
 }
 
 // MARK: - Interactive Segment Block with Top-to-Bottom Gradient, Waveform, Inset Handles & Golden Split Badge
@@ -864,74 +933,9 @@ private struct TimelineInteractiveSegmentView: View {
                     )
                 )
 
-            // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top
+            // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top (Equatable so it never redraws during hover skimming!)
             if let deco = clipDecoration {
-                Canvas { context, size in
-                    // A. Audio Waveform along bottom of Clip
-                    if !deco.waveformSamples.isEmpty && deco.totalSourceMs > 1.0 {
-                        let startFrac = max(0.0, min(1.0, deco.sourceStartMs / deco.totalSourceMs))
-                        let endFrac = max(startFrac + 0.001, min(1.0, deco.sourceEndMs / deco.totalSourceMs))
-                        let totalBuckets = deco.waveformSamples.count
-
-                        let stepPx: CGFloat = 3.0
-                        let pointCount = max(2, Int(size.width / stepPx))
-                        var wavePath = Path()
-                        wavePath.move(to: CGPoint(x: 0, y: size.height))
-
-                        for i in 0...pointCount {
-                            let localFrac = Double(i) / Double(pointCount)
-                            let globalFrac = startFrac + localFrac * (endFrac - startFrac)
-                            let exactBucket = globalFrac * Double(totalBuckets - 1)
-                            let b0 = max(0, min(totalBuckets - 1, Int(exactBucket)))
-                            let b1 = min(totalBuckets - 1, b0 + 1)
-                            let t = Float(exactBucket - Double(b0))
-                            let amp = deco.waveformSamples[b0] * (1.0 - t) + deco.waveformSamples[b1] * t
-
-                            let x = CGFloat(localFrac) * size.width
-                            let waveH = CGFloat(amp) * (size.height * 0.44)
-                            wavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
-                        }
-                        wavePath.addLine(to: CGPoint(x: size.width, y: size.height))
-                        wavePath.closeSubpath()
-
-                        context.fill(
-                            wavePath,
-                            with: .linearGradient(
-                                Gradient(colors: [
-                                    Color(red: 0.56, green: 0.38, blue: 0.68).opacity(0.62),
-                                    Color(red: 0.45, green: 0.28, blue: 0.54).opacity(0.45)
-                                ]),
-                                startPoint: CGPoint(x: 0, y: size.height * 0.5),
-                                endPoint: CGPoint(x: 0, y: size.height)
-                            )
-                        )
-                    }
-
-                    // B. Vertical Ruler Tick Lines at every minor/major ruler dot
-                    let stepMs = deco.minorTickStepSec * 1000.0
-                    let sliceSpanMs = max(1.0, deco.timelineEndMs - deco.timelineStartMs)
-                    var tickMs = ceil(deco.timelineStartMs / stepMs) * stepMs
-                    while tickMs < deco.timelineEndMs {
-                        let localX = CGFloat((tickMs - deco.timelineStartMs) / sliceSpanMs) * size.width
-                        if localX > 4 && localX < size.width - 4 {
-                            let tickRect = CGRect(x: localX - 0.5, y: 0, width: 1.0, height: size.height * 0.65)
-                            context.fill(
-                                Path(tickRect),
-                                with: .linearGradient(
-                                    Gradient(colors: [
-                                        Color.white.opacity(0.18),
-                                        Color.white.opacity(0.0)
-                                    ]),
-                                    startPoint: CGPoint(x: localX, y: 0),
-                                    endPoint: CGPoint(x: localX, y: size.height * 0.65)
-                                )
-                            )
-                        }
-                        tickMs += stepMs
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .allowsHitTesting(false)
+                EquatableView(content: deco)
             }
 
             // 3. Subtle Inner Top Highlight & Selection Border

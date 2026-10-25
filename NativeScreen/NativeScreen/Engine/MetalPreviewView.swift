@@ -98,7 +98,8 @@ public struct MetalPreviewView: NSViewRepresentable {
                     // When dragging Padding, Shadow, Rounded Corners, Background Blur, or Mask handles,
                     // `targetSourceMs` is unchanged, so we redraw immediately in <0.5ms without touching AVPlayer!
                     if abs(targetSourceMs - lastSeekedSourceMs) > 0.5 {
-                        seekDecoderCoalesced(toSourceMs: targetSourceMs)
+                        let isHoverSkim = (newSession.hoverSkimTimelineMs != nil)
+                        seekDecoderCoalesced(toSourceMs: targetSourceMs, fastSkim: isHoverSkim)
                     }
                     mtkView.needsDisplay = true
                 }
@@ -131,10 +132,10 @@ public struct MetalPreviewView: NSViewRepresentable {
             avPlayer.isMuted = true
             self.player = avPlayer
             self.videoOutput = output
-            seekDecoderCoalesced(toSourceMs: session.currentSourceTimeMs)
+            seekDecoderCoalesced(toSourceMs: session.currentSourceTimeMs, fastSkim: false)
         }
 
-        private func seekDecoderCoalesced(toSourceMs sourceMs: Double) {
+        private func seekDecoderCoalesced(toSourceMs sourceMs: Double, fastSkim: Bool) {
             guard let player = player else { return }
             if isDecoderSeeking {
                 pendingSeekSourceMs = sourceMs
@@ -144,8 +145,9 @@ public struct MetalPreviewView: NSViewRepresentable {
             isDecoderSeeking = true
             lastSeekedSourceMs = sourceMs
             let cmTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
+            let tolerance = fastSkim ? CMTime(seconds: 0.05, preferredTimescale: 600) : .zero
 
-            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            player.seek(to: cmTime, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
                     self.isDecoderSeeking = false
@@ -160,7 +162,8 @@ public struct MetalPreviewView: NSViewRepresentable {
                     if let nextMs = self.pendingSeekSourceMs {
                         self.pendingSeekSourceMs = nil
                         if abs(nextMs - self.lastSeekedSourceMs) > 0.5 {
-                            self.seekDecoderCoalesced(toSourceMs: nextMs)
+                            let stillSkimming = (self.session.hoverSkimTimelineMs != nil)
+                            self.seekDecoderCoalesced(toSourceMs: nextMs, fastSkim: stillSkimming)
                         }
                     }
                 }
