@@ -1,14 +1,51 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 public enum ReelPlatformStyle: String, CaseIterable, Identifiable, Sendable {
+    case instagramReels = "Instagram"
     case tiktok = "TikTok"
-    case instagramReels = "Reels"
 
     public var id: String { rawValue }
 }
 
-// MARK: - 1. Reel Mode Safe-Zone Preview Overlay (TikTok & Instagram Reels & 2)
+public enum StillFrameResolution: String, CaseIterable, Identifiable, Sendable {
+    case p480 = "480P"
+    case p720 = "720P"
+    case p1080 = "1080P"
+    case k2 = "2K"
+    case k4 = "4K"
+    case k8 = "8K"
+
+    public var id: String { rawValue }
+
+    public var pixelHeight: Double {
+        switch self {
+        case .p480: return 480
+        case .p720: return 720
+        case .p1080: return 1080
+        case .k2: return 1440
+        case .k4: return 2160
+        case .k8: return 4320
+        }
+    }
+}
+
+public enum StillFrameFormat: String, CaseIterable, Identifiable, Sendable {
+    case png = "PNG"
+    case jpeg = "JPEG"
+
+    public var id: String { rawValue }
+
+    public var fileExtension: String {
+        switch self {
+        case .png: return "png"
+        case .jpeg: return "jpg"
+        }
+    }
+}
+
+// MARK: - 1. Reel Mode Safe-Zone Preview Overlay (TikTok & Instagram Reels — Smooth Show/Hide & Switch)
 
 public struct ReelModeSafeZoneOverlayView: View {
     @Bindable var session: ProjectSession
@@ -41,7 +78,6 @@ public struct ReelModeSafeZoneOverlayView: View {
                 )
                 .frame(height: 180 * scale)
             }
-            .allowsHitTesting(false)
 
             // Main Overlay UI
             VStack(spacing: 0) {
@@ -50,9 +86,8 @@ public struct ReelModeSafeZoneOverlayView: View {
                     .fill(Color.black)
                     .frame(width: 96 * scale, height: 26 * scale)
                     .padding(.top, 12 * scale)
-                    .allowsHitTesting(false)
 
-                // Top Header Bar (Switchable between TikTok & Instagram Reels)
+                // Top Header Bar (TikTok vs Instagram Reels)
                 if session.reelPlatformStyle == .tiktok {
                     HStack {
                         Image(systemName: "play.tv")
@@ -62,15 +97,9 @@ public struct ReelModeSafeZoneOverlayView: View {
                         Spacer()
 
                         HStack(spacing: 14 * scale) {
-                            Button {
-                                session.reelPlatformStyle = .instagramReels
-                            } label: {
-                                Text("Following")
-                                    .font(.system(size: 13 * scale, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.65))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Switch to Instagram Reels overlay")
+                            Text("Following")
+                                .font(.system(size: 13 * scale, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.65))
 
                             VStack(spacing: 3 * scale) {
                                 Text("For You")
@@ -92,15 +121,9 @@ public struct ReelModeSafeZoneOverlayView: View {
                     .padding(.top, 10 * scale)
                 } else {
                     HStack {
-                        Button {
-                            session.reelPlatformStyle = .tiktok
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16 * scale, weight: .semibold))
-                                .foregroundStyle(.white)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Switch to TikTok overlay")
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16 * scale, weight: .semibold))
+                            .foregroundStyle(.white)
 
                         Spacer()
 
@@ -122,7 +145,6 @@ public struct ReelModeSafeZoneOverlayView: View {
 
                 // Bottom-Left Caption & Right-Side Social Action Column
                 HStack(alignment: .bottom, spacing: 10 * scale) {
-                    // Bottom-Left Creator Info
                     VStack(alignment: .leading, spacing: 8 * scale) {
                         if session.reelPlatformStyle == .instagramReels {
                             HStack(spacing: 8 * scale) {
@@ -184,7 +206,6 @@ public struct ReelModeSafeZoneOverlayView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .allowsHitTesting(false)
 
                     // Right-Side Action Icons Column
                     VStack(spacing: 16 * scale) {
@@ -205,7 +226,6 @@ public struct ReelModeSafeZoneOverlayView: View {
                             reelMetricIcon(systemName: "bookmark.fill", label: "3,420", scale: scale)
                             reelMetricIcon(systemName: "arrowshape.turn.up.right.fill", label: "971", scale: scale)
 
-                            // Vinyl disc
                             ZStack {
                                 Circle()
                                     .fill(Color.black.opacity(0.85))
@@ -239,7 +259,6 @@ public struct ReelModeSafeZoneOverlayView: View {
                                 )
                         }
                     }
-                    .allowsHitTesting(false)
                 }
                 .padding(.horizontal, 16 * scale)
                 .padding(.bottom, 18 * scale)
@@ -247,6 +266,8 @@ public struct ReelModeSafeZoneOverlayView: View {
         }
         .frame(width: canvasSize.width, height: canvasSize.height)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: 0.20), value: session.reelPlatformStyle)
     }
 
     @ViewBuilder
@@ -264,18 +285,19 @@ public struct ReelModeSafeZoneOverlayView: View {
     }
 }
 
-// MARK: - 2. Interactive Crop Modal Editor
+// MARK: - 2. Standalone Movable Crop Window View (Own `NSWindow` tied to Project Session)
 
-public struct InteractiveCropModalOverlayView: View {
+public struct StandaloneCropWindowView: View {
     @Bindable var session: ProjectSession
-    let uncroppedScreenImage: NSImage?
+    let onCloseWindow: () -> Void
 
+    @State private var uncroppedScreenImage: NSImage?
     @State private var draftCrop01: Rect01
     @State private var dragStartCrop01: Rect01?
 
-    public init(session: ProjectSession, uncroppedScreenImage: NSImage?) {
+    public init(session: ProjectSession, onCloseWindow: @escaping () -> Void) {
         self.session = session
-        self.uncroppedScreenImage = uncroppedScreenImage
+        self.onCloseWindow = onCloseWindow
         self._draftCrop01 = State(initialValue: session.document.canvas.cropRect01)
     }
 
@@ -288,275 +310,249 @@ public struct InteractiveCropModalOverlayView: View {
     }
 
     public var body: some View {
-        ZStack {
-            Color.black.opacity(0.65)
-                .ignoresSafeArea()
+        VStack(spacing: 0) {
+            // Top Unified Header Bar (Left padding for native `NSWindow` traffic lights + Size W×H + Select Preset + Position X,Y + Reset)
+            HStack(spacing: 12) {
+                Spacer()
+                    .frame(width: 68) // Space for native macOS traffic lights `🔴 🟡 🟢`
 
-            VStack(spacing: 0) {
-                // Top Control Bar (Red Close Dot + Size W×H + Select Preset + Position X,Y + Reset)
-                HStack(spacing: 12) {
-                    // Traffic light dots (Red closes modal)
-                    HStack(spacing: 7) {
-                        Button {
-                            session.isCropModalActive = false
-                        } label: {
-                            Circle()
-                                .fill(Color(red: 1.0, green: 0.37, blue: 0.34))
-                                .frame(width: 12, height: 12)
-                        }
-                        .buttonStyle(.plain)
+                Spacer()
 
-                        Circle()
-                            .fill(Color.white.opacity(0.14))
-                            .frame(width: 12, height: 12)
-                        Circle()
-                            .fill(Color.white.opacity(0.14))
-                            .frame(width: 12, height: 12)
-                    }
+                // Size W × H
+                HStack(spacing: 6) {
+                    Text("Size")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
 
-                    Spacer()
+                    cropDimensionBadge("\(Int(round(draftCrop01.width * sourcePixelWidth)))")
+                    Text("×")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    cropDimensionBadge("\(Int(round(draftCrop01.height * sourcePixelHeight)))")
+                }
 
-                    // Size W × H
-                    HStack(spacing: 6) {
-                        Text("Size")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-
-                        cropDimensionBadge("\(Int(round(draftCrop01.width * sourcePixelWidth)))")
-                        Text("×")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                        cropDimensionBadge("\(Int(round(draftCrop01.height * sourcePixelHeight)))")
-                    }
-
-                    // Select Aspect Ratio Preset Menu
-                    Menu {
-                        Button("Full Original") {
-                            withAnimation(.spring(response: 0.22, dampingFraction: 0.86)) {
-                                draftCrop01 = .full
-                            }
-                        }
-                        Divider()
-                        Button("16:9 Widescreen") { applyAspectCrop(ratio: 16.0 / 9.0) }
-                        Button("9:16 Vertical") { applyAspectCrop(ratio: 9.0 / 16.0) }
-                        Button("1:1 Square") { applyAspectCrop(ratio: 1.0) }
-                        Button("4:3 Classic") { applyAspectCrop(ratio: 4.0 / 3.0) }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "rectangle.dashed")
-                                .font(.system(size: 12))
-                            Text("Select…")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-
-                    // Position X, Y
-                    HStack(spacing: 6) {
-                        Text("Position")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-
-                        cropDimensionBadge("\(Int(round(draftCrop01.x * sourcePixelWidth)))")
-                        cropDimensionBadge("\(Int(round(draftCrop01.y * sourcePixelHeight)))")
-                    }
-
-                    // Reset Button
-                    Button {
+                // Select Aspect Ratio Preset Menu
+                Menu {
+                    Button("Full Original") {
                         withAnimation(.spring(response: 0.22, dampingFraction: 0.86)) {
                             draftCrop01 = .full
                         }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "crop")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("Reset")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(.white.opacity(draftCrop01 == .full ? 0.35 : 0.92))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                        )
                     }
-                    .buttonStyle(.plain)
-                    .disabled(draftCrop01 == .full)
-
-                    Spacer()
+                    Divider()
+                    Button("16:9 Widescreen") { applyAspectCrop(ratio: 16.0 / 9.0) }
+                    Button("9:16 Vertical") { applyAspectCrop(ratio: 9.0 / 16.0) }
+                    Button("1:1 Square") { applyAspectCrop(ratio: 1.0) }
+                    Button("4:3 Classic") { applyAspectCrop(ratio: 4.0 / 3.0) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "rectangle.dashed")
+                            .font(.system(size: 12))
+                        Text("Select…")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 14)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
 
-                // Center Interactive Crop Area with Rule-of-Thirds Grid & 8 Handles
-                GeometryReader { geo in
-                    let fitted = fitSourceFrame(in: geo.size)
-                    let cropRect = CGRect(
-                        x: fitted.minX + CGFloat(draftCrop01.x) * fitted.width,
-                        y: fitted.minY + CGFloat(draftCrop01.y) * fitted.height,
-                        width: max(24, CGFloat(draftCrop01.width) * fitted.width),
-                        height: max(24, CGFloat(draftCrop01.height) * fitted.height)
+                // Position X, Y
+                HStack(spacing: 6) {
+                    Text("Position")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    cropDimensionBadge("\(Int(round(draftCrop01.x * sourcePixelWidth)))")
+                    cropDimensionBadge("\(Int(round(draftCrop01.y * sourcePixelHeight)))")
+                }
+
+                // Reset Button
+                Button {
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.86)) {
+                        draftCrop01 = .full
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "crop")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Reset")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(.white.opacity(draftCrop01 == .full ? 0.35 : 0.92))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                     )
+                }
+                .buttonStyle(.plain)
+                .disabled(draftCrop01 == .full)
 
-                    ZStack(alignment: .topLeading) {
-                        // Base Source Preview
-                        Group {
-                            if let img = uncroppedScreenImage {
-                                Image(nsImage: img)
-                                    .resizable()
-                                    .interpolation(.high)
-                            } else {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(red: 0.08, green: 0.09, blue: 0.13))
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 52)
+
+            // Center Interactive Crop Area with Rule-of-Thirds Grid & 8 Handles
+            GeometryReader { geo in
+                let fitted = fitSourceFrame(in: geo.size)
+                let cropRect = CGRect(
+                    x: fitted.minX + CGFloat(draftCrop01.x) * fitted.width,
+                    y: fitted.minY + CGFloat(draftCrop01.y) * fitted.height,
+                    width: max(24, CGFloat(draftCrop01.width) * fitted.width),
+                    height: max(24, CGFloat(draftCrop01.height) * fitted.height)
+                )
+
+                ZStack(alignment: .topLeading) {
+                    // Base Source Preview
+                    Group {
+                        if let img = uncroppedScreenImage {
+                            Image(nsImage: img)
+                                .resizable()
+                                .interpolation(.high)
+                        } else {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(red: 0.08, green: 0.09, blue: 0.13))
+                        }
+                    }
+                    .frame(width: fitted.width, height: fitted.height)
+                    .position(x: fitted.midX, y: fitted.midY)
+
+                    // Dimmed Outside Mask
+                    Path { path in
+                        path.addRect(fitted)
+                        path.addRect(cropRect)
+                    }
+                    .fill(Color.black.opacity(0.62), style: FillStyle(eoFill: true))
+                    .allowsHitTesting(false)
+
+                    // Interactive Crop Box + Rule of Thirds Grid + 8 Handles
+                    ZStack {
+                        Canvas { context, size in
+                            let strokeStyle = StrokeStyle(lineWidth: 1, dash: [4, 4])
+                            for i in 1...2 {
+                                let frac = CGFloat(i) / 3.0
+                                var vPath = Path()
+                                vPath.move(to: CGPoint(x: size.width * frac, y: 0))
+                                vPath.addLine(to: CGPoint(x: size.width * frac, y: size.height))
+                                context.stroke(vPath, with: .color(.white.opacity(0.28)), style: strokeStyle)
+
+                                var hPath = Path()
+                                hPath.move(to: CGPoint(x: 0, y: size.height * frac))
+                                hPath.addLine(to: CGPoint(x: size.width, y: size.height * frac))
+                                context.stroke(hPath, with: .color(.white.opacity(0.28)), style: strokeStyle)
                             }
                         }
-                        .frame(width: fitted.width, height: fitted.height)
-                        .position(x: fitted.midX, y: fitted.midY)
-
-                        // Dimmed Outside Mask
-                        Path { path in
-                            path.addRect(fitted)
-                            path.addRect(cropRect)
-                        }
-                        .fill(Color.black.opacity(0.62), style: FillStyle(eoFill: true))
                         .allowsHitTesting(false)
 
-                        // Interactive Crop Box + Rule of Thirds Grid + 8 Handles
-                        ZStack {
-                            // Rule of Thirds Grid Lines (Dashed like)
-                            Canvas { context, size in
-                                let strokeStyle = StrokeStyle(lineWidth: 1, dash: [4, 4])
-                                for i in 1...2 {
-                                    let frac = CGFloat(i) / 3.0
-                                    var vPath = Path()
-                                    vPath.move(to: CGPoint(x: size.width * frac, y: 0))
-                                    vPath.addLine(to: CGPoint(x: size.width * frac, y: size.height))
-                                    context.stroke(vPath, with: .color(.white.opacity(0.28)), style: strokeStyle)
-
-                                    var hPath = Path()
-                                    hPath.move(to: CGPoint(x: 0, y: size.height * frac))
-                                    hPath.addLine(to: CGPoint(x: size.width, y: size.height * frac))
-                                    context.stroke(hPath, with: .color(.white.opacity(0.28)), style: strokeStyle)
-                                }
-                            }
-                            .allowsHitTesting(false)
-
-                            Rectangle()
-                                .strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5)
-                                .background(Color.white.opacity(0.001))
-                                .contentShape(Rectangle())
-                                .gesture(
-                                    DragGesture(minimumDistance: 1, coordinateSpace: .named("cropModalSpace"))
-                                        .onChanged { value in
-                                            if dragStartCrop01 == nil {
-                                                dragStartCrop01 = draftCrop01
-                                            }
-                                            guard let start = dragStartCrop01 else { return }
-                                            let dx = Double(value.translation.width / max(1, fitted.width))
-                                            let dy = Double(value.translation.height / max(1, fitted.height))
-                                            draftCrop01 = Rect01(
-                                                x: max(0.0, min(1.0 - start.width, start.x + dx)),
-                                                y: max(0.0, min(1.0 - start.height, start.y + dy)),
-                                                width: start.width,
-                                                height: start.height
-                                            )
+                        Rectangle()
+                            .strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5)
+                            .background(Color.white.opacity(0.001))
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 1, coordinateSpace: .named("cropModalSpace"))
+                                    .onChanged { value in
+                                        if dragStartCrop01 == nil {
+                                            dragStartCrop01 = draftCrop01
                                         }
-                                        .onEnded { _ in
-                                            dragStartCrop01 = nil
-                                        }
-                                )
+                                        guard let start = dragStartCrop01 else { return }
+                                        let dx = Double(value.translation.width / max(1, fitted.width))
+                                        let dy = Double(value.translation.height / max(1, fitted.height))
+                                        draftCrop01 = Rect01(
+                                            x: max(0.0, min(1.0 - start.width, start.x + dx)),
+                                            y: max(0.0, min(1.0 - start.height, start.y + dy)),
+                                            width: start.width,
+                                            height: start.height
+                                        )
+                                    }
+                                    .onEnded { _ in
+                                        dragStartCrop01 = nil
+                                    }
+                            )
 
-                            // 8 Circular Handles (4 Corners + 4 Mid-Edges)
-                            cropHandle(fitted: fitted, xMode: -1, yMode: -1)
-                                .position(x: 0, y: 0)
-                            cropHandle(fitted: fitted, xMode: 0, yMode: -1)
-                                .position(x: cropRect.width * 0.5, y: 0)
-                            cropHandle(fitted: fitted, xMode: 1, yMode: -1)
-                                .position(x: cropRect.width, y: 0)
+                        // 8 Circular Handles (4 Corners + 4 Mid-Edges)
+                        cropHandle(fitted: fitted, xMode: -1, yMode: -1)
+                            .position(x: 0, y: 0)
+                        cropHandle(fitted: fitted, xMode: 0, yMode: -1)
+                            .position(x: cropRect.width * 0.5, y: 0)
+                        cropHandle(fitted: fitted, xMode: 1, yMode: -1)
+                            .position(x: cropRect.width, y: 0)
 
-                            cropHandle(fitted: fitted, xMode: -1, yMode: 0)
-                                .position(x: 0, y: cropRect.height * 0.5)
-                            cropHandle(fitted: fitted, xMode: 1, yMode: 0)
-                                .position(x: cropRect.width, y: cropRect.height * 0.5)
+                        cropHandle(fitted: fitted, xMode: -1, yMode: 0)
+                            .position(x: 0, y: cropRect.height * 0.5)
+                        cropHandle(fitted: fitted, xMode: 1, yMode: 0)
+                            .position(x: cropRect.width, y: cropRect.height * 0.5)
 
-                            cropHandle(fitted: fitted, xMode: -1, yMode: 1)
-                                .position(x: 0, y: cropRect.height)
-                            cropHandle(fitted: fitted, xMode: 0, yMode: 1)
-                                .position(x: cropRect.width * 0.5, y: cropRect.height)
-                            cropHandle(fitted: fitted, xMode: 1, yMode: 1)
-                                .position(x: cropRect.width, y: cropRect.height)
-                        }
-                        .frame(width: cropRect.width, height: cropRect.height)
-                        .position(x: cropRect.midX, y: cropRect.midY)
+                        cropHandle(fitted: fitted, xMode: -1, yMode: 1)
+                            .position(x: 0, y: cropRect.height)
+                        cropHandle(fitted: fitted, xMode: 0, yMode: 1)
+                            .position(x: cropRect.width * 0.5, y: cropRect.height)
+                        cropHandle(fitted: fitted, xMode: 1, yMode: 1)
+                            .position(x: cropRect.width, y: cropRect.height)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .coordinateSpace(name: "cropModalSpace")
+                    .frame(width: cropRect.width, height: cropRect.height)
+                    .position(x: cropRect.midX, y: cropRect.midY)
                 }
-                .padding(.horizontal, 28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .coordinateSpace(name: "cropModalSpace")
+            }
+            .padding(.horizontal, 28)
 
-                // Bottom Confirm / Discard Buttons
-                HStack(spacing: 12) {
-                    Button {
-                        session.mutate { doc in
-                            doc.canvas.cropRect01 = draftCrop01.clamped()
-                        }
-                        session.isCropModalActive = false
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("Confirm changes")
-                                .font(.system(size: 13, weight: .semibold))
-                            Image(systemName: "return")
-                                .font(.system(size: 11, weight: .bold))
-                        }
-                        .foregroundStyle(.white)
+            // Bottom Confirm / Discard Buttons
+            HStack(spacing: 12) {
+                Button {
+                    session.mutate { doc in
+                        doc.canvas.cropRect01 = draftCrop01.clamped()
+                    }
+                    onCloseWindow()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Confirm changes")
+                            .font(.system(size: 13, weight: .semibold))
+                        Image(systemName: "return")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(
+                        Color(red: 0.40, green: 0.28, blue: 0.98),
+                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+
+                Button {
+                    onCloseWindow()
+                } label: {
+                    Text("Discard changes")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.88))
                         .padding(.horizontal, 18)
                         .padding(.vertical, 10)
                         .background(
-                            Color(red: 0.40, green: 0.28, blue: 0.98),
+                            Color.white.opacity(0.08),
                             in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                         )
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.defaultAction)
-
-                    Button {
-                        session.isCropModalActive = false
-                    } label: {
-                        Text("Discard changes")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.88))
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(
-                                Color.white.opacity(0.08),
-                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.cancelAction)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                        )
                 }
-                .padding(.vertical, 18)
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
             }
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(red: 0.14, green: 0.14, blue: 0.17))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.65), radius: 30, y: 12)
-            .padding(24)
+            .padding(.vertical, 18)
+        }
+        .background(Color(red: 0.14, green: 0.14, blue: 0.17))
+        .preferredColorScheme(.dark)
+        .task {
+            draftCrop01 = session.document.canvas.cropRect01
+            uncroppedScreenImage = await session.extractRawSourceFrameNSImage()
         }
     }
 
@@ -654,6 +650,297 @@ public struct InteractiveCropModalOverlayView: View {
                 width: newW,
                 height: newH
             ).clamped()
+        }
+    }
+}
+
+// MARK: - 3. CapCut-Style "Export still frames" Modal
+
+public struct ExportStillFrameModalView: View {
+    @Bindable var session: ProjectSession
+    let onDismiss: () -> Void
+
+    @State private var frameName: String = ""
+    @State private var exportDirectoryURL: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+    @State private var selectedResolution: StillFrameResolution = .k2
+    @State private var selectedFormat: StillFrameFormat = .png
+    @State private var previewImage: NSImage?
+    @State private var isExporting: Bool = false
+
+    private let savedExportDirKey = "NativeScreen.StillFrame.ExportDir"
+
+    public init(session: ProjectSession, onDismiss: @escaping () -> Void) {
+        self.session = session
+        self.onDismiss = onDismiss
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Top Header Title
+            Text("Export still frames")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 22)
+                .padding(.vertical, 16)
+
+            Divider()
+
+            // Main Body: Left Live Frame Preview + Right Options Form
+            HStack(alignment: .top, spacing: 28) {
+                // Left: Composited Still Frame Preview
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.black.opacity(0.45))
+
+                    if let img = previewImage {
+                        Image(nsImage: img)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .padding(8)
+                    } else {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                .frame(width: 240, height: 310)
+
+                // Right: Options Form (Name, Export to, Resolution, Format)
+                VStack(alignment: .leading, spacing: 18) {
+                    // 1. Name
+                    HStack(spacing: 16) {
+                        Text("Name")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 96, alignment: .leading)
+
+                        TextField("Frame name", text: $frameName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                            )
+                    }
+
+                    // 2. Export to (Path + Folder Picker Button)
+                    HStack(spacing: 16) {
+                        Text("Export to")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 96, alignment: .leading)
+
+                        HStack(spacing: 6) {
+                            Text(exportDirectoryURL.path)
+                                .font(.system(size: 12.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                )
+
+                            Button {
+                                chooseExportDirectory()
+                            } label: {
+                                Image(systemName: "folder")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.9))
+                                    .frame(width: 34, height: 32)
+                                    .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    // 3. Resolution (`480P`, `720P`, `1080P`, `2K`, `4K`, `8K`)
+                    HStack(spacing: 16) {
+                        Text("Resolution")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 96, alignment: .leading)
+
+                        Menu {
+                            ForEach(StillFrameResolution.allCases) { res in
+                                Button {
+                                    selectedResolution = res
+                                } label: {
+                                    HStack {
+                                        if selectedResolution == res {
+                                            Image(systemName: "checkmark")
+                                        }
+                                        Text(res.rawValue)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text(selectedResolution.rawValue)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        }
+                        .menuStyle(.borderlessButton)
+                    }
+
+                    // 4. Format (`PNG`, `JPEG`)
+                    HStack(spacing: 16) {
+                        Text("Format")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 96, alignment: .leading)
+
+                        Menu {
+                            ForEach(StillFrameFormat.allCases) { fmt in
+                                Button {
+                                    selectedFormat = fmt
+                                } label: {
+                                    HStack {
+                                        if selectedFormat == fmt {
+                                            Image(systemName: "checkmark")
+                                        }
+                                        Text(fmt.rawValue)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text(selectedFormat.rawValue)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        }
+                        .menuStyle(.borderlessButton)
+                    }
+                }
+                .padding(.top, 10)
+            }
+            .padding(24)
+
+            Spacer(minLength: 8)
+
+            // Bottom Action Bar (`Cancel` + `Export`)
+            HStack(spacing: 12) {
+                Spacer()
+
+                Button {
+                    onDismiss()
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.88))
+                        .frame(width: 88, height: 32)
+                        .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+
+                Button {
+                    performExportStillFrame()
+                } label: {
+                    Text(isExporting ? "Exporting…" : "Export")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.black.opacity(0.88))
+                        .frame(width: 88, height: 32)
+                        .background(
+                            Color(red: 0.08, green: 0.78, blue: 0.85),
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isExporting)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 20)
+        }
+        .frame(width: 660, height: 460)
+        .background(Color(red: 0.14, green: 0.15, blue: 0.17))
+        .preferredColorScheme(.dark)
+        .task {
+            let totalSec = Int(session.effectivePreviewTimelineMs / 1000.0)
+            frameName = "\(session.document.name)(\(totalSec)s)"
+
+            if let savedPath = UserDefaults.standard.string(forKey: savedExportDirKey),
+               FileManager.default.fileExists(atPath: savedPath) {
+                exportDirectoryURL = URL(fileURLWithPath: savedPath, isDirectory: true)
+            }
+
+            if let cgImg = await session.renderCurrentCompositedCGImage(targetHeight: 900.0) {
+                previewImage = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
+            }
+        }
+    }
+
+    private func chooseExportDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = exportDirectoryURL
+        panel.prompt = "Select Folder"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            exportDirectoryURL = url
+            UserDefaults.standard.set(url.path, forKey: savedExportDirKey)
+        }
+    }
+
+    private func performExportStillFrame() {
+        isExporting = true
+        let cleanName = frameName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalBaseName = cleanName.isEmpty ? "\(session.document.name)-frame" : cleanName
+        let outURL = exportDirectoryURL.appendingPathComponent("\(finalBaseName).\(selectedFormat.fileExtension)")
+        let targetH = selectedResolution.pixelHeight
+        let format = selectedFormat
+
+        Task {
+            if let cgImg = await session.renderCurrentCompositedCGImage(targetHeight: targetH) {
+                let bitmap = NSBitmapImageRep(cgImage: cgImg)
+                let data: Data?
+                switch format {
+                case .png:
+                    data = bitmap.representation(using: .png, properties: [:])
+                case .jpeg:
+                    data = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.92])
+                }
+                if let fileData = data {
+                    try? fileData.write(to: outURL, options: .atomic)
+                    NSWorkspace.shared.activateFileViewerSelecting([outURL])
+                }
+            }
+            isExporting = false
+            onDismiss()
         }
     }
 }

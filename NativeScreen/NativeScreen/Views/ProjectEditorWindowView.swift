@@ -247,14 +247,10 @@ public struct ProjectEditorWindowView: View {
                         .menuStyle(.borderlessButton)
                         .fixedSize()
 
-                        // 2. Crop Button (Opens Interactive Crop Modal)
+                        // 2. Crop Button (Opens Standalone Movable Crop Window tied to this Project Session)
                         let hasCustomCrop = (session.document.canvas.cropRect01 != .full)
                         Button {
-                            session.isPlaying = false
-                            Task {
-                                cropModalSourceImage = await session.extractRawSourceFrameNSImage()
-                                session.isCropModalActive = true
-                            }
+                            ProjectWorkspaceStore.shared.presentCropWindow(for: session)
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "crop")
@@ -281,71 +277,100 @@ public struct ProjectEditorWindowView: View {
                         }
                         .buttonStyle(.plain)
 
-                        // 3. Reel Mode Button (TikTok & Instagram Reels Safe-Zone Overlay & 2)
-                        HStack(spacing: 4) {
+                        // 3. Reel Mode Dropdown Menu (Disable | Instagram | TikTok)
+                        Menu {
                             Button {
-                                withAnimation(.easeOut(duration: 0.16)) {
-                                    session.isReelModeActive.toggle()
-                                    if session.isReelModeActive {
-                                        session.mutate {
-                                            $0.canvas.aspectRatioMode = .preset
-                                            $0.canvas.aspectRatioPreset = .vertical9x16
-                                        }
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    session.isReelModeActive = false
+                                }
+                            } label: {
+                                HStack {
+                                    if !session.isReelModeActive {
+                                        Image(systemName: "checkmark")
+                                    }
+                                    Text("Disable")
+                                }
+                            }
+
+                            Divider()
+
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    session.reelPlatformStyle = .instagramReels
+                                    session.isReelModeActive = true
+                                    session.mutate {
+                                        $0.canvas.aspectRatioMode = .preset
+                                        $0.canvas.aspectRatioPreset = .vertical9x16
                                     }
                                 }
                             } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "iphone")
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Text("Reel mode")
-                                        .font(.system(size: 12, weight: .medium))
+                                HStack {
+                                    if session.isReelModeActive && session.reelPlatformStyle == .instagramReels {
+                                        Image(systemName: "checkmark")
+                                    }
+                                    Text("Instagram")
                                 }
-                                .foregroundStyle(
-                                    session.isReelModeActive
-                                        ? Color(red: 0.65, green: 0.56, blue: 1.0)
-                                        : .white.opacity(0.88)
-                                )
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 6)
-                                .background(
-                                    session.isReelModeActive
-                                        ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.22)
-                                        : Color.white.opacity(0.06),
-                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .strokeBorder(
-                                            session.isReelModeActive
-                                                ? Color(red: 0.54, green: 0.44, blue: 1.0).opacity(0.65)
-                                                : Color.clear,
-                                            lineWidth: 1
-                                        )
-                                )
                             }
-                            .buttonStyle(.plain)
 
-                            if session.isReelModeActive {
-                                Picker("", selection: $session.reelPlatformStyle) {
-                                    ForEach(ReelPlatformStyle.allCases) { style in
-                                        Text(style.rawValue).tag(style)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    session.reelPlatformStyle = .tiktok
+                                    session.isReelModeActive = true
+                                    session.mutate {
+                                        $0.canvas.aspectRatioMode = .preset
+                                        $0.canvas.aspectRatioPreset = .vertical9x16
                                     }
                                 }
-                                .pickerStyle(.segmented)
-                                .labelsHidden()
-                                .frame(width: 112)
-                                .controlSize(.small)
+                            } label: {
+                                HStack {
+                                    if session.isReelModeActive && session.reelPlatformStyle == .tiktok {
+                                        Image(systemName: "checkmark")
+                                    }
+                                    Text("TikTok")
+                                }
                             }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "iphone")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Reel mode")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(
+                                session.isReelModeActive
+                                    ? Color(red: 0.65, green: 0.56, blue: 1.0)
+                                    : .white.opacity(0.88)
+                            )
+                            .fixedSize()
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(
+                                session.isReelModeActive
+                                    ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.22)
+                                    : Color.white.opacity(0.06),
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(
+                                        session.isReelModeActive
+                                            ? Color(red: 0.54, green: 0.44, blue: 1.0).opacity(0.65)
+                                            : Color.clear,
+                                        lineWidth: 1
+                                    )
+                            )
                         }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
 
-                        // 4. Extract Current Frame Button (Save PNG or Copy to Clipboard)
+                        // 4. Export Still Frame Button (Opens CapCut-style "Export still frames" modal)
                         Button {
-                            session.saveCurrentFrameAsPNG()
+                            session.openStillFrameExportModal()
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "camera.viewfinder")
                                     .font(.system(size: 12, weight: .semibold))
-                                Text("Save frame")
+                                Text("Export frame")
                                     .font(.system(size: 12, weight: .medium))
                             }
                             .foregroundStyle(.white.opacity(0.88))
@@ -355,8 +380,8 @@ public struct ProjectEditorWindowView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            Button("Save Current Frame as PNG…") {
-                                session.saveCurrentFrameAsPNG()
+                            Button("Export Still Frame…") {
+                                session.openStillFrameExportModal()
                             }
                             Button("Copy Current Frame to Clipboard") {
                                 session.copyCurrentFrameToClipboard()
@@ -378,14 +403,16 @@ public struct ProjectEditorWindowView: View {
                         ZStack {
                             Color(red: 0.03, green: 0.03, blue: 0.04)
 
-                            // GPU Preview + Clean Source-Locked Mask Handle Overlay + Reel Safe-Zone Overlay
+                            // GPU Preview + Clean Source-Locked Mask Handle Overlay + Smooth Reel Safe-Zone Overlay
                             ZStack {
                                 MetalPreviewView(session: session)
                                 InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
 
-                                if session.isReelModeActive {
-                                    ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
-                                }
+                                // Always mounted with smooth opacity & scale animation so both showing AND hiding are 100% smooth!
+                                ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
+                                    .opacity(session.isReelModeActive ? 1.0 : 0.0)
+                                    .scaleEffect(session.isReelModeActive ? 1.0 : 0.985)
+                                    .animation(.easeInOut(duration: 0.22), value: session.isReelModeActive)
                             }
                             .frame(width: fittedSize.width, height: fittedSize.height)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -439,16 +466,6 @@ public struct ProjectEditorWindowView: View {
                                 .zIndex(60)
 
                                 Spacer()
-                            }
-
-                            // Interactive Crop Modal Overlay
-                            if session.isCropModalActive {
-                                InteractiveCropModalOverlayView(
-                                    session: session,
-                                    uncroppedScreenImage: cropModalSourceImage
-                                )
-                                .zIndex(150)
-                                .transition(.opacity)
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -552,20 +569,20 @@ public struct ProjectEditorWindowView: View {
                             Spacer()
 
                             InstantTooltipButton(
-                                tooltip: "Save current frame as PNG",
+                                tooltip: "Export still frame",
                                 edge: .top,
                                 size: 32,
                                 cornerRadius: 8
                             ) {
-                                session.saveCurrentFrameAsPNG()
+                                session.openStillFrameExportModal()
                             } label: {
                                 Image(systemName: "camera.viewfinder")
                                     .font(.system(size: 13.5, weight: .semibold))
                                     .foregroundStyle(.white.opacity(0.82))
                             }
                             .contextMenu {
-                                Button("Save Current Frame as PNG…") {
-                                    session.saveCurrentFrameAsPNG()
+                                Button("Export Still Frame…") {
+                                    session.openStillFrameExportModal()
                                 }
                                 Button("Copy Current Frame to Clipboard") {
                                     session.copyCurrentFrameToClipboard()
@@ -641,6 +658,11 @@ public struct ProjectEditorWindowView: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $isShowingExportSheet) {
             exportModalSheet
+        }
+        .sheet(isPresented: $session.isShowingStillFrameExportModal) {
+            ExportStillFrameModalView(session: session) {
+                session.isShowingStillFrameExportModal = false
+            }
         }
         .onChange(of: isTitleFieldFocused) { _, focused in
             if !focused && isEditingProjectName {

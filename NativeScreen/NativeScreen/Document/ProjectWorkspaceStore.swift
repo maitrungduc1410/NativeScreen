@@ -17,6 +17,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
     public var recentProjectURLs: [URL] = []
 
     private var editorWindowsBySessionID: [UUID: NSWindow] = [:]
+    private var cropWindowsBySessionID: [UUID: NSWindow] = [:]
     private let recentsDefaultsKey = "NativeScreen.RecentProjects"
 
     private override init() {
@@ -118,13 +119,85 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
+    // MARK: - Standalone Movable Crop Window (`NSWindow` tied to Project Session)
+
+    public func presentCropWindow(for session: ProjectSession) {
+        session.isPlaying = false
+
+        if let existingCropWin = cropWindowsBySessionID[session.id] {
+            existingCropWin.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let cropView = StandaloneCropWindowView(session: session) { [weak self] in
+            self?.closeCropWindow(for: session.id)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+
+        let hostingController = NSHostingController(rootView: cropView)
+
+        let cropWin = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 600),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        cropWin.isReleasedWhenClosed = false
+        cropWin.contentViewController = hostingController
+        cropWin.minSize = NSSize(width: 640, height: 480)
+        cropWin.title = "Crop — \(session.document.name)"
+        cropWin.titleVisibility = .hidden
+        cropWin.titlebarAppearsTransparent = true
+        cropWin.backgroundColor = NSColor(red: 0.14, green: 0.14, blue: 0.17, alpha: 1.0)
+        cropWin.isMovableByWindowBackground = true
+
+        let toolbar = NSToolbar(identifier: "NativeScreenCropToolbar-\(session.id.uuidString)")
+        toolbar.showsBaselineSeparator = false
+        cropWin.toolbar = toolbar
+        cropWin.toolbarStyle = .unified
+
+        cropWin.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+        cropWin.standardWindowButton(.zoomButton)?.isEnabled = false
+        cropWin.delegate = self
+
+        // Center over the parent Editor window if available
+        if let parentEditorWin = editorWindowsBySessionID[session.id] {
+            let pf = parentEditorWin.frame
+            let cw: CGFloat = 820
+            let ch: CGFloat = 600
+            let x = pf.midX - cw * 0.5
+            let y = pf.midY - ch * 0.5
+            cropWin.setFrame(NSRect(x: x, y: y, width: cw, height: ch), display: false)
+        } else {
+            cropWin.center()
+        }
+
+        cropWindowsBySessionID[session.id] = cropWin
+        cropWin.makeKeyAndOrderFront(nil)
+    }
+
+    public func closeCropWindow(for sessionID: UUID) {
+        if let cropWin = cropWindowsBySessionID.removeValue(forKey: sessionID) {
+            cropWin.delegate = nil
+            cropWin.orderOut(nil)
+        }
+    }
+
     // MARK: - NSWindowDelegate
 
     public func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow else { return }
 
+        // If the standalone Crop window is closed via its red traffic light button
+        if let (cropSessionID, _) = cropWindowsBySessionID.first(where: { $0.value === closingWindow }) {
+            cropWindowsBySessionID.removeValue(forKey: cropSessionID)
+            return
+        }
+
+        // If a Project Editor window is closed, also automatically close its associated Crop window!
         if let (sessionID, _) = editorWindowsBySessionID.first(where: { $0.value === closingWindow }) {
             editorWindowsBySessionID.removeValue(forKey: sessionID)
+            closeCropWindow(for: sessionID)
             if let session = sessionsByID[sessionID] {
                 session.isPlaying = false
                 try? session.saveNow()

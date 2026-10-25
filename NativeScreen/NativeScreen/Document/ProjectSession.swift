@@ -28,7 +28,7 @@ public final class ProjectSession: Identifiable {
     public var timelineZoom: Double = 1.0
     public var isReelModeActive: Bool = false
     public var reelPlatformStyle: ReelPlatformStyle = .tiktok
-    public var isCropModalActive: Bool = false
+    public var isShowingStillFrameExportModal: Bool = false
     public var selectedSliceId: String?
     public var selectedZoomId: String?
     public var selectedMaskId: String?
@@ -928,7 +928,7 @@ public final class ProjectSession: Identifiable {
         return NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
     }
 
-    public func renderCurrentCompositedCGImage() async -> CGImage? {
+    public func renderCurrentCompositedCGImage(targetHeight: Double = 1440.0) async -> CGImage? {
         guard let compositor = MetalFrameCompositor() else { return nil }
         let sourceMs = currentSourceTimeMs
         var sourceCI: CIImage?
@@ -949,7 +949,7 @@ public final class ProjectSession: Identifiable {
         let srcW = Double(max(1280, metadata.captureTarget.pixelSize.width))
         let srcH = Double(max(720, metadata.captureTarget.pixelSize.height))
         let aspect = document.canvas.effectiveAspectRatio(sourceWidth: srcW, sourceHeight: srcH)
-        let outH = 1440.0
+        let outH = max(240.0, targetHeight)
         let outW = max(200.0, round(outH * aspect))
         let outputSize = CGSize(width: outW, height: outH)
 
@@ -968,24 +968,9 @@ public final class ProjectSession: Identifiable {
         )
     }
 
-    public func saveCurrentFrameAsPNG() {
+    public func openStillFrameExportModal() {
         isPlaying = false
-        let savePanel = NSSavePanel()
-        savePanel.allowedContentTypes = [.png]
-        let totalSec = Int(effectivePreviewTimelineMs / 1000.0)
-        let timeStr = String(format: "%02dm%02ds", totalSec / 60, totalSec % 60)
-        savePanel.nameFieldStringValue = "\(document.name) - Frame \(timeStr).png"
-
-        guard savePanel.runModal() == .OK, let outURL = savePanel.url else { return }
-
-        Task {
-            guard let cgImg = await renderCurrentCompositedCGImage() else { return }
-            let bitmap = NSBitmapImageRep(cgImage: cgImg)
-            if let pngData = bitmap.representation(using: .png, properties: [:]) {
-                try? pngData.write(to: outURL, options: .atomic)
-                NSWorkspace.shared.activateFileViewerSelecting([outURL])
-            }
-        }
+        isShowingStillFrameExportModal = true
     }
 
     public func copyCurrentFrameToClipboard() {
