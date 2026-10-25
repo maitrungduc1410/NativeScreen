@@ -72,16 +72,30 @@ public struct MultiTrackTimelineView: View {
                             }
                             .zIndex(20)
 
-                            // Top-Right Horizontally Synced Time Ruler
-                            ZStack(alignment: .topLeading) {
-                                SmoothTimeRulerView(
-                                    totalDurationMs: totalTimelineMs,
-                                    width: contentWidth,
-                                    majorStepSec: stepInfo.major,
-                                    minorStepSec: stepInfo.minor
-                                )
-                                .offset(x: trackHorizontalInset)
-                            }
+                                // Top-Right Horizontally Synced Time Ruler + Golden Split Teardrop Badges at Cut Boundaries!
+                                ZStack(alignment: .topLeading) {
+                                    SmoothTimeRulerView(
+                                        totalDurationMs: totalTimelineMs,
+                                        width: contentWidth,
+                                        majorStepSec: stepInfo.major,
+                                        minorStepSec: stepInfo.minor
+                                    )
+                                    .offset(x: trackHorizontalInset)
+
+                                    // Golden Split Teardrop Badges (`✂️`) at every cut boundary between adjacent ClipSlices (Matches Screenshot!)
+                                    if session.timeMapper.mappedSlices.count > 1 {
+                                        ForEach(Array(session.timeMapper.mappedSlices.dropLast().enumerated()), id: \.element.slice.id) { idx, mapped in
+                                            let cutX = trackHorizontalInset + CGFloat(mapped.timelineEndMs / totalTimelineMs) * contentWidth
+                                            let nextSliceId = session.timeMapper.mappedSlices[idx + 1].slice.id
+                                            CutBoundaryTeardropBadgeView {
+                                                // Clicking the golden scissors badge merges the two split slices back together!
+                                                session.mergeSliceWithNext(id: mapped.slice.id)
+                                            }
+                                            .offset(x: cutX - 10.0, y: rulerHeight - 22.0)
+                                            .help("Merge cut slices (\(mapped.slice.id.prefix(4)) + \(nextSliceId.prefix(4)))")
+                                        }
+                                    }
+                                }
                             .frame(width: totalDocumentWidth, height: rulerHeight, alignment: .leading)
                             .offset(x: -horizontalScrollOffset)
                             .frame(width: viewportWidth, height: rulerHeight, alignment: .leading)
@@ -248,7 +262,8 @@ public struct MultiTrackTimelineView: View {
                     // C. UNIFIED CONTINUOUS GHOST PLAYHEAD + COMMITTED PLAYHEAD OVERLAY
                     // Spans seamlessly from the top of the Ruler through all tracks with zero gap between head and line!
                     ZStack(alignment: .topLeading) {
-                        // 1. Ghost Hover Playhead (Smoothly ducks its teardrop head well below the main purple playhead!)
+                        // 1. Ghost Hover Playhead (Smoothly ducks its teardrop head well below the main purple playhead!
+                        //    When Split Tool `isSplitModeActive` is ON, its vertical stem turns RED!)
                         if let gx = hoverXInViewport, gx >= -8 && gx <= viewportWidth + 8 {
                             let distToMain = abs(gx - playheadXInViewport)
                             let proximity01 = max(0.0, min(1.0, 1.0 - (distToMain / 26.0)))
@@ -256,7 +271,9 @@ public struct MultiTrackTimelineView: View {
 
                             UnifiedPlayheadCanvasView(
                                 headColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.92),
-                                stemColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.65),
+                                stemColor: session.isSplitModeActive
+                                    ? Color(red: 0.94, green: 0.32, blue: 0.26).opacity(0.90)
+                                    : Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.65),
                                 headTopY: 1.5 + duckYOffset,
                                 totalHeight: outerGeo.size.height
                             )
@@ -434,7 +451,8 @@ public struct MultiTrackTimelineView: View {
                     ),
                     onClickAtLocalX: { localX in
                         let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
-                        let clickedTimelineMs = mapped.timelineStartMs + frac * (mapped.timelineEndMs - mapped.timelineStartMs)
+                        let clickedTimelineMs = session.hoverSkimTimelineMs
+                            ?? (mapped.timelineStartMs + frac * (mapped.timelineEndMs - mapped.timelineStartMs))
                         session.isPlaying = false
                         session.seek(toTimelineMs: clickedTimelineMs)
                         if session.isSplitModeActive {
@@ -512,7 +530,8 @@ public struct MultiTrackTimelineView: View {
                         clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
-                            let clickedTimelineMs = tStartMs + frac * (tEndMs - tStartMs)
+                            let clickedTimelineMs = session.hoverSkimTimelineMs
+                                ?? (tStartMs + frac * (tEndMs - tStartMs))
                             session.isPlaying = false
                             session.seek(toTimelineMs: clickedTimelineMs)
                             if session.isSplitModeActive {
@@ -602,7 +621,8 @@ public struct MultiTrackTimelineView: View {
                         clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
-                            let clickedTimelineMs = tStartMs + frac * (tEndMs - tStartMs)
+                            let clickedTimelineMs = session.hoverSkimTimelineMs
+                                ?? (tStartMs + frac * (tEndMs - tStartMs))
                             session.isPlaying = false
                             session.seek(toTimelineMs: clickedTimelineMs)
                             if session.isSplitModeActive {
@@ -679,6 +699,53 @@ public struct MultiTrackTimelineView: View {
 }
 
 // MARK: - Unified Continuous Playhead Canvas (Zero-Overlap Single-Path Teardrop + Stem)
+
+private struct CutBoundaryTeardropBadgeView: View {
+    let onMergeClick: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onMergeClick) {
+            ZStack {
+                Canvas { context, size in
+                    let centerX = size.width * 0.5
+                    let radius: CGFloat = 8.5
+                    let circleCenterY: CGFloat = 9.0
+                    let tipY: CGFloat = 21.5
+
+                    var path = Path()
+                    path.addArc(
+                        center: CGPoint(x: centerX, y: circleCenterY),
+                        radius: radius,
+                        startAngle: .degrees(142),
+                        endAngle: .degrees(38),
+                        clockwise: false
+                    )
+                    path.addLine(to: CGPoint(x: centerX, y: tipY))
+                    path.closeSubpath()
+
+                    let fillColor = isHovered
+                        ? Color(red: 1.0, green: 0.72, blue: 0.22)
+                        : Color(red: 0.95, green: 0.64, blue: 0.14)
+                    context.fill(path, with: .color(fillColor))
+                }
+
+                Image(systemName: "scissors")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundStyle(.black.opacity(0.88))
+                    .offset(y: -2.0)
+            }
+            .frame(width: 20, height: 22)
+            .scaleEffect(isHovered ? 1.08 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
 
 private struct UnifiedPlayheadCanvasView: View {
     let headColor: Color
@@ -897,7 +964,6 @@ private struct TimelineInteractiveSegmentView: View {
     @State private var dragInitialStartMs: Double?
     @State private var dragInitialEndMs: Double?
     @State private var verticalDragOffset: CGFloat = 0.0
-    @State private var hoverSplitX: CGFloat?
 
     private let edgeHandleHitWidth: CGFloat = 13.0
 
@@ -951,35 +1017,7 @@ private struct TimelineInteractiveSegmentView: View {
                 .allowsHitTesting(false)
             }
 
-            // 5. Interactive Split Mode Cut Line + Golden Teardrop Badge (`2s ✂️` — Positioned inside the top of the segment so it is NEVER clipped by the scroll view!)
-            if isSplitMode, let splitX = hoverSplitX {
-                let cutOffsetSec = Int(round((Double(splitX / max(1, segWidth)) * (endMs - startMs)) / 1000.0))
-                ZStack(alignment: .top) {
-                    Rectangle()
-                        .fill(Color.white.opacity(0.92))
-                        .frame(width: 1.5, height: height)
-
-                    // Golden Split Teardrop Badge right at the top of the cut line (never clipped!)
-                    VStack(spacing: 1) {
-                        Text("\(cutOffsetSec)s")
-                            .font(.system(size: 9.5, weight: .bold).monospacedDigit())
-                        Image(systemName: "scissors")
-                            .font(.system(size: 8.5, weight: .bold))
-                    }
-                    .foregroundStyle(.black.opacity(0.88))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3.5)
-                    .background(
-                        Color(red: 0.90, green: 0.65, blue: 0.24),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    )
-                    .offset(y: 2)
-                }
-                .offset(x: splitX)
-                .allowsHitTesting(false)
-            }
-
-            // 6. Left & Right Edge Resize Bars (Inset 6.5pt inside the segment, smooth fade in/out)
+            // 5. Left & Right Edge Resize Bars (Inset 6.5pt inside the segment, smooth fade in/out)
             if !isSplitMode && segWidth >= 28 {
                 HStack(spacing: 0) {
                     Capsule()
@@ -1010,18 +1048,20 @@ private struct TimelineInteractiveSegmentView: View {
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
-                lastHoverLocalX = pt.x
+                // Crucial: because `.offset(x: xOffset)` is applied AFTER `.onContinuousHover(coordinateSpace: .local)`,
+                // SwiftUI passes `pt.x` in the parent `ZStack` coordinate space (`xOffset .. xOffset + segWidth`).
+                // Subtracting `xOffset` gives the true `[0 .. segWidth]` local coordinate!
+                let localX = (pt.x >= xOffset - 2 && pt.x <= xOffset + segWidth + 2) ? (pt.x - xOffset) : pt.x
+                lastHoverLocalX = max(0, min(segWidth, localX))
                 if !isHovered {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         isHovered = true
                     }
                 }
                 if isSplitMode {
-                    hoverSplitX = max(2, min(segWidth - 2, pt.x))
                     NSCursor.crosshair.set()
                 } else {
-                    hoverSplitX = nil
-                    if segWidth >= 28 && (pt.x <= edgeHandleHitWidth || pt.x >= segWidth - edgeHandleHitWidth) {
+                    if segWidth >= 28 && (lastHoverLocalX <= edgeHandleHitWidth || lastHoverLocalX >= segWidth - edgeHandleHitWidth) {
                         NSCursor.resizeLeftRight.set()
                     } else {
                         NSCursor.arrow.set()
@@ -1031,7 +1071,6 @@ private struct TimelineInteractiveSegmentView: View {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     isHovered = false
                 }
-                hoverSplitX = nil
                 if activeDragMode == nil {
                     NSCursor.arrow.set()
                 }
