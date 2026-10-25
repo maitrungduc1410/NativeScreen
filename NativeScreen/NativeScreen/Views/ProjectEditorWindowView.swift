@@ -339,7 +339,7 @@ public struct ProjectEditorWindowView: View {
                                 VStack(spacing: 8) {
                                     quickDockIconButton(
                                         icon: "plus.magnifyingglass",
-                                        tooltip: "Zoom"
+                                        tooltip: "Classic zoom"
                                     ) {
                                         session.addZoomAtPlayhead()
                                     }
@@ -386,10 +386,10 @@ public struct ProjectEditorWindowView: View {
                     // Unified Transport Playback & Timeline Bar (layout:
                     // Left = Split Tool `✂️` | Center = Timecodes + Jump Start / Play / Jump End with Top Tooltips | Right = Extract Frame + Timeline Zoom Slider)
                     ZStack {
-                        // Left: Split Tool Button (`✂️` only — delete button removed as requested)
+                        // Left: Split Tool Button (`✂️` — Matches Images 4 & 5: `Split clip ⌥`, purple icon & dark purple pill when active!)
                         HStack(spacing: 8) {
                             InstantTooltipButton(
-                                tooltip: session.isSplitModeActive ? "Exit Split Tool (ESC)" : "Split clip, zoom, or mask",
+                                tooltip: "Split clip (⌥)",
                                 edge: .top,
                                 isActive: session.isSplitModeActive,
                                 size: 32,
@@ -399,7 +399,11 @@ public struct ProjectEditorWindowView: View {
                             } label: {
                                 Image(systemName: "scissors")
                                     .font(.system(size: 13.5, weight: .semibold))
-                                    .foregroundStyle(session.isSplitModeActive ? .white : .white.opacity(0.80))
+                                    .foregroundStyle(
+                                        session.isSplitModeActive
+                                            ? Color(red: 0.65, green: 0.55, blue: 1.0)
+                                            : .white.opacity(0.85)
+                                    )
                             }
 
                             Spacer()

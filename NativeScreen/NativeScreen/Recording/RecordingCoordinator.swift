@@ -308,7 +308,7 @@ public final class RecordingCoordinator {
     }
 
     public func hideRecordingHUD() {
-        HUDFloatingTooltipWindowController.shared.hideTooltip()
+        SharedFloatingTooltipWindowController.shared.hideTooltip()
         cancelCountdown()
         isPickingTarget = false
         stopPickerOverlay()
@@ -1007,72 +1007,6 @@ public final class RecordingCoordinator {
     }
 }
 
-// MARK: - Standalone Borderless Tooltip NSPanel for the Recording HUD (Zero Black Window Outline, Zero Corner Clipping!)
-
-@MainActor
-public final class HUDFloatingTooltipWindowController {
-    public static let shared = HUDFloatingTooltipWindowController()
-
-    private var tooltipPanel: NSPanel?
-    private var currentText: String = ""
-
-    private init() {}
-
-    public func showTooltip(text: String, aboveButtonScreenRect buttonRect: NSRect) {
-        guard !text.isEmpty else {
-            hideTooltip()
-            return
-        }
-
-        let hosting = NSHostingView(
-            rootView: InstantTooltipBubble(text: text, edge: .top)
-                .fixedSize()
-                .padding(10) // room for soft drop shadow inside the tooltip window
-        )
-        let fitting = hosting.fittingSize
-        let panelW = max(60, ceil(fitting.width))
-        let panelH = max(32, ceil(fitting.height))
-
-        if tooltipPanel == nil {
-            let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: panelW, height: panelH),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            panel.isReleasedWhenClosed = false
-            panel.isFloatingPanel = true
-            panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
-            panel.backgroundColor = .clear
-            panel.isOpaque = false
-            panel.hasShadow = false // Crucial: prevents macOS WindowServer from drawing a black shadow contour around the transparent area!
-            panel.ignoresMouseEvents = true
-            panel.sharingType = .none
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            self.tooltipPanel = panel
-        }
-
-        guard let panel = tooltipPanel else { return }
-        panel.contentView = hosting
-
-        // Position centered horizontally above `buttonRect`, clamped inside screen bounds so it is NEVER clipped!
-        var originX = round(buttonRect.midX - panelW * 0.5)
-        let originY = round(buttonRect.maxY - 4.0) // sits cleanly 6pt above the button highlight
-
-        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(buttonRect) }) ?? NSScreen.main {
-            let vf = screen.visibleFrame
-            originX = min(max(originX, vf.minX + 6.0), vf.maxX - panelW - 6.0)
-        }
-
-        panel.setFrame(NSRect(x: originX, y: originY, width: panelW, height: panelH), display: true)
-        panel.orderFrontRegardless()
-    }
-
-    public func hideTooltip() {
-        tooltipPanel?.orderOut(nil)
-    }
-}
-
 // MARK: - Native `NSMenu` Presenter for HUD Projects & Recording Options
 
 @MainActor
@@ -1087,7 +1021,7 @@ public final class HUDNativeMenuPresenter: NSObject {
     }
 
     public func presentRecordingOptionsMenu(coordinator: RecordingCoordinator, anchorButtonScreenRect: NSRect, from panel: NSWindow?) {
-        HUDFloatingTooltipWindowController.shared.hideTooltip()
+        SharedFloatingTooltipWindowController.shared.hideTooltip()
 
         let menu = NSMenu(title: "Recording Options")
         menu.autoenablesItems = false
@@ -1187,7 +1121,7 @@ public final class HUDNativeMenuPresenter: NSObject {
         anchorButtonScreenRect: NSRect,
         from panel: NSWindow?
     ) {
-        HUDFloatingTooltipWindowController.shared.hideTooltip()
+        SharedFloatingTooltipWindowController.shared.hideTooltip()
 
         let menu = NSMenu(title: "Projects")
         menu.autoenablesItems = false
@@ -1769,7 +1703,7 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
 
     var body: some View {
         Button {
-            HUDFloatingTooltipWindowController.shared.hideTooltip()
+            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
             if let onActionWithScreenRect {
                 onActionWithScreenRect(currentScreenRect())
             } else {
@@ -1783,7 +1717,7 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
                         .fill(backgroundColor)
                 )
                 .background(
-                    HUDButtonScreenRectProbe { v in
+                    TooltipScreenRectProbe { v in
                         anchorNSView = v
                     }
                 )
@@ -1797,15 +1731,20 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
             if hovering, let tooltip = tooltip, !tooltip.isEmpty {
                 let rect = currentScreenRect()
                 if rect.width > 0 {
-                    HUDFloatingTooltipWindowController.shared.showTooltip(text: tooltip, aboveButtonScreenRect: rect)
+                    SharedFloatingTooltipWindowController.shared.showTooltip(
+                        text: tooltip,
+                        edge: .top,
+                        forButtonScreenRect: rect,
+                        ownerView: anchorNSView
+                    )
                 }
             } else {
-                HUDFloatingTooltipWindowController.shared.hideTooltip()
+                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
             }
         }
         .onDisappear {
             if isHovered {
-                HUDFloatingTooltipWindowController.shared.hideTooltip()
+                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
             }
         }
     }
@@ -1821,20 +1760,6 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
             return isHovered ? Color.white.opacity(0.20) : Color.white.opacity(0.14)
         }
         return isHovered ? Color.white.opacity(0.11) : Color.clear
-    }
-}
-
-private struct HUDButtonScreenRectProbe: NSViewRepresentable {
-    let onViewReady: (NSView) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        DispatchQueue.main.async { onViewReady(v) }
-        return v
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { onViewReady(nsView) }
     }
 }
 
