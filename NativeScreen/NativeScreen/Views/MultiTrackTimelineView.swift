@@ -519,6 +519,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedZoomId == zoom.id)
                     let isPlayed = (session.effectivePreviewTimelineMs >= tStartMs && session.effectivePreviewTimelineMs <= tEndMs)
+                    let timelineDurationMs = max(250.0, tEndMs - tStartMs)
 
                     TimelineInteractiveSegmentView(
                         topTitle: zoom.presentation == .loupe ? "Loupe" : "Zoom",
@@ -536,8 +537,8 @@ public struct MultiTrackTimelineView: View {
                         height: zoomRowHeight,
                         totalWidth: contentWidth,
                         trackTotalDurationMs: totalTimelineMs,
-                        startMs: zoom.sourceStartMs,
-                        endMs: zoom.sourceEndMs,
+                        startMs: tStartMs,
+                        endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: false,
                         clipDecoration: nil,
@@ -567,11 +568,17 @@ public struct MultiTrackTimelineView: View {
                             session.selectZoom(zoom.id)
                             session.beginInteractiveEdit()
                         },
-                        onMoveBody: { desiredStartMs, durationMs in
-                            session.moveZoom(id: zoom.id, desiredStartMs: desiredStartMs, durationMs: durationMs)
+                        onMoveBody: { desiredTimelineStartMs, _ in
+                            let clampedTimelineStart = max(0.0, min(totalTimelineMs - timelineDurationMs, desiredTimelineStartMs))
+                            let clampedTimelineEnd = clampedTimelineStart + timelineDurationMs
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
+                            let newSrcEnd = max(newSrcStart + 250.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
+                            session.moveZoom(id: zoom.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
                         },
-                        onResizeRange: { newStart, newEnd in
-                            session.resizeZoom(id: zoom.id, newStartMs: newStart, newEndMs: newEnd)
+                        onResizeRange: { newTimelineStart, newTimelineEnd in
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
+                            let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs
+                            session.resizeZoom(id: zoom.id, newStartMs: newSrcStart, newEndMs: newSrcEnd)
                         },
                         onMoveVerticalTracks: { _ in },
                         onEndInteractive: {
@@ -605,6 +612,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedMaskId == item.id)
                     let isPlayed = (session.effectivePreviewTimelineMs >= tStartMs && session.effectivePreviewTimelineMs <= tEndMs)
+                    let timelineDurationMs = max(220.0, tEndMs - tStartMs)
 
                     TimelineInteractiveSegmentView(
                         topTitle: "Mask",
@@ -623,8 +631,8 @@ public struct MultiTrackTimelineView: View {
                         height: maskRowHeight,
                         totalWidth: contentWidth,
                         trackTotalDurationMs: totalTimelineMs,
-                        startMs: item.sourceStartMs,
-                        endMs: item.sourceEndMs,
+                        startMs: tStartMs,
+                        endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: true,
                         clipDecoration: nil,
@@ -654,11 +662,18 @@ public struct MultiTrackTimelineView: View {
                             session.selectMask(item.id)
                             session.beginInteractiveEdit()
                         },
-                        onMoveBody: { desiredStartMs, durationMs in
-                            session.moveMask(id: item.id, desiredStartMs: desiredStartMs, durationMs: durationMs)
+                        onMoveBody: { desiredTimelineStartMs, constantTimelineDurMs in
+                            let dur = max(220.0, constantTimelineDurMs)
+                            let clampedTimelineStart = max(0.0, min(totalTimelineMs - dur, desiredTimelineStartMs))
+                            let clampedTimelineEnd = clampedTimelineStart + dur
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
+                            let newSrcEnd = max(newSrcStart + 220.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
+                            session.moveMask(id: item.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
                         },
-                        onResizeRange: { newStart, newEnd in
-                            session.resizeMask(id: item.id, newStartMs: newStart, newEndMs: newEnd)
+                        onResizeRange: { newTimelineStart, newTimelineEnd in
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
+                            let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs
+                            session.resizeMask(id: item.id, newStartMs: newSrcStart, newEndMs: newSrcEnd)
                         },
                         onMoveVerticalTracks: { trackDelta in
                             let targetIdx = trackIndex + trackDelta
@@ -1176,13 +1191,15 @@ private struct TimelineInteractiveSegmentView: View {
     @State private var hasExceededClickSlop = false
     @State private var dragInitialStartMs: Double?
     @State private var dragInitialEndMs: Double?
+    @State private var dragInitialSegWidth: CGFloat = 60.0
     @State private var verticalDragOffset: CGFloat = 0.0
 
-    private let edgeHandleHitWidth: CGFloat = 13.0
+    private let edgeHandleHitWidth: CGFloat = 11.0
 
     var body: some View {
         // 1px visual gap between adjacent touching segments
         let segWidth = max(6.0, width - 1.0)
+        let edgeHitWidth = min(edgeHandleHitWidth, max(5.0, segWidth * 0.22))
         let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
         // Always keep the segment colors and border 100% vibrant (do NOT darken when mouse leaves!)
         let outerRingColor: Color = isSelected ? Color.white : palette.ringBorder
@@ -1271,7 +1288,7 @@ private struct TimelineInteractiveSegmentView: View {
                 if isSplitMode {
                     NSCursor.crosshair.set()
                 } else {
-                    if segWidth >= 28 && (lastHoverLocalX <= edgeHandleHitWidth || lastHoverLocalX >= segWidth - edgeHandleHitWidth) {
+                    if segWidth >= 28 && (lastHoverLocalX <= edgeHitWidth || lastHoverLocalX >= segWidth - edgeHitWidth) {
                         NSCursor.resizeLeftRight.set()
                     } else {
                         NSCursor.arrow.set()
@@ -1294,19 +1311,18 @@ private struct TimelineInteractiveSegmentView: View {
                     if activeDragMode == nil {
                         let startInLane = value.startLocation.x - 20.0 // subtract `trackHorizontalInset`
                         let computedLocalX = startInLane - xOffset
-                        let localX = (computedLocalX >= -4 && computedLocalX <= segWidth + 4)
-                            ? max(0, min(segWidth, computedLocalX))
-                            : lastHoverLocalX
+                        let localX = min(max(0, computedLocalX), segWidth)
 
                         pressLocalX = localX
                         hasExceededClickSlop = false
                         dragInitialStartMs = startMs
                         dragInitialEndMs = endMs
+                        dragInitialSegWidth = max(12.0, width)
 
-                        if !isSplitMode && segWidth >= 28 && localX <= edgeHandleHitWidth {
+                        if !isSplitMode && segWidth >= 32 && localX <= edgeHitWidth {
                             activeDragMode = .resizeLeft
                             NSCursor.resizeLeftRight.set()
-                        } else if !isSplitMode && segWidth >= 28 && localX >= segWidth - edgeHandleHitWidth {
+                        } else if !isSplitMode && segWidth >= 32 && localX >= segWidth - edgeHitWidth {
                             activeDragMode = .resizeRight
                             NSCursor.resizeLeftRight.set()
                         } else {
@@ -1333,7 +1349,7 @@ private struct TimelineInteractiveSegmentView: View {
                         onResizeRange(newStart, e0)
 
                     case .resizeRight:
-                        let newEnd = max(s0 + 250.0, s0 + (e0 - s0) + deltaMs)
+                        let newEnd = max(s0 + 250.0, e0 + deltaMs)
                         onResizeRange(s0, newEnd)
 
                     case .moveBody:
