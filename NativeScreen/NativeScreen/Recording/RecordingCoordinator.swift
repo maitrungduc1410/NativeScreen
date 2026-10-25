@@ -1886,32 +1886,85 @@ private struct HUDSelectableMenuRowButton<RowContent: View>: View {
     @State private var isHovered = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: 8) {
-                ZStack {
-                    if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11.5, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.96))
-                    }
+        HStack(alignment: .center, spacing: 8) {
+            ZStack {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.96))
                 }
-                .frame(width: 14, alignment: .center)
-
-                content()
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 10)
-            .frame(height: rowHeight)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(width: 14, alignment: .center)
+
+            content()
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            isHovered = hovering
+        .padding(.leading, 8)
+        .padding(.trailing, 10)
+        .frame(height: rowHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+        )
+        .overlay(
+            HUDMenuImmediateClickAndHoverOverlay(
+                onHoverChanged: { isHovered = $0 },
+                onClick: action
+            )
+        )
+    }
+}
+
+private struct HUDMenuImmediateClickAndHoverOverlay: NSViewRepresentable {
+    var onHoverChanged: ((Bool) -> Void)? = nil
+    let onClick: () -> Void
+
+    func makeNSView(context: Context) -> TrackingNSView {
+        let v = TrackingNSView()
+        v.onHoverChanged = onHoverChanged
+        v.onClick = onClick
+        return v
+    }
+
+    func updateNSView(_ nsView: TrackingNSView, context: Context) {
+        nsView.onHoverChanged = onHoverChanged
+        nsView.onClick = onClick
+    }
+
+    final class TrackingNSView: NSView {
+        var onHoverChanged: ((Bool) -> Void)?
+        var onClick: (() -> Void)?
+        private var trackingArea: NSTrackingArea?
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+            true
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let existing = trackingArea {
+                removeTrackingArea(existing)
+            }
+            let area = NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .activeAlways, .enabledDuringMouseDrag, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+            trackingArea = area
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            onHoverChanged?(true)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            onHoverChanged?(false)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            onClick?()
         }
     }
 }
@@ -1951,25 +2004,24 @@ private struct HUDCountdownSegmentedRowView: View {
                 let options = RecordingCountdownOption.allCases
                 ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
                     let isSelected = (coordinator.countdownOption == option)
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.14)) {
-                            coordinator.countdownOption = option
-                        }
-                    } label: {
-                        Text(option.label)
-                            .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .frame(minWidth: 38, minHeight: 24)
-                            .padding(.horizontal, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(isSelected ? Color(red: 0.04, green: 0.52, blue: 1.0) : Color.clear)
-                            )
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    Text(option.label)
+                        .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: 38, minHeight: 24)
+                        .padding(.horizontal, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isSelected ? Color(red: 0.04, green: 0.52, blue: 1.0) : Color.clear)
+                        )
+                        .overlay(
+                            HUDMenuImmediateClickAndHoverOverlay {
+                                withAnimation(.easeInOut(duration: 0.14)) {
+                                    coordinator.countdownOption = option
+                                }
+                            }
+                        )
 
                     // Subtle vertical divider between unselected adjacent options
                     if index < options.count - 1 {
@@ -2092,13 +2144,13 @@ public struct RecordingHUDBarView: View {
 
     private var idlePreRecordingBar: some View {
         HStack(spacing: 8) {
-            // 1. Close button (`xmark.circle.fill` — Solid white circle with dark cutout X, & 4!)
+            // 1. Close button (`xmark.circle.fill` — No tooltip, rounded-rectangle hover background matching other HUD buttons!)
             HUDInteractiveItemButton(
-                tooltip: "Close (ESC)",
+                tooltip: nil,
                 isSelected: false,
-                width: 36,
-                height: 36,
-                cornerRadius: 18
+                width: 42,
+                height: buttonHeight,
+                cornerRadius: 10
             ) {
                 coordinator.hideRecordingHUD()
             } label: {

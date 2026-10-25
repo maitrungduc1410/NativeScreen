@@ -570,6 +570,7 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
     let edge: TooltipEdge
     let isActive: Bool
     let action: () -> Void
+    let onActionWithAnchorView: ((NSView?) -> Void)?
     @ViewBuilder let label: () -> LabelContent
 
     @State private var isHovered = false
@@ -579,20 +580,26 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
         tooltip: String? = nil,
         edge: TooltipEdge = .top,
         isActive: Bool = false,
-        action: @escaping () -> Void,
+        action: @escaping () -> Void = {},
+        onActionWithAnchorView: ((NSView?) -> Void)? = nil,
         @ViewBuilder label: @escaping () -> LabelContent
     ) {
         self.tooltip = tooltip
         self.edge = edge
         self.isActive = isActive
         self.action = action
+        self.onActionWithAnchorView = onActionWithAnchorView
         self.label = label
     }
 
     public var body: some View {
         Button {
             SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            action()
+            if let onActionWithAnchorView {
+                onActionWithAnchorView(anchorNSView)
+            } else {
+                action()
+            }
         } label: {
             label()
                 .padding(.horizontal, 12)

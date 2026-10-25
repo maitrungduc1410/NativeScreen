@@ -215,15 +215,19 @@ public struct ProjectEditorWindowView: View {
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
                     // Top Sub-Toolbar Right Above Preview Canvas (Consistent Liquid Glass Popovers + Generous Hover Hitboxes)
+                    let isVerticalAspectRatio = (session.document.canvas.aspectRatioMode == .preset)
+                        && [.vertical9x16, .tall3x4, .portrait4x5].contains(session.document.canvas.aspectRatioPreset)
+
                     HStack(spacing: 10) {
                         // 1. Output Aspect Ratio Pill Button (With Icon + Bright Name + Dimmed Ratio + Native NSMenu Liquid Glass Menu)
                         SubToolbarPillButton(
                             tooltip: "Output aspect ratio",
                             edge: .top,
-                            isActive: false
+                            isActive: false,
+                            onActionWithAnchorView: { anchorView in
+                                NativeSegmentContextMenuPresenter.shared.presentAspectRatioMenu(session: session, below: anchorView)
+                            }
                         ) {
-                            NativeSegmentContextMenuPresenter.shared.presentAspectRatioMenu(session: session, below: nil)
-                        } label: {
                             HStack(spacing: 7) {
                                 AspectIconView()
 
@@ -255,10 +259,11 @@ public struct ProjectEditorWindowView: View {
                         SubToolbarPillButton(
                             tooltip: "Crop recording",
                             edge: .top,
-                            isActive: hasCustomCrop
+                            isActive: hasCustomCrop,
+                            action: {
+                                ProjectWorkspaceStore.shared.presentCropWindow(for: session)
+                            }
                         ) {
-                            ProjectWorkspaceStore.shared.presentCropWindow(for: session)
-                        } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "crop")
                                     .font(.system(size: 12.5, weight: .regular))
@@ -271,36 +276,41 @@ public struct ProjectEditorWindowView: View {
                             .fixedSize()
                         }
 
-                        // 3. Reel Mode Pill Button (Glowing Purple Highlight when active + Native NSMenu Liquid Glass Menu)
-                        SubToolbarPillButton(
-                            tooltip: "Reel mode overlay",
-                            edge: .top,
-                            isActive: session.isReelModeActive
-                        ) {
-                            NativeSegmentContextMenuPresenter.shared.presentReelModeMenu(session: session)
-                        } label: {
-                            HStack(spacing: 6) {
-                                ReelPhoneIconView(isActive: session.isReelModeActive)
+                        // 3. Reel Mode Pill Button (Shown ONLY for vertical aspect ratios `9:16`, `3:4`, `4:5` with smooth animation, no tooltip)
+                        if isVerticalAspectRatio {
+                            SubToolbarPillButton(
+                                tooltip: nil,
+                                edge: .top,
+                                isActive: session.isReelModeActive,
+                                onActionWithAnchorView: { anchorView in
+                                    NativeSegmentContextMenuPresenter.shared.presentReelModeMenu(session: session, below: anchorView)
+                                }
+                            ) {
+                                HStack(spacing: 6) {
+                                    ReelPhoneIconView(isActive: session.isReelModeActive)
 
-                                Text("Reel mode")
-                                    .font(.system(size: 12.5, weight: .regular))
-                                    .foregroundStyle(
-                                        session.isReelModeActive
-                                            ? Color(red: 0.58, green: 0.52, blue: 1.0)
-                                            : .white.opacity(0.88)
-                                    )
+                                    Text("Reel mode")
+                                        .font(.system(size: 12.5, weight: .regular))
+                                        .foregroundStyle(
+                                            session.isReelModeActive
+                                                ? Color(red: 0.58, green: 0.52, blue: 1.0)
+                                                : .white.opacity(0.88)
+                                        )
+                                }
+                                .fixedSize()
                             }
-                            .fixedSize()
+                            .transition(.opacity.combined(with: .scale(scale: 0.90)))
                         }
 
-                        // 4. Export Still Frame Pill Button (Opens CapCut-style "Export still frames" modal)
+                        // 4. Export Still Frame Pill Button (No tooltip since it has explicit text)
                         SubToolbarPillButton(
-                            tooltip: "Export still frame",
+                            tooltip: nil,
                             edge: .top,
-                            isActive: false
+                            isActive: false,
+                            action: {
+                                session.openStillFrameExportModal()
+                            }
                         ) {
-                            session.openStillFrameExportModal()
-                        } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "camera.viewfinder")
                                     .font(.system(size: 12.5, weight: .regular))
@@ -311,6 +321,14 @@ public struct ProjectEditorWindowView: View {
                                     .foregroundStyle(.white.opacity(0.88))
                             }
                             .fixedSize()
+                        }
+                    }
+                    .animation(.spring(response: 0.28, dampingFraction: 0.85), value: isVerticalAspectRatio)
+                    .onChange(of: isVerticalAspectRatio) { _, isVertical in
+                        if !isVertical && session.isReelModeActive {
+                            withAnimation(.easeInOut(duration: 0.20)) {
+                                session.isReelModeActive = false
+                            }
                         }
                     }
                     .padding(.top, 12)
