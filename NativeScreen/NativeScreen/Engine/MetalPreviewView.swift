@@ -241,6 +241,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 let nextTimelineMs = session.playheadTimelineMs + dtMs
                 if nextTimelineMs >= session.timeMapper.totalTimelineDurationMs {
                     session.playheadTimelineMs = session.timeMapper.totalTimelineDurationMs
+                    // Clear any leftover hover-skim timestamp when playback finishes so the preview stays settled
+                    // at the final frame (`playheadTimelineMs`) until the user actively moves the mouse to skim again!
+                    session.hoverSkimTimelineMs = nil
                     session.isPlaying = false
                     view.isPaused = true
                     view.enableSetNeedsDisplay = true

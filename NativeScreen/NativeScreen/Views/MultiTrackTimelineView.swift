@@ -798,7 +798,7 @@ private struct UnifiedPlayheadCanvasView: View {
     }
 }
 
-// MARK: - Smooth Fixed-Interval Time Ruler (Major Labels + Minor Dots & 5)
+// MARK: - Smooth Fixed-Interval Time Ruler
 
 private struct SmoothTimeRulerView: View {
     let totalDurationMs: Double
@@ -806,42 +806,70 @@ private struct SmoothTimeRulerView: View {
     let majorStepSec: Double
     let minorStepSec: Double
 
+    /// `Bf(pixelsPerPlaybackMs)`:
+    /// Picks the closest interval from `[0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0]` seconds
+    /// so that adjacent ruler marks are spaced around ~100–200px apart.
+    /// In `Jp({timeMs})`, `let hasLabel = (timeMs % 1000 == 0)`:
+    /// - When `markIntervalSec` is `0.5s` or `2.5s`, every other dot (`0.5s`, `2.5s`, `7.5s`, `12.5s`) is a half-second (`% 1000 != 0`) -> **dot only, no label**, while whole seconds (`1.0s`, `5.0s`, `10.0s`, `15.0s`) have **both dot + time label**!
+    /// - When `markIntervalSec` is `1.0s`, `5.0s`, `10.0s`, `30.0s`, `60.0s`, every dot is an exact whole second (`% 1000 == 0`) -> **every dot has a time label**!
     static func computeStepIntervals(totalDurationMs: Double, width: CGFloat) -> (major: Double, minor: Double) {
-        let totalSec = max(1.0, totalDurationMs / 1000.0)
-        let pxPerSec = Double(width) / totalSec
-        let candidateStepsSec: [Double] = [1.0, 2.0, 4.0, 5.0, 10.0, 15.0, 20.0, 30.0, 60.0, 120.0]
-        let major = candidateStepsSec.first(where: { $0 * pxPerSec >= 76.0 }) ?? 60.0
-        return (major, major / 2.0)
+        let totalMs = max(1000.0, totalDurationMs)
+        let pxPerMs = max(0.001, Double(width) / totalMs)
+
+        let targetPx: Double = 200.0
+        var num = 1.0
+        var den = 1.0
+        var intervalMs = 1000.0
+        for _ in 0..<500 {
+            intervalMs = 1000.0 / (num / den)
+            let spanPx = intervalMs * pxPerMs
+            if spanPx > targetPx {
+                num += 1.0
+                continue
+            }
+            if spanPx < targetPx * 0.5 {
+                den += 1.0
+                continue
+            }
+            break
+        }
+
+        let candidatesSec: [Double] = [0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0]
+        let idealSec = intervalMs / 1000.0
+        let chosenSec = candidatesSec.min(by: { abs($0 - idealSec) < abs($1 - idealSec) }) ?? 5.0
+        return (chosenSec, chosenSec)
     }
 
     var body: some View {
         Canvas { context, size in
             let totalSec = max(1.0, totalDurationMs / 1000.0)
+            let markStepSec = max(0.25, minorStepSec)
             let dotY = size.height - 6.0
 
-            // Draw dots at every `minorStepSec`, and draw timecode text ONLY at `majorStepSec` ticks
-            var stepIndex = 0
+            var stepIndex = 1 // filters `timeMs > 0 && timeMs < endMs`
             while true {
-                let tSec = Double(stepIndex) * minorStepSec
-                if tSec > totalSec + 0.001 { break }
+                let tSec = Double(stepIndex) * markStepSec
+                if tSec >= totalSec - 0.001 { break }
 
                 let x = CGFloat(tSec / totalSec) * size.width
-                let isMajor = (stepIndex % 2 == 0)
+                let timeMsInt = Int(round(tSec * 1000.0))
+                let isWholeSecond = (timeMsInt % 1000 == 0)
 
-                // Crisp dot on every minor & major tick
-                let dotRadius: CGFloat = 1.4
+                // Crisp circular dot (`4px` diameter -> radius `2.0pt`, `opacity: 0.30`)
+                let dotRadius: CGFloat = 1.8
                 let dotRect = CGRect(x: x - dotRadius, y: dotY - dotRadius, width: dotRadius * 2, height: dotRadius * 2)
-                context.fill(Path(ellipseIn: dotRect), with: .color(.white.opacity(isMajor ? 0.34 : 0.24)))
+                context.fill(Path(ellipseIn: dotRect), with: .color(.white.opacity(0.32)))
 
-                // Draw time label above major dots (skipping `t == 0` so 0:00 is never clipped at the left edge!)
-                if isMajor && stepIndex > 0 && x <= size.width - 14 {
-                    let mins = Int(round(tSec)) / 60
-                    let secs = Int(round(tSec)) % 60
+                // Draw time label ONLY when `timeMs % 1000 == 0`!
+                if isWholeSecond && x >= 14 && x <= size.width - 14 {
+                    let totalWholeSec = timeMsInt / 1000
+                    let mins = totalWholeSec / 60
+                    let secs = totalWholeSec % 60
                     let labelStr = String(format: "%d:%02d", mins, secs)
 
                     let text = Text(labelStr)
-                        .font(.system(size: 11, weight: .medium, design: .default).monospacedDigit())
-                        .foregroundColor(.white.opacity(0.48))
+                        .font(.system(size: 11, weight: .semibold, design: .default).monospacedDigit())
+                        .foregroundColor(.white.opacity(0.34))
                     context.draw(text, at: CGPoint(x: x, y: dotY - 10))
                 }
 

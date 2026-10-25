@@ -903,6 +903,9 @@ public final class ProjectSession: Identifiable {
 
     public func togglePlayPause() {
         if !isPlaying {
+            // Clear hoverSkimTimelineMs when starting playback so when playback pauses or finishes at the end,
+            // it stays at `playheadTimelineMs` until the user actively moves the mouse on the timeline!
+            hoverSkimTimelineMs = nil
             // If playhead is already at the very end, restart from 0:00 when pressing Play
             if playheadTimelineMs >= timeMapper.totalTimelineDurationMs - 15.0 {
                 playheadTimelineMs = 0.0
@@ -910,7 +913,9 @@ public final class ProjectSession: Identifiable {
             }
             isPlaying = true
         } else {
+            hoverSkimTimelineMs = nil
             isPlaying = false
+            renderRevision &+= 1
         }
     }
 
