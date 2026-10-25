@@ -155,8 +155,6 @@ public final class RecordingCoordinator {
     private let hideDockIconKey = "NativeScreen.RecordingOptions.HideDockIcon"
     private let highlightRecordedAreaKey = "NativeScreen.RecordingOptions.HighlightRecordedArea"
 
-    // Extra transparent headroom at the top of the HUD NSPanel so instant tooltips above buttons are NEVER clipped!
-    fileprivate static let tooltipTopHeadroom: CGFloat = 44.0
     fileprivate static let idleBarWidth: CGFloat = 786.0
     fileprivate static let countdownBarWidth: CGFloat = 496.0
     fileprivate static let recordingBarWidth: CGFloat = 278.0
@@ -190,7 +188,7 @@ public final class RecordingCoordinator {
         } else {
             width = Self.idleBarWidth
         }
-        return NSSize(width: width, height: Self.barHeight + Self.tooltipTopHeadroom)
+        return NSSize(width: width, height: Self.barHeight)
     }
 
     public func showRecordingHUD() {
@@ -310,6 +308,7 @@ public final class RecordingCoordinator {
     }
 
     public func hideRecordingHUD() {
+        HUDFloatingTooltipWindowController.shared.hideTooltip()
         cancelCountdown()
         isPickingTarget = false
         stopPickerOverlay()
@@ -1008,6 +1007,72 @@ public final class RecordingCoordinator {
     }
 }
 
+// MARK: - Standalone Borderless Tooltip NSPanel for the Recording HUD (Zero Black Window Outline, Zero Corner Clipping!)
+
+@MainActor
+public final class HUDFloatingTooltipWindowController {
+    public static let shared = HUDFloatingTooltipWindowController()
+
+    private var tooltipPanel: NSPanel?
+    private var currentText: String = ""
+
+    private init() {}
+
+    public func showTooltip(text: String, aboveButtonScreenRect buttonRect: NSRect) {
+        guard !text.isEmpty else {
+            hideTooltip()
+            return
+        }
+
+        let hosting = NSHostingView(
+            rootView: InstantTooltipBubble(text: text, edge: .top)
+                .fixedSize()
+                .padding(10) // room for soft drop shadow inside the tooltip window
+        )
+        let fitting = hosting.fittingSize
+        let panelW = max(60, ceil(fitting.width))
+        let panelH = max(32, ceil(fitting.height))
+
+        if tooltipPanel == nil {
+            let panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: panelW, height: panelH),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.isReleasedWhenClosed = false
+            panel.isFloatingPanel = true
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
+            panel.backgroundColor = .clear
+            panel.isOpaque = false
+            panel.hasShadow = false // Crucial: prevents macOS WindowServer from drawing a black shadow contour around the transparent area!
+            panel.ignoresMouseEvents = true
+            panel.sharingType = .none
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            self.tooltipPanel = panel
+        }
+
+        guard let panel = tooltipPanel else { return }
+        panel.contentView = hosting
+
+        // Position centered horizontally above `buttonRect`, clamped inside screen bounds so it is NEVER clipped!
+        var originX = round(buttonRect.midX - panelW * 0.5)
+        let originY = round(buttonRect.maxY - 4.0) // sits cleanly 6pt above the button highlight
+
+        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(buttonRect) }) ?? NSScreen.main {
+            let vf = screen.visibleFrame
+            originX = min(max(originX, vf.minX + 6.0), vf.maxX - panelW - 6.0)
+        }
+
+        panel.setFrame(NSRect(x: originX, y: originY, width: panelW, height: panelH), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    public func hideTooltip() {
+        tooltipPanel?.orderOut(nil)
+    }
+}
+
 // MARK: - Native `NSMenu` Presenter for HUD Projects & Recording Options
 
 @MainActor
@@ -1021,22 +1086,29 @@ public final class HUDNativeMenuPresenter: NSObject {
         super.init()
     }
 
-    public func presentRecordingOptionsMenu(coordinator: RecordingCoordinator, from panel: NSWindow?) {
+    public func presentRecordingOptionsMenu(coordinator: RecordingCoordinator, anchorButtonScreenRect: NSRect, from panel: NSWindow?) {
+        HUDFloatingTooltipWindowController.shared.hideTooltip()
+
         let menu = NSMenu(title: "Recording Options")
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
+        let menuWidth: CGFloat = 324.0
+
         // 1. Section Header: "Before Recording"
         let beforeHeaderItem = NSMenuItem()
         let beforeHeaderView = NSHostingView(rootView: HUDMenuSectionHeaderView(title: "Before Recording"))
-        beforeHeaderView.frame = NSRect(x: 0, y: 0, width: 288, height: 26)
+        beforeHeaderView.frame = NSRect(x: 0, y: 0, width: menuWidth, height: 26)
         beforeHeaderItem.view = beforeHeaderView
         menu.addItem(beforeHeaderItem)
 
-        // 2. Countdown Row (`Off | 3s | 5s | 10s`)
+        // 2. Countdown Row (`Off | 3s | 5s | 10s` — Single-line `.fixedSize(horizontal: true)` for i18n safety!)
         let countdownItem = NSMenuItem()
         let countdownView = NSHostingView(rootView: HUDCountdownSegmentedRowView(coordinator: coordinator))
-        countdownView.frame = NSRect(x: 0, y: 0, width: 288, height: 38)
+        let countdownIntrinsicW = ceil(countdownView.fittingSize.width)
+        let effectiveWidth = max(menuWidth, countdownIntrinsicW)
+        beforeHeaderView.frame.size.width = effectiveWidth
+        countdownView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 38)
         countdownItem.view = countdownView
         menu.addItem(countdownItem)
 
@@ -1045,7 +1117,7 @@ public final class HUDNativeMenuPresenter: NSObject {
         // 3. Section Header: "While Recording"
         let whileHeaderItem = NSMenuItem()
         let whileHeaderView = NSHostingView(rootView: HUDMenuSectionHeaderView(title: "While Recording"))
-        whileHeaderView.frame = NSRect(x: 0, y: 0, width: 288, height: 26)
+        whileHeaderView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 26)
         whileHeaderItem.view = whileHeaderView
         menu.addItem(whileHeaderItem)
 
@@ -1060,7 +1132,7 @@ public final class HUDNativeMenuPresenter: NSObject {
                 )
             )
         )
-        desktopIconsView.frame = NSRect(x: 0, y: 0, width: 288, height: 34)
+        desktopIconsView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 34)
         desktopIconsItem.view = desktopIconsView
         menu.addItem(desktopIconsItem)
 
@@ -1074,7 +1146,7 @@ public final class HUDNativeMenuPresenter: NSObject {
                 )
             )
         )
-        dockIconView.frame = NSRect(x: 0, y: 0, width: 288, height: 34)
+        dockIconView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 34)
         dockIconItem.view = dockIconView
         menu.addItem(dockIconItem)
 
@@ -1088,15 +1160,22 @@ public final class HUDNativeMenuPresenter: NSObject {
                 )
             )
         )
-        highlightAreaView.frame = NSRect(x: 0, y: 0, width: 288, height: 36)
+        highlightAreaView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 36)
         highlightAreaItem.view = highlightAreaView
         menu.addItem(highlightAreaItem)
 
         activeMenu = menu
-        popUpMenuAboveCursor(menu: menu, in: panel)
+        popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
     }
 
-    public func presentProjectsMenu(coordinator: RecordingCoordinator, workspace: ProjectWorkspaceStore, from panel: NSWindow?) {
+    public func presentProjectsMenu(
+        coordinator: RecordingCoordinator,
+        workspace: ProjectWorkspaceStore,
+        anchorButtonScreenRect: NSRect,
+        from panel: NSWindow?
+    ) {
+        HUDFloatingTooltipWindowController.shared.hideTooltip()
+
         let menu = NSMenu(title: "Projects")
         menu.autoenablesItems = false
         retainedTargets.removeAll()
@@ -1127,32 +1206,45 @@ public final class HUDNativeMenuPresenter: NSObject {
         })
 
         activeMenu = menu
-        popUpMenuAboveCursor(menu: menu, in: panel)
+        popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
     }
 
-    private func popUpMenuAboveCursor(menu: NSMenu, in panel: NSWindow?) {
-        let mouseLoc = NSEvent.mouseLocation
+    /// Pops up the HUD context menu cleanly **outside** the clicked button highlight (below the button if there is room below on screen,
+    /// or cleanly above the HUD bar if near the bottom of the screen — NEVER overlapping the button!).
+    private func popUpMenuOutsideButton(menu: NSMenu, anchorButtonScreenRect: NSRect, in panel: NSWindow?) {
         let menuSize = menu.size
         let menuW = max(260.0, menuSize.width)
-        let menuH = max(180.0, menuSize.height)
+        let menuH = max(160.0, menuSize.height)
 
         if let win = panel, let contentView = win.contentView {
             let screenFrame = (win.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
-            let barTopScreenY = win.frame.minY + RecordingCoordinator.barHeight
 
-            var topLeftScreenX = mouseLoc.x - 40.0
+            // 1. Horizontal: align left edge with the button's left edge, or flip to align right edges if near the right of the screen
+            var topLeftScreenX = anchorButtonScreenRect.minX
             if topLeftScreenX + menuW > screenFrame.maxX - 10.0 {
-                topLeftScreenX = mouseLoc.x - menuW + 20.0
+                topLeftScreenX = anchorButtonScreenRect.maxX - menuW
             }
             topLeftScreenX = min(max(topLeftScreenX, screenFrame.minX + 10.0), screenFrame.maxX - menuW - 10.0)
 
-            var topLeftScreenY = barTopScreenY + menuH + 8.0
-            topLeftScreenY = min(max(topLeftScreenY, screenFrame.minY + menuH + 10.0), screenFrame.maxY - 10.0)
+            // 2. Vertical:
+            // Prefer opening BELOW the button (`top of menu == anchorButtonScreenRect.minY - 8`) so the menu sits cleanly below the button highlight!
+            // If the HUD bar is near the bottom of the screen and there isn't enough vertical space below (`belowTopY - menuH < screenFrame.minY + 10`),
+            // open cleanly ABOVE the button (`bottom of menu == anchorButtonScreenRect.maxY + 8`, so `top of menu == anchorButtonScreenRect.maxY + 8 + menuH`).
+            let belowTopScreenY = anchorButtonScreenRect.minY - 8.0
+            let aboveTopScreenY = anchorButtonScreenRect.maxY + 8.0 + menuH
+
+            let topLeftScreenY: CGFloat
+            if belowTopScreenY - menuH >= screenFrame.minY + 10.0 {
+                topLeftScreenY = belowTopScreenY
+            } else {
+                topLeftScreenY = min(aboveTopScreenY, screenFrame.maxY - 10.0)
+            }
 
             let ptInWin = win.convertPoint(fromScreen: NSPoint(x: topLeftScreenX, y: topLeftScreenY))
             let ptInView = contentView.convert(ptInWin, from: nil)
             menu.popUp(positioning: nil, at: ptInView, in: contentView)
         } else {
+            let mouseLoc = NSEvent.mouseLocation
             menu.popUp(positioning: nil, at: mouseLoc, in: nil)
         }
     }
@@ -1182,6 +1274,8 @@ private struct HUDMenuSectionHeaderView: View {
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.42))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             Spacer()
         }
         .padding(.horizontal, 14)
@@ -1193,12 +1287,14 @@ private struct HUDCountdownSegmentedRowView: View {
     @Bindable var coordinator: RecordingCoordinator
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 14) {
             Text("Countdown")
                 .font(.system(size: 13.5, weight: .regular))
                 .foregroundStyle(.white.opacity(0.95))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
 
-            Spacer()
+            Spacer(minLength: 12)
 
             // 4-segment pill selector (`Off | 3s | 5s | 10s`)
             HStack(spacing: 0) {
@@ -1213,7 +1309,10 @@ private struct HUDCountdownSegmentedRowView: View {
                         Text(option.label)
                             .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
                             .foregroundStyle(.white)
-                            .frame(width: 40, height: 24)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(minWidth: 38, minHeight: 24)
+                            .padding(.horizontal, 4)
                             .background(
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .fill(isSelected ? Color(red: 0.04, green: 0.52, blue: 1.0) : Color.clear)
@@ -1232,6 +1331,7 @@ private struct HUDCountdownSegmentedRowView: View {
                     }
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
             .padding(2)
             .background(
                 RoundedRectangle(cornerRadius: 7.5, style: .continuous)
@@ -1247,12 +1347,14 @@ private struct HUDSwitchMenuRowView: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        HStack {
+        HStack(spacing: 14) {
             Text(title)
                 .font(.system(size: 13.5, weight: .regular))
                 .foregroundStyle(.white.opacity(0.95))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
 
-            Spacer()
+            Spacer(minLength: 12)
 
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
@@ -1273,30 +1375,25 @@ public struct RecordingHUDBarView: View {
     private let buttonHeight: CGFloat = 44
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Transparent top headroom so instant tooltips above HUD buttons are never clipped!
-            Spacer(minLength: RecordingCoordinator.tooltipTopHeadroom)
-
-            Group {
-                if coordinator.isRecording {
-                    activeRecordingCompactBar
-                } else if coordinator.isCountingDown {
-                    countdownBar
-                } else {
-                    idlePreRecordingBar
-                }
+        Group {
+            if coordinator.isRecording {
+                activeRecordingCompactBar
+            } else if coordinator.isCountingDown {
+                countdownBar
+            } else {
+                idlePreRecordingBar
             }
-            .frame(height: RecordingCoordinator.barHeight)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.black.opacity(0.32))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(.white.opacity(0.16), lineWidth: 1)
-            )
         }
+        .frame(height: RecordingCoordinator.barHeight)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black.opacity(0.32))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        )
         .preferredColorScheme(.dark)
     }
 
@@ -1408,14 +1505,16 @@ public struct RecordingHUDBarView: View {
                     isSelected: false,
                     width: 44,
                     height: buttonHeight,
-                    cornerRadius: 10
+                    cornerRadius: 10,
+                    onActionWithScreenRect: { buttonScreenRect in
+                        HUDNativeMenuPresenter.shared.presentProjectsMenu(
+                            coordinator: coordinator,
+                            workspace: workspace,
+                            anchorButtonScreenRect: buttonScreenRect,
+                            from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
+                        )
+                    }
                 ) {
-                    HUDNativeMenuPresenter.shared.presentProjectsMenu(
-                        coordinator: coordinator,
-                        workspace: workspace,
-                        from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
-                    )
-                } label: {
                     Image(systemName: "folder")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.white.opacity(0.85))
@@ -1426,13 +1525,15 @@ public struct RecordingHUDBarView: View {
                     isSelected: false,
                     width: 56,
                     height: buttonHeight,
-                    cornerRadius: 10
+                    cornerRadius: 10,
+                    onActionWithScreenRect: { buttonScreenRect in
+                        HUDNativeMenuPresenter.shared.presentRecordingOptionsMenu(
+                            coordinator: coordinator,
+                            anchorButtonScreenRect: buttonScreenRect,
+                            from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
+                        )
+                    }
                 ) {
-                    HUDNativeMenuPresenter.shared.presentRecordingOptionsMenu(
-                        coordinator: coordinator,
-                        from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
-                    )
-                } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "gearshape")
                             .font(.system(size: 15.5, weight: .regular))
@@ -1619,7 +1720,7 @@ public struct RecordingHUDBarView: View {
 }
 
 /// Borderless Hover-Highlight Button for the Recording HUD Panel:
-/// NO border/outline on hover — only a smooth rounded fill + instant top tooltip!).
+/// NO border/outline on hover — only a smooth rounded fill + standalone floating top tooltip window that never clips!).
 private struct HUDInteractiveItemButton<LabelContent: View>: View {
     let tooltip: String?
     let isSelected: Bool
@@ -1627,22 +1728,50 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
     let height: CGFloat
     let cornerRadius: CGFloat
     let action: () -> Void
+    let onActionWithScreenRect: ((NSRect) -> Void)?
     @ViewBuilder let label: () -> LabelContent
 
     @State private var isHovered = false
-    @State private var buttonSize: CGSize = CGSize(width: 48, height: 44)
-    @State private var bubbleSize: CGSize = CGSize(width: 110, height: 28)
+    @State private var anchorNSView: NSView?
+
+    init(
+        tooltip: String?,
+        isSelected: Bool,
+        width: CGFloat?,
+        height: CGFloat,
+        cornerRadius: CGFloat,
+        action: @escaping () -> Void = {},
+        onActionWithScreenRect: ((NSRect) -> Void)? = nil,
+        @ViewBuilder label: @escaping () -> LabelContent
+    ) {
+        self.tooltip = tooltip
+        self.isSelected = isSelected
+        self.width = width
+        self.height = height
+        self.cornerRadius = cornerRadius
+        self.action = action
+        self.onActionWithScreenRect = onActionWithScreenRect
+        self.label = label
+    }
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            HUDFloatingTooltipWindowController.shared.hideTooltip()
+            if let onActionWithScreenRect {
+                onActionWithScreenRect(currentScreenRect())
+            } else {
+                action()
+            }
+        } label: {
             label()
                 .frame(width: width, height: height)
                 .background(
-                    GeometryReader { geo in
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(backgroundColor)
-                            .onAppear { buttonSize = geo.size }
-                            .onChange(of: geo.size) { _, s in buttonSize = s }
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(backgroundColor)
+                )
+                .background(
+                    HUDButtonScreenRectProbe { v in
+                        anchorNSView = v
                     }
                 )
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -1652,28 +1781,26 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
             }
-        }
-        .overlay(alignment: .center) {
-            if isHovered, let tooltip = tooltip, !tooltip.isEmpty {
-                InstantTooltipBubble(text: tooltip, edge: .top)
-                    .fixedSize()
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear
-                                .onAppear { bubbleSize = geo.size }
-                                .onChange(of: geo.size) { _, s in bubbleSize = s }
-                        }
-                    )
-                    .offset(
-                        x: 0,
-                        y: -((buttonSize.height * 0.5) + (bubbleSize.height * 0.5) + 8)
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .zIndex(999)
-                    .allowsHitTesting(false)
+            if hovering, let tooltip = tooltip, !tooltip.isEmpty {
+                let rect = currentScreenRect()
+                if rect.width > 0 {
+                    HUDFloatingTooltipWindowController.shared.showTooltip(text: tooltip, aboveButtonScreenRect: rect)
+                }
+            } else {
+                HUDFloatingTooltipWindowController.shared.hideTooltip()
             }
         }
-        .zIndex(isHovered ? 500 : 1)
+        .onDisappear {
+            if isHovered {
+                HUDFloatingTooltipWindowController.shared.hideTooltip()
+            }
+        }
+    }
+
+    private func currentScreenRect() -> NSRect {
+        guard let v = anchorNSView, let win = v.window else { return .zero }
+        let rectInWin = v.convert(v.bounds, to: nil)
+        return win.convertToScreen(rectInWin)
     }
 
     private var backgroundColor: Color {
@@ -1681,6 +1808,20 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
             return isHovered ? Color.white.opacity(0.20) : Color.white.opacity(0.14)
         }
         return isHovered ? Color.white.opacity(0.11) : Color.clear
+    }
+}
+
+private struct HUDButtonScreenRectProbe: NSViewRepresentable {
+    let onViewReady: (NSView) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { onViewReady(v) }
+        return v
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { onViewReady(nsView) }
     }
 }
 
