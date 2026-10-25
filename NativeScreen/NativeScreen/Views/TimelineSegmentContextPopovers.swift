@@ -405,13 +405,31 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
             menu.addItem(showEveryItem)
         }
 
-        menu.addItem(.separator())
-
         let allHidden = !allClusters.isEmpty && allClusters.allSatisfy { session.isShortcutHidden($0) }
         let toggleAllItem = makeCommandItem(title: allHidden ? "Show all shortcuts" : "Hide all shortcuts", keyEquivalent: "", modifiers: []) {
             session.setAllShortcutsHidden(!allHidden)
         }
         menu.addItem(toggleAllItem)
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeCommandItem(title: "Edit shortcut…", keyEquivalent: "", modifiers: []) {
+            session.selectShortcut(cluster.id)
+        })
+
+        menu.addItem(makeCommandItem(title: "Duplicate shortcut", keyEquivalent: "d", modifiers: [.command]) {
+            session.duplicateShortcut(cluster)
+        })
+
+        menu.addItem(makeCommandItem(title: "Add new shortcut track", keyEquivalent: "", modifiers: []) {
+            session.addShortcutTrack()
+        })
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeDestructiveCommandItem(title: "Remove shortcut", symbolName: "trash") {
+            session.deleteShortcut(cluster)
+        })
 
         activeMenu = menu
         popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
@@ -448,16 +466,22 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         in parentView: NSView
     ) {
         let menuSize = menu.size
-        let menuW = max(248.0, menuSize.width)
-        let menuH = max(200.0, menuSize.height)
+        let menuW = max(168.0, menuSize.width)
+        let menuH = max(36.0, menuSize.height)
 
         guard let win = parentView.window, let contentView = win.contentView else {
             menu.popUp(positioning: nil, at: pointInView, in: parentView)
             return
         }
 
-        // Convert the clicked point into global screen coordinates (unflipped: Y increases upward!)
-        let clickInWin = parentView.convert(pointInView, to: nil)
+        // Crucial: Use `NSApp.currentEvent?.locationInWindow` when available so SwiftUI `.offset(x:)` layer transforms
+        // on timeline segments never displace the popup X coordinate!
+        let clickInWin: NSPoint = {
+            if let ev = NSApp.currentEvent, ev.window === win {
+                return ev.locationInWindow
+            }
+            return parentView.convert(pointInView, to: nil)
+        }()
         let clickOnScreen = win.convertPoint(toScreen: clickInWin)
 
         let screenFrame = (win.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)

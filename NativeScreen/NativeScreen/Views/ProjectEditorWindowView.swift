@@ -770,9 +770,10 @@ public struct ProjectEditorWindowView: View {
                     NSCursor.arrow.set()
                     return nil
                 }
-                if session.selectedMaskId != nil || session.selectedZoomId != nil {
+                if session.selectedMaskId != nil || session.selectedZoomId != nil || session.selectedShortcutId != nil {
                     session.selectedMaskId = nil
                     session.selectedZoomId = nil
+                    session.selectedShortcutId = nil
                     return nil
                 }
                 return event
@@ -1122,58 +1123,103 @@ private struct PreviewShortcutKeycapsOverlayView: View {
     @Bindable var session: ProjectSession
     let canvasSize: CGSize
 
-    @State private var isHoveringKeycaps = false
+    @State private var hoveredClusterId: String?
 
     var body: some View {
         let sourceMs = session.currentSourceTimeMs
-        let activeCluster = session.activeShortcutCluster(atSourceMs: sourceMs)
+        let activeItems = session.activeShortcutClustersWithStyles(atSourceMs: sourceMs)
         let keyHeight = max(34.0, canvasSize.height * CGFloat(session.document.captions.shortcutsSizeRatio))
         let spacing = keyHeight * 0.10
-        let bottomPadding = max(16.0, canvasSize.height * 0.05)
+        let edgeMargin = max(16.0, canvasSize.height * 0.05)
 
-        ZStack(alignment: .bottom) {
+        ZStack {
             Color.clear
 
-            if let cluster = activeCluster {
-                HStack(spacing: spacing) {
-                    ForEach(cluster.keyCaps) { cap in
-                        NativeScreen3DKeycapView(
-                            cap: cap,
-                            keyHeight: keyHeight,
-                            isHovered: isHoveringKeycaps
+            ForEach(activeItems, id: \.cluster.id) { entry in
+                let cluster = entry.cluster
+                let style = entry.style
+                let isHovered = (hoveredClusterId == cluster.id)
+                let isSelected = (session.selectedShortcutId == cluster.id)
+                let offsetXPt = CGFloat(style.offsetX) * canvasSize.width
+                let offsetYPt = CGFloat(style.offsetY) * canvasSize.height
+
+                ZStack(alignment: dockAlignment(for: style.dockPosition)) {
+                    Color.clear
+
+                    Group {
+                        if style.dockPosition.isVerticalStack {
+                            VStack(spacing: spacing) {
+                                ForEach(cluster.keyCaps) { cap in
+                                    NativeScreen3DKeycapView(
+                                        cap: cap,
+                                        style: style,
+                                        keyHeight: keyHeight,
+                                        isHovered: isHovered || isSelected
+                                    )
+                                }
+                            }
+                        } else {
+                            HStack(spacing: spacing) {
+                                ForEach(cluster.keyCaps) { cap in
+                                    NativeScreen3DKeycapView(
+                                        cap: cap,
+                                        style: style,
+                                        keyHeight: keyHeight,
+                                        isHovered: isHovered || isSelected
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, style.dockPosition == .bottom ? edgeMargin : 0)
+                    .padding(.top, style.dockPosition == .top ? edgeMargin : 0)
+                    .padding(.leading, style.dockPosition == .left ? edgeMargin : 0)
+                    .padding(.trailing, style.dockPosition == .right ? edgeMargin : 0)
+                    .offset(x: offsetXPt, y: offsetYPt)
+                    .scaleEffect(isHovered ? 1.02 : 1.0)
+                    .brightness(isHovered ? 0.08 : 0.0)
+                    .shadow(color: .black.opacity(0.42), radius: keyHeight * 0.22, y: keyHeight * 0.10)
+                    .contentShape(Rectangle())
+                    .onHover { hovering in
+                        withAnimation(.easeOut(duration: 0.14)) {
+                            if hovering {
+                                hoveredClusterId = cluster.id
+                            } else if hoveredClusterId == cluster.id {
+                                hoveredClusterId = nil
+                            }
+                        }
+                    }
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                            session.selectShortcut(cluster.id)
+                        }
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.96)),
+                            removal: .opacity.combined(with: .scale(scale: 0.96))
                         )
-                    }
-                }
-                .padding(.bottom, bottomPadding)
-                .scaleEffect(isHoveringKeycaps ? 1.02 : 1.0)
-                .brightness(isHoveringKeycaps ? 0.08 : 0.0)
-                .shadow(color: .black.opacity(0.42), radius: keyHeight * 0.22, y: keyHeight * 0.10)
-                .contentShape(Rectangle())
-                .onHover { hovering in
-                    withAnimation(.easeOut(duration: 0.14)) {
-                        isHoveringKeycaps = hovering
-                    }
-                }
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                        session.selectedInspectorTab = .shortcuts
-                    }
-                }
-                .transition(
-                    .asymmetric(
-                        insertion: .opacity.combined(with: .offset(y: -keyHeight * 0.08)).combined(with: .scale(scale: 0.96)),
-                        removal: .opacity.combined(with: .scale(scale: 0.96))
                     )
-                )
+                }
             }
         }
-        .frame(width: canvasSize.width, height: canvasSize.height, alignment: .bottom)
-        .animation(.spring(response: 0.24, dampingFraction: 0.84), value: activeCluster?.id)
+        .frame(width: canvasSize.width, height: canvasSize.height)
+        .animation(.spring(response: 0.24, dampingFraction: 0.84), value: activeItems.map(\.cluster.id))
+    }
+
+    private func dockAlignment(for pos: ShortcutDockPosition) -> Alignment {
+        switch pos {
+        case .bottom: return .bottom
+        case .top: return .top
+        case .left: return .leading
+        case .right: return .trailing
+        }
     }
 }
 
 private struct NativeScreen3DKeycapView: View {
     let cap: ProjectSession.ShortcutKeyCap
+    let style: ShortcutStyleConfig
     let keyHeight: CGFloat
     let isHovered: Bool
 
@@ -1183,35 +1229,71 @@ private struct NativeScreen3DKeycapView: View {
         let borderThickness = max(1.2, keyHeight * (3.0 / 256.0))
         let innerRadius = max(2.0, outerRadius - borderThickness)
         let innerPad = (keyHeight - borderThickness * 2.0) * 0.125
+        let textCol: Color = (style.colorMode == .defaultDark) ? .white : Color(hex: style.textColorHex)
+
+        let bodyTopColor: Color = {
+            switch style.colorMode {
+            case .defaultDark:
+                return isHovered ? Color(red: 0.22, green: 0.22, blue: 0.24) : Color(red: 0.169, green: 0.169, blue: 0.169)
+            case .solid:
+                return Color(hex: style.solidColorHex)
+            case .gradient:
+                return Color(hex: style.gradientStartHex)
+            }
+        }()
+
+        let bodyBottomColor: Color = {
+            switch style.colorMode {
+            case .defaultDark:
+                return isHovered ? Color(red: 0.13, green: 0.13, blue: 0.15) : Color(red: 0.098, green: 0.098, blue: 0.098)
+            case .solid:
+                return Color(hex: style.solidColorHex).opacity(0.76)
+            case .gradient:
+                return Color(hex: style.gradientEndHex)
+            }
+        }()
+
+        let bevelTopColor: Color = {
+            switch style.colorMode {
+            case .defaultDark:
+                return Color(red: 0.396, green: 0.396, blue: 0.396).opacity(isHovered ? 1.0 : 0.92)
+            case .solid, .gradient:
+                return Color.white.opacity(isHovered ? 0.55 : 0.38)
+            }
+        }()
+
+        let bevelBottomColor: Color = {
+            switch style.colorMode {
+            case .defaultDark:
+                return Color(red: 0.098, green: 0.098, blue: 0.098)
+            case .solid, .gradient:
+                return Color.black.opacity(0.55)
+            }
+        }()
 
         ZStack {
+            if style.colorMode != .defaultDark {
+                RoundedRectangle(cornerRadius: outerRadius, style: .continuous)
+                    .fill(Color(red: 0.08, green: 0.08, blue: 0.10))
+            }
+
             // 1. Outer 3D Bevel Border Gradient (`#656565` top -> `#191919` bottom)
             RoundedRectangle(cornerRadius: outerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [
-                            Color(red: 0.396, green: 0.396, blue: 0.396).opacity(isHovered ? 1.0 : 0.92),
-                            Color(red: 0.098, green: 0.098, blue: 0.098)
-                        ],
+                        colors: [bevelTopColor, bevelBottomColor],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
 
-            // 2. Inner Keycap Body Gradient (`#2B2B2B` top -> `#191919` bottom)
+            // 2. Inner Keycap Body Gradient (`#2B2B2B` top -> `#191919` bottom or custom Solid/Gradient!)
             RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [
-                            isHovered
-                                ? Color(red: 0.22, green: 0.22, blue: 0.24)
-                                : Color(red: 0.169, green: 0.169, blue: 0.169),
-                            isHovered
-                                ? Color(red: 0.13, green: 0.13, blue: 0.15)
-                                : Color(red: 0.098, green: 0.098, blue: 0.098)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        colors: [bodyTopColor, bodyBottomColor],
+                        startPoint: style.colorMode == .gradient ? .topLeading : .top,
+                        endPoint: style.colorMode == .gradient ? .bottomTrailing : .bottom
                     )
                 )
                 .padding(borderThickness)
@@ -1222,7 +1304,7 @@ private struct NativeScreen3DKeycapView: View {
                 case .center:
                     Text(cap.label)
                         .font(.system(size: keyHeight * 0.33, weight: .regular))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(textCol)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .padding(.horizontal, innerPad)
@@ -1232,13 +1314,13 @@ private struct NativeScreen3DKeycapView: View {
                         if let sym = cap.symbol, !sym.isEmpty {
                             Text(sym)
                                 .font(.system(size: keyHeight * 0.31, weight: .regular))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(textCol)
                         }
                         Spacer(minLength: 0)
                         if !cap.label.isEmpty {
                             Text(cap.label)
                                 .font(.system(size: keyHeight * 0.215, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.96))
+                                .foregroundStyle(textCol.opacity(0.96))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.6)
                         }
@@ -1251,13 +1333,13 @@ private struct NativeScreen3DKeycapView: View {
                         if let sym = cap.symbol, !sym.isEmpty {
                             Text(sym)
                                 .font(.system(size: keyHeight * 0.31, weight: .regular))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(textCol)
                         }
                         Spacer(minLength: 0)
                         if !cap.label.isEmpty {
                             Text(cap.label)
                                 .font(.system(size: keyHeight * 0.215, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.96))
+                                .foregroundStyle(textCol.opacity(0.96))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.6)
                         }

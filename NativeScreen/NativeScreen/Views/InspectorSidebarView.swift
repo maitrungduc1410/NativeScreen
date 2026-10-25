@@ -10,7 +10,13 @@ public struct InspectorSidebarView: View {
     @State private var isRotationSectionExpanded: Bool = false
     @State private var isAdvancedCursorSectionExpanded: Bool = false
     @State private var isAdvancedShadowSectionExpanded: Bool = false
+    @State private var isAdvancedZoomSegmentExpanded: Bool = false
     @State private var wallpaperCategory: String = "macOS"
+    @State private var gradientHueShift: Double = 0.5
+    @State private var isHoveringImageDropZone: Bool = false
+    @State private var selectedShortcutTrackId: String = "default-shortcuts-track"
+    @State private var isRecordingShortcutKeys: Bool = false
+    @State private var shortcutKeyRecorderMonitor: Any? = nil
     @State private var hoveredScreenAnimPreset: String? = nil
     @State private var hoveredCursorAnimPreset: String? = nil
     @State private var selectedAudioGenre: String = "Lo-Fi"
@@ -36,6 +42,8 @@ public struct InspectorSidebarView: View {
                         cornerRadius: 9
                     ) {
                         withAnimation(.easeOut(duration: 0.15)) {
+                            session.selectedZoomId = nil
+                            session.selectedShortcutId = nil
                             session.selectedInspectorTab = tab
                         }
                     } label: {
@@ -68,19 +76,27 @@ public struct InspectorSidebarView: View {
             // Active Inspector Content Panel (Wrapped in the rounded dark container with spacious 24pt section rhythm!)
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 24) {
-                    switch session.selectedInspectorTab {
-                    case .background:
-                        backgroundInspector
-                    case .cursor:
-                        cursorInspector
-                    case .zoom:
-                        zoomInspector
-                    case .masks:
-                        masksInspector
-                    case .audio:
-                        audioAndSliceInspector
-                    case .shortcuts:
-                        shortcutsInspector
+                    if let zoomId = session.selectedZoomId,
+                       let zoom = session.document.timeline.zooms.first(where: { $0.id == zoomId }) {
+                        zoomSegmentEditor(zoom: zoom)
+                    } else if let shortcutId = session.selectedShortcutId,
+                              let cluster = session.detectedShortcutClusters.first(where: { $0.id == shortcutId }) {
+                        shortcutSegmentEditor(cluster: cluster)
+                    } else {
+                        switch session.selectedInspectorTab {
+                        case .background:
+                            backgroundInspector
+                        case .cursor:
+                            cursorInspector
+                        case .zoom:
+                            zoomInspector
+                        case .masks:
+                            masksInspector
+                        case .audio:
+                            audioAndSliceInspector
+                        case .shortcuts:
+                            shortcutsInspector
+                        }
                     }
                 }
                 .padding(20)
@@ -102,54 +118,120 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 1. Background & Frame Style Inspector ( & 10!)
+    // MARK: - 1. Background & Frame Style Inspector
+
+    private static let curatedSolidColors: [String] = [
+        "#4776E6", "#8E54E9", "#1E1E2E", "#0F172A", "#2563EB", "#7C3AED", "#DB2777", "#EA580C",
+        "#059669", "#0D9488", "#4F46E5", "#9333EA", "#E11D48", "#D97706", "#16A34A", "#0284C7"
+    ]
+
+    private static let curatedGradientPairs: [(String, String)] = [
+        ("#E2E8F0", "#CBD5E1"), ("#BFDBFE", "#93C5FD"), ("#FED7AA", "#FDBA74"), ("#C7D2FE", "#A5B4FC"),
+        ("#CCFBF1", "#99F6E4"), ("#D9F99D", "#BEF264"), ("#FDBA74", "#F472B6"), ("#FDE047", "#F97316"),
+        ("#FB7185", "#EA580C"), ("#F97316", "#EAB308"), ("#C084FC", "#FDBA74"), ("#FB923C", "#4F46E5"),
+        ("#38BDF8", "#60A5FA"), ("#22D3EE", "#3B82F6"), ("#2DD4BF", "#0284C7"), ("#34D399", "#059669"),
+        ("#4ADE80", "#1E3A8A"), ("#38BDF8", "#1E40AF"), ("#4776E6", "#8E54E9"), ("#7C3AED", "#DB2777"),
+        ("#0EA5E9", "#312E81"), ("#EC4899", "#6366F1"), ("#F472B6", "#60A5FA"), ("#38BDF8", "#A855F7"),
+        ("#1E293B", "#0F172A"), ("#1E3A8A", "#0F172A"), ("#7F1D1D", "#1E1B4B"), ("#C026D3", "#31102F"),
+        ("#64748B", "#334155"), ("#27272A", "#09090B")
+    ]
 
     @ViewBuilder
     private var backgroundInspector: some View {
         let bgType = session.document.background.type
         let isWallpaperMode = (bgType == .mesh || bgType == .wallpaper)
+        let activeTopModeId: String = {
+            if isWallpaperMode { return "Wallpaper" }
+            switch bgType {
+            case .gradient: return "Gradient"
+            case .solid: return "Color"
+            case .image: return "Image"
+            default: return "Wallpaper"
+            }
+        }()
 
         VStack(alignment: .leading, spacing: 24) {
-            // 1. Background Type Selector (`Wallpaper` | `Gradient` | `Color` | `Image`)
+            // 1. Background Type Selector (`Wallpaper` | `Gradient` | `Color` | `Image` — Horizontal Scroll + Auto-Center on Click!)
             VStack(alignment: .leading, spacing: 10) {
                 Text("Background")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.white.opacity(0.92))
 
-                HStack(spacing: 6) {
-                    inspectorPillOptionButton(title: "Wallpaper", isSelected: isWallpaperMode) {
-                        session.mutate { $0.background.type = (wallpaperCategory == "macOS" ? .wallpaper : .mesh) }
+                ScrollViewReader { modeProxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 7) {
+                            inspectorPillOptionButton(title: "Wallpaper", isSelected: isWallpaperMode) {
+                                session.mutate { $0.background.type = (wallpaperCategory == "macOS" ? .wallpaper : .mesh) }
+                                withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                    modeProxy.scrollTo("Wallpaper", anchor: .center)
+                                }
+                            }
+                            .id("Wallpaper")
+
+                            inspectorPillOptionButton(title: "Gradient", isSelected: bgType == .gradient) {
+                                session.mutate { $0.background.type = .gradient }
+                                withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                    modeProxy.scrollTo("Gradient", anchor: .center)
+                                }
+                            }
+                            .id("Gradient")
+
+                            inspectorPillOptionButton(title: "Color", isSelected: bgType == .solid) {
+                                session.mutate { $0.background.type = .solid }
+                                withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                    modeProxy.scrollTo("Color", anchor: .center)
+                                }
+                            }
+                            .id("Color")
+
+                            inspectorPillOptionButton(title: "Image", isSelected: bgType == .image) {
+                                session.mutate { $0.background.type = .image }
+                                withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                    modeProxy.scrollTo("Image", anchor: .center)
+                                }
+                            }
+                            .id("Image")
+                        }
+                        .padding(.vertical, 2)
+                        .padding(.trailing, 18)
                     }
-                    inspectorPillOptionButton(title: "Gradient", isSelected: bgType == .gradient) {
-                        session.mutate { $0.background.type = .gradient }
-                    }
-                    inspectorPillOptionButton(title: "Color", isSelected: bgType == .solid) {
-                        session.mutate { $0.background.type = .solid }
-                    }
-                    inspectorPillOptionButton(title: "Image", isSelected: bgType == .image) {
-                        session.mutate { $0.background.type = .image }
+                    .padding(.trailing, -18)
+                    .onChange(of: activeTopModeId) { _, newId in
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                            modeProxy.scrollTo(newId, anchor: .center)
+                        }
                     }
                 }
             }
 
             if isWallpaperMode {
-                // 2. Wallpaper Category Pills + Full-Width `Pick random wallpaper` + 8-Column Grid
+                // 2A. Wallpaper Category Pills + Full-Width `Pick random wallpaper` + 8-Column Grid
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Wallpaper")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.white.opacity(0.92))
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(["macOS", "Spring", "Sunset", "Radiant"], id: \.self) { cat in
-                                inspectorPillOptionButton(title: cat, isSelected: wallpaperCategory == cat) {
-                                    wallpaperCategory = cat
-                                    session.mutate {
-                                        $0.background.type = (cat == "macOS") ? .wallpaper : .mesh
+                    ScrollViewReader { catProxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 7) {
+                                ForEach(["All", "macOS", "Mesh", "Spring", "Sunset", "Radiant"], id: \.self) { cat in
+                                    let displayTitle = (cat == "All") ? "★" : cat
+                                    inspectorPillOptionButton(title: displayTitle, isSelected: wallpaperCategory == cat) {
+                                        wallpaperCategory = cat
+                                        session.mutate {
+                                            $0.background.type = (cat == "macOS") ? .wallpaper : .mesh
+                                        }
+                                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                            catProxy.scrollTo(cat, anchor: .center)
+                                        }
                                     }
+                                    .id(cat)
                                 }
                             }
+                            .padding(.vertical, 2)
+                            .padding(.trailing, 18)
                         }
+                        .padding(.trailing, -18)
                     }
 
                     Button {
@@ -164,9 +246,9 @@ public struct InspectorSidebarView: View {
                     } label: {
                         HStack(spacing: 7) {
                             Image(systemName: "wand.and.stars")
-                                .font(.system(size: 12.5, weight: .medium))
+                                .font(.system(size: 13, weight: .regular))
                             Text("Pick random wallpaper")
-                                .font(.system(size: 12.5, weight: .medium))
+                                .font(.system(size: 13, weight: .regular))
                         }
                         .foregroundStyle(.white.opacity(0.92))
                         .frame(maxWidth: .infinity)
@@ -183,9 +265,17 @@ public struct InspectorSidebarView: View {
                     .buttonStyle(.plain)
 
                     // 8-Column Square Thumbnail Grid
+                    let filteredMeshPresets: [MeshPreset] = {
+                        if wallpaperCategory == "macOS" { return [] }
+                        if wallpaperCategory == "All" || wallpaperCategory == "Mesh" { return MeshPreset.builtIn }
+                        let sub = MeshPreset.builtIn.filter { $0.category.caseInsensitiveCompare(wallpaperCategory) == .orderedSame }
+                        return sub.isEmpty ? MeshPreset.builtIn : sub
+                    }()
+                    let showSystemItems = (wallpaperCategory == "All" || wallpaperCategory == "macOS" || wallpaperCategory == "Spring" || wallpaperCategory == "Sunset")
+
                     let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 8)
                     LazyVGrid(columns: columns, spacing: 6) {
-                        ForEach(MeshPreset.builtIn) { preset in
+                        ForEach(filteredMeshPresets) { preset in
                             let isSelected = (session.document.background.type == .mesh && session.document.background.meshPresetId == preset.id)
                             Button {
                                 session.mutate {
@@ -210,57 +300,343 @@ public struct InspectorSidebarView: View {
                             .buttonStyle(.plain)
                         }
 
-                        ForEach(systemWallpapers) { item in
-                            let isSelected = (session.document.background.type == .wallpaper && session.document.background.systemWallpaperName == item.name)
+                        if showSystemItems {
+                            ForEach(systemWallpapers) { item in
+                                let isSelected = (session.document.background.type == .wallpaper && session.document.background.systemWallpaperName == item.name)
+                                Button {
+                                    session.selectSystemWallpaper(item)
+                                } label: {
+                                    Group {
+                                        if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
+                                            Image(nsImage: nsImg)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                        } else {
+                                            Color.secondary.opacity(0.2)
+                                        }
+                                    }
+                                    .aspectRatio(1.0, contentMode: .fit)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                coalescedSlider(
+                    title: "Background blur",
+                    value: Binding(
+                        get: { session.document.background.blurRadius },
+                        set: { v in session.mutate { $0.background.blurRadius = v } }
+                    ),
+                    range: 0...60,
+                    defaultValue: 0.0,
+                    showResetButton: false
+                )
+
+            } else if bgType == .gradient {
+                // 2B. Background Gradient (`Swatch 1 + #HEX` + `Swatch 2 + #HEX` + Magic Wand + `Hue` Slider + 30 Gradient Presets)
+                let stop0Hex = session.document.background.gradient.stops.first?.color ?? "#4776E6"
+                let stop1Hex = session.document.background.gradient.stops.dropFirst().first?.color ?? "#8E54E9"
+
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Background Gradient")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        HStack(spacing: 6) {
+                            ColorSwatchPickerButton(
+                                hexColor: Binding(
+                                    get: { stop0Hex },
+                                    set: { newHex in
+                                        session.mutate { doc in
+                                            if doc.background.gradient.stops.isEmpty {
+                                                doc.background.gradient.stops = [
+                                                    GradientStopConfig(color: newHex, location: 0.0),
+                                                    GradientStopConfig(color: stop1Hex, location: 1.0)
+                                                ]
+                                            } else {
+                                                doc.background.gradient.stops[0].color = newHex
+                                            }
+                                        }
+                                    }
+                                )
+                            )
+
+                            HexInputBox(
+                                hexColor: Binding(
+                                    get: { stop0Hex },
+                                    set: { newHex in
+                                        session.mutate { doc in
+                                            if !doc.background.gradient.stops.isEmpty {
+                                                doc.background.gradient.stops[0].color = newHex
+                                            }
+                                        }
+                                    }
+                                )
+                            )
+
+                            ColorSwatchPickerButton(
+                                hexColor: Binding(
+                                    get: { stop1Hex },
+                                    set: { newHex in
+                                        session.mutate { doc in
+                                            if doc.background.gradient.stops.count < 2 {
+                                                doc.background.gradient.stops = [
+                                                    GradientStopConfig(color: stop0Hex, location: 0.0),
+                                                    GradientStopConfig(color: newHex, location: 1.0)
+                                                ]
+                                            } else {
+                                                doc.background.gradient.stops[1].color = newHex
+                                            }
+                                        }
+                                    }
+                                )
+                            )
+
+                            HexInputBox(
+                                hexColor: Binding(
+                                    get: { stop1Hex },
+                                    set: { newHex in
+                                        session.mutate { doc in
+                                            if doc.background.gradient.stops.count >= 2 {
+                                                doc.background.gradient.stops[1].color = newHex
+                                            }
+                                        }
+                                    }
+                                )
+                            )
+
                             Button {
-                                session.selectSystemWallpaper(item)
-                            } label: {
-                                Group {
-                                    if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
-                                        Image(nsImage: nsImg)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                    } else {
-                                        Color.secondary.opacity(0.2)
+                                if let pair = Self.curatedGradientPairs.randomElement() {
+                                    session.mutate { doc in
+                                        doc.background.gradient.stops = [
+                                            GradientStopConfig(color: pair.0, location: 0.0),
+                                            GradientStopConfig(color: pair.1, location: 1.0)
+                                        ]
                                     }
                                 }
-                                .aspectRatio(1.0, contentMode: .fit)
-                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
-                                )
+                            } label: {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 13.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.90))
+                                    .frame(width: 36, height: 36)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(Color.white.opacity(0.035))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .help("Pick random gradient")
+                        }
+                    }
+
+                    // `🎨 Hue` Slider (`paintpalette` + `Hue`)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "paintpalette")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.90))
+                            Text("Hue")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+                        }
+
+                        Slider(
+                            value: Binding(
+                                get: { gradientHueShift },
+                                set: { newVal in
+                                    let delta = newVal - gradientHueShift
+                                    gradientHueShift = newVal
+                                    session.mutate { doc in
+                                        let c0 = Color.shiftHue(ofHex: stop0Hex, by: delta)
+                                        let c1 = Color.shiftHue(ofHex: stop1Hex, by: delta)
+                                        doc.background.gradient.stops = [
+                                            GradientStopConfig(color: c0, location: 0.0),
+                                            GradientStopConfig(color: c1, location: 1.0)
+                                        ]
+                                    }
+                                }
+                            ),
+                            in: 0.0...1.0
+                        )
+                        .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
+                        .controlSize(.regular)
+                    }
+
+                    // 8-Column Grid of 30 Curated Gradient Swatches
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 8)
+                    LazyVGrid(columns: columns, spacing: 6) {
+                        ForEach(Array(Self.curatedGradientPairs.enumerated()), id: \.offset) { _, pair in
+                            let isSelected = (stop0Hex.caseInsensitiveCompare(pair.0) == .orderedSame && stop1Hex.caseInsensitiveCompare(pair.1) == .orderedSame)
+                            Button {
+                                session.mutate { doc in
+                                    doc.background.gradient.stops = [
+                                        GradientStopConfig(color: pair.0, location: 0.0),
+                                        GradientStopConfig(color: pair.1, location: 1.0)
+                                    ]
+                                }
+                            } label: {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color(hex: pair.0), Color(hex: pair.1)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .aspectRatio(1.0, contentMode: .fit)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                    )
                             }
                             .buttonStyle(.plain)
                         }
                     }
                 }
-            } else {
-                HStack {
-                    Text("Hex Color")
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.75))
-                    Spacer()
-                    TextField("#1E1E2E", text: Binding(
-                        get: { session.document.background.solidColor },
-                        set: { hex in session.mutate { $0.background.solidColor = hex } }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 104)
+
+            } else if bgType == .solid {
+                // 2C. Background Color (`36×36pt` Color Swatch Picker + `#HEX` Input + Magic Wand & 5!)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Background Color")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+
+                    HStack(spacing: 8) {
+                        ColorSwatchPickerButton(
+                            hexColor: Binding(
+                                get: { session.document.background.solidColor },
+                                set: { hex in session.mutate { $0.background.solidColor = hex } }
+                            )
+                        )
+
+                        HexInputBox(
+                            hexColor: Binding(
+                                get: { session.document.background.solidColor },
+                                set: { hex in session.mutate { $0.background.solidColor = hex } }
+                            ),
+                            width: 112
+                        )
+
+                        Button {
+                            if let randomHex = Self.curatedSolidColors.randomElement() {
+                                session.mutate { $0.background.solidColor = randomHex }
+                            }
+                        } label: {
+                            Image(systemName: "wand.and.stars")
+                                .font(.system(size: 13.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.90))
+                                .frame(width: 36, height: 36)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.white.opacity(0.035))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .help("Pick random color")
+                    }
+                }
+
+            } else if bgType == .image {
+                // 2D. Background Image (`Click to select, drop image, or press ⌘ V while hovering.` + `Background blur`)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Background Image")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+
+                    Button {
+                        let panel = NSOpenPanel()
+                        panel.allowedContentTypes = [.image]
+                        panel.allowsMultipleSelection = false
+                        if panel.runModal() == .OK, let url = panel.url {
+                            session.selectCustomBackgroundImage(from: url)
+                        }
+                    } label: {
+                        VStack(spacing: 10) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 22, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.62))
+
+                            Text("Click to select, drop image, or press ⌘ V while\nhovering.")
+                                .font(.system(size: 12.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.46))
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(2)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 112)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white.opacity(isHoveringImageDropZone ? 0.05 : 0.025))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(
+                                    isHoveringImageDropZone
+                                        ? Color(red: 0.44, green: 0.34, blue: 0.98)
+                                        : Color.white.opacity(0.08),
+                                    lineWidth: 1
+                                )
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHoveringImageDropZone = hovering
+                    }
+                    .onDrop(of: [.fileURL, .image], isTargeted: $isHoveringImageDropZone) { providers in
+                        guard let first = providers.first else { return false }
+                        if first.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                            first.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                                if let data = data as? Data,
+                                   let url = URL(dataRepresentation: data, relativeTo: nil) {
+                                    Task { @MainActor in
+                                        session.selectCustomBackgroundImage(from: url)
+                                    }
+                                }
+                            }
+                            return true
+                        }
+                        return false
+                    }
+                    .onPasteCommand(of: [.image, .fileURL]) { _ in
+                        let pb = NSPasteboard.general
+                        if let imgs = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
+                           let firstImg = imgs.first {
+                            session.selectCustomBackgroundNSImage(firstImg)
+                        } else if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+                                  let firstURL = urls.first {
+                            session.selectCustomBackgroundImage(from: firstURL)
+                        }
+                    }
+
+                    coalescedSlider(
+                        title: "Background blur",
+                        value: Binding(
+                            get: { session.document.background.blurRadius },
+                            set: { v in session.mutate { $0.background.blurRadius = v } }
+                        ),
+                        range: 0...60,
+                        defaultValue: 0.0,
+                        showResetButton: false
+                    )
                 }
             }
-
-            // 3. Background blur slider
-            coalescedSlider(
-                title: "Background blur",
-                value: Binding(
-                    get: { session.document.background.blurRadius },
-                    set: { v in session.mutate { $0.background.blurRadius = v } }
-                ),
-                range: 0...60,
-                defaultValue: 0.0,
-                showResetButton: false
-            )
 
             inspectorDivider
 
@@ -1416,11 +1792,534 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 6. Keyboard Shortcuts Inspector
+    // MARK: - 6. Dedicated Zoom Segment Editor ( `Close Zoom editor` 1:1!)
+
+    @ViewBuilder
+    private func zoomSegmentEditor(zoom: ZoomBlock) -> some View {
+        let zoomId = zoom.id
+        let isLoupe = (zoom.presentation == .loupe)
+        let isAuto = (zoom.mode == .followCursor)
+
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. `← Close Zoom editor` Button
+            Button {
+                withAnimation(.easeOut(duration: 0.14)) {
+                    session.selectedZoomId = nil
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Close Zoom editor")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            // 2. `Zoom style` (`Classic` | `Glass Loupe`)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Zoom style")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                HStack(spacing: 8) {
+                    segmentLargeOptionButton(
+                        title: "Classic",
+                        icon: "arrow.up.left.and.down.right.magnifyingglass",
+                        isSelected: !isLoupe
+                    ) {
+                        session.setZoomPresentation(id: zoomId, presentation: .screen)
+                    }
+
+                    segmentLargeOptionButton(
+                        title: "Glass Loupe",
+                        icon: "magnifyingglass.circle.fill",
+                        isSelected: isLoupe
+                    ) {
+                        session.setZoomPresentation(id: zoomId, presentation: .loupe)
+                    }
+                }
+            }
+
+            // 3. `Instant animation` Toggle
+            inspectorToggleRow(
+                title: "Instant animation",
+                icon: nil,
+                description: "If enabled, the zoom will be applied instantly without any animation.",
+                isOn: Binding(
+                    get: { zoom.instantAnimation },
+                    set: { val in
+                        session.mutate { doc in
+                            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                doc.timeline.zooms[idx].instantAnimation = val
+                            }
+                        }
+                    }
+                )
+            )
+
+            inspectorDivider
+
+            // 4. `Zoom position` (`Auto` | `Manual`)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Zoom position")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                HStack(spacing: 8) {
+                    segmentLargeOptionButton(
+                        title: "Auto",
+                        icon: "wand.and.stars",
+                        isSelected: isAuto
+                    ) {
+                        session.mutate { doc in
+                            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                doc.timeline.zooms[idx].mode = .followCursor
+                            }
+                        }
+                    }
+
+                    segmentLargeOptionButton(
+                        title: "Manual",
+                        icon: "scope",
+                        isSelected: !isAuto
+                    ) {
+                        session.mutate { doc in
+                            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                doc.timeline.zooms[idx].mode = .manual
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    isAuto
+                        ? "Zoomed camera will automatically try to keep the mouse cursor visible."
+                        : "Camera stays focused on the manual target point."
+                )
+                .font(.system(size: 12.5, weight: .regular))
+                .foregroundStyle(.white.opacity(0.42))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // 5. `Zoom level` Slider + Reset
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Zoom level")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                Text("How close to zoom on the cursor during this zoom phase")
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                coalescedSliderRowOnly(
+                    value: Binding(
+                        get: { zoom.scale },
+                        set: { val in
+                            session.setZoomScale(id: zoomId, scale: val)
+                        }
+                    ),
+                    range: 1.0...3.5,
+                    defaultValue: 1.8
+                )
+                .padding(.top, 4)
+            }
+
+            inspectorDivider
+
+            // 6. `Advanced` Collapsible Section
+            inspectorCollapsibleSection(
+                title: "Advanced",
+                isExpanded: $isAdvancedZoomSegmentExpanded
+            ) {
+                VStack(alignment: .leading, spacing: 14) {
+                    if isLoupe {
+                        coalescedSlider(
+                            title: "Loupe size",
+                            value: Binding(
+                                get: { zoom.loupe.radius01 },
+                                set: { v in
+                                    session.mutate { doc in
+                                        if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                            doc.timeline.zooms[idx].loupe.radius01 = v
+                                        }
+                                    }
+                                }
+                            ),
+                            range: 0.15...0.60,
+                            defaultValue: 0.35
+                        )
+                    }
+
+                    Button {
+                        session.applyZoomLevelToAllOtherZooms(fromId: zoomId)
+                    } label: {
+                        Text("Apply zoom level to all other zooms")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.90))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.05))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    inspectorToggleRow(
+                        title: "Disable zoom",
+                        icon: nil,
+                        description: nil,
+                        isOn: Binding(
+                            get: { zoom.disabled },
+                            set: { _ in session.toggleZoomDisabled(id: zoomId) }
+                        )
+                    )
+                }
+            }
+
+            inspectorDivider
+
+            // 7. `🗑 Remove zoom` Button
+            Button {
+                session.deleteZoom(zoomId: zoomId)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .regular))
+                    Text("Remove zoom")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.035))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - 7. Dedicated Shortcut Segment Editor (`← Close Shortcut editor` — Per-Segment Keys, Position, Offset, Color & Delete!)
+
+    @ViewBuilder
+    private func shortcutSegmentEditor(cluster: ProjectSession.ShortcutPressCluster) -> some View {
+        let isHidden = session.isShortcutHidden(cluster)
+        let hasCustomStyleOverride = (session.document.captions.shortcutStyleOverrides[cluster.id] != nil)
+        let currentStyle = session.effectiveShortcutStyle(for: cluster)
+
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. `← Close Shortcut editor` Button
+            Button {
+                stopShortcutKeyRecording()
+                withAnimation(.easeOut(duration: 0.14)) {
+                    session.selectedShortcutId = nil
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Close Shortcut editor")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            // 2. Shortcut Keys & Live Key Recorder
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Shortcut keys")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+                    Spacer()
+                    Text(cluster.compactTimelineLabel)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.20))
+                        )
+                }
+
+                // Interactive `Record shortcut…` Button
+                Button {
+                    if isRecordingShortcutKeys {
+                        stopShortcutKeyRecording()
+                    } else {
+                        startShortcutKeyRecording(for: cluster)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: isRecordingShortcutKeys ? "record.circle.fill" : "keyboard")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(isRecordingShortcutKeys ? Color.red : .white.opacity(0.90))
+                        Text(isRecordingShortcutKeys ? "Press any shortcut on keyboard… (ESC to cancel)" : "Record shortcut keys…")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(isRecordingShortcutKeys ? Color.red.opacity(0.16) : Color.white.opacity(0.04))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                isRecordingShortcutKeys
+                                    ? Color.red.opacity(0.65)
+                                    : Color.white.opacity(0.08),
+                                lineWidth: 1
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+
+                // Quick Modifier Toggle Pills (`⌘`, `⇧`, `⌥`, `⌃`, `⇪`) + Primary Key Input
+                HStack(spacing: 6) {
+                    ForEach([("Meta", "⌘"), ("Shift", "⇧"), ("Alt", "⌥"), ("Ctrl", "⌃"), ("CapsLock", "⇪")], id: \.0) { modKey, modSym in
+                        let hasMod = cluster.modifiers.contains(modKey)
+                        inspectorPillOptionButton(title: modSym, isSelected: hasMod) {
+                            var nextMods = cluster.modifiers
+                            if let idx = nextMods.firstIndex(of: modKey) {
+                                nextMods.remove(at: idx)
+                            } else {
+                                nextMods.append(modKey)
+                            }
+                            session.updateShortcutKeys(for: cluster, modifiers: nextMods, primaryKey: cluster.primaryKey)
+                        }
+                    }
+
+                    TextField("Key", text: Binding(
+                        get: { cluster.primaryKey },
+                        set: { newKey in
+                            session.updateShortcutKeys(for: cluster, modifiers: cluster.modifiers, primaryKey: newKey)
+                        }
+                    ))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 8)
+                    .frame(height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                    )
+                }
+            }
+
+            // 3. Visibility Toggle (`Show this shortcut`)
+            inspectorToggleRow(
+                title: "Show this shortcut",
+                icon: nil,
+                description: "When disabled, this shortcut segment is dimmed on the timeline and hidden in the video.",
+                isOn: Binding(
+                    get: { !isHidden },
+                    set: { shouldShow in
+                        if shouldShow == isHidden {
+                            session.toggleShortcutHidden(cluster)
+                        }
+                    }
+                )
+            )
+
+            inspectorDivider
+
+            // 4. Custom Style Override Toggle (`Customize position & color for this shortcut only`)
+            inspectorToggleRow(
+                title: "Custom style for this shortcut",
+                icon: nil,
+                description: "Override the track's default position, offset, and keycap color for this segment.",
+                isOn: Binding(
+                    get: { hasCustomStyleOverride },
+                    set: { enabled in
+                        session.mutate { doc in
+                            if enabled {
+                                doc.captions.shortcutStyleOverrides[cluster.id] = currentStyle
+                            } else {
+                                doc.captions.shortcutStyleOverrides.removeValue(forKey: cluster.id)
+                            }
+                        }
+                    }
+                )
+            )
+
+            // 5. Position, Offset X/Y & Keycap Color Controls (Edits either this segment's override or the track's style!)
+            shortcutStyleControlsSection(
+                style: Binding(
+                    get: { session.effectiveShortcutStyle(for: cluster) },
+                    set: { updatedStyle in
+                        session.mutate { doc in
+                            if doc.captions.shortcutStyleOverrides[cluster.id] != nil {
+                                doc.captions.shortcutStyleOverrides[cluster.id] = updatedStyle
+                            } else if let tIdx = doc.captions.shortcutTracks.firstIndex(where: { $0.id == cluster.trackId }) {
+                                doc.captions.shortcutTracks[tIdx].style = updatedStyle
+                                if tIdx == 0 {
+                                    doc.captions.defaultShortcutStyle = updatedStyle
+                                }
+                            } else {
+                                doc.captions.defaultShortcutStyle = updatedStyle
+                            }
+                        }
+                    }
+                )
+            )
+
+            inspectorDivider
+
+            // 6. Action Buttons: `Duplicate shortcut` & `🗑 Remove shortcut` (Permanent Delete!)
+            VStack(spacing: 8) {
+                Button {
+                    session.duplicateShortcut(cluster)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.square.on.square")
+                            .font(.system(size: 13, weight: .regular))
+                        Text("Duplicate shortcut")
+                            .font(.system(size: 13, weight: .regular))
+                    }
+                    .foregroundStyle(.white.opacity(0.92))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color.white.opacity(0.035))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    stopShortcutKeyRecording()
+                    session.deleteShortcut(cluster)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 13, weight: .regular))
+                        Text("Remove shortcut")
+                            .font(.system(size: 13, weight: .regular))
+                    }
+                    .foregroundStyle(Color(red: 1.0, green: 0.45, blue: 0.45))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color.red.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.red.opacity(0.22), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .onDisappear {
+            stopShortcutKeyRecording()
+        }
+    }
+
+    private func startShortcutKeyRecording(for cluster: ProjectSession.ShortcutPressCluster) {
+        stopShortcutKeyRecording()
+        isRecordingShortcutKeys = true
+        shortcutKeyRecorderMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { // ESC cancels key recording
+                stopShortcutKeyRecording()
+                return nil
+            }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            var mods: [String] = []
+            if flags.contains(.capsLock) { mods.append("CapsLock") }
+            if flags.contains(.command) { mods.append("Meta") }
+            if flags.contains(.shift) { mods.append("Shift") }
+            if flags.contains(.option) { mods.append("Alt") }
+            if flags.contains(.control) { mods.append("Ctrl") }
+
+            let keyName: String = {
+                switch event.keyCode {
+                case 36, 76: return "Enter"
+                case 48: return "Tab"
+                case 49: return "Space"
+                case 51: return "Delete"
+                case 117: return "ForwardDelete"
+                case 123: return "ArrowLeft"
+                case 124: return "ArrowRight"
+                case 125: return "ArrowDown"
+                case 126: return "ArrowUp"
+                default:
+                    if let chars = event.charactersIgnoringModifiers, !chars.isEmpty {
+                        return chars.uppercased()
+                    }
+                    return "K"
+                }
+            }()
+
+            session.updateShortcutKeys(for: cluster, modifiers: mods, primaryKey: keyName)
+            stopShortcutKeyRecording()
+            return nil
+        }
+    }
+
+    private func stopShortcutKeyRecording() {
+        isRecordingShortcutKeys = false
+        if let monitor = shortcutKeyRecorderMonitor {
+            NSEvent.removeMonitor(monitor)
+            shortcutKeyRecorderMonitor = nil
+        }
+    }
+
+    // MARK: - 8. Global & Multi-Track Keyboard Shortcuts Inspector
 
     @ViewBuilder
     private var shortcutsInspector: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        let tracks = session.document.captions.shortcutTracks
+        let activeTrackIndex = tracks.firstIndex(where: { $0.id == selectedShortcutTrackId }) ?? 0
+        let activeTrack = tracks.indices.contains(activeTrackIndex) ? tracks[activeTrackIndex] : ShortcutTrackConfig()
+
+        VStack(alignment: .leading, spacing: 22) {
             inspectorToggleRow(
                 title: "Show shortcuts",
                 icon: nil,
@@ -1430,6 +2329,52 @@ public struct InspectorSidebarView: View {
                     set: { v in session.mutate { $0.captions.showKeystrokes = v } }
                 )
             )
+
+            // Quick Action Buttons: `+ Add shortcut at playhead` & `+ Add shortcut track`
+            HStack(spacing: 8) {
+                Button {
+                    session.addCustomShortcut(trackId: activeTrack.id)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Add shortcut")
+                            .font(.system(size: 12.5, weight: .regular))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(red: 0.302, green: 0.184, blue: 0.961))
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    let newId = session.addShortcutTrack()
+                    selectedShortcutTrackId = newId
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "rectangle.stack.badge.plus")
+                            .font(.system(size: 12, weight: .regular))
+                        Text("New track")
+                            .font(.system(size: 12.5, weight: .regular))
+                    }
+                    .foregroundStyle(.white.opacity(0.92))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
 
             if session.document.captions.showKeystrokes {
                 coalescedSlider(
@@ -1451,8 +2396,367 @@ public struct InspectorSidebarView: View {
                         set: { v in session.mutate { $0.captions.showSingleKeyShortcuts = v } }
                     )
                 )
+
+                inspectorDivider
+
+                // Multi-Track Selector (if >1 track exists, or shows current track settings)
+                if tracks.count > 1 {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Shortcut track")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+                            Spacer()
+                            if tracks.count > 1 && activeTrackIndex > 0 {
+                                Button {
+                                    session.removeShortcutTrack(id: activeTrack.id)
+                                    selectedShortcutTrackId = session.document.captions.shortcutTracks.first?.id ?? "default-shortcuts-track"
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 11))
+                                        Text("Remove track")
+                                            .font(.system(size: 11.5))
+                                    }
+                                    .foregroundStyle(Color(red: 1.0, green: 0.45, blue: 0.45))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        ScrollViewReader { trackProxy in
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(tracks) { trk in
+                                        inspectorPillOptionButton(
+                                            title: trk.name,
+                                            isSelected: activeTrack.id == trk.id
+                                        ) {
+                                            selectedShortcutTrackId = trk.id
+                                            withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                                trackProxy.scrollTo(trk.id, anchor: .center)
+                                            }
+                                        }
+                                        .id(trk.id)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Track Position, Offset X/Y & Keycap Color
+                shortcutStyleControlsSection(
+                    style: Binding(
+                        get: {
+                            let idx = session.document.captions.shortcutTracks.firstIndex(where: { $0.id == activeTrack.id }) ?? 0
+                            if session.document.captions.shortcutTracks.indices.contains(idx) {
+                                return session.document.captions.shortcutTracks[idx].style
+                            }
+                            return session.document.captions.defaultShortcutStyle
+                        },
+                        set: { newStyle in
+                            session.mutate { doc in
+                                let idx = doc.captions.shortcutTracks.firstIndex(where: { $0.id == activeTrack.id }) ?? 0
+                                if doc.captions.shortcutTracks.indices.contains(idx) {
+                                    doc.captions.shortcutTracks[idx].style = newStyle
+                                }
+                                if idx == 0 {
+                                    doc.captions.defaultShortcutStyle = newStyle
+                                }
+                            }
+                        }
+                    )
+                )
             }
         }
+    }
+
+    /// Reusable Position (`Bottom` | `Top` | `Left` | `Right`), Offset (`Horizontal` & `Vertical`), and Keycap Color (`Default` | `Solid` | `Gradient`) controls.
+    @ViewBuilder
+    private func shortcutStyleControlsSection(style: Binding<ShortcutStyleConfig>) -> some View {
+        let current = style.wrappedValue
+
+        VStack(alignment: .leading, spacing: 20) {
+            // 1. Position (`Bottom` | `Top` | `Left` | `Right`)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Position")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                HStack(spacing: 6) {
+                    ForEach(ShortcutDockPosition.allCases) { pos in
+                        inspectorPillOptionButton(
+                            title: pos.label,
+                            isSelected: current.dockPosition == pos
+                        ) {
+                            style.wrappedValue.dockPosition = pos
+                        }
+                    }
+                }
+
+                if current.dockPosition.isVerticalStack {
+                    Text("Keycaps are stacked vertically along the \(current.dockPosition.label.lowercased()) edge.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.42))
+                }
+            }
+
+            // 2. Fine Position Offset (`Horizontal offset` & `Vertical offset` to avoid captions!)
+            coalescedSlider(
+                title: "Horizontal offset",
+                value: Binding(
+                    get: { current.offsetX },
+                    set: { style.wrappedValue.offsetX = $0 }
+                ),
+                range: -0.45...0.45,
+                defaultValue: 0.0
+            )
+
+            coalescedSlider(
+                title: "Vertical offset",
+                value: Binding(
+                    get: { current.offsetY },
+                    set: { style.wrappedValue.offsetY = $0 }
+                ),
+                range: -0.45...0.45,
+                defaultValue: 0.0
+            )
+
+            inspectorDivider
+
+            // 3. Keycap Color (`Default` | `Solid` | `Gradient` + Color Picker!)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Keycap color")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                HStack(spacing: 6) {
+                    ForEach(ShortcutColorMode.allCases) { mode in
+                        inspectorPillOptionButton(
+                            title: mode.label,
+                            isSelected: current.colorMode == mode
+                        ) {
+                            style.wrappedValue.colorMode = mode
+                        }
+                    }
+                }
+
+                if current.colorMode == .solid {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Key background")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.65))
+
+                        HStack(spacing: 8) {
+                            ColorSwatchPickerButton(
+                                hexColor: Binding(
+                                    get: { current.solidColorHex },
+                                    set: { style.wrappedValue.solidColorHex = $0 }
+                                )
+                            )
+
+                            HexInputBox(
+                                hexColor: Binding(
+                                    get: { current.solidColorHex },
+                                    set: { style.wrappedValue.solidColorHex = $0 }
+                                ),
+                                width: 110
+                            )
+
+                            Button {
+                                if let rand = Self.curatedSolidColors.randomElement() {
+                                    style.wrappedValue.solidColorHex = rand
+                                }
+                            } label: {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 13.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.90))
+                                    .frame(width: 36, height: 36)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(Color.white.opacity(0.035))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Text("Text color")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.65))
+
+                        HStack(spacing: 8) {
+                            ColorSwatchPickerButton(
+                                hexColor: Binding(
+                                    get: { current.textColorHex },
+                                    set: { style.wrappedValue.textColorHex = $0 }
+                                )
+                            )
+
+                            HexInputBox(
+                                hexColor: Binding(
+                                    get: { current.textColorHex },
+                                    set: { style.wrappedValue.textColorHex = $0 }
+                                ),
+                                width: 110
+                            )
+                        }
+                    }
+                    .padding(.top, 4)
+
+                } else if current.colorMode == .gradient {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Key gradient")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.65))
+
+                        HStack(spacing: 6) {
+                            ColorSwatchPickerButton(
+                                hexColor: Binding(
+                                    get: { current.gradientStartHex },
+                                    set: { style.wrappedValue.gradientStartHex = $0 }
+                                )
+                            )
+
+                            HexInputBox(
+                                hexColor: Binding(
+                                    get: { current.gradientStartHex },
+                                    set: { style.wrappedValue.gradientStartHex = $0 }
+                                )
+                            )
+
+                            ColorSwatchPickerButton(
+                                hexColor: Binding(
+                                    get: { current.gradientEndHex },
+                                    set: { style.wrappedValue.gradientEndHex = $0 }
+                                )
+                            )
+
+                            HexInputBox(
+                                hexColor: Binding(
+                                    get: { current.gradientEndHex },
+                                    set: { style.wrappedValue.gradientEndHex = $0 }
+                                )
+                            )
+
+                            Button {
+                                if let pair = Self.curatedGradientPairs.randomElement() {
+                                    style.wrappedValue.gradientStartHex = pair.0
+                                    style.wrappedValue.gradientEndHex = pair.1
+                                }
+                            } label: {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 13.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.90))
+                                    .frame(width: 36, height: 36)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(Color.white.opacity(0.035))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        // Mini 8-column preset gradient picker for keycaps
+                        let columns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 8)
+                        LazyVGrid(columns: columns, spacing: 5) {
+                            ForEach(Array(Self.curatedGradientPairs.prefix(16).enumerated()), id: \.offset) { _, pair in
+                                let isSel = (current.gradientStartHex.caseInsensitiveCompare(pair.0) == .orderedSame && current.gradientEndHex.caseInsensitiveCompare(pair.1) == .orderedSame)
+                                Button {
+                                    style.wrappedValue.gradientStartHex = pair.0
+                                    style.wrappedValue.gradientEndHex = pair.1
+                                } label: {
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color(hex: pair.0), Color(hex: pair.1)],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                        .aspectRatio(1.0, contentMode: .fit)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                                .strokeBorder(isSel ? Color.white : Color.white.opacity(0.12), lineWidth: isSel ? 1.4 : 0.8)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        Text("Text color")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.65))
+                            .padding(.top, 2)
+
+                        HStack(spacing: 8) {
+                            ColorSwatchPickerButton(
+                                hexColor: Binding(
+                                    get: { current.textColorHex },
+                                    set: { style.wrappedValue.textColorHex = $0 }
+                                )
+                            )
+
+                            HexInputBox(
+                                hexColor: Binding(
+                                    get: { current.textColorHex },
+                                    set: { style.wrappedValue.textColorHex = $0 }
+                                ),
+                                width: 110
+                            )
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func segmentLargeOptionButton(
+        title: String,
+        icon: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 13.5, weight: .regular))
+                Text(title)
+                    .font(.system(size: 13.5, weight: .regular))
+            }
+            .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.85))
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.16)
+                            : Color.white.opacity(0.035)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        isSelected
+                            ? Color(red: 0.44, green: 0.34, blue: 0.98)
+                            : Color.white.opacity(0.06),
+                        lineWidth: isSelected ? 1.3 : 1.0
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Helpers
@@ -1496,16 +2800,16 @@ public struct InspectorSidebarView: View {
                 HStack(spacing: 7) {
                     if let icon = icon {
                         Image(systemName: icon)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.white.opacity(0.88))
                     }
                     Text(title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.white.opacity(0.92))
                 }
                 if let desc = description {
                     Text(desc)
-                        .font(.system(size: 12))
+                        .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(.white.opacity(0.45))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1526,19 +2830,25 @@ public struct InspectorSidebarView: View {
     ) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.white.opacity(isSelected ? 0.96 : 0.80))
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
+                .font(.system(size: 13.0, weight: .regular))
+                .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.82))
+                .padding(.horizontal, 15)
+                .frame(height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(isSelected ? 0.08 : 0.035))
+                        .fill(
+                            isSelected
+                                ? Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.16)
+                                : Color.white.opacity(0.038)
+                        )
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(
-                            isSelected ? Color(red: 0.50, green: 0.44, blue: 0.78).opacity(0.85) : Color.white.opacity(0.06),
-                            lineWidth: 1.0
+                            isSelected
+                                ? Color(red: 0.44, green: 0.34, blue: 0.98)
+                                : Color.white.opacity(0.06),
+                            lineWidth: isSelected ? 1.3 : 1.0
                         )
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -1800,6 +3110,255 @@ private struct CursorStyleHorizontalCardView: View {
     }
 }
 
+// MARK: - Visual Color Swatch Button, Hex Box & Interactive 2D HSB Color Picker Popover
+
+private struct ColorSwatchPickerButton: View {
+    @Binding var hexColor: String
+    @State private var isShowingPopover = false
+
+    var body: some View {
+        Button {
+            isShowingPopover.toggle()
+        } label: {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(hex: hexColor))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1.2)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isShowingPopover, arrowEdge: .leading) {
+            ColorPickerPopoverView(hexColor: $hexColor)
+        }
+    }
+}
+
+private struct HexInputBox: View {
+    @Binding var hexColor: String
+    var width: CGFloat = 92
+
+    var body: some View {
+        TextField("#4776E6", text: $hexColor)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .regular))
+            .foregroundStyle(.white.opacity(0.95))
+            .padding(.horizontal, 11)
+            .frame(width: width, height: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.035))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+    }
+}
+
+private struct ColorPickerPopoverView: View {
+    @Binding var hexColor: String
+
+    @State private var hue: Double = 0.62
+    @State private var saturation: Double = 0.75
+    @State private var brightness: Double = 0.90
+
+    private static let paletteSwatches: [String] = [
+        "#FFFFFF", "#CBD5E1", "#64748B", "#1E293B", "#0F172A", "#18181B", "#EF4444", "#F97316",
+        "#F59E0B", "#EAB308", "#84CC16", "#22C55E", "#10B981", "#14B8A6", "#06B6D4", "#0EA5E9",
+        "#3B82F6", "#4776E6", "#6366F1", "#4D2FF5", "#8B5CF6", "#8E54E9", "#D946EF", "#EC4899"
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // 1. 2D Saturation / Brightness Square (`224 × 150`)
+            GeometryReader { geo in
+                let w = max(1.0, geo.size.width)
+                let h = max(1.0, geo.size.height)
+
+                ZStack(alignment: .topLeading) {
+                    // Base pure hue
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(hue: hue, saturation: 1.0, brightness: 1.0))
+
+                    // White -> Transparent horizontal saturation gradient
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.white, .white.opacity(0.0)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+
+                    // Transparent -> Black vertical brightness gradient
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.black.opacity(0.0), .black],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+
+                    // Circular thumb handle
+                    Circle()
+                        .strokeBorder(Color.white, lineWidth: 2.2)
+                        .background(Circle().fill(Color(hex: hexColor)))
+                        .frame(width: 14, height: 14)
+                        .shadow(color: .black.opacity(0.5), radius: 3)
+                        .offset(
+                            x: CGFloat(saturation) * w - 7.0,
+                            y: CGFloat(1.0 - brightness) * h - 7.0
+                        )
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            saturation = min(1.0, max(0.0, Double(value.location.x / w)))
+                            brightness = min(1.0, max(0.0, 1.0 - Double(value.location.y / h)))
+                            hexColor = Color.hexString(hue: hue, saturation: saturation, brightness: brightness)
+                        }
+                )
+            }
+            .frame(width: 224, height: 148)
+
+            // 2. Rainbow Hue Bar (`224 × 14`)
+            GeometryReader { geo in
+                let w = max(1.0, geo.size.width)
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: (0...12).map { i in
+                                    Color(hue: Double(i) / 12.0, saturation: 1.0, brightness: 1.0)
+                                },
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 12)
+
+                    Circle()
+                        .fill(Color(hue: hue, saturation: 1.0, brightness: 1.0))
+                        .overlay(Circle().strokeBorder(Color.white, lineWidth: 2))
+                        .frame(width: 16, height: 16)
+                        .shadow(color: .black.opacity(0.45), radius: 2)
+                        .offset(x: CGFloat(hue) * (w - 16.0))
+                }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            hue = min(1.0, max(0.0, Double(value.location.x / w)))
+                            hexColor = Color.hexString(hue: hue, saturation: saturation, brightness: brightness)
+                        }
+                )
+            }
+            .frame(width: 224, height: 16)
+
+            // 3. Curated Quick Swatches (`8 × 3` grid)
+            let cols = Array(repeating: GridItem(.flexible(), spacing: 5), count: 8)
+            LazyVGrid(columns: cols, spacing: 5) {
+                ForEach(Self.paletteSwatches, id: \.self) { swatchHex in
+                    let isSel = (hexColor.caseInsensitiveCompare(swatchHex) == .orderedSame)
+                    Button {
+                        hexColor = swatchHex
+                        let hsb = Color.hsbComponents(fromHex: swatchHex)
+                        hue = hsb.h
+                        saturation = hsb.s
+                        brightness = hsb.b
+                    } label: {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color(hex: swatchHex))
+                            .aspectRatio(1.0, contentMode: .fit)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .strokeBorder(isSel ? Color.white : Color.white.opacity(0.15), lineWidth: isSel ? 1.5 : 0.8)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // 4. Bottom Hex Input + Native Eyedropper Button
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(hex: hexColor))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+                    )
+
+                TextField("#4776E6", text: $hexColor)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                    )
+
+                Button {
+                    NSColorSampler().show { sampledColor in
+                        if let sampled = sampledColor?.usingColorSpace(.sRGB) {
+                            let r = Int(round(sampled.redComponent * 255.0))
+                            let g = Int(round(sampled.greenComponent * 255.0))
+                            let b = Int(round(sampled.blueComponent * 255.0))
+                            let newHex = String(format: "#%02X%02X%02X", max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
+                            hexColor = newHex
+                            let hsb = Color.hsbComponents(fromHex: newHex)
+                            hue = hsb.h
+                            saturation = hsb.s
+                            brightness = hsb.b
+                        }
+                    }
+                } label: {
+                    Image(systemName: "eyedropper")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.90))
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Pick color from screen")
+            }
+        }
+        .padding(14)
+        .frame(width: 252)
+        .background(Color(red: 0.075, green: 0.075, blue: 0.09))
+        .preferredColorScheme(.dark)
+        .onAppear {
+            let hsb = Color.hsbComponents(fromHex: hexColor)
+            hue = hsb.h
+            saturation = hsb.s
+            brightness = hsb.b
+        }
+    }
+}
+
 extension Color {
     init(hex: String) {
         let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
@@ -1809,5 +3368,41 @@ extension Color {
         let g = Double((rgb >> 8) & 0xFF) / 255.0
         let b = Double(rgb & 0xFF) / 255.0
         self.init(red: r, green: g, blue: b)
+    }
+
+    static func hsbComponents(fromHex hex: String) -> (h: Double, s: Double, b: Double) {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var rgb: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&rgb)
+        let r = CGFloat((rgb >> 16) & 0xFF) / 255.0
+        let g = CGFloat((rgb >> 8) & 0xFF) / 255.0
+        let b = CGFloat(rgb & 0xFF) / 255.0
+        let nsColor = NSColor(srgbRed: r, green: g, blue: b, alpha: 1.0)
+        var h: CGFloat = 0
+        var s: CGFloat = 0
+        var br: CGFloat = 0
+        var a: CGFloat = 0
+        nsColor.getHue(&h, saturation: &s, brightness: &br, alpha: &a)
+        return (Double(h), Double(s), Double(br))
+    }
+
+    static func hexString(hue: Double, saturation: Double, brightness: Double) -> String {
+        let nsColor = NSColor(
+            hue: CGFloat(min(1.0, max(0.0, hue))),
+            saturation: CGFloat(min(1.0, max(0.0, saturation))),
+            brightness: CGFloat(min(1.0, max(0.0, brightness))),
+            alpha: 1.0
+        ).usingColorSpace(.sRGB) ?? NSColor.white
+        let r = Int(round(nsColor.redComponent * 255.0))
+        let g = Int(round(nsColor.greenComponent * 255.0))
+        let b = Int(round(nsColor.blueComponent * 255.0))
+        return String(format: "#%02X%02X%02X", max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
+    }
+
+    static func shiftHue(ofHex hex: String, by delta: Double) -> String {
+        let hsb = hsbComponents(fromHex: hex)
+        var nextHue = (hsb.h + delta).truncatingRemainder(dividingBy: 1.0)
+        if nextHue < 0 { nextHue += 1.0 }
+        return hexString(hue: nextHue, saturation: max(0.15, hsb.s), brightness: max(0.15, hsb.b))
     }
 }

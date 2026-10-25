@@ -32,6 +32,7 @@ public final class ProjectSession: Identifiable {
     public var selectedSliceId: String?
     public var selectedZoomId: String?
     public var selectedMaskId: String?
+    public var selectedShortcutId: String?
     public var selectedInspectorTab: InspectorTab = .background
 
     // Audio Waveform Envelope Samples (`0.0 ... 1.0`, ~240 buckets across `metadata.durationMs`)
@@ -341,11 +342,13 @@ public final class ProjectSession: Identifiable {
         selectedSliceId = id
         selectedZoomId = nil
         selectedMaskId = nil
+        selectedShortcutId = nil
     }
 
     public func selectZoom(_ id: String?) {
         selectedZoomId = id
         selectedMaskId = nil
+        selectedShortcutId = nil
         if id != nil {
             selectedInspectorTab = .zoom
         }
@@ -354,12 +357,27 @@ public final class ProjectSession: Identifiable {
     public func selectMask(_ id: String?) {
         selectedMaskId = id
         selectedZoomId = nil
+        selectedShortcutId = nil
         if id != nil {
             selectedInspectorTab = .masks
         }
     }
 
+    public func selectShortcut(_ id: String?) {
+        selectedShortcutId = id
+        selectedZoomId = nil
+        selectedMaskId = nil
+        if id != nil {
+            selectedInspectorTab = .shortcuts
+        }
+    }
+
     public func deleteSelectedTimelineItem() {
+        if let shortcutId = selectedShortcutId,
+           let cluster = detectedShortcutClusters.first(where: { $0.id == shortcutId }) {
+            deleteShortcut(cluster)
+            return
+        }
         if let maskId = selectedMaskId {
             deleteMask(maskId: maskId)
             return
@@ -884,6 +902,44 @@ public final class ProjectSession: Identifiable {
             doc.background.type = .wallpaper
             doc.background.systemWallpaperName = item.name
             doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+        }
+    }
+
+    public func selectCustomBackgroundImage(from url: URL) {
+        let assetsDir = packageURL.appendingPathComponent("assets", isDirectory: true)
+        try? FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        let destFileName = "custom-bg-\(Int(Date().timeIntervalSince1970)).jpg"
+        let destURL = assetsDir.appendingPathComponent(destFileName)
+
+        if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: url, maxPixelSize: 2560) {
+            let bitmap = NSBitmapImageRep(cgImage: cgImage)
+            if let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.90]) {
+                try? jpgData.write(to: destURL, options: .atomic)
+            }
+        } else {
+            try? FileManager.default.copyItem(at: url, to: destURL)
+        }
+
+        mutate { doc in
+            doc.background.type = .image
+            doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+        }
+    }
+
+    public func selectCustomBackgroundNSImage(_ image: NSImage) {
+        let assetsDir = packageURL.appendingPathComponent("assets", isDirectory: true)
+        try? FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        let destFileName = "custom-bg-\(Int(Date().timeIntervalSince1970)).jpg"
+        let destURL = assetsDir.appendingPathComponent(destFileName)
+
+        if let tiff = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.90]) {
+            try? jpgData.write(to: destURL, options: .atomic)
+            mutate { doc in
+                doc.background.type = .image
+                doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+            }
         }
     }
 
@@ -1465,130 +1521,188 @@ public final class ProjectSession: Identifiable {
     }
 
     public struct ShortcutPressCluster: Identifiable, Equatable, Sendable {
-        public var id: Int { firstKeyDownMsInt }
+        public let id: String
+        public let trackId: String
+        public let isCustomSegment: Bool
         public let firstKeyDownMsInt: Int
         public let firstKeyDownMs: Double
         public let lastKeyDownMs: Double
         public var displayStartMs: Double
         public var displayEndMs: Double
+        public let modifiers: [String]
+        public let primaryKey: String
         public let compactTimelineLabel: String
         public let keyCaps: [ShortcutKeyCap]
     }
 
-    /// Computes all visible/hidden shortcut clusters on the timeline according to `showSingleKeyShortcuts`.
+    /// Computes all visible/hidden shortcut clusters across all shortcut tracks.
     public var detectedShortcutClusters: [ShortcutPressCluster] {
-        guard !keyEvents.isEmpty else { return [] }
-        let allowSingleLetters = document.captions.showSingleKeyShortcuts
+        let primaryTrackId = document.captions.shortcutTracks.first?.id ?? "default-shortcuts-track"
+        let deletedTelemetrySet = Set(document.captions.deletedShortcutStartMs)
+        let timingOverrides = document.captions.shortcutTimingOverrides
+        let keyOverrides = document.captions.shortcutKeyOverrides
 
-        struct NormalizedEvent {
-            let raw: KeyStrokeEvent
-            let modifiers: [String] // Canonical order: ["CapsLock", "Meta", "Shift", "Alt", "Ctrl"]
-            let primaryKey: String
-            var tokenCount: Int { modifiers.count + 1 }
-            var signature: String { (modifiers + [primaryKey]).joined(separator: "+") }
-        }
+        var telemetryClusters: [ShortcutPressCluster] = []
 
-        let normalized: [NormalizedEvent] = keyEvents.compactMap { ev in
-            guard let key = Self.normalizeKeyToken(from: ev) else { return nil }
-            let mods = Self.normalizeModifiers(from: ev.modifiers ?? [])
-            return NormalizedEvent(raw: ev, modifiers: mods, primaryKey: key)
-        }
+        if !keyEvents.isEmpty {
+            let allowSingleLetters = document.captions.showSingleKeyShortcuts
 
-        // Step 1: Filter via the `F_` / `Ag` rule
-        var filtered: [NormalizedEvent] = []
-        for i in 0..<normalized.count {
-            let curr = normalized[i]
-            // If `Shift + single char` is followed within 1000ms by a single char with NO modifiers, it's just a capital letter while typing prose!
-            if curr.modifiers == ["Shift"], curr.primaryKey.count == 1, i + 1 < normalized.count {
-                let next = normalized[i + 1]
-                if next.modifiers.isEmpty && (next.raw.t - curr.raw.t) < 1000.0 {
+            struct NormalizedEvent {
+                let raw: KeyStrokeEvent
+                let modifiers: [String]
+                let primaryKey: String
+                var tokenCount: Int { modifiers.count + 1 }
+                var signature: String { (modifiers + [primaryKey]).joined(separator: "+") }
+            }
+
+            let normalized: [NormalizedEvent] = keyEvents.compactMap { ev in
+                guard let key = Self.normalizeKeyToken(from: ev) else { return nil }
+                let mods = Self.normalizeModifiers(from: ev.modifiers ?? [])
+                return NormalizedEvent(raw: ev, modifiers: mods, primaryKey: key)
+            }
+
+            var filtered: [NormalizedEvent] = []
+            for i in 0..<normalized.count {
+                let curr = normalized[i]
+                if curr.modifiers == ["Shift"], curr.primaryKey.count == 1, i + 1 < normalized.count {
+                    let next = normalized[i + 1]
+                    if next.modifiers.isEmpty && (next.raw.t - curr.raw.t) < 1000.0 {
+                        continue
+                    }
+                }
+
+                if !allowSingleLetters && curr.tokenCount == 1 {
+                    guard Self.isAllowedStandaloneSpecialKey(curr.primaryKey) else {
+                        continue
+                    }
+                }
+                filtered.append(curr)
+            }
+
+            struct RawGroup {
+                let modifiers: [String]
+                let primaryKey: String
+                let signature: String
+                var events: [NormalizedEvent]
+            }
+
+            var groups: [RawGroup] = []
+            for curr in filtered {
+                guard let last = groups.last else {
+                    groups.append(RawGroup(modifiers: curr.modifiers, primaryKey: curr.primaryKey, signature: curr.signature, events: [curr]))
                     continue
+                }
+
+                if allowSingleLetters {
+                    let firstOfLast = last.events[0]
+                    if firstOfLast.modifiers.isEmpty && curr.modifiers.isEmpty
+                        && Self.isAlphaNumericSingleKey(firstOfLast.primaryKey)
+                        && Self.isAlphaNumericSingleKey(curr.primaryKey)
+                        && (curr.raw.t - firstOfLast.raw.t) < 1000.0 {
+                        groups.removeLast()
+                        continue
+                    }
+                }
+
+                let lastEventInGroup = last.events[last.events.count - 1]
+                if (curr.raw.t - lastEventInGroup.raw.t) <= 2000.0 && last.signature == curr.signature {
+                    groups[groups.count - 1].events.append(curr)
+                } else {
+                    groups.append(RawGroup(modifiers: curr.modifiers, primaryKey: curr.primaryKey, signature: curr.signature, events: [curr]))
                 }
             }
 
-            if !allowSingleLetters && curr.tokenCount == 1 {
-                guard Self.isAllowedStandaloneSpecialKey(curr.primaryKey) else {
-                    continue
+            var rawClusters: [ShortcutPressCluster] = groups.compactMap { g in
+                let firstMs = g.events[0].raw.t
+                let msInt = Int(round(firstMs))
+                guard !deletedTelemetrySet.contains(msInt) else { return nil }
+
+                let lastMs = g.events[g.events.count - 1].raw.t
+                var startMs = max(0.0, firstMs - 80.0)
+                var endMs = lastMs + 1500.0
+
+                if let overrideSpan = timingOverrides[msInt] {
+                    startMs = max(0.0, overrideSpan.x)
+                    endMs = max(startMs + 180.0, overrideSpan.y)
+                }
+
+                let effectiveMods = keyOverrides[msInt]?.modifiers ?? g.modifiers
+                let effectiveKey = keyOverrides[msInt]?.primaryKey ?? g.primaryKey
+
+                return ShortcutPressCluster(
+                    id: "telemetry_\(msInt)",
+                    trackId: primaryTrackId,
+                    isCustomSegment: false,
+                    firstKeyDownMsInt: msInt,
+                    firstKeyDownMs: firstMs,
+                    lastKeyDownMs: lastMs,
+                    displayStartMs: startMs,
+                    displayEndMs: endMs,
+                    modifiers: effectiveMods,
+                    primaryKey: effectiveKey,
+                    compactTimelineLabel: Self.buildCompactTimelineLabel(modifiers: effectiveMods, primaryKey: effectiveKey),
+                    keyCaps: Self.buildKeyCaps(modifiers: effectiveMods, primaryKey: effectiveKey)
+                )
+            }
+
+            if rawClusters.count >= 2 {
+                for i in 0..<(rawClusters.count - 1) {
+                    if timingOverrides[rawClusters[i].firstKeyDownMsInt] == nil,
+                       timingOverrides[rawClusters[i + 1].firstKeyDownMsInt] == nil {
+                        let nextFirst = rawClusters[i + 1].firstKeyDownMs
+                        if rawClusters[i].displayEndMs > nextFirst {
+                            rawClusters[i].displayEndMs = max(rawClusters[i].firstKeyDownMs + 120.0, nextFirst)
+                            rawClusters[i + 1].displayStartMs = rawClusters[i].displayEndMs
+                        }
+                    }
                 }
             }
-            filtered.append(curr)
-        }
 
-        // Step 2: Group & filter via the `L_` / `Mg` rule (`2000ms` repeat merge + `1000ms` prose-typing suppression when `allowSingleLetters == true`)
-        struct RawGroup {
-            let modifiers: [String]
-            let primaryKey: String
-            let signature: String
-            var events: [NormalizedEvent]
-        }
-
-        var groups: [RawGroup] = []
-        for curr in filtered {
-            guard let last = groups.last else {
-                groups.append(RawGroup(modifiers: curr.modifiers, primaryKey: curr.primaryKey, signature: curr.signature, events: [curr]))
-                continue
-            }
-
-            // Crucial rule from `Mg`:
-            // When `showSingleKeyShortcuts` is ON, if two consecutive single-key alphanumeric presses (with no modifiers)
-            // occur within `1000ms` of each other (e.g. typing code `"addsfdasfsdf"`), pop the previous one and skip the current one!
-            if allowSingleLetters {
-                let firstOfLast = last.events[0]
-                if firstOfLast.modifiers.isEmpty && curr.modifiers.isEmpty
-                    && Self.isAlphaNumericSingleKey(firstOfLast.primaryKey)
-                    && Self.isAlphaNumericSingleKey(curr.primaryKey)
-                    && (curr.raw.t - firstOfLast.raw.t) < 1000.0 {
-                    groups.removeLast()
-                    continue
+            telemetryClusters = rawClusters.filter { c in
+                document.timeline.slices.contains { slice in
+                    min(c.displayEndMs, slice.sourceEndMs) > max(c.displayStartMs, slice.sourceStartMs)
                 }
             }
-
-            let lastEventInGroup = last.events[last.events.count - 1]
-            if (curr.raw.t - lastEventInGroup.raw.t) <= 2000.0 && last.signature == curr.signature {
-                groups[groups.count - 1].events.append(curr)
-            } else {
-                groups.append(RawGroup(modifiers: curr.modifiers, primaryKey: curr.primaryKey, signature: curr.signature, events: [curr]))
-            }
         }
 
-        // Step 3: Build `ShortcutPressCluster` with non-overlapping `[displayStartMs, displayEndMs]`
-        var clusters: [ShortcutPressCluster] = groups.map { g in
-            let firstMs = g.events[0].raw.t
-            let lastMs = g.events[g.events.count - 1].raw.t
-            let startMs = max(0.0, firstMs - 80.0)
-            let endMs = lastMs + 1500.0
+        let customClusters: [ShortcutPressCluster] = document.captions.customShortcuts.compactMap { seg in
+            let hasOverlap = document.timeline.slices.contains { slice in
+                min(seg.sourceEndMs, slice.sourceEndMs) > max(seg.sourceStartMs, slice.sourceStartMs)
+            }
+            guard hasOverlap else { return nil }
+            let mods = Self.normalizeModifiers(from: seg.modifiers)
+            let pKey = seg.primaryKey.isEmpty ? "K" : seg.primaryKey
             return ShortcutPressCluster(
-                firstKeyDownMsInt: Int(round(firstMs)),
-                firstKeyDownMs: firstMs,
-                lastKeyDownMs: lastMs,
-                displayStartMs: startMs,
-                displayEndMs: endMs,
-                compactTimelineLabel: Self.buildCompactTimelineLabel(modifiers: g.modifiers, primaryKey: g.primaryKey),
-                keyCaps: Self.buildKeyCaps(modifiers: g.modifiers, primaryKey: g.primaryKey)
+                id: seg.id,
+                trackId: seg.trackId,
+                isCustomSegment: true,
+                firstKeyDownMsInt: Int(round(seg.sourceStartMs)),
+                firstKeyDownMs: seg.sourceStartMs,
+                lastKeyDownMs: seg.sourceEndMs,
+                displayStartMs: seg.sourceStartMs,
+                displayEndMs: seg.sourceEndMs,
+                modifiers: mods,
+                primaryKey: pKey,
+                compactTimelineLabel: Self.buildCompactTimelineLabel(modifiers: mods, primaryKey: pKey),
+                keyCaps: Self.buildKeyCaps(modifiers: mods, primaryKey: pKey)
             )
         }
 
-        // Clamp adjacent `displayEndMs` / `displayStartMs` so adjacent blocks touch cleanly on the timeline (`k_` & `D_`)
-        if clusters.count >= 2 {
-            for i in 0..<(clusters.count - 1) {
-                let nextFirst = clusters[i + 1].firstKeyDownMs
-                if clusters[i].displayEndMs > nextFirst {
-                    clusters[i].displayEndMs = max(clusters[i].firstKeyDownMs + 120.0, nextFirst)
-                    clusters[i + 1].displayStartMs = clusters[i].displayEndMs
-                }
-            }
-        }
+        return (telemetryClusters + customClusters).sorted { $0.displayStartMs < $1.displayStartMs }
+    }
 
-        // Filter to clusters that overlap at least one active ClipSlice
-        return clusters.filter { c in
-            document.timeline.slices.contains { slice in
-                min(c.displayEndMs, slice.sourceEndMs) > max(c.displayStartMs, slice.sourceStartMs)
-            }
+    public func shortcutClusters(forTrackId trackId: String) -> [ShortcutPressCluster] {
+        let isPrimary = (trackId == document.captions.shortcutTracks.first?.id)
+        return detectedShortcutClusters.filter {
+            $0.trackId == trackId || (isPrimary && $0.trackId == "default-shortcuts-track")
         }
     }
 
     public func isShortcutHidden(_ cluster: ShortcutPressCluster) -> Bool {
-        document.captions.hiddenShortcutStartMs.contains(cluster.firstKeyDownMsInt)
+        if cluster.isCustomSegment {
+            return document.captions.customShortcuts.first(where: { $0.id == cluster.id })?.isHidden ?? false
+        }
+        return document.captions.hiddenShortcutStartMs.contains(cluster.firstKeyDownMsInt)
     }
 
     public func toggleShortcutHidden(_ cluster: ShortcutPressCluster) {
@@ -1596,63 +1710,309 @@ public final class ProjectSession: Identifiable {
             if !doc.captions.showKeystrokes {
                 doc.captions.showKeystrokes = true
             }
-            if let idx = doc.captions.hiddenShortcutStartMs.firstIndex(of: cluster.firstKeyDownMsInt) {
-                doc.captions.hiddenShortcutStartMs.remove(at: idx)
+            if cluster.isCustomSegment {
+                if let idx = doc.captions.customShortcuts.firstIndex(where: { $0.id == cluster.id }) {
+                    doc.captions.customShortcuts[idx].isHidden.toggle()
+                }
             } else {
-                doc.captions.hiddenShortcutStartMs.append(cluster.firstKeyDownMsInt)
+                if let idx = doc.captions.hiddenShortcutStartMs.firstIndex(of: cluster.firstKeyDownMsInt) {
+                    doc.captions.hiddenShortcutStartMs.remove(at: idx)
+                } else {
+                    doc.captions.hiddenShortcutStartMs.append(cluster.firstKeyDownMsInt)
+                }
             }
         }
     }
 
     public func setEveryShortcutWithSameLabelHidden(_ cluster: ShortcutPressCluster, hidden: Bool) {
-        let matchingIds = detectedShortcutClusters
-            .filter { $0.compactTimelineLabel == cluster.compactTimelineLabel }
-            .map(\.firstKeyDownMsInt)
+        let matching = detectedShortcutClusters.filter { $0.compactTimelineLabel == cluster.compactTimelineLabel }
         mutate { doc in
-            if hidden {
-                for id in matchingIds where !doc.captions.hiddenShortcutStartMs.contains(id) {
-                    doc.captions.hiddenShortcutStartMs.append(id)
+            for item in matching {
+                if item.isCustomSegment {
+                    if let idx = doc.captions.customShortcuts.firstIndex(where: { $0.id == item.id }) {
+                        doc.captions.customShortcuts[idx].isHidden = hidden
+                    }
+                } else {
+                    if hidden {
+                        if !doc.captions.hiddenShortcutStartMs.contains(item.firstKeyDownMsInt) {
+                            doc.captions.hiddenShortcutStartMs.append(item.firstKeyDownMsInt)
+                        }
+                    } else {
+                        doc.captions.hiddenShortcutStartMs.removeAll { $0 == item.firstKeyDownMsInt }
+                    }
                 }
-            } else {
-                doc.captions.hiddenShortcutStartMs.removeAll { matchingIds.contains($0) }
             }
         }
     }
 
     public func setAllShortcutsHidden(_ hidden: Bool) {
-        let allIds = detectedShortcutClusters.map(\.firstKeyDownMsInt)
+        let all = detectedShortcutClusters
         mutate { doc in
             if hidden {
-                doc.captions.hiddenShortcutStartMs = allIds
+                doc.captions.hiddenShortcutStartMs = all.filter { !$0.isCustomSegment }.map(\.firstKeyDownMsInt)
+                for idx in doc.captions.customShortcuts.indices {
+                    doc.captions.customShortcuts[idx].isHidden = true
+                }
             } else {
                 doc.captions.hiddenShortcutStartMs.removeAll()
+                for idx in doc.captions.customShortcuts.indices {
+                    doc.captions.customShortcuts[idx].isHidden = false
+                }
             }
         }
     }
 
-    public func toggleShortcutsTrackVisibility() {
+    public func toggleShortcutsTrackVisibility(trackId: String? = nil) {
         mutate { doc in
-            doc.timeline.isShortcutsTrackHidden.toggle()
+            if let trackId, let idx = doc.captions.shortcutTracks.firstIndex(where: { $0.id == trackId }) {
+                doc.captions.shortcutTracks[idx].isHidden.toggle()
+                if idx == 0 {
+                    doc.timeline.isShortcutsTrackHidden = doc.captions.shortcutTracks[0].isHidden
+                }
+            } else {
+                doc.timeline.isShortcutsTrackHidden.toggle()
+                if !doc.captions.shortcutTracks.isEmpty {
+                    doc.captions.shortcutTracks[0].isHidden = doc.timeline.isShortcutsTrackHidden
+                }
+            }
         }
     }
 
-    /// Returns the currently active, non-hidden `ShortcutPressCluster` at `sourceMs` (for rendering 3D keycaps on the video preview & export).
-    public func activeShortcutCluster(atSourceMs sourceMs: Double) -> ShortcutPressCluster? {
-        guard document.captions.showKeystrokes, !document.timeline.isShortcutsTrackHidden else {
-            return nil
-        }
-        let hiddenSet = Set(document.captions.hiddenShortcutStartMs)
-        var candidate: ShortcutPressCluster?
-        for cluster in detectedShortcutClusters where !hiddenSet.contains(cluster.firstKeyDownMsInt) {
-            if cluster.displayStartMs > sourceMs {
-                break
+    /// Permanently deletes a shortcut segment (either telemetry-recorded or custom-inserted) from the timeline.
+    public func deleteShortcut(_ cluster: ShortcutPressCluster) {
+        mutate { doc in
+            if cluster.isCustomSegment {
+                doc.captions.customShortcuts.removeAll { $0.id == cluster.id }
+            } else {
+                if !doc.captions.deletedShortcutStartMs.contains(cluster.firstKeyDownMsInt) {
+                    doc.captions.deletedShortcutStartMs.append(cluster.firstKeyDownMsInt)
+                }
+                doc.captions.hiddenShortcutStartMs.removeAll { $0 == cluster.firstKeyDownMsInt }
+                doc.captions.shortcutTimingOverrides.removeValue(forKey: cluster.firstKeyDownMsInt)
+                doc.captions.shortcutKeyOverrides.removeValue(forKey: cluster.firstKeyDownMsInt)
             }
-            candidate = cluster
+            doc.captions.shortcutStyleOverrides.removeValue(forKey: cluster.id)
         }
-        guard let match = candidate, sourceMs >= match.displayStartMs && sourceMs <= match.displayEndMs else {
-            return nil
+        if selectedShortcutId == cluster.id {
+            selectedShortcutId = nil
         }
-        return match
+    }
+
+    /// Inserts a new custom shortcut segment on the given track (or at the playhead) and selects it immediately.
+    @discardableResult
+    public func addCustomShortcut(
+        trackId: String? = nil,
+        sourceStartMs: Double? = nil,
+        sourceEndMs: Double? = nil,
+        modifiers: [String] = ["Meta"],
+        primaryKey: String = "K"
+    ) -> String {
+        let maxDur = max(1000.0, metadata.durationMs)
+        let targetTrackId = trackId ?? document.captions.shortcutTracks.first?.id ?? "default-shortcuts-track"
+        let start = max(0.0, min(maxDur - 400.0, sourceStartMs ?? currentSourceTimeMs))
+        let end = max(start + 350.0, min(maxDur, sourceEndMs ?? (start + 1600.0)))
+
+        let newSeg = CustomShortcutSegment(
+            id: UUID().uuidString,
+            trackId: targetTrackId,
+            sourceStartMs: start,
+            sourceEndMs: end,
+            modifiers: modifiers,
+            primaryKey: primaryKey,
+            isHidden: false,
+            customStyle: nil
+        )
+        mutate { doc in
+            doc.captions.showKeystrokes = true
+            doc.captions.customShortcuts.append(newSeg)
+        }
+        selectShortcut(newSeg.id)
+        return newSeg.id
+    }
+
+    /// Duplicates an existing shortcut segment right after it on the same track.
+    public func duplicateShortcut(_ cluster: ShortcutPressCluster) {
+        let maxDur = max(1000.0, metadata.durationMs)
+        let dur = max(400.0, cluster.displayEndMs - cluster.displayStartMs)
+        let start = min(maxDur - 350.0, cluster.displayEndMs + 60.0)
+        let end = min(maxDur, start + dur)
+        let customStyle = document.captions.shortcutStyleOverrides[cluster.id]
+            ?? (cluster.isCustomSegment ? document.captions.customShortcuts.first(where: { $0.id == cluster.id })?.customStyle : nil)
+
+        let copy = CustomShortcutSegment(
+            id: UUID().uuidString,
+            trackId: cluster.trackId,
+            sourceStartMs: start,
+            sourceEndMs: end,
+            modifiers: cluster.modifiers,
+            primaryKey: cluster.primaryKey,
+            isHidden: false,
+            customStyle: customStyle
+        )
+        mutate { doc in
+            doc.captions.customShortcuts.append(copy)
+        }
+        selectShortcut(copy.id)
+    }
+
+    /// Adds a new Shortcut Track (with a distinct default position like Top / Left / Right) and optionally inserts a sample shortcut on it.
+    @discardableResult
+    public func addShortcutTrack() -> String {
+        let nextIndex = document.captions.shortcutTracks.count + 1
+        let defaultPositions: [ShortcutDockPosition] = [.bottom, .top, .left, .right]
+        let chosenPos = defaultPositions[(nextIndex - 1) % defaultPositions.count]
+        let newTrack = ShortcutTrackConfig(
+            id: UUID().uuidString,
+            name: "Shortcuts \(nextIndex)",
+            isHidden: false,
+            style: ShortcutStyleConfig(dockPosition: chosenPos)
+        )
+        mutate { doc in
+            doc.captions.showKeystrokes = true
+            doc.captions.shortcutTracks.append(newTrack)
+        }
+        return newTrack.id
+    }
+
+    public func removeShortcutTrack(id: String) {
+        guard document.captions.shortcutTracks.count > 1 else { return }
+        mutate { doc in
+            doc.captions.shortcutTracks.removeAll { $0.id == id }
+            doc.captions.customShortcuts.removeAll { $0.trackId == id }
+        }
+    }
+
+    public func moveShortcut(_ cluster: ShortcutPressCluster, desiredStartMs: Double, durationMs: Double) {
+        let maxDur = max(500.0, metadata.durationMs)
+        let dur = max(220.0, durationMs)
+        let clampedStart = max(0.0, min(maxDur - dur, desiredStartMs))
+        let clampedEnd = clampedStart + dur
+
+        if cluster.isCustomSegment {
+            if let idx = document.captions.customShortcuts.firstIndex(where: { $0.id == cluster.id }) {
+                document.captions.customShortcuts[idx].sourceStartMs = clampedStart
+                document.captions.customShortcuts[idx].sourceEndMs = clampedEnd
+            }
+        } else {
+            document.captions.shortcutTimingOverrides[cluster.firstKeyDownMsInt] = Point01(x: clampedStart, y: clampedEnd)
+        }
+        renderRevision &+= 1
+    }
+
+    public func resizeShortcut(_ cluster: ShortcutPressCluster, newStartMs: Double, newEndMs: Double) {
+        let maxDur = max(500.0, metadata.durationMs)
+        let s = max(0.0, min(newEndMs - 220.0, newStartMs))
+        let e = min(maxDur, max(s + 220.0, newEndMs))
+
+        if cluster.isCustomSegment {
+            if let idx = document.captions.customShortcuts.firstIndex(where: { $0.id == cluster.id }) {
+                document.captions.customShortcuts[idx].sourceStartMs = s
+                document.captions.customShortcuts[idx].sourceEndMs = e
+            }
+        } else {
+            document.captions.shortcutTimingOverrides[cluster.firstKeyDownMsInt] = Point01(x: s, y: e)
+        }
+        renderRevision &+= 1
+    }
+
+    public func moveShortcutToTrack(_ cluster: ShortcutPressCluster, targetTrackIndex: Int) {
+        let tracks = document.captions.shortcutTracks
+        guard targetTrackIndex >= 0 && targetTrackIndex < tracks.count else { return }
+        let targetTrackId = tracks[targetTrackIndex].id
+        guard targetTrackId != cluster.trackId else { return }
+
+        mutate { doc in
+            if cluster.isCustomSegment {
+                if let idx = doc.captions.customShortcuts.firstIndex(where: { $0.id == cluster.id }) {
+                    doc.captions.customShortcuts[idx].trackId = targetTrackId
+                }
+            } else {
+                // Convert telemetry cluster to a custom segment on the target track and mark original telemetry key as moved/deleted
+                if !doc.captions.deletedShortcutStartMs.contains(cluster.firstKeyDownMsInt) {
+                    doc.captions.deletedShortcutStartMs.append(cluster.firstKeyDownMsInt)
+                }
+                let customSeg = CustomShortcutSegment(
+                    id: UUID().uuidString,
+                    trackId: targetTrackId,
+                    sourceStartMs: cluster.displayStartMs,
+                    sourceEndMs: cluster.displayEndMs,
+                    modifiers: cluster.modifiers,
+                    primaryKey: cluster.primaryKey,
+                    isHidden: false,
+                    customStyle: doc.captions.shortcutStyleOverrides[cluster.id]
+                )
+                doc.captions.customShortcuts.append(customSeg)
+                selectedShortcutId = customSeg.id
+            }
+        }
+    }
+
+    public func updateShortcutKeys(for cluster: ShortcutPressCluster, modifiers: [String], primaryKey: String) {
+        let canonicalMods = Self.normalizeModifiers(from: modifiers)
+        let cleanKey = primaryKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "K" : primaryKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        mutate { doc in
+            if cluster.isCustomSegment {
+                if let idx = doc.captions.customShortcuts.firstIndex(where: { $0.id == cluster.id }) {
+                    doc.captions.customShortcuts[idx].modifiers = canonicalMods
+                    doc.captions.customShortcuts[idx].primaryKey = cleanKey
+                }
+            } else {
+                doc.captions.shortcutKeyOverrides[cluster.firstKeyDownMsInt] = CustomShortcutSegment(
+                    id: cluster.id,
+                    trackId: cluster.trackId,
+                    sourceStartMs: cluster.displayStartMs,
+                    sourceEndMs: cluster.displayEndMs,
+                    modifiers: canonicalMods,
+                    primaryKey: cleanKey
+                )
+            }
+        }
+    }
+
+    /// Resolves the effective `ShortcutStyleConfig` (position, offsetX/Y, solid/gradient keycap colors) for a given shortcut segment.
+    public func effectiveShortcutStyle(for cluster: ShortcutPressCluster) -> ShortcutStyleConfig {
+        if let segOverride = document.captions.shortcutStyleOverrides[cluster.id] {
+            return segOverride
+        }
+        if cluster.isCustomSegment,
+           let customSeg = document.captions.customShortcuts.first(where: { $0.id == cluster.id }),
+           let customStyle = customSeg.customStyle {
+            return customStyle
+        }
+        if let track = document.captions.shortcutTracks.first(where: { $0.id == cluster.trackId }) {
+            return track.style
+        }
+        return document.captions.shortcutTracks.first?.style ?? document.captions.defaultShortcutStyle
+    }
+
+    /// Returns all active, non-hidden `ShortcutPressCluster` items (one per visible track) at `sourceMs` with their resolved styles.
+    public func activeShortcutClustersWithStyles(atSourceMs sourceMs: Double) -> [(cluster: ShortcutPressCluster, style: ShortcutStyleConfig)] {
+        guard document.captions.showKeystrokes else { return [] }
+        var results: [(cluster: ShortcutPressCluster, style: ShortcutStyleConfig)] = []
+
+        for (index, track) in document.captions.shortcutTracks.enumerated() {
+            if track.isHidden || (index == 0 && document.timeline.isShortcutsTrackHidden) {
+                continue
+            }
+            let trackClusters = shortcutClusters(forTrackId: track.id)
+            var candidate: ShortcutPressCluster?
+            for cluster in trackClusters where !isShortcutHidden(cluster) {
+                if cluster.displayStartMs > sourceMs {
+                    break
+                }
+                candidate = cluster
+            }
+            if let match = candidate, sourceMs >= match.displayStartMs && sourceMs <= match.displayEndMs {
+                results.append((match, effectiveShortcutStyle(for: match)))
+            }
+        }
+        return results
+    }
+
+    /// Returns the primary active, non-hidden `ShortcutPressCluster` at `sourceMs`.
+    public func activeShortcutCluster(atSourceMs sourceMs: Double) -> ShortcutPressCluster? {
+        return activeShortcutClustersWithStyles(atSourceMs: sourceMs).first?.cluster
     }
 
     // MARK: - Shortcut Normalization & Keycap Helpers

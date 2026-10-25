@@ -635,12 +635,147 @@ public struct CaptionSegment: Codable, Equatable, Hashable, Identifiable, Sendab
     }
 }
 
+public enum ShortcutDockPosition: String, Codable, CaseIterable, Identifiable, Sendable {
+    case bottom = "bottom"
+    case top = "top"
+    case left = "left"
+    case right = "right"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .bottom: return "Bottom"
+        case .top: return "Top"
+        case .left: return "Left"
+        case .right: return "Right"
+        }
+    }
+
+    public var iconName: String {
+        switch self {
+        case .bottom: return "Dock.rectangle"
+        case .top: return "menubar.rectangle"
+        case .left: return "sidebar.left"
+        case .right: return "sidebar.right"
+        }
+    }
+
+    public var isVerticalStack: Bool {
+        self == .left || self == .right
+    }
+}
+
+public enum ShortcutColorMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case defaultDark = "default"
+    case solid = "solid"
+    case gradient = "gradient"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .defaultDark: return "Default"
+        case .solid: return "Solid"
+        case .gradient: return "Gradient"
+        }
+    }
+}
+
+public struct ShortcutStyleConfig: Codable, Equatable, Hashable, Sendable {
+    public var dockPosition: ShortcutDockPosition
+    public var offsetX: Double // -0.45 ... +0.45 normalized canvas offset
+    public var offsetY: Double // -0.45 ... +0.45 normalized canvas offset
+    public var colorMode: ShortcutColorMode
+    public var solidColorHex: String
+    public var gradientStartHex: String
+    public var gradientEndHex: String
+    public var textColorHex: String
+
+    public init(
+        dockPosition: ShortcutDockPosition = .bottom,
+        offsetX: Double = 0.0,
+        offsetY: Double = 0.0,
+        colorMode: ShortcutColorMode = .defaultDark,
+        solidColorHex: String = "#4D2FF5",
+        gradientStartHex: String = "#4776E6",
+        gradientEndHex: String = "#8E54E9",
+        textColorHex: String = "#FFFFFF"
+    ) {
+        self.dockPosition = dockPosition
+        self.offsetX = offsetX
+        self.offsetY = offsetY
+        self.colorMode = colorMode
+        self.solidColorHex = solidColorHex
+        self.gradientStartHex = gradientStartHex
+        self.gradientEndHex = gradientEndHex
+        self.textColorHex = textColorHex
+    }
+}
+
+public struct ShortcutTrackConfig: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var isHidden: Bool
+    public var style: ShortcutStyleConfig
+
+    public init(
+        id: String = UUID().uuidString,
+        name: String = "Shortcuts",
+        isHidden: Bool = false,
+        style: ShortcutStyleConfig = ShortcutStyleConfig()
+    ) {
+        self.id = id
+        self.name = name
+        self.isHidden = isHidden
+        self.style = style
+    }
+}
+
+public struct CustomShortcutSegment: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var trackId: String
+    public var sourceStartMs: Double
+    public var sourceEndMs: Double
+    public var modifiers: [String] // Canonical: ["CapsLock", "Meta", "Shift", "Alt", "Ctrl"]
+    public var primaryKey: String
+    public var isHidden: Bool
+    public var customStyle: ShortcutStyleConfig?
+
+    public init(
+        id: String = UUID().uuidString,
+        trackId: String = "default-shortcuts-track",
+        sourceStartMs: Double,
+        sourceEndMs: Double,
+        modifiers: [String] = ["Meta"],
+        primaryKey: String = "K",
+        isHidden: Bool = false,
+        customStyle: ShortcutStyleConfig? = nil
+    ) {
+        self.id = id
+        self.trackId = trackId
+        self.sourceStartMs = sourceStartMs
+        self.sourceEndMs = sourceEndMs
+        self.modifiers = modifiers
+        self.primaryKey = primaryKey
+        self.isHidden = isHidden
+        self.customStyle = customStyle
+    }
+}
+
 public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     public var enabled: Bool
     public var showKeystrokes: Bool
     public var shortcutsSizeRatio: Double
     public var showSingleKeyShortcuts: Bool
     public var hiddenShortcutStartMs: [Int]
+    public var deletedShortcutStartMs: [Int]
+    public var defaultShortcutStyle: ShortcutStyleConfig
+    public var shortcutTracks: [ShortcutTrackConfig]
+    public var customShortcuts: [CustomShortcutSegment]
+    public var shortcutStyleOverrides: [String: ShortcutStyleConfig]
+    public var shortcutTimingOverrides: [Int: Point01]
+    public var shortcutKeyOverrides: [Int: CustomShortcutSegment]
     public var keystrokesPosition01: Point01
     public var fontFamily: String
     public var fontSizeRatio: Double
@@ -656,6 +791,15 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         shortcutsSizeRatio: Double = 0.11,
         showSingleKeyShortcuts: Bool = false,
         hiddenShortcutStartMs: [Int] = [],
+        deletedShortcutStartMs: [Int] = [],
+        defaultShortcutStyle: ShortcutStyleConfig = ShortcutStyleConfig(),
+        shortcutTracks: [ShortcutTrackConfig] = [
+            ShortcutTrackConfig(id: "default-shortcuts-track", name: "Shortcuts", isHidden: false, style: ShortcutStyleConfig())
+        ],
+        customShortcuts: [CustomShortcutSegment] = [],
+        shortcutStyleOverrides: [String: ShortcutStyleConfig] = [:],
+        shortcutTimingOverrides: [Int: Point01] = [:],
+        shortcutKeyOverrides: [Int: CustomShortcutSegment] = [:],
         keystrokesPosition01: Point01 = Point01(x: 0.5, y: 0.90),
         fontFamily: String = "SF Pro Rounded",
         fontSizeRatio: Double = 0.045,
@@ -670,6 +814,13 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.shortcutsSizeRatio = shortcutsSizeRatio
         self.showSingleKeyShortcuts = showSingleKeyShortcuts
         self.hiddenShortcutStartMs = hiddenShortcutStartMs
+        self.deletedShortcutStartMs = deletedShortcutStartMs
+        self.defaultShortcutStyle = defaultShortcutStyle
+        self.shortcutTracks = shortcutTracks
+        self.customShortcuts = customShortcuts
+        self.shortcutStyleOverrides = shortcutStyleOverrides
+        self.shortcutTimingOverrides = shortcutTimingOverrides
+        self.shortcutKeyOverrides = shortcutKeyOverrides
         self.keystrokesPosition01 = keystrokesPosition01
         self.fontFamily = fontFamily
         self.fontSizeRatio = fontSizeRatio
@@ -686,6 +837,13 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         case shortcutsSizeRatio
         case showSingleKeyShortcuts
         case hiddenShortcutStartMs
+        case deletedShortcutStartMs
+        case defaultShortcutStyle
+        case shortcutTracks
+        case customShortcuts
+        case shortcutStyleOverrides
+        case shortcutTimingOverrides
+        case shortcutKeyOverrides
         case keystrokesPosition01
         case fontFamily
         case fontSizeRatio
@@ -703,6 +861,21 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.shortcutsSizeRatio = try container.decodeIfPresent(Double.self, forKey: .shortcutsSizeRatio) ?? 0.11
         self.showSingleKeyShortcuts = try container.decodeIfPresent(Bool.self, forKey: .showSingleKeyShortcuts) ?? false
         self.hiddenShortcutStartMs = try container.decodeIfPresent([Int].self, forKey: .hiddenShortcutStartMs) ?? []
+        self.deletedShortcutStartMs = try container.decodeIfPresent([Int].self, forKey: .deletedShortcutStartMs) ?? []
+        let defStyle = try container.decodeIfPresent(ShortcutStyleConfig.self, forKey: .defaultShortcutStyle) ?? ShortcutStyleConfig()
+        self.defaultShortcutStyle = defStyle
+        let decodedTracks = try container.decodeIfPresent([ShortcutTrackConfig].self, forKey: .shortcutTracks)
+        if let tracks = decodedTracks, !tracks.isEmpty {
+            self.shortcutTracks = tracks
+        } else {
+            self.shortcutTracks = [
+                ShortcutTrackConfig(id: "default-shortcuts-track", name: "Shortcuts", isHidden: false, style: defStyle)
+            ]
+        }
+        self.customShortcuts = try container.decodeIfPresent([CustomShortcutSegment].self, forKey: .customShortcuts) ?? []
+        self.shortcutStyleOverrides = try container.decodeIfPresent([String: ShortcutStyleConfig].self, forKey: .shortcutStyleOverrides) ?? [:]
+        self.shortcutTimingOverrides = try container.decodeIfPresent([Int: Point01].self, forKey: .shortcutTimingOverrides) ?? [:]
+        self.shortcutKeyOverrides = try container.decodeIfPresent([Int: CustomShortcutSegment].self, forKey: .shortcutKeyOverrides) ?? [:]
         self.keystrokesPosition01 = try container.decodeIfPresent(Point01.self, forKey: .keystrokesPosition01) ?? Point01(x: 0.5, y: 0.90)
         self.fontFamily = try container.decodeIfPresent(String.self, forKey: .fontFamily) ?? "SF Pro Rounded"
         self.fontSizeRatio = try container.decodeIfPresent(Double.self, forKey: .fontSizeRatio) ?? 0.045
@@ -809,6 +982,7 @@ public struct ZoomBlock: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var presentation: ZoomPresentation
     public var manualCenter01: Point01
     public var loupe: LoupeConfig
+    public var instantAnimation: Bool
     public var disabled: Bool
 
     public init(
@@ -820,6 +994,7 @@ public struct ZoomBlock: Codable, Equatable, Hashable, Identifiable, Sendable {
         presentation: ZoomPresentation = .screen,
         manualCenter01: Point01 = .center,
         loupe: LoupeConfig = LoupeConfig(),
+        instantAnimation: Bool = false,
         disabled: Bool = false
     ) {
         self.id = id
@@ -830,7 +1005,26 @@ public struct ZoomBlock: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.presentation = presentation
         self.manualCenter01 = manualCenter01
         self.loupe = loupe
+        self.instantAnimation = instantAnimation
         self.disabled = disabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, sourceStartMs, sourceEndMs, scale, mode, presentation, manualCenter01, loupe, instantAnimation, disabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.sourceStartMs = try container.decode(Double.self, forKey: .sourceStartMs)
+        self.sourceEndMs = try container.decode(Double.self, forKey: .sourceEndMs)
+        self.scale = try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.8
+        self.mode = try container.decodeIfPresent(ZoomMode.self, forKey: .mode) ?? .followCursor
+        self.presentation = try container.decodeIfPresent(ZoomPresentation.self, forKey: .presentation) ?? .screen
+        self.manualCenter01 = try container.decodeIfPresent(Point01.self, forKey: .manualCenter01) ?? .center
+        self.loupe = try container.decodeIfPresent(LoupeConfig.self, forKey: .loupe) ?? LoupeConfig()
+        self.instantAnimation = try container.decodeIfPresent(Bool.self, forKey: .instantAnimation) ?? false
+        self.disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
     }
 }
 

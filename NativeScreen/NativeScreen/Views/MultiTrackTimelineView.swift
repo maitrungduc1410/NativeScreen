@@ -21,6 +21,7 @@ public struct MultiTrackTimelineView: View {
     @State private var lastZoomForAnchor: Double = 1.0
     @State private var splitWigglePhase: Bool = false
     @State private var zoomTrackHoverX: CGFloat? = nil
+    @State private var shortcutTrackHoverX: [String: CGFloat] = [:]
 
     private let labelColumnWidth: CGFloat = 104
     private let trackHorizontalInset: CGFloat = 20
@@ -130,7 +131,9 @@ public struct MultiTrackTimelineView: View {
                         let typingSuggestions = session.activeTypingSuggestions
                         let hasTypingSuggestions = !typingSuggestions.isEmpty
                         let shortcutClusters = session.detectedShortcutClusters
-                        let hasShortcutsTrack = !shortcutClusters.isEmpty
+                        let hasShortcutsTrack = session.document.captions.showKeystrokes
+                            || !shortcutClusters.isEmpty
+                            || session.document.captions.shortcutTracks.count > 1
 
                         ScrollView(.vertical, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 0) {
@@ -190,24 +193,49 @@ public struct MultiTrackTimelineView: View {
                                     }
 
                                     if hasShortcutsTrack {
-                                        let shortcutsHidden = session.document.timeline.isShortcutsTrackHidden || !session.document.captions.showKeystrokes
-                                        HStack(spacing: 6) {
-                                            Button {
-                                                session.toggleShortcutsTrackVisibility()
-                                            } label: {
-                                                Image(systemName: shortcutsHidden ? "eye.slash" : "eye")
-                                                    .font(.system(size: 10, weight: .medium))
-                                                    .foregroundStyle(Color.white.opacity(shortcutsHidden ? 0.28 : 0.65))
-                                            }
-                                            .buttonStyle(.plain)
+                                        ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
+                                            let isTrackHidden = sTrack.isHidden
+                                                || (sIdx == 0 && session.document.timeline.isShortcutsTrackHidden)
+                                                || !session.document.captions.showKeystrokes
 
-                                            Text("Shortcuts")
-                                                .font(.system(size: 11, weight: .medium))
-                                                .foregroundStyle(Color.white.opacity(shortcutsHidden ? 0.30 : 0.65))
-                                                .lineLimit(1)
+                                            HStack(spacing: 5) {
+                                                Button {
+                                                    session.toggleShortcutsTrackVisibility(trackId: sTrack.id)
+                                                } label: {
+                                                    Image(systemName: isTrackHidden ? "eye.slash" : "eye")
+                                                        .font(.system(size: 10, weight: .medium))
+                                                        .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.28 : 0.65))
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Button {
+                                                    session.selectedShortcutId = nil
+                                                    session.selectedInspectorTab = .shortcuts
+                                                } label: {
+                                                    Text(session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts")
+                                                        .font(.system(size: 11, weight: .medium))
+                                                        .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.30 : 0.65))
+                                                        .lineLimit(1)
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Spacer(minLength: 2)
+
+                                                Button {
+                                                    session.addCustomShortcut(trackId: sTrack.id)
+                                                } label: {
+                                                    Image(systemName: "plus")
+                                                        .font(.system(size: 9.5, weight: .bold))
+                                                        .foregroundStyle(Color.white.opacity(0.45))
+                                                        .frame(width: 16, height: 16)
+                                                }
+                                                .buttonStyle(.plain)
+                                                .help("Add shortcut at playhead")
+                                                .padding(.trailing, 6)
+                                            }
+                                            .padding(.leading, 14)
+                                            .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                         }
-                                        .padding(.leading, 14)
-                                        .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                     }
                                 }
                                 .padding(.vertical, 8)
@@ -266,15 +294,19 @@ public struct MultiTrackTimelineView: View {
                                                     .offset(y: baseWiggleY * dir)
                                                 }
 
-                                                // Lane 4+: Keyboard Shortcuts Track (`34pt` height)
+                                                // Lane 4+: Multi-Track Keyboard Shortcuts Lanes (`34pt` height)
                                                 if hasShortcutsTrack {
-                                                    let dir: CGFloat = ((2 + session.document.timeline.maskTracks.count) % 2 == 0) ? 1.0 : -1.0
-                                                    shortcutsLaneView(
-                                                        clusters: shortcutClusters,
-                                                        contentWidth: contentWidth,
-                                                        totalTimelineMs: totalTimelineMs
-                                                    )
-                                                    .offset(y: baseWiggleY * dir)
+                                                    ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
+                                                        let dir: CGFloat = ((2 + session.document.timeline.maskTracks.count + sIdx) % 2 == 0) ? 1.0 : -1.0
+                                                        shortcutsLaneView(
+                                                            track: sTrack,
+                                                            trackIndex: sIdx,
+                                                            clusters: session.shortcutClusters(forTrackId: sTrack.id),
+                                                            contentWidth: contentWidth,
+                                                            totalTimelineMs: totalTimelineMs
+                                                        )
+                                                        .offset(y: baseWiggleY * dir)
+                                                    }
                                                 }
                                             }
                                             .padding(.vertical, 8)
@@ -876,34 +908,135 @@ public struct MultiTrackTimelineView: View {
 
     @ViewBuilder
     private func shortcutsLaneView(
+        track: ShortcutTrackConfig,
+        trackIndex: Int,
         clusters: [ProjectSession.ShortcutPressCluster],
         contentWidth: CGFloat,
         totalTimelineMs: Double
     ) -> some View {
-        let trackHidden = session.document.timeline.isShortcutsTrackHidden || !session.document.captions.showKeystrokes
+        let trackHidden = track.isHidden
+            || (trackIndex == 0 && session.document.timeline.isShortcutsTrackHidden)
+            || !session.document.captions.showKeystrokes
 
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.white.opacity(0.015))
+
+            // Hover `+` preview block on empty areas of the Shortcuts track (click to insert a custom shortcut!)
+            if !session.isSplitModeActive,
+               let previewSpan = hoverAddShortcutSpan(trackId: track.id, clusters: clusters, contentWidth: contentWidth, totalTimelineMs: totalTimelineMs) {
+                let pX = CGFloat(previewSpan.tStartMs / totalTimelineMs) * contentWidth
+                let pW = max(24.0, CGFloat((previewSpan.tEndMs - previewSpan.tStartMs) / totalTimelineMs) * contentWidth)
+                let primaryPurple = Color(red: 0.302, green: 0.184, blue: 0.961)
+
+                Button {
+                    session.isPlaying = false
+                    session.seek(toTimelineMs: (previewSpan.tStartMs + previewSpan.tEndMs) * 0.5)
+                    session.addCustomShortcut(
+                        trackId: track.id,
+                        sourceStartMs: previewSpan.srcStartMs,
+                        sourceEndMs: previewSpan.srcEndMs
+                    )
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        primaryPurple.opacity(0.26),
+                                        primaryPurple.opacity(0.06)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(primaryPurple.opacity(0.62), lineWidth: 1.0)
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.88))
+                    }
+                    .frame(width: pW, height: maskRowHeight)
+                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .offset(x: pX)
+                .zIndex(5)
+            }
 
             ForEach(clusters) { cluster in
                 if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: cluster.displayStartMs, sourceEndMs: cluster.displayEndMs) {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(22.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth - 1.0)
                     let isItemHidden = trackHidden || session.isShortcutHidden(cluster)
+                    let isSelected = (session.selectedShortcutId == cluster.id)
 
                     ShortcutTimelineSegmentView(
                         session: session,
                         cluster: cluster,
+                        trackIndex: trackIndex,
+                        xOffset: xStart,
                         width: blockW,
                         height: maskRowHeight,
+                        totalWidth: contentWidth,
+                        trackTotalDurationMs: totalTimelineMs,
+                        startMs: tStartMs,
+                        endMs: tEndMs,
+                        isSelected: isSelected,
                         isHidden: isItemHidden
                     )
-                    .offset(x: xStart)
                 }
             }
         }
         .frame(width: contentWidth, height: maskRowHeight)
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let pt):
+                shortcutTrackHoverX[track.id] = max(0.0, min(contentWidth, pt.x))
+            case .ended:
+                shortcutTrackHoverX.removeValue(forKey: track.id)
+            }
+        }
+    }
+
+    private func hoverAddShortcutSpan(
+        trackId: String,
+        clusters: [ProjectSession.ShortcutPressCluster],
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> (tStartMs: Double, tEndMs: Double, srcStartMs: Double, srcEndMs: Double)? {
+        guard let hoverX = shortcutTrackHoverX[trackId], contentWidth > 10 else { return nil }
+        let hoverTimelineMs = Double(hoverX / contentWidth) * totalTimelineMs
+
+        var existingSpans: [(start: Double, end: Double)] = []
+        for cluster in clusters {
+            if let (ts, te) = timelineSpan(forSourceStartMs: cluster.displayStartMs, sourceEndMs: cluster.displayEndMs) {
+                existingSpans.append((ts, te))
+            }
+        }
+        existingSpans.sort { $0.start < $1.start }
+
+        let marginMs = Double(6.0 / contentWidth) * totalTimelineMs
+        for span in existingSpans {
+            if hoverTimelineMs >= span.start - marginMs && hoverTimelineMs <= span.end + marginMs {
+                return nil
+            }
+        }
+
+        let availStart = existingSpans.last(where: { $0.end <= hoverTimelineMs })?.end ?? 0.0
+        let availEnd = existingSpans.first(where: { $0.start >= hoverTimelineMs })?.start ?? totalTimelineMs
+        guard availEnd - availStart >= 450.0 else { return nil }
+
+        let desiredDur = min(1800.0, availEnd - availStart)
+        let tStart = max(availStart, min(availEnd - desiredDur, hoverTimelineMs - desiredDur * 0.5))
+        let tEnd = min(availEnd, tStart + desiredDur)
+
+        let srcStart = session.timeMapper.sourceTime(forTimelineMs: tStart).sourceMs
+        let srcEnd = session.timeMapper.sourceTime(forTimelineMs: tEnd).sourceMs
+        guard srcEnd - srcStart >= 300.0 else { return nil }
+        return (tStart, tEnd, srcStart, srcEnd)
     }
 
     private func timelineSpan(forSourceStartMs sourceStartMs: Double, sourceEndMs: Double) -> (Double, Double)? {
@@ -1963,126 +2096,256 @@ private struct SpeedUpTypingPopoverView: View {
 private struct ShortcutTimelineSegmentView: View {
     @Bindable var session: ProjectSession
     let cluster: ProjectSession.ShortcutPressCluster
+    let trackIndex: Int
+    let xOffset: CGFloat
     let width: CGFloat
     let height: CGFloat
+    let totalWidth: CGFloat
+    let trackTotalDurationMs: Double
+    let startMs: Double
+    let endMs: Double
+    let isSelected: Bool
     let isHidden: Bool
 
-    @State private var isHovered = false
-    @State private var anchorNSView: NSView?
+    private enum DragMode {
+        case moveBody
+        case resizeLeft
+        case resizeRight
+    }
 
-    private let primaryPurple = Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
+    @State private var isHovered = false
+    @State private var activeDragMode: DragMode?
+    @State private var dragInitialStartMs: Double?
+    @State private var dragInitialEndMs: Double?
+    @State private var hasExceededClickSlop = false
+    @State private var pressLocalX: CGFloat = 0.0
+    @State private var verticalDragOffset: CGFloat = 0.0
+
+    private let edgeHitWidth: CGFloat = 9.0
+
+    private var segmentColor: Color {
+        let style = session.effectiveShortcutStyle(for: cluster)
+        switch style.colorMode {
+        case .defaultDark:
+            return Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
+        case .solid:
+            return Color(hex: style.solidColorHex)
+        case .gradient:
+            return Color(hex: style.gradientStartHex)
+        }
+    }
+
+    private var segmentEndColor: Color {
+        let style = session.effectiveShortcutStyle(for: cluster)
+        if style.colorMode == .gradient {
+            return Color(hex: style.gradientEndHex)
+        }
+        return segmentColor
+    }
 
     var body: some View {
-        let tooltipText: String = {
-            if !session.document.captions.showKeystrokes {
-                return "Enable shortcuts"
-            }
-            return isHidden ? "Show shortcut" : "Hide shortcut"
-        }()
+        let segWidth = max(14.0, width)
+        let showHandles = (isHovered || isSelected || activeDragMode != nil) && segWidth >= 32
 
-        Button {
-            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            session.toggleShortcutHidden(cluster)
-        } label: {
-            ZStack {
-                // 1. `W_` Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                primaryPurple.opacity(isHidden ? 0.14 : 0.42),
-                                primaryPurple.opacity(isHidden ? 0.03 : 0.08)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+        ZStack {
+            // 1. `W_` Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            segmentColor.opacity(isHidden ? 0.14 : (isSelected ? 0.56 : 0.42)),
+                            segmentEndColor.opacity(isHidden ? 0.03 : (isSelected ? 0.18 : 0.08))
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
-
-                // 2. Inner bottom glow (`W_:before`: `inset: 4px 2px; opacity: 0.3; linear-gradient(to top, primary.opacity(0.4), transparent)`)
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                primaryPurple.opacity(isHidden ? 0.05 : 0.22),
-                                Color.clear
-                            ],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
-                    )
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 2)
-
-                // 3. Outer 1px Outline (`outline: 1px solid primary`)
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(
-                        primaryPurple.opacity(isHidden ? (isHovered ? 0.45 : 0.22) : (isHovered ? 0.95 : 0.85)),
-                        lineWidth: 1.0
-                    )
-
-                // 4. Centered Shortcut Label (`⌥ ⌃ Space`, `⌘ A`, `⌫`, `⌘ →`, `D`)
-                if width >= 22 {
-                    Text(cluster.compactTimelineLabel)
-                        .font(.system(size: 12.0, weight: .semibold))
-                        .foregroundStyle(.white.opacity(isHidden ? 0.38 : 0.96))
-                        .lineLimit(1)
-                        .padding(.horizontal, 6)
-                }
-            }
-            .frame(width: width, height: height)
-            .shadow(
-                color: isHidden ? .clear : primaryPurple.opacity(isHovered ? 0.32 : 0.18),
-                radius: 6
-            )
-            .background(
-                TooltipScreenRectProbe { v in
-                    anchorNSView = v
-                }
-            )
-            .overlay(
-                RightClickDetectorView { pointInView, parentView in
-                    NativeSegmentContextMenuPresenter.shared.presentShortcutContextMenu(
-                        session: session,
-                        cluster: cluster,
-                        at: pointInView,
-                        in: parentView
-                    )
-                }
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHovered = hovering
-            }
-            if hovering, let v = anchorNSView, let win = v.window {
-                let rectInWin = v.convert(v.bounds, to: nil)
-                let screenRect = win.convertToScreen(rectInWin)
-                SharedFloatingTooltipWindowController.shared.showTooltip(
-                    text: tooltipText,
-                    edge: .top,
-                    forButtonScreenRect: screenRect,
-                    ownerView: v
                 )
-            } else {
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+
+            // 2. Inner bottom glow (`W_:before`: `inset: 4px 2px; opacity: 0.3; linear-gradient(to top, primary.opacity(0.4), transparent)`)
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            segmentEndColor.opacity(isHidden ? 0.05 : 0.24),
+                            Color.clear
+                        ],
+                        startPoint: .bottom,
+                        endPoint: .top
+                    )
+                )
+                .padding(.vertical, 4)
+                .padding(.horizontal, 2)
+
+            // 3. Outer 1px Outline (`outline: 1px solid primary`, bright when selected!)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(
+                    isSelected
+                        ? Color.white.opacity(0.95)
+                        : segmentColor.opacity(isHidden ? (isHovered ? 0.45 : 0.22) : (isHovered ? 0.95 : 0.85)),
+                    lineWidth: isSelected ? 1.4 : 1.0
+                )
+
+            // 4. Centered Shortcut Label (`⌥ ⌃ Space`, `⌘ A`, `⌫`, `⌘ →`, `D`)
+            if segWidth >= 22 {
+                Text(cluster.compactTimelineLabel)
+                    .font(.system(size: 12.0, weight: .semibold))
+                    .foregroundStyle(.white.opacity(isHidden ? 0.38 : 0.96))
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .allowsHitTesting(false)
+            }
+
+            // 5. Left & Right Resize Handles on Hover / Selection
+            if showHandles {
+                HStack(spacing: 0) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.88))
+                        .frame(width: 3.0, height: max(8, height - 14))
+                        .padding(.leading, 5.0)
+                    Spacer(minLength: 4)
+                    Capsule()
+                        .fill(Color.white.opacity(0.88))
+                        .frame(width: 3.0, height: max(8, height - 14))
+                        .padding(.trailing, 5.0)
+                }
+                .allowsHitTesting(false)
             }
         }
-        .onChange(of: isHidden) { _, _ in
-            if isHovered, let v = anchorNSView, let win = v.window {
-                let rectInWin = v.convert(v.bounds, to: nil)
-                let screenRect = win.convertToScreen(rectInWin)
-                let newText = !session.document.captions.showKeystrokes
-                    ? "Enable shortcuts"
-                    : (isHidden ? "Show shortcut" : "Hide shortcut")
-                SharedFloatingTooltipWindowController.shared.showTooltip(
-                    text: newText,
-                    edge: .top,
-                    forButtonScreenRect: screenRect,
-                    ownerView: v
+        .frame(width: segWidth, height: height)
+        .shadow(
+            color: isHidden ? .clear : segmentColor.opacity(isSelected ? 0.40 : (isHovered ? 0.32 : 0.18)),
+            radius: 6
+        )
+        .overlay(
+            RightClickDetectorView { pointInView, parentView in
+                session.selectShortcut(cluster.id)
+                NativeSegmentContextMenuPresenter.shared.presentShortcutContextMenu(
+                    session: session,
+                    cluster: cluster,
+                    at: pointInView,
+                    in: parentView
                 )
             }
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let pt):
+                let localX = (pt.x >= xOffset - 2 && pt.x <= xOffset + segWidth + 2) ? (pt.x - xOffset) : pt.x
+                if !isHovered {
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        isHovered = true
+                    }
+                }
+                if segWidth >= 32 && (localX <= edgeHitWidth || localX >= segWidth - edgeHitWidth) {
+                    NSCursor.resizeLeftRight.set()
+                } else {
+                    NSCursor.arrow.set()
+                }
+            case .ended:
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isHovered = false
+                }
+                if activeDragMode == nil {
+                    NSCursor.arrow.set()
+                }
+            }
         }
+        .offset(x: xOffset, y: verticalDragOffset)
+        .zIndex(activeDragMode != nil ? 60 : (isSelected ? 40 : (isHovered ? 30 : 1)))
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named("timelineContentSpace"))
+                .onChanged { value in
+                    if activeDragMode == nil {
+                        let startInLane = value.startLocation.x - 20.0
+                        let computedLocalX = startInLane - xOffset
+                        let localX = min(max(0, computedLocalX), segWidth)
+
+                        pressLocalX = localX
+                        hasExceededClickSlop = false
+                        dragInitialStartMs = startMs
+                        dragInitialEndMs = endMs
+
+                        if segWidth >= 32 && localX <= edgeHitWidth {
+                            activeDragMode = .resizeLeft
+                            NSCursor.resizeLeftRight.set()
+                        } else if segWidth >= 32 && localX >= segWidth - edgeHitWidth {
+                            activeDragMode = .resizeRight
+                            NSCursor.resizeLeftRight.set()
+                        } else {
+                            activeDragMode = .moveBody
+                        }
+                    }
+
+                    let dragDist = hypot(value.translation.width, value.translation.height)
+                    if !hasExceededClickSlop {
+                        guard dragDist >= 2.5 else { return }
+                        hasExceededClickSlop = true
+                        session.selectShortcut(cluster.id)
+                        session.beginInteractiveEdit()
+                    }
+
+                    guard let s0 = dragInitialStartMs,
+                          let e0 = dragInitialEndMs,
+                          let mode = activeDragMode else { return }
+
+                    let deltaMs = Double(value.translation.width / max(1.0, totalWidth)) * trackTotalDurationMs
+
+                    switch mode {
+                    case .resizeLeft:
+                        let newTimelineStart = max(0.0, min(e0 - 220.0, s0 + deltaMs))
+                        let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
+                        let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: e0).sourceMs
+                        session.resizeShortcut(cluster, newStartMs: newSrcStart, newEndMs: newSrcEnd)
+
+                    case .resizeRight:
+                        let newTimelineEnd = max(s0 + 220.0, min(trackTotalDurationMs, e0 + deltaMs))
+                        let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: s0).sourceMs
+                        let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs
+                        session.resizeShortcut(cluster, newStartMs: newSrcStart, newEndMs: newSrcEnd)
+
+                    case .moveBody:
+                        let dur = max(220.0, e0 - s0)
+                        let clampedTimelineStart = max(0.0, min(trackTotalDurationMs - dur, s0 + deltaMs))
+                        let clampedTimelineEnd = clampedTimelineStart + dur
+                        let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
+                        let newSrcEnd = max(newSrcStart + 220.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
+                        session.moveShortcut(cluster, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
+
+                        if session.document.captions.shortcutTracks.count > 1 {
+                            verticalDragOffset = value.translation.height
+                        }
+                    }
+                }
+                .onEnded { value in
+                    let wasDrag = hasExceededClickSlop
+                    let localX = pressLocalX
+
+                    if wasDrag {
+                        if activeDragMode == .moveBody && session.document.captions.shortcutTracks.count > 1 {
+                            let rowDelta = Int(round(value.translation.height / 42.0))
+                            verticalDragOffset = 0.0
+                            if rowDelta != 0 {
+                                session.moveShortcutToTrack(cluster, targetTrackIndex: trackIndex + rowDelta)
+                            }
+                        }
+                        session.endInteractiveEdit()
+                    } else {
+                        // Single Left-Click selects the Shortcut Segment and opens the Shortcut Editor in the Inspector!
+                        let frac = max(0.0, min(1.0, Double(localX / max(1.0, segWidth))))
+                        let clickedTimelineMs = session.hoverSkimTimelineMs ?? (startMs + frac * (endMs - startMs))
+                        session.isPlaying = false
+                        session.seek(toTimelineMs: clickedTimelineMs)
+                        session.selectShortcut(cluster.id)
+                    }
+
+                    activeDragMode = nil
+                    hasExceededClickSlop = false
+                    dragInitialStartMs = nil
+                    dragInitialEndMs = nil
+                    verticalDragOffset = 0.0
+                    NSCursor.arrow.set()
+                }
+        )
     }
 }
