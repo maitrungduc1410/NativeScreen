@@ -1220,7 +1220,9 @@ public final class ProjectSession: Identifiable {
             return
         }
 
-        let bucketCount = 240
+        let durationSec = max(1.0, metadata.durationMs / 1000.0)
+        // Extract at the high-density 800 bins/sec so the mip-pyramid has full resolution!
+        let targetBinCount = max(256, min(16384, Int(durationSec * 240.0)))
         let extracted: [Float]? = await Task.detached(priority: .utility) {
             guard let reader = try? AVAssetReader(asset: asset) else { return nil }
             let settings: [String: Any] = [
@@ -1235,8 +1237,8 @@ public final class ProjectSession: Identifiable {
             reader.add(output)
             guard reader.startReading() else { return nil }
 
-            var peaks: [Float] = []
-            peaks.reserveCapacity(4096)
+            var rawPeaks: [Float] = []
+            rawPeaks.reserveCapacity(8192)
 
             while reader.status == .reading, let sampleBuffer = output.copyNextSampleBuffer() {
                 guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { continue }
@@ -1246,35 +1248,42 @@ public final class ProjectSession: Identifiable {
                     if let baseAddress = rawBuffer.baseAddress {
                         CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: baseAddress)
                         let int16Ptr = baseAddress.assumingMemoryBound(to: Int16.self)
-                        let count = length / MemoryLayout<Int16>.size
-                        let step = max(1, count / 16)
-                        var maxSample: Float = 0.0
-                        var idx = 0
-                        while idx < count {
-                            let v = abs(Float(int16Ptr[idx])) / 32768.0
-                            if v > maxSample { maxSample = v }
-                            idx += step
+                        let totalSamples = length / MemoryLayout<Int16>.size
+                        // Subdivide each CMSampleBuffer into 128-sample chunks so every syllable peak/valley is captured!
+                        let chunkSize = 128
+                        var offset = 0
+                        while offset < totalSamples {
+                            let end = min(totalSamples, offset + chunkSize)
+                            var maxSample: Float = 0.0
+                            var i = offset
+                            while i < end {
+                                let v = abs(Float(int16Ptr[i])) / 32768.0
+                                if v > maxSample { maxSample = v }
+                                i += 2
+                            }
+                            rawPeaks.append(maxSample)
+                            offset += chunkSize
                         }
-                        peaks.append(maxSample)
                     }
                 }
             }
 
-            guard peaks.count >= 8 else { return nil }
-            let sortedPeaks = peaks.sorted()
+            guard rawPeaks.count >= 8 else { return nil }
+            let sortedPeaks = rawPeaks.sorted()
             let p95Idx = min(sortedPeaks.count - 1, Int(Double(sortedPeaks.count) * 0.95))
-            let referencePeak = max(0.04, sortedPeaks[p95Idx])
+            let referencePeak = max(0.03, sortedPeaks[p95Idx])
 
-            var buckets = [Float](repeating: 0.08, count: bucketCount)
-            for b in 0..<bucketCount {
-                let startIdx = (b * peaks.count) / bucketCount
-                let endIdx = max(startIdx + 1, ((b + 1) * peaks.count) / bucketCount)
+            let finalCount = min(targetBinCount, rawPeaks.count)
+            var buckets = [Float](repeating: 0.04, count: finalCount)
+            for b in 0..<finalCount {
+                let startIdx = (b * rawPeaks.count) / finalCount
+                let endIdx = max(startIdx + 1, ((b + 1) * rawPeaks.count) / finalCount)
                 var localMax: Float = 0
-                for j in startIdx..<min(peaks.count, endIdx) {
-                    localMax = max(localMax, peaks[j])
+                for j in startIdx..<min(rawPeaks.count, endIdx) {
+                    localMax = max(localMax, rawPeaks[j])
                 }
                 let normalized = min(1.0, localMax / referencePeak)
-                buckets[b] = min(0.96, max(0.06, pow(normalized, 0.58)))
+                buckets[b] = min(0.98, max(0.03, pow(normalized, 0.62)))
             }
             return buckets
         }.value

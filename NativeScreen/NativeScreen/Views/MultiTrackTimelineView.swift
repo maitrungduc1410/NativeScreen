@@ -867,45 +867,86 @@ private struct ClipSegmentDecoration: Equatable, View {
 
     var body: some View {
         Canvas { context, size in
-            // A. Audio Waveform along bottom of Clip (Scaled per-segment by `volumeScale`!)
+            // A. Smooth Catmull-Rom Cubic Spline + Mip-Pyramid Audio Waveform
             if !waveformSamples.isEmpty && totalSourceMs > 1.0 && volumeScale > 0.005 {
                 let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
                 let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
-                let totalBuckets = waveformSamples.count
                 let clampedVol = CGFloat(min(1.5, max(0.0, volumeScale)))
 
-                let stepPx: CGFloat = 2.5
-                let pointCount = max(2, min(480, Int(size.width / stepPx)))
+                // Build multi-resolution max-reduction mipmap pyramid (plus slight neighbor smoothing so bins have organic continuity)
+                let pyramid = Self.buildWaveformPyramid(from: waveformSamples)
+                let baseCount = Double(waveformSamples.count)
+                let sliceSampleSpan = max(1.0, (endFrac - startFrac) * baseCount)
+
+                // `pxPerBin = 5.0` (`Wg = 5` when `enableSmoothWaveform` is enabled):
+                // Each control bin spans ~11px on screen, and Catmull-Rom cubic spline (`readPyramidLevel`)
+                // evaluates every 1.5px between bins to form rolling mountain-dune peaks & valleys!
+                let pxPerBin: Double = 11.0
+                let samplesPerBin = max(1.0, (sliceSampleSpan / Double(max(1.0, size.width))) * pxPerBin)
+                let maxWaveHeightPx: CGFloat = min(size.height * 0.68, 32.0)
+
+                let stepPx: CGFloat = 1.5
+                let pointCount = max(4, Int(ceil(size.width / stepPx)))
+
                 var wavePath = Path()
                 wavePath.move(to: CGPoint(x: 0, y: size.height))
 
                 for i in 0...pointCount {
                     let localFrac = Double(i) / Double(pointCount)
                     let globalFrac = startFrac + localFrac * (endFrac - startFrac)
-                    let exactBucket = globalFrac * Double(totalBuckets - 1)
-                    let b0 = max(0, min(totalBuckets - 1, Int(exactBucket)))
-                    let b1 = min(totalBuckets - 1, b0 + 1)
-                    let t = Float(exactBucket - Double(b0))
-                    let amp = waveformSamples[b0] * (1.0 - t) + waveformSamples[b1] * t
+                    let samplePos = globalFrac * baseCount
 
+                    let env01 = Self.readWaveformEnvelope(
+                        pyramid: pyramid,
+                        samplePosition: samplePos,
+                        samplesPerBin: samplesPerBin
+                    )
                     let x = CGFloat(localFrac) * size.width
-                    let waveH = min(size.height * 0.82, CGFloat(amp) * (size.height * 0.68) * clampedVol)
+                    let waveH = min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedVol)
                     wavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
                 }
+
                 wavePath.addLine(to: CGPoint(x: size.width, y: size.height))
                 wavePath.closeSubpath()
 
+                // `fillUnder` + `system-audio` color (`#4D2FF5`, top opacity `0.50` -> bottom opacity `0.25`)
+                // Blended over the golden Clip gradient, this produces the exact rich purple-to-warm-lavender gradient in
                 context.fill(
                     wavePath,
                     with: .linearGradient(
                         Gradient(colors: [
-                            Color(red: 0.54, green: 0.36, blue: 0.68).opacity(0.76),
-                            Color(red: 0.44, green: 0.27, blue: 0.54).opacity(0.58)
+                            Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.52),
+                            Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.25)
                         ]),
-                        startPoint: CGPoint(x: 0, y: size.height * 0.35),
+                        startPoint: CGPoint(x: 0, y: size.height - maxWaveHeightPx),
                         endPoint: CGPoint(x: 0, y: size.height)
                     )
                 )
+
+                // When slice volume < 100%, also draws a subtle ghost outline of the 100% waveform (`outlineColor` with `opacity: 0.10`)
+                if clampedVol < 0.99 {
+                    var unscaledPath = Path()
+                    unscaledPath.move(to: CGPoint(x: 0, y: size.height))
+                    for i in 0...pointCount {
+                        let localFrac = Double(i) / Double(pointCount)
+                        let globalFrac = startFrac + localFrac * (endFrac - startFrac)
+                        let samplePos = globalFrac * baseCount
+                        let env01 = Self.readWaveformEnvelope(
+                            pyramid: pyramid,
+                            samplePosition: samplePos,
+                            samplesPerBin: samplesPerBin
+                        )
+                        let x = CGFloat(localFrac) * size.width
+                        let waveH = min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx)
+                        unscaledPath.addLine(to: CGPoint(x: x, y: size.height - waveH))
+                    }
+                    unscaledPath.addLine(to: CGPoint(x: size.width, y: size.height))
+                    unscaledPath.closeSubpath()
+                    context.fill(
+                        unscaledPath,
+                        with: .color(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.12))
+                    )
+                }
             }
 
             // B. Vertical Ruler Tick Lines at every minor/major ruler dot
@@ -931,8 +972,76 @@ private struct ClipSegmentDecoration: Equatable, View {
                 tickMs += stepMs
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .allowsHitTesting(false)
+    }
+
+    // MARK: - Exact Mip-Pyramid + Catmull-Rom Cubic Spline
+
+    private static func buildWaveformPyramid(from baseSamples: [Float]) -> [[Float]] {
+        guard !baseSamples.isEmpty else { return [] }
+        var levels: [[Float]] = [baseSamples]
+        while let last = levels.last, last.count > 2 {
+            let nextCount = (last.count + 1) / 2
+            var nextLevel = [Float](repeating: 0, count: nextCount)
+            for i in 0..<nextCount {
+                let left = last[i * 2]
+                let right = last[min(last.count - 1, i * 2 + 1)]
+                nextLevel[i] = max(left, right)
+            }
+            levels.append(nextLevel)
+        }
+        return levels
+    }
+
+    private static func readLevelBin(_ level: [Float], index: Int) -> Double {
+        guard !level.isEmpty else { return 0.0 }
+        if index < 0 || index >= level.count {
+            return 0.0
+        }
+        return Double(level[index])
+    }
+
+    /// Evaluates the 4-point Catmull-Rom Cubic Spline at `samplePosition` on `levelIndex`:
+    /// `curve = left + 0.5 * t * (linearTerm + t * (quadraticTerm + t * cubicTerm))`
+    private static func readPyramidLevel(pyramid: [[Float]], levelIndex: Int, samplePosition: Double) -> Double {
+        guard levelIndex >= 0 && levelIndex < pyramid.count else { return 0.0 }
+        let level = pyramid[levelIndex]
+        let scale = pow(2.0, Double(levelIndex))
+        let binPosition = (samplePosition / scale) - 0.5
+        let leftPosition = floor(binPosition)
+        let t = binPosition - leftPosition
+        let leftIndex = Int(leftPosition)
+
+        let before = readLevelBin(level, index: leftIndex - 1)
+        let left   = readLevelBin(level, index: leftIndex)
+        let right  = readLevelBin(level, index: leftIndex + 1)
+        let after  = readLevelBin(level, index: leftIndex + 2)
+
+        let linearTerm = right - before
+        let quadraticTerm = 2.0 * before - 5.0 * left + 4.0 * right - after
+        let cubicTerm = 3.0 * (left - right) + after - before
+
+        let curve = left + 0.5 * t * (linearTerm + t * (quadraticTerm + t * cubicTerm))
+        return min(1.0, max(0.0, curve))
+    }
+
+    /// Trilinearly blends between `lowerLevel` and `upperLevel` of the Catmull-Rom pyramid based on `log2(samplesPerBin)`.
+    private static func readWaveformEnvelope(pyramid: [[Float]], samplePosition: Double, samplesPerBin: Double) -> Double {
+        guard !pyramid.isEmpty else { return 0.0 }
+        let maxLevel = Double(pyramid.count - 1)
+        let level = min(maxLevel, max(0.0, log2(max(1.0, samplesPerBin))))
+        let lowerFloor = floor(level)
+        let lowerLevel = Int(lowerFloor)
+        let upperLevel = min(pyramid.count - 1, lowerLevel + 1)
+        let frac = level - lowerFloor
+
+        let lowVal = readPyramidLevel(pyramid: pyramid, levelIndex: lowerLevel, samplePosition: samplePosition)
+        if lowerLevel == upperLevel || frac <= 0.0001 {
+            return lowVal
+        }
+        let highVal = readPyramidLevel(pyramid: pyramid, levelIndex: upperLevel, samplePosition: samplePosition)
+        return lowVal + (highVal - lowVal) * frac
     }
 }
 
