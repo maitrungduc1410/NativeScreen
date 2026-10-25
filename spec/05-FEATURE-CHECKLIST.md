@@ -81,7 +81,7 @@
   - [x] Click ripple animations & synthesized mechanical/Magic Mouse click sound effects.
   - [x] Capture and render actual macOS cursor shapes (`arrow`, `pointingHand`, `iBeam`, `crosshair`, `resize`).
 - [ ] **Audio Enhancements:**
-  - [ ] Audio waveform visualization on the timeline.
+  - [x] Audio waveform visualization on the timeline.
   - [ ] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
   - [ ] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
   - [ ] Post-recording Voiceover recording directly onto the timeline.
@@ -105,8 +105,8 @@
   - [ ] Circle / Squircle / Rounded Rectangle shapes, mirror toggle, border & drop shadow.
   - [ ] **AI Person Cutout:** Real-time background removal / blur using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest` — 0MB model bloat!).
   - [ ] Auto-hide webcam during silence.
-- [ ] **Optical Glass Loupe Zoom:**
-  - [ ] Alternative zoom presentation mode (`presentation: "loupe"`) with glass refraction, bevel highlight, and chromatic aberration shader.
+- [x] **Optical Glass Loupe Zoom:**
+  - [x] Alternative zoom presentation mode (`presentation: "loupe"`) with glass refraction, bevel highlight, and chromatic aberration shader.
 - [ ] **Keyboard Shortcuts HUD Overlay:**
   - [ ] Render stylish animated keystroke badges (e.g. `⌘ + K`, `⇧ + ⌘ + P`) from `keys.jsonl` with customizable size, position, and filter (ignore single letters).
 - [ ] **Device Mockups & iOS Recording:**

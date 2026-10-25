@@ -4,6 +4,66 @@ import AppKit
 import Observation
 import ScreenCaptureKit
 
+/// Custom `NSPanel` that allows dragging the Recording HUD from ANYWHERE on the bar (even when pressing on buttons),
+/// while still allowing normal clicks on buttons, and persists its global multi-monitor position.
+private final class DraggableHUDPanel: NSPanel {
+    var onPanelMoved: ((NSPoint) -> Void)?
+
+    private var mouseDownScreenPoint: NSPoint = .zero
+    private var mouseDownWindowOrigin: NSPoint = .zero
+    private var isDraggingWindow: Bool = false
+
+    override func sendEvent(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown:
+            mouseDownScreenPoint = NSEvent.mouseLocation
+            mouseDownWindowOrigin = frame.origin
+            isDraggingWindow = false
+            super.sendEvent(event)
+
+        case .leftMouseDragged:
+            let current = NSEvent.mouseLocation
+            let dx = current.x - mouseDownScreenPoint.x
+            let dy = current.y - mouseDownScreenPoint.y
+            if !isDraggingWindow && hypot(dx, dy) > 3.5 {
+                isDraggingWindow = true
+            }
+            if isDraggingWindow {
+                let newOrigin = NSPoint(x: mouseDownWindowOrigin.x + dx, y: mouseDownWindowOrigin.y + dy)
+                setFrameOrigin(newOrigin)
+                onPanelMoved?(newOrigin)
+                return
+            }
+            super.sendEvent(event)
+
+        case .leftMouseUp:
+            if isDraggingWindow {
+                isDraggingWindow = false
+                onPanelMoved?(frame.origin)
+                // Send a synthetic mouse-up outside any button so SwiftUI buttons don't fire their action after a drag
+                if let cancelEvent = NSEvent.mouseEvent(
+                    with: .leftMouseUp,
+                    location: NSPoint(x: -100, y: -100),
+                    modifierFlags: event.modifierFlags,
+                    timestamp: event.timestamp,
+                    windowNumber: windowNumber,
+                    context: nil,
+                    eventNumber: event.eventNumber,
+                    clickCount: 0,
+                    pressure: 0
+                ) {
+                    super.sendEvent(cancelEvent)
+                }
+                return
+            }
+            super.sendEvent(event)
+
+        default:
+            super.sendEvent(event)
+        }
+    }
+}
+
 /// Coordinates the floating Recording HUD (`NSPanel`), multi-monitor interactive Window/Display/Area Picker overlays,
 /// `ESC` key cancellation, and the `ScreenCaptureEngine` + `TelemetryRecorder`.
 @Observable
@@ -13,6 +73,7 @@ public final class RecordingCoordinator {
 
     public var isHUDVisible: Bool = false
     public var isRecording: Bool = false
+    public var isPickingTarget: Bool = false
     public var recordingElapsedSeconds: TimeInterval = 0.0
     public var selectedMode: CaptureTargetMode = .window
     public var captureMicrophone: Bool = false
@@ -26,7 +87,7 @@ public final class RecordingCoordinator {
 
     public var onRecordingCompleted: ((ProjectSession) -> Void)?
 
-    private var hudPanel: NSPanel?
+    private var hudPanel: DraggableHUDPanel?
     private var pickerOverlayWindows: [NSWindow] = []
     private var hoverTimer: Timer?
     private var recordingTimer: Timer?
@@ -39,14 +100,21 @@ public final class RecordingCoordinator {
     private var activePackageURL: URL?
     private var activeTargetMetadata: CaptureTargetMetadata?
 
+    private let savedHUDOriginXKey = "NativeScreen.HUDPanel.OriginX"
+    private let savedHUDOriginYKey = "NativeScreen.HUDPanel.OriginY"
+    private let hasSavedHUDOriginKey = "NativeScreen.HUDPanel.HasSavedOrigin"
+
     private init() {}
 
     // MARK: - Show / Hide Floating Recording HUD Bar (`NSPanel`)
 
     public func showRecordingHUD() {
+        let panelW: CGFloat = 840
+        let panelH: CGFloat = 66
+
         if hudPanel == nil {
-            let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 840, height: 66),
+            let panel = DraggableHUDPanel(
+                contentRect: NSRect(x: 0, y: 0, width: panelW, height: panelH),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -59,6 +127,9 @@ public final class RecordingCoordinator {
             panel.hasShadow = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isMovableByWindowBackground = true
+            panel.onPanelMoved = { [weak self] newOrigin in
+                self?.saveHUDPanelOrigin(newOrigin)
+            }
 
             let hostingView = NSHostingView(rootView: RecordingHUDBarView(coordinator: self))
             hostingView.sizingOptions = []
@@ -66,23 +137,77 @@ public final class RecordingCoordinator {
             self.hudPanel = panel
         }
 
-        let targetScreen = WindowDiscoveryService.screenUnderMouse() ?? NSScreen.main
-        if let screen = targetScreen, let panel = hudPanel {
-            let screenFrame = screen.visibleFrame
-            let panelW: CGFloat = 840
-            let panelH: CGFloat = 66
-            let x = screenFrame.midX - panelW * 0.5
-            let y = screenFrame.minY + 42
-            panel.setFrame(NSRect(x: x, y: y, width: panelW, height: panelH), display: true)
+        if let panel = hudPanel {
+            let restoredOrigin = restoredAndClampedHUDOrigin(panelSize: NSSize(width: panelW, height: panelH))
+            panel.setFrame(NSRect(origin: restoredOrigin, size: NSSize(width: panelW, height: panelH)), display: true)
             panel.orderFrontRegardless()
         }
 
+        // Crucial: on launch or showRecordingHUD, ONLY show the small HUD bar!
+        // Do NOT automatically enter window/area/display selection mode until the user clicks a mode button.
+        isPickingTarget = false
+        stopPickerOverlay()
         isHUDVisible = true
         installEscapeKeyMonitors()
-        updatePickerOverlayForSelectedMode()
+    }
+
+    private func saveHUDPanelOrigin(_ origin: NSPoint) {
+        let defaults = UserDefaults.standard
+        defaults.set(Double(origin.x), forKey: savedHUDOriginXKey)
+        defaults.set(Double(origin.y), forKey: savedHUDOriginYKey)
+        defaults.set(true, forKey: hasSavedHUDOriginKey)
+    }
+
+    /// Restores the saved multi-monitor HUD position and clamps it so 100% of the panel is fully visible inside the target monitor.
+    private func restoredAndClampedHUDOrigin(panelSize: NSSize) -> NSPoint {
+        let defaults = UserDefaults.standard
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else {
+            return NSPoint(x: 200, y: 80)
+        }
+
+        if defaults.bool(forKey: hasSavedHUDOriginKey) {
+            let savedX = CGFloat(defaults.double(forKey: savedHUDOriginXKey))
+            let savedY = CGFloat(defaults.double(forKey: savedHUDOriginYKey))
+            let candidateRect = NSRect(x: savedX, y: savedY, width: panelSize.width, height: panelSize.height)
+            let candidateCenter = NSPoint(x: candidateRect.midX, y: candidateRect.midY)
+
+            // Find the monitor that contains `candidateCenter`, or has the closest visibleFrame to `candidateCenter`
+            let bestScreen = screens.min { s1, s2 in
+                let d1 = distanceSquared(from: candidateCenter, to: s1.visibleFrame)
+                let d2 = distanceSquared(from: candidateCenter, to: s2.visibleFrame)
+                return d1 < d2
+            } ?? screens[0]
+
+            let vf = bestScreen.visibleFrame
+            let margin: CGFloat = 10.0
+            let minX = vf.minX + margin
+            let maxX = max(minX, vf.maxX - panelSize.width - margin)
+            let minY = vf.minY + margin
+            let maxY = max(minY, vf.maxY - panelSize.height - margin)
+
+            let clampedX = min(max(savedX, minX), maxX)
+            let clampedY = min(max(savedY, minY), maxY)
+            let clampedOrigin = NSPoint(x: clampedX, y: clampedY)
+            saveHUDPanelOrigin(clampedOrigin)
+            return clampedOrigin
+        }
+
+        let defaultScreen = WindowDiscoveryService.screenUnderMouse() ?? NSScreen.main ?? screens[0]
+        let vf = defaultScreen.visibleFrame
+        return NSPoint(x: vf.midX - panelSize.width * 0.5, y: vf.minY + 42)
+    }
+
+    private func distanceSquared(from pt: NSPoint, to rect: NSRect) -> CGFloat {
+        let cx = min(max(pt.x, rect.minX), rect.maxX)
+        let cy = min(max(pt.y, rect.minY), rect.maxY)
+        let dx = pt.x - cx
+        let dy = pt.y - cy
+        return dx * dx + dy * dy
     }
 
     public func hideRecordingHUD() {
+        isPickingTarget = false
         stopPickerOverlay()
         removeEscapeKeyMonitors()
         hudPanel?.orderOut(nil)
@@ -90,7 +215,14 @@ public final class RecordingCoordinator {
     }
 
     public func selectMode(_ mode: CaptureTargetMode) {
+        if selectedMode == mode && isPickingTarget {
+            // Clicking the already-active mode toggles off the picker overlay back to the plain HUD bar
+            isPickingTarget = false
+            stopPickerOverlay()
+            return
+        }
         selectedMode = mode
+        isPickingTarget = true
         if mode == .area, let screen = WindowDiscoveryService.screenUnderMouse() {
             let qFrame = WindowDiscoveryService.quartzFrame(for: screen)
             let w = min(1280.0, qFrame.width * 0.7)
@@ -105,7 +237,7 @@ public final class RecordingCoordinator {
         updatePickerOverlayForSelectedMode()
     }
 
-    // MARK: - `ESC` Hotkey Monitor (Cancels Picker / Closes Recording HUD)
+    // MARK: - `ESC` Hotkey Monitor (Cancels Picker Overlay first, or Closes Recording HUD)
 
     private func installEscapeKeyMonitors() {
         removeEscapeKeyMonitors()
@@ -113,7 +245,12 @@ public final class RecordingCoordinator {
             if event.keyCode == 53 { // ESC key
                 Task { @MainActor [weak self] in
                     guard let self = self, !self.isRecording else { return }
-                    self.hideRecordingHUD()
+                    if self.isPickingTarget {
+                        self.isPickingTarget = false
+                        self.stopPickerOverlay()
+                    } else {
+                        self.hideRecordingHUD()
+                    }
                 }
                 return nil
             }
@@ -123,7 +260,12 @@ public final class RecordingCoordinator {
             if event.keyCode == 53 { // ESC key
                 Task { @MainActor [weak self] in
                     guard let self = self, !self.isRecording else { return }
-                    self.hideRecordingHUD()
+                    if self.isPickingTarget {
+                        self.isPickingTarget = false
+                        self.stopPickerOverlay()
+                    } else {
+                        self.hideRecordingHUD()
+                    }
                 }
             }
         }
@@ -143,7 +285,7 @@ public final class RecordingCoordinator {
     // MARK: - Multi-Monitor Interactive Window / Display / Area Picker Overlays
 
     public func updatePickerOverlayForSelectedMode() {
-        guard isHUDVisible, !isRecording else {
+        guard isHUDVisible, isPickingTarget, !isRecording else {
             stopPickerOverlay()
             return
         }
@@ -585,7 +727,7 @@ public struct RecordingHUDBarView: View {
                 // Capture Target Mode Buttons (Display, Window, Area, Device)
                 HStack(spacing: 4) {
                     ForEach(CaptureTargetMode.allCases) { mode in
-                        let isSelected = (coordinator.selectedMode == mode)
+                        let isSelected = (coordinator.isPickingTarget && coordinator.selectedMode == mode)
                         Button {
                             coordinator.selectMode(mode)
                         } label: {

@@ -23,6 +23,7 @@ public final class ProjectSession: Identifiable {
     public var playheadTimelineMs: Double = 0.0
     public var hoverSkimTimelineMs: Double? = nil
     public var isPlaying: Bool = false
+    public var previewPlaybackRate: Double = 1.0
     public var isSplitModeActive: Bool = false
     public var timelineZoom: Double = 1.0
     public var isReelModeActive: Bool = false
@@ -32,6 +33,13 @@ public final class ProjectSession: Identifiable {
     public var selectedZoomId: String?
     public var selectedMaskId: String?
     public var selectedInspectorTab: InspectorTab = .background
+
+    // Audio Waveform Envelope Samples (`0.0 ... 1.0`, ~240 buckets across `metadata.durationMs`)
+    public var audioWaveformSamples: [Float] = []
+
+    // Clipboard for Zoom / Mask Copy & Cut (`⌘C` / `⌘X`)
+    public var copiedZoomBlock: ZoomBlock?
+    public var copiedMaskItem: MaskItem?
 
     // Cached NLE Mapper & 120Hz Spring Trajectory Solver
     public private(set) var timeMapper: NLETimeMapper
@@ -103,6 +111,10 @@ public final class ProjectSession: Identifiable {
             document: cleanedDoc
         )
         self.selectedSliceId = cleanedDoc.timeline.slices.first?.id
+        self.audioWaveformSamples = Self.generateProceduralWaveform(durationMs: metadata.durationMs)
+        Task { [weak self] in
+            await self?.loadRealAudioWaveformIfAvailable()
+        }
     }
 
     // MARK: - Load & Save `.nativescreen` Bundle
@@ -399,16 +411,15 @@ public final class ProjectSession: Identifiable {
         mutate { doc in
             guard let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) else { return }
             let original = doc.timeline.zooms[idx]
-            let gap = 40.0
             guard sourceMs > original.sourceStartMs + 200.0 && sourceMs < original.sourceEndMs - 200.0 else { return }
 
             var firstHalf = original
             firstHalf.id = UUID().uuidString
-            firstHalf.sourceEndMs = sourceMs - gap * 0.5
+            firstHalf.sourceEndMs = sourceMs
 
             var secondHalf = original
             secondHalf.id = UUID().uuidString
-            secondHalf.sourceStartMs = sourceMs + gap * 0.5
+            secondHalf.sourceStartMs = sourceMs
 
             doc.timeline.zooms.replaceSubrange(idx...idx, with: [firstHalf, secondHalf])
             selectedZoomId = secondHalf.id
@@ -420,17 +431,16 @@ public final class ProjectSession: Identifiable {
             for tIdx in doc.timeline.maskTracks.indices {
                 if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {
                     let original = doc.timeline.maskTracks[tIdx].items[mIdx]
-                    let gap = 40.0
                     guard sourceMs > original.sourceStartMs + 180.0 && sourceMs < original.sourceEndMs - 180.0 else { return }
 
                     let rectAtSplit = original.interpolatedRect(at: sourceMs)
                     var firstHalf = original
                     firstHalf.id = UUID().uuidString
-                    firstHalf.sourceEndMs = sourceMs - gap * 0.5
+                    firstHalf.sourceEndMs = sourceMs
 
                     var secondHalf = original
                     secondHalf.id = UUID().uuidString
-                    secondHalf.sourceStartMs = sourceMs + gap * 0.5
+                    secondHalf.sourceStartMs = sourceMs
                     secondHalf.keyframes = [MaskKeyframe(sourceMs: secondHalf.sourceStartMs, rect01: rectAtSplit)]
 
                     doc.timeline.maskTracks[tIdx].items.replaceSubrange(mIdx...mIdx, with: [firstHalf, secondHalf])
@@ -523,22 +533,21 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Moves a ZoomBlock horizontally while strictly preserving its exact `durationMs` (NEVER resizes!).
+    /// Moves a ZoomBlock horizontally while strictly preserving its exact `durationMs` (NEVER resizes! Touching neighbors with 0ms gap).
     public func moveZoom(id: String, desiredStartMs: Double, durationMs: Double) {
         let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
         let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
-        let minGap = 40.0
-        let span = max(300.0, durationMs)
+        let span = max(250.0, durationMs)
 
         mutate { doc in
             let sorted = doc.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
             guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
 
             let lowerBound = sortedIdx > 0
-                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs + minGap)
+                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs)
                 : earliestSourceMs
             let upperBound = sortedIdx + 1 < sorted.count
-                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs - minGap)
+                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs)
                 : latestSourceMs
             guard upperBound - lowerBound >= span else { return }
 
@@ -553,22 +562,21 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Resizes ONLY the left/start or right/end edge of a ZoomBlock (only triggered by the 2 edge handles).
+    /// Resizes ONLY the left/start or right/end edge of a ZoomBlock (touching neighbors edge-to-edge with 0ms gap).
     public func resizeZoom(id: String, newStartMs: Double, newEndMs: Double) {
         let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
         let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
-        let minDuration = 300.0
-        let minGap = 40.0
+        let minDuration = 250.0
 
         mutate { doc in
             let sorted = doc.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
             guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
 
             let lowerBound = sortedIdx > 0
-                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs + minGap)
+                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs)
                 : earliestSourceMs
             let upperBound = sortedIdx + 1 < sorted.count
-                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs - minGap)
+                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs)
                 : latestSourceMs
             guard upperBound - lowerBound >= minDuration else { return }
 
@@ -593,12 +601,11 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Moves a MaskItem horizontally while strictly preserving its exact `durationMs` (NEVER resizes!).
+    /// Moves a MaskItem horizontally while strictly preserving its exact `durationMs` (touching neighbors with 0ms gap).
     public func moveMask(id: String, desiredStartMs: Double, durationMs: Double) {
         let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
         let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
-        let minGap = 30.0
-        let span = max(250.0, durationMs)
+        let span = max(220.0, durationMs)
 
         mutate { doc in
             for tIdx in doc.timeline.maskTracks.indices {
@@ -606,10 +613,10 @@ public final class ProjectSession: Identifiable {
                 guard let sortedIdx = items.firstIndex(where: { $0.id == id }) else { continue }
 
                 let lowerBound = sortedIdx > 0
-                    ? max(earliestSourceMs, items[sortedIdx - 1].sourceEndMs + minGap)
+                    ? max(earliestSourceMs, items[sortedIdx - 1].sourceEndMs)
                     : earliestSourceMs
                 let upperBound = sortedIdx + 1 < items.count
-                    ? min(latestSourceMs, items[sortedIdx + 1].sourceStartMs - minGap)
+                    ? min(latestSourceMs, items[sortedIdx + 1].sourceStartMs)
                     : latestSourceMs
                 guard upperBound - lowerBound >= span else { return }
 
@@ -630,12 +637,11 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Resizes ONLY the left/start or right/end edge of a MaskItem (only triggered by the 2 edge handles).
+    /// Resizes ONLY the left/start or right/end edge of a MaskItem (touching neighbors edge-to-edge with 0ms gap).
     public func resizeMask(id: String, newStartMs: Double, newEndMs: Double) {
         let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
         let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
-        let minDuration = 250.0
-        let minGap = 30.0
+        let minDuration = 220.0
 
         mutate { doc in
             for tIdx in doc.timeline.maskTracks.indices {
@@ -643,10 +649,10 @@ public final class ProjectSession: Identifiable {
                 guard let sortedIdx = items.firstIndex(where: { $0.id == id }) else { continue }
 
                 let lowerBound = sortedIdx > 0
-                    ? max(earliestSourceMs, items[sortedIdx - 1].sourceEndMs + minGap)
+                    ? max(earliestSourceMs, items[sortedIdx - 1].sourceEndMs)
                     : earliestSourceMs
                 let upperBound = sortedIdx + 1 < items.count
-                    ? min(latestSourceMs, items[sortedIdx + 1].sourceStartMs - minGap)
+                    ? min(latestSourceMs, items[sortedIdx + 1].sourceStartMs)
                     : latestSourceMs
                 guard upperBound - lowerBound >= minDuration else { return }
 
@@ -705,9 +711,8 @@ public final class ProjectSession: Identifiable {
 
         let prevEnd = sorted.last(where: { $0.sourceEndMs <= srcMs })?.sourceEndMs ?? 0.0
         let nextStart = sorted.first(where: { $0.sourceStartMs >= srcMs })?.sourceStartMs ?? maxDur
-        let minGap = 50.0
-        let availStart = prevEnd + (prevEnd > 0 ? minGap : 0)
-        let availEnd = nextStart - (nextStart < maxDur ? minGap : 0)
+        let availStart = prevEnd
+        let availEnd = nextStart
         guard availEnd - availStart >= 400.0 else { return }
 
         let desiredDuration = min(3200.0, availEnd - availStart)
@@ -991,6 +996,292 @@ public final class ProjectSession: Identifiable {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.writeObjects([nsImg])
+        }
+    }
+
+    // MARK: - Rich Context Popover Actions (Clip, Zoom, Mask)
+
+    public func mergeSliceWithNext(id: String) {
+        mutate { doc in
+            guard let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }),
+                  idx + 1 < doc.timeline.slices.count else { return }
+            let nextSlice = doc.timeline.slices[idx + 1]
+            doc.timeline.slices[idx].sourceEndMs = max(doc.timeline.slices[idx].sourceEndMs, nextSlice.sourceEndMs)
+            doc.timeline.slices.remove(at: idx + 1)
+            selectedSliceId = doc.timeline.slices[idx].id
+        }
+    }
+
+    public func resetSliceTrim(id: String) {
+        let maxDur = metadata.durationMs
+        mutate { doc in
+            guard let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) else { return }
+            let prevEnd = idx > 0 ? doc.timeline.slices[idx - 1].sourceEndMs : 0.0
+            let nextStart = (idx + 1 < doc.timeline.slices.count) ? doc.timeline.slices[idx + 1].sourceStartMs : maxDur
+            if nextStart > prevEnd + 100.0 {
+                doc.timeline.slices[idx].sourceStartMs = prevEnd
+                doc.timeline.slices[idx].sourceEndMs = nextStart
+            }
+        }
+    }
+
+    public func resetAllSlicesTrimAndCuts() {
+        let maxDur = metadata.durationMs
+        mutate { doc in
+            let newSlice = ClipSlice(sourceStartMs: 0.0, sourceEndMs: maxDur, speed: 1.0)
+            doc.timeline.slices = [newSlice]
+            selectedSliceId = newSlice.id
+        }
+    }
+
+    public func setSliceSpeed(id: String, speed: Double) {
+        mutate { doc in
+            if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {
+                doc.timeline.slices[idx].speed = max(0.25, min(8.0, speed))
+            }
+        }
+    }
+
+    public func toggleSliceHideCursor(id: String) {
+        mutate { doc in
+            if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {
+                doc.timeline.slices[idx].hideCursor.toggle()
+            }
+        }
+    }
+
+    public func toggleSliceDisableSmoothCursor(id: String) {
+        mutate { doc in
+            if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {
+                doc.timeline.slices[idx].disableSmoothCursor.toggle()
+            }
+        }
+    }
+
+    public func setZoomPresentation(id: String, presentation: ZoomPresentation) {
+        mutate { doc in
+            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
+                doc.timeline.zooms[idx].presentation = presentation
+            }
+        }
+    }
+
+    public func setZoomScale(id: String, scale: Double) {
+        mutate { doc in
+            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
+                doc.timeline.zooms[idx].scale = max(1.05, min(4.0, scale))
+            }
+        }
+    }
+
+    public func applyZoomLevelToAllOtherZooms(fromId id: String) {
+        mutate { doc in
+            guard let sourceZoom = doc.timeline.zooms.first(where: { $0.id == id }) else { return }
+            for idx in doc.timeline.zooms.indices {
+                doc.timeline.zooms[idx].scale = sourceZoom.scale
+            }
+        }
+    }
+
+    public func duplicateZoom(id: String) {
+        let maxDur = metadata.durationMs
+        mutate { doc in
+            let sorted = doc.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
+            guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
+            let orig = sorted[sortedIdx]
+            let nextStart = (sortedIdx + 1 < sorted.count) ? sorted[sortedIdx + 1].sourceStartMs : maxDur
+            let availAfter = nextStart - orig.sourceEndMs
+
+            if availAfter >= 300.0 {
+                var copy = orig
+                copy.id = UUID().uuidString
+                copy.sourceStartMs = orig.sourceEndMs
+                copy.sourceEndMs = min(nextStart, orig.sourceEndMs + (orig.sourceEndMs - orig.sourceStartMs))
+                doc.timeline.zooms.append(copy)
+                doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
+                selectedZoomId = copy.id
+            } else if orig.sourceEndMs - orig.sourceStartMs >= 500.0 {
+                // Split in half so duplicate fits right beside it
+                let mid = (orig.sourceStartMs + orig.sourceEndMs) * 0.5
+                if let realIdx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
+                    doc.timeline.zooms[realIdx].sourceEndMs = mid
+                }
+                var copy = orig
+                copy.id = UUID().uuidString
+                copy.sourceStartMs = mid
+                copy.sourceEndMs = orig.sourceEndMs
+                doc.timeline.zooms.append(copy)
+                doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
+                selectedZoomId = copy.id
+            }
+        }
+    }
+
+    public func toggleZoomDisabled(id: String) {
+        mutate { doc in
+            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
+                doc.timeline.zooms[idx].disabled.toggle()
+            }
+        }
+    }
+
+    public func copyZoomToClipboard(id: String) {
+        if let found = document.timeline.zooms.first(where: { $0.id == id }) {
+            copiedZoomBlock = found
+        }
+    }
+
+    public func cutZoomToClipboard(id: String) {
+        copyZoomToClipboard(id: id)
+        deleteZoom(zoomId: id)
+    }
+
+    public func setMaskType(id: String, type: MaskType) {
+        mutate { doc in
+            for tIdx in doc.timeline.maskTracks.indices {
+                if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {
+                    doc.timeline.maskTracks[tIdx].items[mIdx].type = type
+                    if type == .spotlight {
+                        doc.timeline.maskTracks[tIdx].items[mIdx].style = .dim
+                    } else if doc.timeline.maskTracks[tIdx].items[mIdx].style == .dim {
+                        doc.timeline.maskTracks[tIdx].items[mIdx].style = .gaussian
+                    }
+                    return
+                }
+            }
+        }
+    }
+
+    public func toggleMaskDisabled(id: String) {
+        mutate { doc in
+            for tIdx in doc.timeline.maskTracks.indices {
+                if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {
+                    doc.timeline.maskTracks[tIdx].items[mIdx].disabled.toggle()
+                    return
+                }
+            }
+        }
+    }
+
+    public func copyMaskToClipboard(id: String) {
+        for track in document.timeline.maskTracks {
+            if let found = track.items.first(where: { $0.id == id }) {
+                copiedMaskItem = found
+                return
+            }
+        }
+    }
+
+    public func cutMaskToClipboard(id: String) {
+        copyMaskToClipboard(id: id)
+        deleteMask(maskId: id)
+    }
+
+    /// Splits whichever item is currently selected at `currentSourceTimeMs` (or splits the Clip at Playhead) when pressing `C`.
+    public func splitAtCurrentTimeShortcut() {
+        let srcMs = currentSourceTimeMs
+        if let maskId = selectedMaskId {
+            splitMask(id: maskId, atSourceMs: srcMs)
+            return
+        }
+        if let zoomId = selectedZoomId {
+            splitZoom(id: zoomId, atSourceMs: srcMs)
+            return
+        }
+        splitSliceAtPlayhead()
+    }
+
+    /// Toggles `disabled` on the selected Zoom or Mask when pressing `D`.
+    public func toggleDisableSelectedShortcut() {
+        if let maskId = selectedMaskId {
+            toggleMaskDisabled(id: maskId)
+            return
+        }
+        if let zoomId = selectedZoomId {
+            toggleZoomDisabled(id: zoomId)
+        }
+    }
+
+    // MARK: - Audio Waveform Extraction & Smooth Speech Envelope Generator
+
+    private static func generateProceduralWaveform(durationMs: Double, bucketCount: Int = 240) -> [Float] {
+        var samples: [Float] = []
+        samples.reserveCapacity(bucketCount)
+        for i in 0..<bucketCount {
+            let t = Double(i) / Double(max(1, bucketCount)) * (durationMs / 1000.0)
+            let syllabic = abs(sin(t * 4.7)) * 0.52 + abs(sin(t * 11.3 + 1.2)) * 0.30 + abs(cos(t * 2.1)) * 0.18
+            let pauseEnvelope = sin(t * 1.35) > -0.55 ? 1.0 : 0.14
+            let val = Float(min(0.95, max(0.08, syllabic * pauseEnvelope)))
+            samples.append(val)
+        }
+        return samples
+    }
+
+    private func loadRealAudioWaveformIfAvailable() async {
+        let url = videoFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let asset = AVURLAsset(url: url)
+        guard let tracks = try? await asset.loadTracks(withMediaType: .audio),
+              let audioTrack = tracks.first else {
+            return
+        }
+
+        let bucketCount = 240
+        let extracted: [Float]? = await Task.detached(priority: .utility) {
+            guard let reader = try? AVAssetReader(asset: asset) else { return nil }
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsNonInterleaved: false
+            ]
+            let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: settings)
+            guard reader.canAdd(output) else { return nil }
+            reader.add(output)
+            guard reader.startReading() else { return nil }
+
+            var peaks: [Float] = []
+            peaks.reserveCapacity(4096)
+
+            while reader.status == .reading, let sampleBuffer = output.copyNextSampleBuffer() {
+                guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { continue }
+                let length = CMBlockBufferGetDataLength(blockBuffer)
+                var data = Data(count: length)
+                data.withUnsafeMutableBytes { rawBuffer in
+                    if let baseAddress = rawBuffer.baseAddress {
+                        CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: baseAddress)
+                        let int16Ptr = baseAddress.assumingMemoryBound(to: Int16.self)
+                        let count = length / MemoryLayout<Int16>.size
+                        let step = max(1, count / 16)
+                        var maxSample: Float = 0.0
+                        var idx = 0
+                        while idx < count {
+                            let v = abs(Float(int16Ptr[idx])) / 32768.0
+                            if v > maxSample { maxSample = v }
+                            idx += step
+                        }
+                        peaks.append(maxSample)
+                    }
+                }
+            }
+
+            guard peaks.count >= 8 else { return nil }
+            var buckets = [Float](repeating: 0.08, count: bucketCount)
+            for b in 0..<bucketCount {
+                let startIdx = (b * peaks.count) / bucketCount
+                let endIdx = max(startIdx + 1, ((b + 1) * peaks.count) / bucketCount)
+                var sum: Float = 0
+                for j in startIdx..<min(peaks.count, endIdx) {
+                    sum = max(sum, peaks[j])
+                }
+                buckets[b] = min(0.96, max(0.08, pow(sum, 0.65)))
+            }
+            return buckets
+        }.value
+
+        if let realSamples = extracted {
+            self.audioWaveformSamples = realSamples
         }
     }
 }

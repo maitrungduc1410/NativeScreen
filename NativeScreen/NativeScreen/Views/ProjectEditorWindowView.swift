@@ -547,7 +547,7 @@ public struct ProjectEditorWindowView: View {
                                 .frame(width: 64, alignment: .leading)
                         }
 
-                        // Right: Extract Current Frame Icon + Timeline Zoom Slider
+                        // Right: Extract Current Frame Icon + Divider + Playback Speed (`1x`) + Timeline Zoom Slider
                         HStack(spacing: 10) {
                             Spacer()
 
@@ -572,10 +572,35 @@ public struct ProjectEditorWindowView: View {
                                 }
                             }
 
-                            Text(String(format: "%.0fx", session.timelineZoom))
-                                .font(.system(size: 11.5, weight: .medium).monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .frame(width: 24, alignment: .trailing)
+                            Divider()
+                                .frame(height: 16)
+
+                            // Playback Speed Button (`1x`)
+                            InstantTooltipButton(
+                                tooltip: "Playback speed",
+                                edge: .top,
+                                isActive: abs(session.previewPlaybackRate - 1.0) > 0.01,
+                                size: 34,
+                                cornerRadius: 8
+                            ) {
+                                let rates: [Double] = [1.0, 1.25, 1.5, 2.0, 0.5]
+                                if let idx = rates.firstIndex(where: { abs($0 - session.previewPlaybackRate) < 0.03 }) {
+                                    session.previewPlaybackRate = rates[(idx + 1) % rates.count]
+                                } else {
+                                    session.previewPlaybackRate = 1.0
+                                }
+                            } label: {
+                                Text(String(format: "%gx", session.previewPlaybackRate))
+                                    .font(.system(size: 12.5, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(.white.opacity(0.92))
+                            }
+                            .contextMenu {
+                                ForEach([0.5, 1.0, 1.25, 1.5, 2.0], id: \.self) { rate in
+                                    Button(String(format: "%gx", rate)) {
+                                        session.previewPlaybackRate = rate
+                                    }
+                                }
+                            }
 
                             Slider(value: $session.timelineZoom, in: 1.0...6.0)
                                 .frame(width: 96)
@@ -688,6 +713,50 @@ public struct ProjectEditorWindowView: View {
             case 51, 117: // Delete / Forward Delete
                 session.deleteSelectedTimelineItem()
                 return nil
+
+            case 8: // 'C' key: Split at current time (or Copy with ⌘C)
+                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if flags.contains(.command) {
+                    if let mId = session.selectedMaskId {
+                        session.copyMaskToClipboard(id: mId)
+                        return nil
+                    }
+                    if let zId = session.selectedZoomId {
+                        session.copyZoomToClipboard(id: zId)
+                        return nil
+                    }
+                } else if flags.isEmpty {
+                    session.splitAtCurrentTimeShortcut()
+                    return nil
+                }
+                return event
+
+            case 2: // 'D' key: Disable selected (or Duplicate with ⌘D)
+                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if flags.contains(.command) {
+                    if let zId = session.selectedZoomId {
+                        session.duplicateZoom(id: zId)
+                        return nil
+                    }
+                } else if flags.isEmpty {
+                    session.toggleDisableSelectedShortcut()
+                    return nil
+                }
+                return event
+
+            case 7: // 'X' key with ⌘X: Cut to clipboard
+                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if flags.contains(.command) {
+                    if let mId = session.selectedMaskId {
+                        session.cutMaskToClipboard(id: mId)
+                        return nil
+                    }
+                    if let zId = session.selectedZoomId {
+                        session.cutZoomToClipboard(id: zId)
+                        return nil
+                    }
+                }
+                return event
 
             default:
                 return event

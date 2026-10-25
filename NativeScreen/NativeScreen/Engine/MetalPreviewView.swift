@@ -190,7 +190,7 @@ public struct MetalPreviewView: NSViewRepresentable {
 
             if session.isPlaying {
                 let now = ProcessInfo.processInfo.systemUptime
-                let dtMs = max(0.0, min(50.0, (now - lastFrameTickUptime) * 1000.0))
+                let dtMs = max(0.0, min(50.0, (now - lastFrameTickUptime) * 1000.0)) * session.previewPlaybackRate
                 lastFrameTickUptime = now
 
                 let nextTimelineMs = session.playheadTimelineMs + dtMs
@@ -208,9 +208,11 @@ public struct MetalPreviewView: NSViewRepresentable {
             let targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
 
             if let output = videoOutput {
-                if session.isPlaying, let player = player, player.rate == 0 {
+                let sliceSpeed = session.currentActiveSlice?.speed ?? 1.0
+                let desiredRate = Float(session.previewPlaybackRate * sliceSpeed)
+                if session.isPlaying, let player = player, abs(player.rate - desiredRate) > 0.05 {
                     player.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
-                    player.play()
+                    player.rate = desiredRate
                 } else if !session.isPlaying, let player = player, player.rate != 0 {
                     player.pause()
                 }

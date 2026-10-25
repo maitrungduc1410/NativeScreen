@@ -2,28 +2,36 @@ import SwiftUI
 import AppKit
 
 /// NativeScreen-grade Multi-Track NLE Timeline:
-/// - **Fixed Left Track Header Column** (never scrolls off-screen when scrolling horizontally).
-/// - **Fixed Top Time Ruler** (never scrolls off-screen when scrolling vertically).
-/// - **Slim 4pt Custom Pill Scrollbars** (replaces thick white default macOS scrollbars).
-/// - **Taller Track Proportions** (`46pt` Clip, `40pt` Zoom, `30pt` Masks).
-/// - **Live Hover Skimming** with translucent teardrop Ghost Playhead + Click anywhere to seek & select.
-/// - **Universal Split Blade (`✂️`)** + Cross-track vertical drag for Masks + Auto-prune empty tracks.
+/// - **Unified Continuous Playhead** (teardrop head + vertical stem drawn as a single connected shape with zero gap).
+/// - **Ghost Playhead "Ducking" Animation** (when hovering near the main purple playhead, the grey ghost playhead head smoothly ducks down underneath it).
+/// - **Ruler Dots & Clip Vertical Tick Lines** (major labels + minor dots, with matching vertical tick lines inside the Clip bar).
+/// - **Audio Waveform Inside Clip** (smooth purple-tinted waveform rendered along the bottom of the Clip segment).
+/// - **Edge-to-Edge Touching Segments** (zero artificial gap when segments touch).
+/// - **Playhead-Anchored Timeline Zoom** (zooming keeps the playhead stationary at its current screen position).
+/// - **Native Liquid Glass Right-Click Context Popovers**.
 public struct MultiTrackTimelineView: View {
     @Bindable var session: ProjectSession
     @State private var pinchBaseZoom: Double?
 
-    // Track scroll offsets for synchronized Sticky Ruler & Slim 4pt Scrollbars
+    // Track scroll offsets & NSScrollView reference for playhead-anchored zooming
     @State private var horizontalScrollOffset: CGFloat = 0.0
     @State private var verticalScrollOffset: CGFloat = 0.0
     @State private var verticalContentHeight: CGFloat = 180.0
+    @State private var horizontalScrollView: NSScrollView?
+    @State private var lastZoomForAnchor: Double = 1.0
+
+    // Right-Click Liquid Glass Context Popover State
+    @State private var contextPopoverSliceId: String?
+    @State private var contextPopoverZoomId: String?
+    @State private var contextPopoverMaskId: String?
 
     private let labelColumnWidth: CGFloat = 104
-    private let trackHorizontalInset: CGFloat = 12
+    private let trackHorizontalInset: CGFloat = 20
     private let rulerHeight: CGFloat = 30
     private let clipRowHeight: CGFloat = 52
     private let zoomRowHeight: CGFloat = 46
     private let maskRowHeight: CGFloat = 34
-    private let rowSpacing: CGFloat = 9
+    private let rowSpacing: CGFloat = 8
 
     public init(session: ProjectSession) {
         self.session = session
@@ -31,10 +39,6 @@ public struct MultiTrackTimelineView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // 2D Pinned Timeline Area:
-            // - Left Column (`labelColumnWidth`) is fixed horizontally.
-            // - Top Ruler (`rulerHeight`) is fixed vertically.
-            // - Right Track Canvas scrolls both ways with slim 4pt scroll indicators.
             GeometryReader { outerGeo in
                 let viewportWidth = max(300, outerGeo.size.width - labelColumnWidth)
                 let viewportHeight = max(80, outerGeo.size.height - rulerHeight)
@@ -42,15 +46,24 @@ public struct MultiTrackTimelineView: View {
                 let contentWidth = baseTrackWidth * CGFloat(session.timelineZoom)
                 let totalDocumentWidth = contentWidth + trackHorizontalInset * 2
                 let totalTimelineMs = max(1000.0, session.timeMapper.totalTimelineDurationMs)
+                let stepInfo = SmoothTimeRulerView.computeStepIntervals(totalDurationMs: totalTimelineMs, width: contentWidth)
 
-                ZStack(alignment: .bottomTrailing) {
+                let playheadXInDoc = trackHorizontalInset + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
+                let playheadXInViewport = playheadXInDoc - horizontalScrollOffset
+
+                let hoverXInDoc: CGFloat? = (!session.isPlaying && session.hoverSkimTimelineMs != nil)
+                    ? (trackHorizontalInset + CGFloat(session.hoverSkimTimelineMs! / totalTimelineMs) * contentWidth)
+                    : nil
+                let hoverXInViewport: CGFloat? = hoverXInDoc.map { $0 - horizontalScrollOffset }
+
+                ZStack(alignment: .topLeading) {
                     VStack(spacing: 0) {
                         // A. FIXED TOP RULER BAR
                         HStack(spacing: 0) {
                             // Top-Left Corner Header
                             HStack {
                                 Text("Tracks")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: 10.5, weight: .semibold))
                                     .foregroundStyle(.white.opacity(0.32))
                                     .padding(.leading, 14)
                                 Spacer()
@@ -64,33 +77,15 @@ public struct MultiTrackTimelineView: View {
                             }
                             .zIndex(20)
 
-                            // Top-Right Horizontally Synced Time Ruler + Playhead Teardrop Caps
-                            // `trackHorizontalInset` (10pt) guarantees that at 0.00s and at end duration,
-                            // the 11pt teardrop playhead cap is 100% visible and never clipped!
+                            // Top-Right Horizontally Synced Time Ruler
                             ZStack(alignment: .topLeading) {
                                 SmoothTimeRulerView(
                                     totalDurationMs: totalTimelineMs,
-                                    width: contentWidth
+                                    width: contentWidth,
+                                    majorStepSec: stepInfo.major,
+                                    minorStepSec: stepInfo.minor
                                 )
                                 .offset(x: trackHorizontalInset)
-
-                                // Ghost Hover Teardrop Cap in Ruler
-                                if let hoverMs = session.hoverSkimTimelineMs, !session.isPlaying {
-                                    let hoverX = trackHorizontalInset + CGFloat(hoverMs / totalTimelineMs) * contentWidth
-                                    TeardropHeadShape()
-                                        .fill(Color(red: 0.28, green: 0.30, blue: 0.38))
-                                        .frame(width: 11, height: 13)
-                                        .offset(x: hoverX - 5.5, y: 2)
-                                        .allowsHitTesting(false)
-                                }
-
-                                // Committed Playhead Teardrop Cap in Ruler
-                                let playheadX = trackHorizontalInset + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
-                                TeardropHeadShape()
-                                    .fill(Color(red: 0.46, green: 0.34, blue: 1.0))
-                                    .frame(width: 11, height: 13)
-                                    .offset(x: playheadX - 5.5, y: 2)
-                                    .allowsHitTesting(false)
                             }
                             .frame(width: totalDocumentWidth, height: rulerHeight, alignment: .leading)
                             .offset(x: -horizontalScrollOffset)
@@ -119,18 +114,12 @@ public struct MultiTrackTimelineView: View {
                         }
                         .frame(height: rulerHeight)
                         .background(Color(red: 0.04, green: 0.04, blue: 0.06))
-                        .overlay(alignment: .bottom) {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.06))
-                                .frame(height: 1)
-                        }
 
                         // B. VERTICALLY SCROLLABLE BODY (Fixed Left Labels + Horizontally Scrollable Track Lanes)
                         ScrollView(.vertical, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 0) {
-                                // B1. FIXED LEFT TRACK LABELS COLUMN (Never moves horizontally!)
+                                // B1. FIXED LEFT TRACK LABELS COLUMN
                                 VStack(alignment: .leading, spacing: rowSpacing) {
-                                    // Clip Label
                                     HStack(spacing: 6) {
                                         Text("Clip")
                                             .font(.system(size: 11, weight: .medium))
@@ -139,7 +128,6 @@ public struct MultiTrackTimelineView: View {
                                     .padding(.leading, 14)
                                     .frame(width: labelColumnWidth, height: clipRowHeight, alignment: .leading)
 
-                                    // Zoom Label + Visibility Eye Toggle
                                     let zoomHidden = session.document.timeline.isZoomTrackHidden
                                     HStack(spacing: 6) {
                                         Button {
@@ -158,7 +146,6 @@ public struct MultiTrackTimelineView: View {
                                     .padding(.leading, 14)
                                     .frame(width: labelColumnWidth, height: zoomRowHeight, alignment: .leading)
 
-                                    // Dynamic Mask Track Labels + Visibility Eye Toggles
                                     ForEach(session.document.timeline.maskTracks) { track in
                                         let maskHidden = track.isHidden
                                         HStack(spacing: 6) {
@@ -178,17 +165,9 @@ public struct MultiTrackTimelineView: View {
                                         }
                                         .padding(.leading, 14)
                                         .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
-                                        .contextMenu {
-                                            Button(maskHidden ? "Show Track" : "Hide Track") {
-                                                session.toggleMaskTrackVisibility(trackId: track.id)
-                                            }
-                                            Button("Delete Track", role: .destructive) {
-                                                session.deleteMaskTrack(trackId: track.id)
-                                            }
-                                        }
                                     }
                                 }
-                                .padding(.vertical, 10)
+                                .padding(.vertical, 8)
                                 .background(Color(red: 0.04, green: 0.04, blue: 0.06))
                                 .overlay(alignment: .trailing) {
                                     Rectangle()
@@ -201,19 +180,20 @@ public struct MultiTrackTimelineView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     ZStack(alignment: .topLeading) {
                                         VStack(alignment: .leading, spacing: rowSpacing) {
-                                            // Lane 1: Screen Clips (`46pt` height)
+                                            // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
                                             clipLaneView(
                                                 contentWidth: contentWidth,
-                                                totalTimelineMs: totalTimelineMs
+                                                totalTimelineMs: totalTimelineMs,
+                                                minorTickStepSec: stepInfo.minor
                                             )
 
-                                            // Lane 2: Auto-Zooms (`40pt` height)
+                                            // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
                                             zoomLaneView(
                                                 contentWidth: contentWidth,
                                                 totalTimelineMs: totalTimelineMs
                                             )
 
-                                            // Lane 3+: Dynamic Mask Tracks (`30pt` height)
+                                            // Lane 3+: Dynamic Mask Tracks (`34pt` height)
                                             ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
                                                 maskLaneView(
                                                     track: track,
@@ -223,28 +203,15 @@ public struct MultiTrackTimelineView: View {
                                                 )
                                             }
                                         }
-                                        .padding(.vertical, 10)
+                                        .padding(.vertical, 8)
                                         .padding(.horizontal, trackHorizontalInset)
-
-                                        // Ghost Hover Playhead Line across all lanes
-                                        if let hoverMs = session.hoverSkimTimelineMs, !session.isPlaying {
-                                            let hoverX = trackHorizontalInset + CGFloat(hoverMs / totalTimelineMs) * contentWidth
-                                            Rectangle()
-                                                .fill(Color.white.opacity(0.24))
-                                                .frame(width: 1.5)
-                                                .frame(maxHeight: .infinity)
-                                                .offset(x: hoverX - 0.75)
-                                                .allowsHitTesting(false)
-                                        }
-
-                                        // Committed Playhead Line across all lanes
-                                        let playheadX = trackHorizontalInset + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
-                                        Rectangle()
-                                            .fill(Color(red: 0.46, green: 0.34, blue: 1.0))
-                                            .frame(width: 1.5)
-                                            .frame(maxHeight: .infinity)
-                                            .offset(x: playheadX - 0.75)
-                                            .allowsHitTesting(false)
+                                        .background(
+                                            HorizontalScrollViewIntrospector { sv in
+                                                if horizontalScrollView !== sv {
+                                                    horizontalScrollView = sv
+                                                }
+                                            }
+                                        )
                                     }
                                     .frame(width: totalDocumentWidth)
                                     .coordinateSpace(name: "timelineContentSpace")
@@ -283,7 +250,44 @@ public struct MultiTrackTimelineView: View {
                         }
                     }
 
-                    // C. SLIM 4pt HORIZONTAL SCROLLBAR PILL (Only shown when zoomed > 1.0x)
+                    // C. UNIFIED CONTINUOUS GHOST PLAYHEAD + COMMITTED PLAYHEAD OVERLAY
+                    // Spans seamlessly from the top of the Ruler through all tracks with zero gap between head and line!
+                    ZStack(alignment: .topLeading) {
+                        // 1. Ghost Hover Playhead (Smoothly ducks its teardrop head down when near the main purple playhead!)
+                        if let gx = hoverXInViewport, gx >= -6 && gx <= viewportWidth + 6 {
+                            let distToMain = abs(gx - playheadXInViewport)
+                            let proximity01 = max(0.0, min(1.0, 1.0 - (distToMain / 22.0)))
+                            let duckYOffset = 13.0 * proximity01 * proximity01
+
+                            UnifiedPlayheadCanvasView(
+                                headColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.90),
+                                stemColor: Color.white.opacity(0.22),
+                                headTopY: 2.0 + duckYOffset,
+                                totalHeight: outerGeo.size.height
+                            )
+                            .frame(width: 14, height: outerGeo.size.height)
+                            .offset(x: gx - 7.0)
+                        }
+
+                        // 2. Main Committed Purple Playhead (100% connected teardrop + vertical stem)
+                        if playheadXInViewport >= -6 && playheadXInViewport <= viewportWidth + 6 {
+                            UnifiedPlayheadCanvasView(
+                                headColor: Color(red: 0.44, green: 0.30, blue: 1.0),
+                                stemColor: Color(red: 0.44, green: 0.30, blue: 1.0).opacity(0.85),
+                                headTopY: 2.0,
+                                totalHeight: outerGeo.size.height
+                            )
+                            .frame(width: 14, height: outerGeo.size.height)
+                            .offset(x: playheadXInViewport - 7.0)
+                        }
+                    }
+                    .frame(width: viewportWidth, height: outerGeo.size.height, alignment: .topLeading)
+                    .clipped()
+                    .offset(x: labelColumnWidth)
+                    .allowsHitTesting(false)
+                    .zIndex(25)
+
+                    // D. SLIM 4pt HORIZONTAL SCROLLBAR PILL
                     if totalDocumentWidth > viewportWidth + 4 {
                         let ratio = viewportWidth / totalDocumentWidth
                         let thumbW = max(36, viewportWidth * ratio)
@@ -291,18 +295,21 @@ public struct MultiTrackTimelineView: View {
                         let scrollFrac = min(1, max(0, horizontalScrollOffset / maxScroll))
                         let thumbX = labelColumnWidth + scrollFrac * (viewportWidth - thumbW - 8)
 
-                        HStack {
-                            Capsule()
-                                .fill(Color.white.opacity(0.24))
-                                .frame(width: thumbW, height: 4)
-                                .offset(x: thumbX)
+                        VStack {
                             Spacer()
+                            HStack {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.24))
+                                    .frame(width: thumbW, height: 4)
+                                    .offset(x: thumbX)
+                                Spacer()
+                            }
+                            .padding(.bottom, 3)
                         }
-                        .padding(.bottom, 3)
                         .allowsHitTesting(false)
                     }
 
-                    // D. SLIM 4pt VERTICAL SCROLLBAR PILL (Only shown when tracks overflow vertically)
+                    // E. SLIM 4pt VERTICAL SCROLLBAR PILL
                     if verticalContentHeight > viewportHeight + 4 {
                         let ratio = viewportHeight / verticalContentHeight
                         let thumbH = max(24, viewportHeight * ratio)
@@ -310,16 +317,29 @@ public struct MultiTrackTimelineView: View {
                         let scrollFrac = min(1, max(0, verticalScrollOffset / maxScroll))
                         let thumbY = rulerHeight + scrollFrac * (viewportHeight - thumbH - 8)
 
-                        VStack {
-                            Capsule()
-                                .fill(Color.white.opacity(0.24))
-                                .frame(width: 4, height: thumbH)
-                                .offset(y: thumbY)
+                        HStack {
                             Spacer()
+                            VStack {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.24))
+                                    .frame(width: 4, height: thumbH)
+                                    .offset(y: thumbY)
+                                Spacer()
+                            }
+                            .padding(.trailing, 3)
                         }
-                        .padding(.trailing, 3)
                         .allowsHitTesting(false)
                     }
+                }
+                // Keep Playhead stationary in the viewport when `session.timelineZoom` changes!
+                .onChange(of: session.timelineZoom) { oldZoom, newZoom in
+                    anchorScrollOffsetAroundPlayhead(
+                        oldZoom: oldZoom,
+                        newZoom: newZoom,
+                        baseTrackWidth: baseTrackWidth,
+                        viewportWidth: viewportWidth,
+                        totalTimelineMs: totalTimelineMs
+                    )
                 }
                 // Trackpad 2-Finger Pinch-to-Zoom Gesture
                 .gesture(
@@ -346,10 +366,37 @@ public struct MultiTrackTimelineView: View {
         let contentHeight: CGFloat
     }
 
-    // MARK: - 1. Screen Clips Lane (`46pt` height)
+    /// Adjusts the horizontal `NSScrollView` content offset whenever `timelineZoom` changes so the Playhead stays
+    /// at the exact same pixel coordinate on screen!
+    private func anchorScrollOffsetAroundPlayhead(
+        oldZoom: Double,
+        newZoom: Double,
+        baseTrackWidth: CGFloat,
+        viewportWidth: CGFloat,
+        totalTimelineMs: Double
+    ) {
+        guard let sv = horizontalScrollView else { return }
+        let playheadFrac = CGFloat(session.playheadTimelineMs / max(1.0, totalTimelineMs))
+        let oldContentW = baseTrackWidth * CGFloat(oldZoom)
+        let newContentW = baseTrackWidth * CGFloat(newZoom)
+        let newTotalDocW = newContentW + trackHorizontalInset * 2
+
+        let currentScrollX = sv.contentView.bounds.origin.x
+        let playheadViewportX = trackHorizontalInset + playheadFrac * oldContentW - currentScrollX
+
+        let desiredNewScrollX = (trackHorizontalInset + playheadFrac * newContentW) - playheadViewportX
+        let maxScrollX = max(0.0, newTotalDocW - viewportWidth)
+        let clampedScrollX = max(0.0, min(maxScrollX, desiredNewScrollX))
+
+        sv.contentView.scroll(to: NSPoint(x: clampedScrollX, y: sv.contentView.bounds.origin.y))
+        sv.reflectScrolledClipView(sv.contentView)
+        horizontalScrollOffset = clampedScrollX
+    }
+
+    // MARK: - 1. Screen Clips Lane (`52pt` height, with Ruler Tick Lines + Audio Waveform + Liquid Glass Popover)
 
     @ViewBuilder
-    private func clipLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
+    private func clipLaneView(contentWidth: CGFloat, totalTimelineMs: Double, minorTickStepSec: Double) -> some View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.white.opacity(0.018))
@@ -363,8 +410,8 @@ public struct MultiTrackTimelineView: View {
                     topTitle: "Clip",
                     subtitle: formatClipSubtitle(durationMs: mapped.slice.timelineDurationMs, speed: mapped.slice.speed),
                     gradientColors: [
-                        Color(red: 0.74, green: 0.47, blue: 0.09),
-                        Color(red: 0.59, green: 0.36, blue: 0.05)
+                        Color(red: 0.72, green: 0.45, blue: 0.08),
+                        Color(red: 0.56, green: 0.34, blue: 0.05)
                     ],
                     isSelected: isSelected,
                     isDimmed: false,
@@ -378,6 +425,16 @@ public struct MultiTrackTimelineView: View {
                     endMs: mapped.slice.sourceEndMs,
                     allowDragMove: false,
                     allowVerticalTrackDrag: false,
+                    clipDecoration: ClipSegmentDecoration(
+                        timelineStartMs: mapped.timelineStartMs,
+                        timelineEndMs: mapped.timelineEndMs,
+                        totalTimelineMs: totalTimelineMs,
+                        minorTickStepSec: minorTickStepSec,
+                        sourceStartMs: mapped.slice.sourceStartMs,
+                        sourceEndMs: mapped.slice.sourceEndMs,
+                        totalSourceMs: session.metadata.durationMs,
+                        waveformSamples: session.audioWaveformSamples
+                    ),
                     onClickAtLocalX: { localX in
                         let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
                         let clickedTimelineMs = mapped.timelineStartMs + frac * (mapped.timelineEndMs - mapped.timelineStartMs)
@@ -388,6 +445,10 @@ public struct MultiTrackTimelineView: View {
                         } else {
                             session.selectSlice(mapped.slice.id)
                         }
+                    },
+                    onRightClick: {
+                        session.selectSlice(mapped.slice.id)
+                        contextPopoverSliceId = mapped.slice.id
                     },
                     onBeginInteractive: {
                         session.beginInteractiveEdit()
@@ -403,18 +464,25 @@ public struct MultiTrackTimelineView: View {
                     onMoveVerticalTracks: { _ in },
                     onEndInteractive: {
                         session.endInteractiveEdit()
-                    },
-                    onDelete: {
-                        session.selectSlice(mapped.slice.id)
-                        session.deleteSelectedSlice()
                     }
                 )
+                .popover(
+                    isPresented: Binding(
+                        get: { contextPopoverSliceId == mapped.slice.id },
+                        set: { if !$0 { contextPopoverSliceId = nil } }
+                    ),
+                    arrowEdge: .top
+                ) {
+                    ClipSliceContextPopoverView(session: session, sliceId: mapped.slice.id) {
+                        contextPopoverSliceId = nil
+                    }
+                }
             }
         }
         .frame(width: contentWidth, height: clipRowHeight)
     }
 
-    // MARK: - 2. Zoom Lane (`40pt` height)
+    // MARK: - 2. Zoom Lane (`46pt` height, Touching Edge-to-Edge + Liquid Glass Popover)
 
     @ViewBuilder
     private func zoomLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
@@ -431,11 +499,11 @@ public struct MultiTrackTimelineView: View {
                     let isSelected = (session.selectedZoomId == zoom.id)
 
                     TimelineInteractiveSegmentView(
-                        topTitle: "Zoom",
+                        topTitle: zoom.presentation == .loupe ? "Loupe" : "Zoom",
                         subtitle: String(format: "🔍 %.1fx  %@", zoom.scale, zoom.mode == .followCursor ? "Auto" : "Manual"),
                         gradientColors: [
-                            Color(red: 0.42, green: 0.30, blue: 0.96),
-                            Color(red: 0.34, green: 0.23, blue: 0.84)
+                            Color(red: 0.43, green: 0.32, blue: 0.98),
+                            Color(red: 0.34, green: 0.22, blue: 0.85)
                         ],
                         isSelected: isSelected,
                         isDimmed: isHidden || zoom.disabled,
@@ -449,6 +517,7 @@ public struct MultiTrackTimelineView: View {
                         endMs: zoom.sourceEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: false,
+                        clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
                             let clickedTimelineMs = tStartMs + frac * (tEndMs - tStartMs)
@@ -460,6 +529,10 @@ public struct MultiTrackTimelineView: View {
                             } else {
                                 session.selectZoom(zoom.id)
                             }
+                        },
+                        onRightClick: {
+                            session.selectZoom(zoom.id)
+                            contextPopoverZoomId = zoom.id
                         },
                         onBeginInteractive: {
                             session.selectZoom(zoom.id)
@@ -474,18 +547,26 @@ public struct MultiTrackTimelineView: View {
                         onMoveVerticalTracks: { _ in },
                         onEndInteractive: {
                             session.endInteractiveEdit()
-                        },
-                        onDelete: {
-                            session.deleteZoom(zoomId: zoom.id)
                         }
                     )
+                    .popover(
+                        isPresented: Binding(
+                            get: { contextPopoverZoomId == zoom.id },
+                            set: { if !$0 { contextPopoverZoomId = nil } }
+                        ),
+                        arrowEdge: .top
+                    ) {
+                        ZoomBlockContextPopoverView(session: session, zoomId: zoom.id) {
+                            contextPopoverZoomId = nil
+                        }
+                    }
                 }
             }
         }
         .frame(width: contentWidth, height: zoomRowHeight)
     }
 
-    // MARK: - 3. Mask Lane (`30pt` height)
+    // MARK: - 3. Mask Lane (`34pt` height, Touching Edge-to-Edge + Liquid Glass Popover)
 
     @ViewBuilder
     private func maskLaneView(
@@ -507,15 +588,15 @@ public struct MultiTrackTimelineView: View {
                     let isSelected = (session.selectedMaskId == item.id)
 
                     TimelineInteractiveSegmentView(
-                        topTitle: item.type == .blur ? item.style.rawValue.capitalized : "Spotlight",
+                        topTitle: item.type == .blur ? item.style.rawValue.capitalized : "Highlight",
                         subtitle: nil,
                         gradientColors: item.type == .blur
                             ? [
                                 Color(red: 0.56, green: 0.22, blue: 0.39),
-                                Color(red: 0.44, green: 0.16, blue: 0.30)
+                                Color(red: 0.43, green: 0.15, blue: 0.29)
                             ]
                             : [
-                                Color(red: 0.16, green: 0.52, blue: 0.54),
+                                Color(red: 0.17, green: 0.53, blue: 0.55),
                                 Color(red: 0.12, green: 0.38, blue: 0.40)
                             ],
                         isSelected: isSelected,
@@ -530,6 +611,7 @@ public struct MultiTrackTimelineView: View {
                         endMs: item.sourceEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: true,
+                        clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
                             let clickedTimelineMs = tStartMs + frac * (tEndMs - tStartMs)
@@ -541,6 +623,10 @@ public struct MultiTrackTimelineView: View {
                             } else {
                                 session.selectMask(item.id)
                             }
+                        },
+                        onRightClick: {
+                            session.selectMask(item.id)
+                            contextPopoverMaskId = item.id
                         },
                         onBeginInteractive: {
                             session.selectMask(item.id)
@@ -558,11 +644,19 @@ public struct MultiTrackTimelineView: View {
                         },
                         onEndInteractive: {
                             session.endInteractiveEdit()
-                        },
-                        onDelete: {
-                            session.deleteMask(maskId: item.id)
                         }
                     )
+                    .popover(
+                        isPresented: Binding(
+                            get: { contextPopoverMaskId == item.id },
+                            set: { if !$0 { contextPopoverMaskId = nil } }
+                        ),
+                        arrowEdge: .top
+                    ) {
+                        MaskBlockContextPopoverView(session: session, maskId: item.id) {
+                            contextPopoverMaskId = nil
+                        }
+                    }
                 }
             }
         }
@@ -602,74 +696,114 @@ public struct MultiTrackTimelineView: View {
     }
 }
 
-// MARK: - NativeScreen-Style Teardrop Playhead Cap Shape
+// MARK: - Unified Continuous Playhead Canvas (100% Connected Teardrop + Stem + Ducking Support)
 
-private struct TeardropHeadShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let r = rect.width * 0.5
-        path.addArc(
-            center: CGPoint(x: rect.midX, y: r),
-            radius: r,
-            startAngle: .degrees(150),
-            endAngle: .degrees(30),
-            clockwise: false
-        )
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        path.closeSubpath()
-        return path
+private struct UnifiedPlayheadCanvasView: View {
+    let headColor: Color
+    let stemColor: Color
+    let headTopY: CGFloat
+    let totalHeight: CGFloat
+
+    var body: some View {
+        Canvas { context, size in
+            let centerX = size.width * 0.5
+            let radius: CGFloat = 5.4
+            let circleCenterY = headTopY + radius
+            let tipY = circleCenterY + radius * 1.65
+
+            // 1. Continuous Teardrop Head
+            var headPath = Path()
+            headPath.addArc(
+                center: CGPoint(x: centerX, y: circleCenterY),
+                radius: radius,
+                startAngle: .degrees(145),
+                endAngle: .degrees(35),
+                clockwise: false
+            )
+            headPath.addLine(to: CGPoint(x: centerX, y: tipY))
+            headPath.closeSubpath()
+            context.fill(headPath, with: .color(headColor))
+
+            // 2. Directly Connected Vertical Stem (Starts inside the teardrop tip so there is ZERO gap!)
+            let stemRect = CGRect(
+                x: centerX - 0.75,
+                y: tipY - 1.5,
+                width: 1.5,
+                height: max(10, totalHeight - tipY + 2.0)
+            )
+            context.fill(Path(stemRect), with: .color(stemColor))
+        }
     }
 }
 
-// MARK: - Smooth Fixed-Interval Time Ruler
+// MARK: - Smooth Fixed-Interval Time Ruler (Major Labels + Minor Dots & 5)
 
 private struct SmoothTimeRulerView: View {
     let totalDurationMs: Double
     let width: CGFloat
+    let majorStepSec: Double
+    let minorStepSec: Double
+
+    static func computeStepIntervals(totalDurationMs: Double, width: CGFloat) -> (major: Double, minor: Double) {
+        let totalSec = max(1.0, totalDurationMs / 1000.0)
+        let pxPerSec = Double(width) / totalSec
+        let candidateStepsSec: [Double] = [1.0, 2.0, 4.0, 5.0, 10.0, 15.0, 20.0, 30.0, 60.0, 120.0]
+        let major = candidateStepsSec.first(where: { $0 * pxPerSec >= 76.0 }) ?? 60.0
+        return (major, major / 2.0)
+    }
 
     var body: some View {
         Canvas { context, size in
             let totalSec = max(1.0, totalDurationMs / 1000.0)
-            let pxPerSec = Double(size.width) / totalSec
+            let dotY = size.height - 6.0
 
-            let candidateStepsSec: [Double] = [0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0]
-            let majorStepSec = candidateStepsSec.first(where: { $0 * pxPerSec >= 68.0 }) ?? 60.0
-            let minorStepSec = majorStepSec / 2.0
+            // Draw dots at every `minorStepSec`, and draw timecode text ONLY at `majorStepSec` ticks
+            var stepIndex = 0
+            while true {
+                let tSec = Double(stepIndex) * minorStepSec
+                if tSec > totalSec + 0.001 { break }
 
-            var tMinor = 0.0
-            while tMinor <= totalSec {
-                let x = CGFloat(tMinor / totalSec) * size.width
-                let dotRect = CGRect(x: x - 1.2, y: size.height - 5, width: 2.4, height: 2.4)
-                context.fill(Path(ellipseIn: dotRect), with: .color(.white.opacity(0.22)))
-                tMinor += minorStepSec
-            }
+                let x = CGFloat(tSec / totalSec) * size.width
+                let isMajor = (stepIndex % 2 == 0)
 
-            var tMajor = 0.0
-            while tMajor <= totalSec + 0.001 {
-                let x = CGFloat(tMajor / totalSec) * size.width
-                let mins = Int(tMajor) / 60
-                let secs = Int(tMajor) % 60
-                let labelStr: String
-                if majorStepSec < 1.0 {
-                    let tenths = Int(round((tMajor - floor(tMajor)) * 10))
-                    labelStr = String(format: "%d:%02d.%d", mins, secs, tenths)
-                } else {
-                    labelStr = String(format: "%d:%02d", mins, secs)
+                // Crisp dot on every minor & major tick
+                let dotRadius: CGFloat = 1.4
+                let dotRect = CGRect(x: x - dotRadius, y: dotY - dotRadius, width: dotRadius * 2, height: dotRadius * 2)
+                context.fill(Path(ellipseIn: dotRect), with: .color(.white.opacity(isMajor ? 0.34 : 0.24)))
+
+                // Draw time label above major dots (skipping `t == 0` so 0:00 is never clipped at the left edge!)
+                if isMajor && stepIndex > 0 && x <= size.width - 14 {
+                    let mins = Int(round(tSec)) / 60
+                    let secs = Int(round(tSec)) % 60
+                    let labelStr = String(format: "%d:%02d", mins, secs)
+
+                    let text = Text(labelStr)
+                        .font(.system(size: 11, weight: .medium, design: .default).monospacedDigit())
+                        .foregroundColor(.white.opacity(0.48))
+                    context.draw(text, at: CGPoint(x: x, y: dotY - 10))
                 }
 
-                let text = Text(labelStr)
-                    .font(.system(size: 11.5, weight: .medium, design: .default).monospacedDigit())
-                    .foregroundColor(.white.opacity(0.62))
-                let clampedX = min(size.width - 20, max(16, x))
-                context.draw(text, at: CGPoint(x: clampedX, y: 11))
-                tMajor += majorStepSec
+                stepIndex += 1
             }
         }
         .frame(width: width, height: 30)
     }
 }
 
-// MARK: - Interactive Segment Block with Strictly Separated Edge Resize vs. Body Move
+// MARK: - Clip Segment Decoration (Ruler Tick Lines + Audio Waveform Curve)
+
+private struct ClipSegmentDecoration {
+    let timelineStartMs: Double
+    let timelineEndMs: Double
+    let totalTimelineMs: Double
+    let minorTickStepSec: Double
+    let sourceStartMs: Double
+    let sourceEndMs: Double
+    let totalSourceMs: Double
+    let waveformSamples: [Float]
+}
+
+// MARK: - Interactive Segment Block with Top-to-Bottom Gradient, Waveform, Inset Handles & Golden Split Badge
 
 private struct TimelineInteractiveSegmentView: View {
     private enum SegmentDragMode {
@@ -693,13 +827,14 @@ private struct TimelineInteractiveSegmentView: View {
     let endMs: Double
     let allowDragMove: Bool
     let allowVerticalTrackDrag: Bool
+    let clipDecoration: ClipSegmentDecoration?
     let onClickAtLocalX: (CGFloat) -> Void
+    let onRightClick: () -> Void
     let onBeginInteractive: () -> Void
     let onMoveBody: (Double, Double) -> Void
     let onResizeRange: (Double, Double) -> Void
     let onMoveVerticalTracks: (Int) -> Void
     let onEndInteractive: () -> Void
-    let onDelete: () -> Void
 
     @State private var isHovered = false
     @State private var lastHoverLocalX: CGFloat = 0.0
@@ -711,14 +846,15 @@ private struct TimelineInteractiveSegmentView: View {
     @State private var verticalDragOffset: CGFloat = 0.0
     @State private var hoverSplitX: CGFloat?
 
-    private let edgeHandleWidth: CGFloat = 11.0
+    private let edgeHandleHitWidth: CGFloat = 13.0
 
     var body: some View {
-        let segWidth = max(6, width - 1.5)
-        let showHandles = !isSplitMode && segWidth >= 26 && (isSelected || isHovered)
+        // Full `width` (no gap subtraction!) so adjacent segments touch seamlessly edge-to-edge
+        let segWidth = max(6.0, width)
+        let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
 
         ZStack(alignment: .leading) {
-            // Segment Pill Body
+            // 1. Rich Top-to-Bottom Gradient Pill Body
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(
                     LinearGradient(
@@ -727,64 +863,161 @@ private struct TimelineInteractiveSegmentView: View {
                         endPoint: .bottom
                     )
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(
-                            isSelected
-                                ? Color.white.opacity(0.65)
-                                : (isHovered ? Color.white.opacity(0.28) : Color.white.opacity(0.10)),
-                            lineWidth: isSelected ? 1.4 : 0.8
-                        )
-                )
-                .opacity(isDimmed ? 0.35 : 1.0)
 
-            // Centered Title & Subtitle
+            // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top
+            if let deco = clipDecoration {
+                Canvas { context, size in
+                    // A. Audio Waveform along bottom of Clip
+                    if !deco.waveformSamples.isEmpty && deco.totalSourceMs > 1.0 {
+                        let startFrac = max(0.0, min(1.0, deco.sourceStartMs / deco.totalSourceMs))
+                        let endFrac = max(startFrac + 0.001, min(1.0, deco.sourceEndMs / deco.totalSourceMs))
+                        let totalBuckets = deco.waveformSamples.count
+
+                        let stepPx: CGFloat = 3.0
+                        let pointCount = max(2, Int(size.width / stepPx))
+                        var wavePath = Path()
+                        wavePath.move(to: CGPoint(x: 0, y: size.height))
+
+                        for i in 0...pointCount {
+                            let localFrac = Double(i) / Double(pointCount)
+                            let globalFrac = startFrac + localFrac * (endFrac - startFrac)
+                            let exactBucket = globalFrac * Double(totalBuckets - 1)
+                            let b0 = max(0, min(totalBuckets - 1, Int(exactBucket)))
+                            let b1 = min(totalBuckets - 1, b0 + 1)
+                            let t = Float(exactBucket - Double(b0))
+                            let amp = deco.waveformSamples[b0] * (1.0 - t) + deco.waveformSamples[b1] * t
+
+                            let x = CGFloat(localFrac) * size.width
+                            let waveH = CGFloat(amp) * (size.height * 0.44)
+                            wavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
+                        }
+                        wavePath.addLine(to: CGPoint(x: size.width, y: size.height))
+                        wavePath.closeSubpath()
+
+                        context.fill(
+                            wavePath,
+                            with: .linearGradient(
+                                Gradient(colors: [
+                                    Color(red: 0.56, green: 0.38, blue: 0.68).opacity(0.62),
+                                    Color(red: 0.45, green: 0.28, blue: 0.54).opacity(0.45)
+                                ]),
+                                startPoint: CGPoint(x: 0, y: size.height * 0.5),
+                                endPoint: CGPoint(x: 0, y: size.height)
+                            )
+                        )
+                    }
+
+                    // B. Vertical Ruler Tick Lines at every minor/major ruler dot
+                    let stepMs = deco.minorTickStepSec * 1000.0
+                    let sliceSpanMs = max(1.0, deco.timelineEndMs - deco.timelineStartMs)
+                    var tickMs = ceil(deco.timelineStartMs / stepMs) * stepMs
+                    while tickMs < deco.timelineEndMs {
+                        let localX = CGFloat((tickMs - deco.timelineStartMs) / sliceSpanMs) * size.width
+                        if localX > 4 && localX < size.width - 4 {
+                            let tickRect = CGRect(x: localX - 0.5, y: 0, width: 1.0, height: size.height * 0.65)
+                            context.fill(
+                                Path(tickRect),
+                                with: .linearGradient(
+                                    Gradient(colors: [
+                                        Color.white.opacity(0.18),
+                                        Color.white.opacity(0.0)
+                                    ]),
+                                    startPoint: CGPoint(x: localX, y: 0),
+                                    endPoint: CGPoint(x: localX, y: size.height * 0.65)
+                                )
+                            )
+                        }
+                        tickMs += stepMs
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .allowsHitTesting(false)
+            }
+
+            // 3. Subtle Inner Top Highlight & Selection Border
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(
+                    isSelected
+                        ? Color.white.opacity(0.75)
+                        : (isHovered ? Color.white.opacity(0.32) : Color.white.opacity(0.14)),
+                    lineWidth: isSelected ? 1.5 : 1.0
+                )
+
+            // 4. Centered Title & Subtitle
             if segWidth > 42 {
-                VStack(spacing: 2) {
+                VStack(spacing: 1.5) {
                     Text(topTitle)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.white.opacity(subtitle != nil ? 0.55 : 0.92))
                         .lineLimit(1)
 
-                    if let sub = subtitle, segWidth > 78 {
+                    if let sub = subtitle, segWidth > 76 {
                         Text(sub)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.88))
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.95))
                             .lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
+                .allowsHitTesting(false)
             }
 
-            // Interactive Split Mode Cut Line Indicator
+            // 5. Interactive Split Mode Cut Line + Golden Teardrop Badge (`2s ✂️`)
             if isSplitMode, let splitX = hoverSplitX {
-                Rectangle()
-                    .fill(Color.white.opacity(0.92))
-                    .frame(width: 1.5, height: height)
-                    .offset(x: splitX)
+                let cutOffsetSec = Int(round((Double(splitX / max(1, segWidth)) * (endMs - startMs)) / 1000.0))
+                ZStack(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.92))
+                        .frame(width: 1.5, height: height)
+
+                    // Golden Split Teardrop Badge above the cut line
+                    VStack(spacing: 0) {
+                        Text("\(cutOffsetSec)s")
+                            .font(.system(size: 9, weight: .bold).monospacedDigit())
+                        Image(systemName: "scissors")
+                            .font(.system(size: 8, weight: .bold))
+                    }
+                    .foregroundStyle(.black.opacity(0.88))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(
+                        Color(red: 0.90, green: 0.65, blue: 0.24),
+                        in: Capsule()
+                    )
+                    .offset(y: -26)
+                }
+                .offset(x: splitX)
+                .allowsHitTesting(false)
             }
 
-            // Left & Right Edge Resize Visual Indicators (Smoothly fade in/out on hover or selection)
-            if !isSplitMode && segWidth >= 26 {
+            // 6. Left & Right Edge Resize Bars (Inset 6.5pt inside the segment, smooth fade in/out)
+            if !isSplitMode && segWidth >= 28 {
                 HStack(spacing: 0) {
                     Capsule()
-                        .fill(Color.white.opacity(0.82))
-                        .frame(width: 3, height: max(8, height - 14))
-                        .padding(.leading, 4)
+                        .fill(Color.white.opacity(0.92))
+                        .frame(width: 3.5, height: max(8, height - 14))
+                        .padding(.leading, 6.5)
 
                     Spacer(minLength: 4)
 
                     Capsule()
-                        .fill(Color.white.opacity(0.82))
-                        .frame(width: 3, height: max(8, height - 14))
-                        .padding(.trailing, 4)
+                        .fill(Color.white.opacity(0.92))
+                        .frame(width: 3.5, height: max(8, height - 14))
+                        .padding(.trailing, 6.5)
                 }
                 .opacity(showHandles ? 1.0 : 0.0)
                 .animation(.easeInOut(duration: 0.15), value: showHandles)
+                .allowsHitTesting(false)
             }
         }
+        .opacity(isDimmed ? 0.35 : 1.0)
         .frame(width: segWidth, height: height)
+        .background(
+            RightClickDetectorView {
+                onRightClick()
+            }
+        )
         .contentShape(Rectangle())
         .offset(x: xOffset, y: verticalDragOffset)
         .zIndex(activeDragMode != nil ? 60 : 1)
@@ -802,7 +1035,7 @@ private struct TimelineInteractiveSegmentView: View {
                     NSCursor.crosshair.set()
                 } else {
                     hoverSplitX = nil
-                    if segWidth >= 26 && (pt.x <= edgeHandleWidth || pt.x >= segWidth - edgeHandleWidth) {
+                    if segWidth >= 28 && (pt.x <= edgeHandleHitWidth || pt.x >= segWidth - edgeHandleHitWidth) {
                         NSCursor.resizeLeftRight.set()
                     } else if allowDragMove {
                         NSCursor.openHand.set()
@@ -820,16 +1053,11 @@ private struct TimelineInteractiveSegmentView: View {
                 }
             }
         }
-        // Single Unified High-Priority Gesture:
-        // - Determines whether the user grabbed the Left Handle (`.resizeLeft`), Right Handle (`.resizeRight`), or Center Body (`.moveBody`).
-        // - `.moveBody` ONLY moves the segment and NEVER resizes it.
-        // - `.resizeLeft` / `.resizeRight` ONLY resize the grabbed edge.
         .highPriorityGesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .named("timelineContentSpace"))
                 .onChanged { value in
                     if activeDragMode == nil {
-                        // Compute local X inside this segment at the exact moment of mouse-down
-                        let startInLane = value.startLocation.x - 12.0 // subtract `trackHorizontalInset`
+                        let startInLane = value.startLocation.x - 20.0 // subtract `trackHorizontalInset`
                         let computedLocalX = startInLane - xOffset
                         let localX = (computedLocalX >= -4 && computedLocalX <= segWidth + 4)
                             ? max(0, min(segWidth, computedLocalX))
@@ -840,10 +1068,10 @@ private struct TimelineInteractiveSegmentView: View {
                         dragInitialStartMs = startMs
                         dragInitialEndMs = endMs
 
-                        if !isSplitMode && segWidth >= 26 && localX <= edgeHandleWidth {
+                        if !isSplitMode && segWidth >= 28 && localX <= edgeHandleHitWidth {
                             activeDragMode = .resizeLeft
                             NSCursor.resizeLeftRight.set()
-                        } else if !isSplitMode && segWidth >= 26 && localX >= segWidth - edgeHandleWidth {
+                        } else if !isSplitMode && segWidth >= 28 && localX >= segWidth - edgeHandleHitWidth {
                             activeDragMode = .resizeRight
                             NSCursor.resizeLeftRight.set()
                         } else {
@@ -869,11 +1097,11 @@ private struct TimelineInteractiveSegmentView: View {
 
                     switch mode {
                     case .resizeLeft:
-                        let newStart = max(0.0, min(e0 - 300.0, s0 + deltaMs))
+                        let newStart = max(0.0, min(e0 - 250.0, s0 + deltaMs))
                         onResizeRange(newStart, e0)
 
                     case .resizeRight:
-                        let newEnd = max(s0 + 300.0, s0 + (e0 - s0) + deltaMs)
+                        let newEnd = max(s0 + 250.0, s0 + (e0 - s0) + deltaMs)
                         onResizeRange(s0, newEnd)
 
                     case .moveBody:
@@ -892,7 +1120,7 @@ private struct TimelineInteractiveSegmentView: View {
 
                     if wasDrag {
                         if activeDragMode == .moveBody && allowVerticalTrackDrag {
-                            let rowDelta = Int(round(value.translation.height / 38.0))
+                            let rowDelta = Int(round(value.translation.height / 42.0))
                             verticalDragOffset = 0.0
                             if rowDelta != 0 {
                                 onMoveVerticalTracks(rowDelta)
@@ -911,19 +1139,50 @@ private struct TimelineInteractiveSegmentView: View {
                     NSCursor.arrow.set()
                 }
         )
-        .contextMenu {
-            Button {
-                onClickAtLocalX(segWidth * 0.5)
-            } label: {
-                Label("Seek Here", systemImage: "arrow.down.to.line")
+    }
+}
+
+// MARK: - AppKit Helpers for Right-Click Popover Trigger & NSScrollView Introspection
+
+private struct RightClickDetectorView: NSViewRepresentable {
+    let onRightClick: () -> Void
+
+    func makeNSView(context: Context) -> RightClickCatcherNSView {
+        let v = RightClickCatcherNSView()
+        v.onRightClick = onRightClick
+        return v
+    }
+
+    func updateNSView(_ nsView: RightClickCatcherNSView, context: Context) {
+        nsView.onRightClick = onRightClick
+    }
+
+    final class RightClickCatcherNSView: NSView {
+        var onRightClick: (() -> Void)?
+
+        override func rightMouseDown(with event: NSEvent) {
+            onRightClick?()
+        }
+    }
+}
+
+private struct HorizontalScrollViewIntrospector: NSViewRepresentable {
+    let onFound: (NSScrollView) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let sv = view.enclosingScrollView {
+                onFound(sv)
             }
+        }
+        return view
+    }
 
-            Divider()
-
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label("Delete", systemImage: "trash")
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let sv = nsView.enclosingScrollView {
+                onFound(sv)
             }
         }
     }

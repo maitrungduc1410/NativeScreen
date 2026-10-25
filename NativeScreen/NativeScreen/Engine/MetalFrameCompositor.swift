@@ -185,20 +185,66 @@ public final class MetalFrameCompositor {
             )
         }
 
-        // Apply Virtual Camera Pan & Zoom Transform around `cameraState.center01`
+        // Apply Virtual Camera Pan & Zoom Transform (Classic mode) OR Optical Glass Loupe Lens (Loupe mode)
         let zoomScale = CGFloat(max(1.0, cameraState.scale))
-        if zoomScale > 1.002 && !cameraState.isLoupeMode {
+        if zoomScale > 1.002 {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
-            let canvasCenterX = canvasRect.midX
-            let canvasCenterY = canvasRect.midY
 
-            var cameraTransform = CGAffineTransform.identity
-            cameraTransform = cameraTransform.translatedBy(x: canvasCenterX, y: canvasCenterY)
-            cameraTransform = cameraTransform.scaledBy(x: zoomScale, y: zoomScale)
-            cameraTransform = cameraTransform.translatedBy(x: -focusX, y: -focusY)
+            if cameraState.isLoupeMode {
+                let loupeRadius = max(40.0, min(screenFrameRect.width, screenFrameRect.height) * CGFloat(cameraState.loupeConfig.radius01))
+                let loupeRect = CGRect(
+                    x: focusX - loupeRadius,
+                    y: focusY - loupeRadius,
+                    width: loupeRadius * 2.0,
+                    height: loupeRadius * 2.0
+                )
 
-            positionedScreen = positionedScreen.transformed(by: cameraTransform)
+                var zoomTransform = CGAffineTransform.identity
+                zoomTransform = zoomTransform.translatedBy(x: focusX, y: focusY)
+                zoomTransform = zoomTransform.scaledBy(x: zoomScale, y: zoomScale)
+                zoomTransform = zoomTransform.translatedBy(x: -focusX, y: -focusY)
+
+                let magnifiedScreen = positionedScreen.transformed(by: zoomTransform).cropped(to: loupeRect)
+                if let circleStencil = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                    "inputExtent": CIVector(cgRect: loupeRect),
+                    "inputRadius": loupeRadius,
+                    "inputColor": CIColor.white
+                ])?.outputImage {
+                    let clearBG = CIImage.empty().cropped(to: loupeRect)
+                    let circularLens = magnifiedScreen.applyingFilter("CIBlendWithMask", parameters: [
+                        kCIInputBackgroundImageKey: clearBG,
+                        kCIInputMaskImageKey: circleStencil
+                    ]).cropped(to: loupeRect)
+
+                    // Bevel glass rim around the loupe
+                    let borderRadius = loupeRadius + 2.5
+                    let borderRect = CGRect(
+                        x: focusX - borderRadius,
+                        y: focusY - borderRadius,
+                        width: borderRadius * 2.0,
+                        height: borderRadius * 2.0
+                    )
+                    if let rimCircle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                        "inputExtent": CIVector(cgRect: borderRect),
+                        "inputRadius": borderRadius,
+                        "inputColor": CIColor(red: 1, green: 1, blue: 1, alpha: 0.65)
+                    ])?.outputImage {
+                        positionedScreen = rimCircle.composited(over: positionedScreen)
+                    }
+                    positionedScreen = circularLens.composited(over: positionedScreen)
+                }
+            } else {
+                let canvasCenterX = canvasRect.midX
+                let canvasCenterY = canvasRect.midY
+
+                var cameraTransform = CGAffineTransform.identity
+                cameraTransform = cameraTransform.translatedBy(x: canvasCenterX, y: canvasCenterY)
+                cameraTransform = cameraTransform.scaledBy(x: zoomScale, y: zoomScale)
+                cameraTransform = cameraTransform.translatedBy(x: -focusX, y: -focusY)
+
+                positionedScreen = positionedScreen.transformed(by: cameraTransform)
+            }
         }
 
         // --- PASS 5: Camera Motion Blur (Velocity-Driven Shutter Blur) ---

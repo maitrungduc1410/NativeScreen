@@ -191,23 +191,20 @@ public struct SpringTrajectorySolver: Sendable {
             if let zoom = activeZoom {
                 isLoupe = (zoom.presentation == .loupe)
                 loupeCfg = zoom.loupe
+                targetScale = max(1.0, zoom.scale)
+                switch zoom.mode {
+                case .followCursor:
+                    targetX = cursorAtStep.x
+                    targetY = cursorAtStep.y
+                case .manual:
+                    targetX = zoom.manualCenter01.x
+                    targetY = zoom.manualCenter01.y
+                }
 
-                if !isLoupe {
-                    targetScale = max(1.0, zoom.scale)
-                    switch zoom.mode {
-                    case .followCursor:
-                        targetX = cursorAtStep.x
-                        targetY = cursorAtStep.y
-                    case .manual:
-                        targetX = zoom.manualCenter01.x
-                        targetY = zoom.manualCenter01.y
-                    }
-
-                    if document.motion.avoidEmptyBoundsWhenZooming && targetScale > 1.001 {
-                        let halfSpan = 0.5 / targetScale
-                        targetX = max(halfSpan, min(1.0 - halfSpan, targetX))
-                        targetY = max(halfSpan, min(1.0 - halfSpan, targetY))
-                    }
+                if !isLoupe && document.motion.avoidEmptyBoundsWhenZooming && targetScale > 1.001 {
+                    let halfSpan = 0.5 / targetScale
+                    targetX = max(halfSpan, min(1.0 - halfSpan, targetX))
+                    targetY = max(halfSpan, min(1.0 - halfSpan, targetY))
                 }
             }
 
@@ -365,28 +362,20 @@ public enum AutoZoomClusterGenerator {
         return normalizeNonOverlappingZooms(blocks, durationMs: durationMs)
     }
 
-    /// Ensures zoom blocks on the Zoom track are strictly sorted and non-overlapping.
+    /// Ensures zoom blocks on the Zoom track are strictly sorted and non-overlapping (touching edge-to-edge with 0ms gap).
     public static func normalizeNonOverlappingZooms(_ blocks: [ZoomBlock], durationMs: Double) -> [ZoomBlock] {
         let sorted = blocks.sorted { $0.sourceStartMs < $1.sourceStartMs }
         var result: [ZoomBlock] = []
-        let minGapMs = 60.0
 
         for var block in sorted {
             block.sourceStartMs = max(0.0, min(durationMs - 200.0, block.sourceStartMs))
             block.sourceEndMs = max(block.sourceStartMs + 200.0, min(durationMs, block.sourceEndMs))
 
-            if var last = result.last {
-                if block.sourceStartMs < last.sourceEndMs + minGapMs {
-                    // Merge or clamp so they never overlap
-                    if block.sourceStartMs < last.sourceEndMs {
-                        last.sourceEndMs = max(last.sourceEndMs, block.sourceEndMs)
-                        result[result.count - 1] = last
+            if let last = result.last {
+                if block.sourceStartMs < last.sourceEndMs {
+                    block.sourceStartMs = last.sourceEndMs
+                    if block.sourceEndMs - block.sourceStartMs < 250.0 {
                         continue
-                    } else {
-                        block.sourceStartMs = last.sourceEndMs + minGapMs
-                        if block.sourceEndMs - block.sourceStartMs < 300.0 {
-                            continue
-                        }
                     }
                 }
             }
