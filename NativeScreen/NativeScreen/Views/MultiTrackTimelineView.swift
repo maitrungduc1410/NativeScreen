@@ -410,8 +410,9 @@ public struct MultiTrackTimelineView: View {
                     topTitle: "Clip",
                     subtitle: formatClipSubtitle(durationMs: mapped.slice.timelineDurationMs, speed: mapped.slice.speed),
                     gradientColors: [
-                        Color(red: 0.72, green: 0.45, blue: 0.08),
-                        Color(red: 0.56, green: 0.34, blue: 0.05)
+                        Color(red: 0.78, green: 0.49, blue: 0.08),
+                        Color(red: 0.68, green: 0.41, blue: 0.05),
+                        Color(red: 0.88, green: 0.56, blue: 0.14)
                     ],
                     isSelected: isSelected,
                     isDimmed: false,
@@ -502,8 +503,9 @@ public struct MultiTrackTimelineView: View {
                         topTitle: zoom.presentation == .loupe ? "Loupe" : "Zoom",
                         subtitle: String(format: "🔍 %.1fx  %@", zoom.scale, zoom.mode == .followCursor ? "Auto" : "Manual"),
                         gradientColors: [
-                            Color(red: 0.43, green: 0.32, blue: 0.98),
-                            Color(red: 0.34, green: 0.22, blue: 0.85)
+                            Color(red: 0.42, green: 0.28, blue: 0.99),
+                            Color(red: 0.36, green: 0.23, blue: 0.96),
+                            Color(red: 0.54, green: 0.43, blue: 1.00)
                         ],
                         isSelected: isSelected,
                         isDimmed: isHidden || zoom.disabled,
@@ -592,12 +594,14 @@ public struct MultiTrackTimelineView: View {
                         subtitle: nil,
                         gradientColors: item.type == .blur
                             ? [
-                                Color(red: 0.56, green: 0.22, blue: 0.39),
-                                Color(red: 0.43, green: 0.15, blue: 0.29)
+                                Color(red: 0.55, green: 0.20, blue: 0.38),
+                                Color(red: 0.48, green: 0.16, blue: 0.33),
+                                Color(red: 0.65, green: 0.26, blue: 0.46)
                             ]
                             : [
-                                Color(red: 0.17, green: 0.53, blue: 0.55),
-                                Color(red: 0.12, green: 0.38, blue: 0.40)
+                                Color(red: 0.18, green: 0.54, blue: 0.58),
+                                Color(red: 0.14, green: 0.44, blue: 0.48),
+                                Color(red: 0.24, green: 0.64, blue: 0.68)
                             ],
                         isSelected: isSelected,
                         isDimmed: isHidden || item.disabled,
@@ -923,7 +927,7 @@ private struct TimelineInteractiveSegmentView: View {
         let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
 
         ZStack(alignment: .leading) {
-            // 1. Rich Top-to-Bottom Gradient Pill Body
+            // 1. Rich Vibrant Pill Body + Inner Specular Top/Bottom Edge Glow (style!)
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(
                     LinearGradient(
@@ -932,18 +936,29 @@ private struct TimelineInteractiveSegmentView: View {
                         endPoint: .bottom
                     )
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(
+                            RadialGradient(
+                                colors: [Color.white.opacity(0.16), Color.clear],
+                                center: .center,
+                                startRadius: 2,
+                                endRadius: max(30, segWidth * 0.55)
+                            )
+                        )
+                )
 
             // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top (Equatable so it never redraws during hover skimming!)
             if let deco = clipDecoration {
                 EquatableView(content: deco)
             }
 
-            // 3. Subtle Inner Top Highlight & Selection Border
+            // 3. Crisp Specular Inner Rim & Selection Border
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .strokeBorder(
                     isSelected
-                        ? Color.white.opacity(0.75)
-                        : (isHovered ? Color.white.opacity(0.32) : Color.white.opacity(0.14)),
+                        ? Color.white.opacity(0.85)
+                        : (isHovered ? Color.white.opacity(0.45) : Color.white.opacity(0.28)),
                     lineWidth: isSelected ? 1.5 : 1.0
                 )
 

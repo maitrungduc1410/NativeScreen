@@ -5,16 +5,22 @@ import AVFoundation
 import CoreImage
 
 /// Zero-Idle-CPU `MTKView` wrapper for SwiftUI.
+/// - Animatable `canvasAspect` allows the preview canvas to morph smoothly with a 120Hz spring when changing aspect ratios!
 /// - Explicitly observes `session.renderRevision` and `session.isPlaying` so slider drags update at 120Hz with zero lag.
-/// - Never re-seeks `AVPlayer` when `sourceTimeMs` is unchanged (e.g. while dragging Padding, Corners, Shadow, or Blur sliders!).
-/// - Coalesces video decoder seeks during fast timeline hover-skimming.
-public struct MetalPreviewView: NSViewRepresentable {
+public struct MetalPreviewView: NSViewRepresentable, Animatable {
     public var session: ProjectSession
+    public var canvasAspect: Double
     public var renderRevision: UInt64
     public var isPlaying: Bool
 
-    public init(session: ProjectSession) {
+    public nonisolated var animatableData: Double {
+        get { canvasAspect }
+        set { canvasAspect = newValue }
+    }
+
+    public init(session: ProjectSession, canvasAspect: Double = 16.0 / 9.0) {
         self.session = session
+        self.canvasAspect = canvasAspect
         self.renderRevision = session.renderRevision
         self.isPlaying = session.isPlaying
     }
@@ -42,7 +48,7 @@ public struct MetalPreviewView: NSViewRepresentable {
     }
 
     public func updateNSView(_ mtkView: MTKView, context: Context) {
-        context.coordinator.updateSession(session, mtkView: mtkView)
+        context.coordinator.updateSession(session, canvasAspect: canvasAspect, mtkView: mtkView)
     }
 
     @MainActor
@@ -52,6 +58,7 @@ public struct MetalPreviewView: NSViewRepresentable {
         weak var mtkView: MTKView?
 
         private var lastRenderedRevision: UInt64 = .max
+        private var lastCanvasAspect: Double = -1.0
         private var lastFrameTickUptime: TimeInterval = 0
 
         // Video frame decoder for recorded `.mp4` / `.m3u8`
@@ -74,7 +81,7 @@ public struct MetalPreviewView: NSViewRepresentable {
             mtkView.needsDisplay = true
         }
 
-        func updateSession(_ newSession: ProjectSession, mtkView: MTKView) {
+        func updateSession(_ newSession: ProjectSession, canvasAspect: Double, mtkView: MTKView) {
             self.session = newSession
             setupVideoDecoderIfNeeded(for: newSession.videoFileURL)
 
@@ -89,6 +96,10 @@ public struct MetalPreviewView: NSViewRepresentable {
                 if !animatingBg && !mtkView.isPaused {
                     mtkView.isPaused = true
                     mtkView.enableSetNeedsDisplay = true
+                }
+                if abs(canvasAspect - lastCanvasAspect) > 0.0005 {
+                    lastCanvasAspect = canvasAspect
+                    mtkView.needsDisplay = true
                 }
                 if lastRenderedRevision != newSession.renderRevision {
                     lastRenderedRevision = newSession.renderRevision

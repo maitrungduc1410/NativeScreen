@@ -111,11 +111,64 @@ public enum WindowDiscoveryService {
                     appName: runningApp?.localizedName ?? ownerName,
                     bundleId: bundleId,
                     bounds: bounds,
-                    borderRadius: 12.0
+                    borderRadius: detectWindowCornerRadius(pid: ownerPID, windowBounds: bounds)
                 )
             )
         }
         return results
+    }
+
+    /// Detects the exact macOS corner radius of a window using `AXUIElement` (`AXSubrole` + `AXToolbar` height),
+    /// matching `Windowing.AccessibilityWindow.cornerRadius` in NativeScreen:
+    /// - `AXFullScreen`: `0.0`
+    /// - `AXDialog` / `AXSheet`: `16.0`
+    /// - Standard window with `AXToolbar`: `26.0` (tall unified toolbar > 50pt) or `20.0` (standard toolbar)
+    /// - Standard window without toolbar (or when Accessibility is not yet trusted): `12.0` / `16.0`
+    public static func detectWindowCornerRadius(pid: pid_t, windowBounds: CGRect) -> Double {
+        guard AXIsProcessTrusted() else {
+            return 16.0
+        }
+        let appElement = AXUIElementCreateApplication(pid)
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+              let axWindows = windowsRef as? [AXUIElement],
+              let axWin = axWindows.first else {
+            return 16.0
+        }
+
+        var subroleRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWin, kAXSubroleAttribute as CFString, &subroleRef) == .success,
+           let subrole = subroleRef as? String {
+            if subrole == "AXFullScreenWindow" || subrole == "AXFullScreen" {
+                return 0.0
+            }
+            if subrole == "AXDialog" || subrole == "AXSheet" {
+                return 16.0
+            }
+        }
+
+        var childrenRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWin, kAXChildrenAttribute as CFString, &childrenRef) == .success,
+           let children = childrenRef as? [AXUIElement] {
+            for child in children {
+                var roleRef: CFTypeRef?
+                if AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef) == .success,
+                   let role = roleRef as? String,
+                   role == "AXToolbar" {
+                    var sizeRef: CFTypeRef?
+                    if AXUIElementCopyAttributeValue(child, kAXSizeAttribute as CFString, &sizeRef) == .success,
+                       let sizeVal = sizeRef {
+                        var toolbarSize: CGSize = .zero
+                        if AXValueGetValue(sizeVal as! AXValue, .cgSize, &toolbarSize) {
+                            return toolbarSize.height > 50.0 ? 26.0 : 20.0
+                        }
+                    }
+                    return 20.0
+                }
+            }
+        }
+
+        return 16.0
     }
 
     /// Hit-tests the topmost window under the current mouse location across all connected monitors.

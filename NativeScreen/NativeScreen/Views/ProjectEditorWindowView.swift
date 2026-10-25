@@ -330,46 +330,21 @@ public struct ProjectEditorWindowView: View {
                     .zIndex(75)
 
                     GeometryReader { geo in
-                        let aspect = session.document.canvas.effectiveAspectRatio(
+                        let targetAspect = session.document.canvas.effectiveAspectRatio(
                             sourceWidth: Double(session.metadata.captureTarget.pixelSize.width),
                             sourceHeight: Double(session.metadata.captureTarget.pixelSize.height)
                         )
-                        let fittedSize = fitPreviewCanvas(in: geo.size, aspect: aspect)
 
                         ZStack {
                             Color(red: 0.03, green: 0.03, blue: 0.04)
 
-                            // GPU Preview + Clean Source-Locked Mask Handle Overlay + Smooth Reel Safe-Zone Overlay
-                            ZStack {
-                                MetalPreviewView(session: session)
-                                InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
-
-                                // Always mounted with smooth opacity & scale animation so both showing AND hiding are 100% smooth!
-                                ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
-                                    .opacity(session.isReelModeActive ? 1.0 : 0.0)
-                                    .scaleEffect(session.isReelModeActive ? 1.0 : 0.985)
-                                    .animation(.easeInOut(duration: 0.22), value: session.isReelModeActive)
-
-                                // Subtle bright hover highlight over the video preview canvas
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color.white.opacity(isHoveringPreviewCanvas ? 0.035 : 0.0))
-                                    .allowsHitTesting(false)
-                            }
-                            .frame(width: fittedSize.width, height: fittedSize.height)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(
-                                        Color.white.opacity(isHoveringPreviewCanvas ? 0.28 : 0.08),
-                                        lineWidth: isHoveringPreviewCanvas ? 1.5 : 1.0
-                                    )
+                            AnimatableAspectCanvasContainer(
+                                session: session,
+                                containerSize: geo.size,
+                                aspect: targetAspect,
+                                isHoveringPreviewCanvas: $isHoveringPreviewCanvas
                             )
-                            .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
-                            .onHover { hovering in
-                                withAnimation(.easeOut(duration: 0.15)) {
-                                    isHoveringPreviewCanvas = hovering
-                                }
-                            }
+                            .animation(.spring(response: 0.30, dampingFraction: 0.86), value: targetAspect)
 
                             // Floating Left Quick Dock (Instant Tooltip + Smooth Highlight)
                             HStack {
@@ -853,6 +828,65 @@ public struct ProjectEditorWindowView: View {
         let secs = Int(totalSec) % 60
         let hundredths = Int((totalSec - floor(totalSec)) * 100)
         return String(format: "%02d:%02d.%02d", mins, secs, hundredths)
+    }
+}
+
+/// Animatable container that smoothly interpolates the preview canvas frame (`aspect`) at 120Hz using a spring animation
+/// whenever the user switches Aspect Ratio presets (e.g. `16:9` <-> `9:16` <-> `1:1`)!
+private struct AnimatableAspectCanvasContainer: View, Animatable {
+    @Bindable var session: ProjectSession
+    let containerSize: CGSize
+    var aspect: Double
+    @Binding var isHoveringPreviewCanvas: Bool
+
+    nonisolated var animatableData: Double {
+        get { aspect }
+        set { aspect = newValue }
+    }
+
+    var body: some View {
+        let fittedSize = fitCanvas(in: containerSize, aspect: aspect)
+
+        ZStack {
+            MetalPreviewView(session: session, canvasAspect: aspect)
+            InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
+
+            ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
+                .opacity(session.isReelModeActive ? 1.0 : 0.0)
+                .scaleEffect(session.isReelModeActive ? 1.0 : 0.985)
+                .animation(.easeInOut(duration: 0.22), value: session.isReelModeActive)
+
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(isHoveringPreviewCanvas ? 0.035 : 0.0))
+                .allowsHitTesting(false)
+        }
+        .frame(width: fittedSize.width, height: fittedSize.height)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(
+                    Color.white.opacity(isHoveringPreviewCanvas ? 0.28 : 0.08),
+                    lineWidth: isHoveringPreviewCanvas ? 1.5 : 1.0
+                )
+        )
+        .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHoveringPreviewCanvas = hovering
+            }
+        }
+    }
+
+    private func fitCanvas(in container: CGSize, aspect: Double) -> CGSize {
+        let availW = max(160, container.width - 96)
+        let availH = max(120, container.height - 24)
+        var w = availW
+        var h = w / max(0.2, aspect)
+        if h > availH {
+            h = availH
+            w = h * max(0.2, aspect)
+        }
+        return CGSize(width: w, height: h)
     }
 }
 
