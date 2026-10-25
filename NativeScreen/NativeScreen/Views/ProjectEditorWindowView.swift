@@ -145,6 +145,7 @@ public struct ProjectEditorWindowView: View {
                         InstantTooltipButton(
                             tooltip: "Undo (⌘Z)",
                             edge: .bottom,
+                            isDisabled: !session.canUndo,
                             size: 28,
                             cornerRadius: 7
                         ) {
@@ -152,14 +153,14 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             Image(systemName: "arrow.uturn.backward")
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(session.canUndo ? 0.85 : 0.25))
+                                .foregroundStyle(.white.opacity(0.88))
                         }
-                        .disabled(!session.canUndo)
                         .keyboardShortcut("z", modifiers: [.command])
 
                         InstantTooltipButton(
                             tooltip: "Redo (⇧⌘Z)",
                             edge: .bottom,
+                            isDisabled: !session.canRedo,
                             size: 28,
                             cornerRadius: 7
                         ) {
@@ -167,9 +168,8 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             Image(systemName: "arrow.uturn.forward")
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(session.canRedo ? 0.85 : 0.25))
+                                .foregroundStyle(.white.opacity(0.88))
                         }
-                        .disabled(!session.canRedo)
                         .keyboardShortcut("Z", modifiers: [.command, .shift])
                     }
 

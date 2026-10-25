@@ -14,6 +14,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     let tooltip: String
     let edge: TooltipEdge
     let isActive: Bool
+    let isDisabled: Bool
     let activeColor: Color
     let size: CGFloat
     let cornerRadius: CGFloat
@@ -27,6 +28,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         tooltip: String,
         edge: TooltipEdge = .trailing,
         isActive: Bool = false,
+        isDisabled: Bool = false,
         activeColor: Color = Color(red: 0.45, green: 0.36, blue: 0.96),
         size: CGFloat = 32,
         cornerRadius: CGFloat = 8,
@@ -36,6 +38,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         self.tooltip = tooltip
         self.edge = edge
         self.isActive = isActive
+        self.isDisabled = isDisabled
         self.activeColor = activeColor
         self.size = size
         self.cornerRadius = cornerRadius
@@ -44,12 +47,16 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     }
 
     public var body: some View {
-        Button(action: action) {
+        Button {
+            guard !isDisabled else { return }
+            action()
+        } label: {
             ZStack {
                 label()
+                    .opacity(isDisabled ? 0.25 : 1.0)
 
                 // Active dot indicator on the right side for active rail tabs (style)
-                if isActive && edge == .leading {
+                if isActive && !isDisabled && edge == .leading {
                     HStack {
                         Spacer()
                         Circle()
@@ -66,13 +73,19 @@ public struct InstantTooltipButton<LabelContent: View>: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.10)) {
-                isHovered = hovering
+                isHovered = isDisabled ? false : hovering
+            }
+        }
+        .onChange(of: isDisabled) { _, disabled in
+            if disabled && isHovered {
+                isHovered = false
             }
         }
         .overlay(alignment: .center) {
-            if isHovered && !tooltip.isEmpty {
+            if isHovered && !isDisabled && !tooltip.isEmpty {
                 InstantTooltipBubble(text: tooltip, edge: edge)
                     .fixedSize()
                     .background(
@@ -122,6 +135,9 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     }
 
     private var backgroundColor: Color {
+        if isDisabled {
+            return Color.clear
+        }
         if isActive {
             return isHovered ? activeColor.opacity(0.95) : activeColor
         }

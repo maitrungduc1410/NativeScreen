@@ -172,7 +172,6 @@ public final class ProjectSession: Identifiable {
     public func saveNow() throws {
         var updatedDoc = document
         updatedDoc.updatedAt = ISO8601DateFormatter().string(from: Date())
-        self.document = updatedDoc
 
         let fm = FileManager.default
         try fm.createDirectory(at: packageURL, withIntermediateDirectories: true)
