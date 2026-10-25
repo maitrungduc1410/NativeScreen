@@ -1066,9 +1066,10 @@ public final class ProjectSession: Identifiable {
     }
 
     public func setZoomScale(id: String, scale: Double) {
+        let stepped = (scale * 10.0).rounded() / 10.0
         mutate { doc in
             if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
-                doc.timeline.zooms[idx].scale = max(1.05, min(4.0, scale))
+                doc.timeline.zooms[idx].scale = max(1.0, min(4.0, stepped))
             }
         }
     }

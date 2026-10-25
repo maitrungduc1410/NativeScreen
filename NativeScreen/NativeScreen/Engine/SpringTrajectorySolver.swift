@@ -286,7 +286,7 @@ public struct SpringTrajectorySolver: Sendable {
 
         var zoomFocusGroups: [String: [CursorMovesGroup]] = [:]
         for zoom in activeZooms where zoom.mode == .followCursor {
-            let zoomScale = max(1.05, zoom.scale)
+            let zoomScale = max(1.0, zoom.scale)
             // the dead-zone size: `getVisibleSourcePart(zoom).multiply(0.5)` -> `0.5 / zoomScale`!
             let maxDist01 = 0.5 / zoomScale
             zoomFocusGroups[zoom.id] = Self.buildMovesGroupsForZoom(

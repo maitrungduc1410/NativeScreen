@@ -860,16 +860,11 @@ public struct InspectorSidebarView: View {
                     .foregroundStyle(.secondary)
 
                 coalescedSlider(
-                    title: String(format: "Zoom level (%d%%)", Int(round(zoom.scale * 100))),
+                    title: String(format: "Zoom level (%d%%)", Int(round(((zoom.scale * 10.0).rounded() / 10.0) * 100))),
                     value: Binding(
-                        get: { zoom.scale },
+                        get: { (zoom.scale * 10.0).rounded() / 10.0 },
                         set: { v in
-                            let stepped = (v * 10.0).rounded() / 10.0
-                            session.mutate { doc in
-                                if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
-                                    doc.timeline.zooms[idx].scale = stepped
-                                }
-                            }
+                            session.setZoomScale(id: zoomId, scale: v)
                         }
                     ),
                     range: 1.0...4.0,
