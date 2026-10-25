@@ -849,8 +849,8 @@ private struct TimelineInteractiveSegmentView: View {
     private let edgeHandleHitWidth: CGFloat = 13.0
 
     var body: some View {
-        // Full `width` (no gap subtraction!) so adjacent segments touch seamlessly edge-to-edge
-        let segWidth = max(6.0, width)
+        // 1px visual gap between adjacent touching segments
+        let segWidth = max(6.0, width - 1.0)
         let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
 
         ZStack(alignment: .leading) {
