@@ -375,6 +375,48 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
     }
 
+    // MARK: - 3b. Present Keyboard Shortcut Block Native Context Menu
+
+    public func presentShortcutContextMenu(
+        session: ProjectSession,
+        cluster: ProjectSession.ShortcutPressCluster,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        let menu = NSMenu(title: "Shortcut Context Menu")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let isHidden = session.isShortcutHidden(cluster)
+        let showThisItem = makeCommandItem(title: "Show this shortcut", keyEquivalent: "", modifiers: []) {
+            session.toggleShortcutHidden(cluster)
+        }
+        showThisItem.state = !isHidden ? .on : .off
+        menu.addItem(showThisItem)
+
+        let allClusters = session.detectedShortcutClusters
+        let sameLabelClusters = allClusters.filter { $0.compactTimelineLabel == cluster.compactTimelineLabel }
+        if sameLabelClusters.count >= 2 {
+            let allSameVisible = sameLabelClusters.allSatisfy { !session.isShortcutHidden($0) }
+            let showEveryItem = makeCommandItem(title: "Show every \(cluster.compactTimelineLabel)", keyEquivalent: "", modifiers: []) {
+                session.setEveryShortcutWithSameLabelHidden(cluster, hidden: allSameVisible)
+            }
+            showEveryItem.state = allSameVisible ? .on : .off
+            menu.addItem(showEveryItem)
+        }
+
+        menu.addItem(.separator())
+
+        let allHidden = !allClusters.isEmpty && allClusters.allSatisfy { session.isShortcutHidden($0) }
+        let toggleAllItem = makeCommandItem(title: allHidden ? "Show all shortcuts" : "Hide all shortcuts", keyEquivalent: "", modifiers: []) {
+            session.setAllShortcutsHidden(!allHidden)
+        }
+        menu.addItem(toggleAllItem)
+
+        activeMenu = menu
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
+    }
+
     /// Ensures all custom `NSMenuItem.view` rows (`PaletteRow`, `SliderRow`) span 100% of the final `NSMenu` width
     /// with zero leftover space on the right!
     private func syncCustomItemViewWidths(in menu: NSMenu, minimumWidth: CGFloat) {

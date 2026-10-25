@@ -126,10 +126,21 @@ public struct MultiTrackTimelineView: View {
                         .background(Color(red: 0.04, green: 0.04, blue: 0.06))
 
                         // B. VERTICALLY SCROLLABLE BODY (Fixed Left Labels + Horizontally Scrollable Track Lanes)
+                        let typingSuggestions = session.activeTypingSuggestions
+                        let hasTypingSuggestions = !typingSuggestions.isEmpty
+                        let shortcutClusters = session.detectedShortcutClusters
+                        let hasShortcutsTrack = !shortcutClusters.isEmpty
+
                         ScrollView(.vertical, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 0) {
                                 // B1. FIXED LEFT TRACK LABELS COLUMN
                                 VStack(alignment: .leading, spacing: rowSpacing) {
+                                    if hasTypingSuggestions {
+                                        Color.clear
+                                            .frame(width: labelColumnWidth, height: 19)
+                                            .padding(.bottom, -4)
+                                    }
+
                                     HStack(spacing: 6) {
                                         Text("Clip")
                                             .font(.system(size: 11, weight: .medium))
@@ -176,6 +187,27 @@ public struct MultiTrackTimelineView: View {
                                         .padding(.leading, 14)
                                         .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                     }
+
+                                    if hasShortcutsTrack {
+                                        let shortcutsHidden = session.document.timeline.isShortcutsTrackHidden || !session.document.captions.showKeystrokes
+                                        HStack(spacing: 6) {
+                                            Button {
+                                                session.toggleShortcutsTrackVisibility()
+                                            } label: {
+                                                Image(systemName: shortcutsHidden ? "eye.slash" : "eye")
+                                                    .font(.system(size: 10, weight: .medium))
+                                                    .foregroundStyle(Color.white.opacity(shortcutsHidden ? 0.28 : 0.65))
+                                            }
+                                            .buttonStyle(.plain)
+
+                                            Text("Shortcuts")
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundStyle(Color.white.opacity(shortcutsHidden ? 0.30 : 0.65))
+                                                .lineLimit(1)
+                                        }
+                                        .padding(.leading, 14)
+                                        .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                    }
                                 }
                                 .padding(.vertical, 8)
                                 .background(Color(red: 0.04, green: 0.04, blue: 0.06))
@@ -195,6 +227,17 @@ public struct MultiTrackTimelineView: View {
 
                                         ZStack(alignment: .topLeading) {
                                             VStack(alignment: .leading, spacing: rowSpacing) {
+                                                // Lane 0 (Optional): Speed up typing suggestion bars right above Clip
+                                                if hasTypingSuggestions {
+                                                    typingSuggestionsLaneView(
+                                                        suggestions: typingSuggestions,
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                    .padding(.bottom, -4)
+                                                    .offset(y: baseWiggleY)
+                                                }
+
                                                 // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
                                                 clipLaneView(
                                                     contentWidth: contentWidth,
@@ -216,6 +259,17 @@ public struct MultiTrackTimelineView: View {
                                                     maskLaneView(
                                                         track: track,
                                                         trackIndex: trackIdx,
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                    .offset(y: baseWiggleY * dir)
+                                                }
+
+                                                // Lane 4+: Keyboard Shortcuts Track (`34pt` height)
+                                                if hasShortcutsTrack {
+                                                    let dir: CGFloat = ((2 + session.document.timeline.maskTracks.count) % 2 == 0) ? 1.0 : -1.0
+                                                    shortcutsLaneView(
+                                                        clusters: shortcutClusters,
                                                         contentWidth: contentWidth,
                                                         totalTimelineMs: totalTimelineMs
                                                     )
@@ -530,7 +584,7 @@ public struct MultiTrackTimelineView: View {
                         palette: .zoom,
                         isSelected: isSelected,
                         isPlayed: isPlayed,
-                        isDimmed: isHidden || zoom.disabled,
+                        isDimmed: isHidden || zoom.disabled || zoom.scale <= 1.01,
                         isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
                         width: blockW,
@@ -683,6 +737,66 @@ public struct MultiTrackTimelineView: View {
                             session.endInteractiveEdit()
                         }
                     )
+                }
+            }
+        }
+        .frame(width: contentWidth, height: maskRowHeight)
+    }
+
+    // MARK: - 0. Speed Up Typing Suggestion Lane
+
+    @ViewBuilder
+    private func typingSuggestionsLaneView(
+        suggestions: [ProjectSession.TypingSuggestionRange],
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> some View {
+        ZStack(alignment: .leading) {
+            ForEach(suggestions) { suggestion in
+                if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: suggestion.sourceStartMs, sourceEndMs: suggestion.sourceEndMs) {
+                    let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                    let blockW = max(24.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth - 1.0)
+
+                    SpeedUpTypingSuggestionChipView(
+                        session: session,
+                        suggestion: suggestion,
+                        width: blockW
+                    )
+                    .offset(x: xStart)
+                }
+            }
+        }
+        .frame(width: contentWidth, height: 19)
+    }
+
+    // MARK: - 4. Keyboard Shortcuts Track Lane
+
+    @ViewBuilder
+    private func shortcutsLaneView(
+        clusters: [ProjectSession.ShortcutPressCluster],
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> some View {
+        let trackHidden = session.document.timeline.isShortcutsTrackHidden || !session.document.captions.showKeystrokes
+
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.015))
+
+            ForEach(clusters) { cluster in
+                if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: cluster.displayStartMs, sourceEndMs: cluster.displayEndMs) {
+                    let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                    let blockW = max(22.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth - 1.0)
+                    let isItemHidden = trackHidden || session.isShortcutHidden(cluster)
+
+                    ShortcutTimelineSegmentView(
+                        session: session,
+                        cluster: cluster,
+                        width: blockW,
+                        height: maskRowHeight,
+                        isHidden: isItemHidden
+                    )
+                    .offset(x: xStart)
                 }
             }
         }
@@ -1205,38 +1319,48 @@ private struct TimelineInteractiveSegmentView: View {
         let outerRingColor: Color = isSelected ? Color.white : palette.ringBorder
 
         ZStack(alignment: .leading) {
-            // 1. `shadeBody` Vertical LinearGradient (`fillTop` -> `fillBottom`)
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [palette.fillTop, palette.fillBottom],
-                        startPoint: .top,
-                        endPoint: .bottom
+            // 1. `shadeBody` Vertical LinearGradient (`fillTop` -> `fillBottom`) + Inner Edge Blurred Glow (`glowColor * glowAlpha`)
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [palette.fillTop, palette.fillBottom],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
+
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(palette.innerEdgeGlow, lineWidth: 7.0)
+                    .blur(radius: 4.5)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            // When `isDimmed` (e.g. Zoom = `1x` or disabled), the `shadeBody` multiplies body opacity by `disabledOpacity = Xm = 0.50`!
+            .opacity(isDimmed ? 0.50 : 1.0)
 
             // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top (Equatable so it never redraws during hover skimming!)
             if let deco = clipDecoration {
                 EquatableView(content: deco)
             }
 
-            // 3. Crisp 1px Outer Ring Border (Constant vibrant opacity whether hovered or not!)
+            // 3. Crisp 1px Outer Ring Border ( when dimmed at 1x zoom!)
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
-                    outerRingColor.opacity(isSelected ? 0.98 : 0.84),
+                    outerRingColor.opacity(isSelected ? 0.98 : (isDimmed ? 0.44 : 0.84)),
                     lineWidth: 1.0
                 )
 
-            // 4. Centered Title & Icon Subtitle (Matches Images 5, 6, 7 — Regular/Normal weight!)
+            // 4. Centered Title & Icon Subtitle (Matches Images 2, 5, 6, 7 — Regular/Normal weight!)
             if segWidth > 42 {
                 VStack(spacing: 1.5) {
                     Text(topTitle)
                         .font(.system(size: 11.0, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.48))
+                        .foregroundStyle(.white.opacity(isDimmed ? 0.34 : 0.48))
                         .lineLimit(1)
 
                     if segWidth > 64 {
                         subtitleRowView
+                            .opacity(isDimmed ? 0.62 : 1.0)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -1264,7 +1388,6 @@ private struct TimelineInteractiveSegmentView: View {
                 .allowsHitTesting(false)
             }
         }
-        .opacity(isDimmed ? 0.35 : 1.0)
         .frame(width: segWidth, height: height)
         .overlay(
             RightClickDetectorView { pointInView, parentView in
@@ -1503,6 +1626,359 @@ private struct HorizontalScrollViewIntrospector: NSViewRepresentable {
         DispatchQueue.main.async {
             if let sv = nsView.enclosingScrollView {
                 onFound(sv)
+            }
+        }
+    }
+}
+
+// MARK: - Speed Up Typing Suggestion Chip & Popover
+
+private struct SpeedUpTypingSuggestionChipView: View {
+    @Bindable var session: ProjectSession
+    let suggestion: ProjectSession.TypingSuggestionRange
+    let width: CGFloat
+
+    @State private var isHovered = false
+    @State private var isShowingPopover = false
+    @State private var anchorNSView: NSView?
+    @AppStorage("NativeScreen.TypingSuggestionPreferredSpeed") private var preferredSpeed: Double = 3.0
+
+    var body: some View {
+        Button {
+            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+            isShowingPopover = true
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.40, green: 0.27, blue: 0.04),
+                                Color(red: 0.56, green: 0.37, blue: 0.05)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                    .strokeBorder(
+                        (isHovered || isShowingPopover)
+                            ? Color.white.opacity(0.95)
+                            : Color(red: 0.94, green: 0.76, blue: 0.44).opacity(0.72),
+                        lineWidth: 1.0
+                    )
+
+                Image(systemName: "keyboard")
+                    .font(.system(size: 10.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.95))
+            }
+            .frame(width: width, height: 17)
+            .background(
+                TooltipScreenRectProbe { v in
+                    anchorNSView = v
+                }
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 5.5, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+            if hovering && !isShowingPopover, let v = anchorNSView, let win = v.window {
+                let rectInWin = v.convert(v.bounds, to: nil)
+                let screenRect = win.convertToScreen(rectInWin)
+                SharedFloatingTooltipWindowController.shared.showTooltip(
+                    text: "Speed up typing",
+                    edge: .top,
+                    forButtonScreenRect: screenRect,
+                    ownerView: v
+                )
+            } else {
+                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+            }
+        }
+        .popover(isPresented: $isShowingPopover, arrowEdge: .top) {
+            SpeedUpTypingPopoverView(
+                preferredSpeed: $preferredSpeed,
+                onApplySingle: {
+                    session.applyTypingSuggestion(suggestion, speed: preferredSpeed)
+                    isShowingPopover = false
+                },
+                onApplyAll: {
+                    session.applyAllTypingSuggestions(speed: preferredSpeed)
+                    isShowingPopover = false
+                },
+                onRemove: {
+                    session.dismissTypingSuggestion(suggestion)
+                    isShowingPopover = false
+                }
+            )
+        }
+    }
+}
+
+private struct SpeedUpTypingPopoverView: View {
+    @Binding var preferredSpeed: Double
+    let onApplySingle: () -> Void
+    let onApplyAll: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        let isModified = abs(preferredSpeed - 3.0) > 0.05
+
+        VStack(alignment: .leading, spacing: 14) {
+            // 1. Header (`⌨️ Speed up typing`)
+            HStack(spacing: 8) {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+                Text("Speed up typing")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.96))
+                Spacer()
+                Text(String(format: "%.1f×", preferredSpeed))
+                    .font(.system(size: 12.5, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+
+            // 2. Description
+            Text("You are typing during this part of the recording. Speed it up using options below.")
+                .font(.system(size: 12.5, weight: .regular))
+                .foregroundStyle(.white.opacity(0.46))
+                .fixedSize(horizontal: false, vertical: true)
+
+            // 3. Purple Slider (`1.5× ... 8.0×`, reset value `3.0×`) + Reset Button
+            HStack(spacing: 12) {
+                Slider(
+                    value: Binding(
+                        get: { preferredSpeed },
+                        set: { preferredSpeed = ($0 * 2.0).rounded() / 2.0 }
+                    ),
+                    in: 1.5...8.0
+                )
+                .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
+                .controlSize(.regular)
+
+                Button {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        preferredSpeed = 3.0
+                    }
+                } label: {
+                    Text("Reset")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
+                        .frame(width: 64, height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(!isModified)
+            }
+
+            // 4. Action Buttons (`Apply all suggestions ⌘ ↵` & `Apply suggestion ↵`)
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Button(action: onApplyAll) {
+                        HStack(spacing: 6) {
+                            Text("Apply all suggestions")
+                                .font(.system(size: 12.5, weight: .medium))
+                            Text("⌘ ↵")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .opacity(0.75)
+                        }
+                        .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.return, modifiers: [.command])
+
+                    Button(action: onApplySingle) {
+                        HStack(spacing: 6) {
+                            Text("Apply suggestion")
+                                .font(.system(size: 12.5, weight: .semibold))
+                            Text("↵")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .opacity(0.90)
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color(red: 0.302, green: 0.184, blue: 0.961))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.return, modifiers: [])
+                }
+
+                // 5. Remove suggestion
+                Button(action: onRemove) {
+                    Text("Remove suggestion")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.90))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(18)
+        .frame(width: 356)
+        .background(Color(red: 0.07, green: 0.07, blue: 0.09))
+        .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Keyboard Shortcut Timeline Segment
+
+private struct ShortcutTimelineSegmentView: View {
+    @Bindable var session: ProjectSession
+    let cluster: ProjectSession.ShortcutPressCluster
+    let width: CGFloat
+    let height: CGFloat
+    let isHidden: Bool
+
+    @State private var isHovered = false
+    @State private var anchorNSView: NSView?
+
+    private let primaryPurple = Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
+
+    var body: some View {
+        let tooltipText: String = {
+            if !session.document.captions.showKeystrokes {
+                return "Enable shortcuts"
+            }
+            return isHidden ? "Show shortcut" : "Hide shortcut"
+        }()
+
+        Button {
+            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+            session.toggleShortcutHidden(cluster)
+        } label: {
+            ZStack {
+                // 1. `W_` Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                primaryPurple.opacity(isHidden ? 0.14 : 0.42),
+                                primaryPurple.opacity(isHidden ? 0.03 : 0.08)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                // 2. Inner bottom glow (`W_:before`: `inset: 4px 2px; opacity: 0.3; linear-gradient(to top, primary.opacity(0.4), transparent)`)
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                primaryPurple.opacity(isHidden ? 0.05 : 0.22),
+                                Color.clear
+                            ],
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 2)
+
+                // 3. Outer 1px Outline (`outline: 1px solid primary`)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(
+                        primaryPurple.opacity(isHidden ? (isHovered ? 0.45 : 0.22) : (isHovered ? 0.95 : 0.85)),
+                        lineWidth: 1.0
+                    )
+
+                // 4. Centered Shortcut Label (`⌥ ⌃ Space`, `⌘ A`, `⌫`, `⌘ →`, `D`)
+                if width >= 22 {
+                    Text(cluster.compactTimelineLabel)
+                        .font(.system(size: 12.0, weight: .semibold))
+                        .foregroundStyle(.white.opacity(isHidden ? 0.38 : 0.96))
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                }
+            }
+            .frame(width: width, height: height)
+            .shadow(
+                color: isHidden ? .clear : primaryPurple.opacity(isHovered ? 0.32 : 0.18),
+                radius: 6
+            )
+            .background(
+                TooltipScreenRectProbe { v in
+                    anchorNSView = v
+                }
+            )
+            .overlay(
+                RightClickDetectorView { pointInView, parentView in
+                    NativeSegmentContextMenuPresenter.shared.presentShortcutContextMenu(
+                        session: session,
+                        cluster: cluster,
+                        at: pointInView,
+                        in: parentView
+                    )
+                }
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+            if hovering, let v = anchorNSView, let win = v.window {
+                let rectInWin = v.convert(v.bounds, to: nil)
+                let screenRect = win.convertToScreen(rectInWin)
+                SharedFloatingTooltipWindowController.shared.showTooltip(
+                    text: tooltipText,
+                    edge: .top,
+                    forButtonScreenRect: screenRect,
+                    ownerView: v
+                )
+            } else {
+                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+            }
+        }
+        .onChange(of: isHidden) { _, _ in
+            if isHovered, let v = anchorNSView, let win = v.window {
+                let rectInWin = v.convert(v.bounds, to: nil)
+                let screenRect = win.convertToScreen(rectInWin)
+                let newText = !session.document.captions.showKeystrokes
+                    ? "Enable shortcuts"
+                    : (isHidden ? "Show shortcut" : "Hide shortcut")
+                SharedFloatingTooltipWindowController.shared.showTooltip(
+                    text: newText,
+                    edge: .top,
+                    forButtonScreenRect: screenRect,
+                    ownerView: v
+                )
             }
         }
     }

@@ -65,6 +65,8 @@ public struct InspectorSidebarView: View {
                         masksInspector
                     case .audio:
                         audioAndSliceInspector
+                    case .shortcuts:
+                        shortcutsInspector
                     }
                 }
                 .padding(18)
@@ -1242,6 +1244,45 @@ public struct InspectorSidebarView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+            }
+        }
+    }
+
+    // MARK: - 6. Keyboard Shortcuts Inspector
+
+    @ViewBuilder
+    private var shortcutsInspector: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            inspectorToggleRow(
+                title: "Show shortcuts",
+                icon: nil,
+                description: "Show pressed shortcut labels in the video.",
+                isOn: Binding(
+                    get: { session.document.captions.showKeystrokes },
+                    set: { v in session.mutate { $0.captions.showKeystrokes = v } }
+                )
+            )
+
+            if session.document.captions.showKeystrokes {
+                coalescedSlider(
+                    title: "Shortcut labels size",
+                    value: Binding(
+                        get: { session.document.captions.shortcutsSizeRatio },
+                        set: { v in session.mutate { $0.captions.shortcutsSizeRatio = v } }
+                    ),
+                    range: 0.075...0.25,
+                    defaultValue: 0.11
+                )
+
+                inspectorToggleRow(
+                    title: "Show single key shortcuts",
+                    icon: nil,
+                    description: "By default, only 2+ keys shortcuts are shown. Enable this option to show single letter shortcuts as well.",
+                    isOn: Binding(
+                        get: { session.document.captions.showSingleKeyShortcuts },
+                        set: { v in session.mutate { $0.captions.showSingleKeyShortcuts = v } }
+                    )
+                )
             }
         }
     }

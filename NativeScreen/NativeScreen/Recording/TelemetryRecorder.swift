@@ -143,30 +143,115 @@ public final class TelemetryRecorder {
             )
             queue.async { self.clicksAppender.append(ev) }
         case .keyDown:
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let hasCommandOrCtrl = flags.contains(.command) || flags.contains(.control) || flags.contains(.option)
-            if hasCommandOrCtrl {
-                var mods: [String] = []
-                var symbols = ""
-                if flags.contains(.control) { mods.append("ctrl"); symbols += "⌃" }
-                if flags.contains(.option) { mods.append("opt"); symbols += "⌥" }
-                if flags.contains(.shift) { mods.append("shift"); symbols += "⇧" }
-                if flags.contains(.command) { mods.append("cmd"); symbols += "⌘" }
-                let chars = (event.charactersIgnoringModifiers ?? "").uppercased()
-                let keyEv = KeyStrokeEvent(
-                    t: t,
-                    kind: "shortcut",
-                    modifiers: mods,
-                    key: chars,
-                    label: symbols + chars
-                )
-                queue.async { self.keysAppender.append(keyEv) }
-            } else {
-                let keyEv = KeyStrokeEvent(t: t, kind: "typing")
-                queue.async { self.keysAppender.append(keyEv) }
+            if event.isARepeat {
+                return
             }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            var mods: [String] = []
+            if flags.contains(.capsLock) { mods.append("CapsLock") }
+            if flags.contains(.command) { mods.append("Meta") }
+            if flags.contains(.shift) { mods.append("Shift") }
+            if flags.contains(.option) { mods.append("Alt") }
+            if flags.contains(.control) { mods.append("Ctrl") }
+
+            let keyName = Self.canonicalKeyName(for: event)
+            let hasCommandOrCtrlOrOpt = flags.contains(.command) || flags.contains(.control) || flags.contains(.option)
+            let isSpecialSingleKey = Self.isSpecialStandaloneKey(keyName)
+            let kind = (hasCommandOrCtrlOrOpt || isSpecialSingleKey) ? "shortcut" : "typing"
+
+            var displayParts = mods.map { Self.symbolForModifier($0) }
+            if let k = keyName, !k.isEmpty {
+                displayParts.append(Self.symbolForKey(k))
+            }
+            let label = displayParts.joined(separator: " ")
+
+            let keyEv = KeyStrokeEvent(
+                t: t,
+                kind: kind,
+                modifiers: mods.isEmpty ? nil : mods,
+                key: keyName,
+                label: label.isEmpty ? nil : label
+            )
+            queue.async { self.keysAppender.append(keyEv) }
         default:
             break
+        }
+    }
+
+    private static func canonicalKeyName(for event: NSEvent) -> String? {
+        switch event.keyCode {
+        case 36, 76: return "Enter"
+        case 48: return "Tab"
+        case 49: return "Space"
+        case 51: return "Delete"        // Backspace (⌫)
+        case 117: return "ForwardDelete" // Forward Delete (⌦)
+        case 53: return "Escape"
+        case 123: return "ArrowLeft"
+        case 124: return "ArrowRight"
+        case 125: return "ArrowDown"
+        case 126: return "ArrowUp"
+        case 115: return "Home"
+        case 119: return "End"
+        case 116: return "PageUp"
+        case 121: return "PageDown"
+        case 122: return "F1"
+        case 120: return "F2"
+        case 99: return "F3"
+        case 118: return "F4"
+        case 96: return "F5"
+        case 97: return "F6"
+        case 98: return "F7"
+        case 100: return "F8"
+        case 101: return "F9"
+        case 109: return "F10"
+        case 103: return "F11"
+        case 111: return "F12"
+        default:
+            guard let chars = event.charactersIgnoringModifiers, !chars.isEmpty else {
+                return nil
+            }
+            let trimmed = chars.trimmingCharacters(in: .controlCharacters)
+            guard !trimmed.isEmpty else { return nil }
+            return trimmed.uppercased()
+        }
+    }
+
+    private static func isSpecialStandaloneKey(_ key: String?) -> Bool {
+        guard let k = key else { return false }
+        switch k {
+        case "Delete", "ForwardDelete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+             "Home", "End", "PageUp", "PageDown",
+             "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func symbolForModifier(_ mod: String) -> String {
+        switch mod {
+        case "Meta", "cmd": return "⌘"
+        case "Shift", "shift": return "⇧"
+        case "Alt", "opt": return "⌥"
+        case "Ctrl", "ctrl", "Control": return "⌃"
+        case "CapsLock": return "⇪"
+        default: return mod
+        }
+    }
+
+    private static func symbolForKey(_ key: String) -> String {
+        switch key {
+        case "Delete", "Backspace": return "⌫"
+        case "ForwardDelete": return "⌦"
+        case "Enter": return "⏎"
+        case "Tab": return "⇥"
+        case "Escape": return "Esc"
+        case "Space", " ": return "Space"
+        case "ArrowUp": return "↑"
+        case "ArrowDown": return "↓"
+        case "ArrowLeft": return "←"
+        case "ArrowRight": return "→"
+        default: return key.uppercased()
         }
     }
 }

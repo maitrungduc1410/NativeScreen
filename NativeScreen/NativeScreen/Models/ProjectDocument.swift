@@ -621,6 +621,9 @@ public struct CaptionSegment: Codable, Equatable, Hashable, Identifiable, Sendab
 public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     public var enabled: Bool
     public var showKeystrokes: Bool
+    public var shortcutsSizeRatio: Double
+    public var showSingleKeyShortcuts: Bool
+    public var hiddenShortcutStartMs: [Int]
     public var keystrokesPosition01: Point01
     public var fontFamily: String
     public var fontSizeRatio: Double
@@ -633,6 +636,9 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     public init(
         enabled: Bool = false,
         showKeystrokes: Bool = true,
+        shortcutsSizeRatio: Double = 0.11,
+        showSingleKeyShortcuts: Bool = false,
+        hiddenShortcutStartMs: [Int] = [],
         keystrokesPosition01: Point01 = Point01(x: 0.5, y: 0.90),
         fontFamily: String = "SF Pro Rounded",
         fontSizeRatio: Double = 0.045,
@@ -644,6 +650,9 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     ) {
         self.enabled = enabled
         self.showKeystrokes = showKeystrokes
+        self.shortcutsSizeRatio = shortcutsSizeRatio
+        self.showSingleKeyShortcuts = showSingleKeyShortcuts
+        self.hiddenShortcutStartMs = hiddenShortcutStartMs
         self.keystrokesPosition01 = keystrokesPosition01
         self.fontFamily = fontFamily
         self.fontSizeRatio = fontSizeRatio
@@ -652,6 +661,39 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.position01 = position01
         self.animationStyle = animationStyle
         self.segments = segments
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case showKeystrokes
+        case shortcutsSizeRatio
+        case showSingleKeyShortcuts
+        case hiddenShortcutStartMs
+        case keystrokesPosition01
+        case fontFamily
+        case fontSizeRatio
+        case textColor
+        case backgroundColor
+        case position01
+        case animationStyle
+        case segments
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        self.showKeystrokes = try container.decodeIfPresent(Bool.self, forKey: .showKeystrokes) ?? true
+        self.shortcutsSizeRatio = try container.decodeIfPresent(Double.self, forKey: .shortcutsSizeRatio) ?? 0.11
+        self.showSingleKeyShortcuts = try container.decodeIfPresent(Bool.self, forKey: .showSingleKeyShortcuts) ?? false
+        self.hiddenShortcutStartMs = try container.decodeIfPresent([Int].self, forKey: .hiddenShortcutStartMs) ?? []
+        self.keystrokesPosition01 = try container.decodeIfPresent(Point01.self, forKey: .keystrokesPosition01) ?? Point01(x: 0.5, y: 0.90)
+        self.fontFamily = try container.decodeIfPresent(String.self, forKey: .fontFamily) ?? "SF Pro Rounded"
+        self.fontSizeRatio = try container.decodeIfPresent(Double.self, forKey: .fontSizeRatio) ?? 0.045
+        self.textColor = try container.decodeIfPresent(String.self, forKey: .textColor) ?? "#FFFFFF"
+        self.backgroundColor = try container.decodeIfPresent(String.self, forKey: .backgroundColor) ?? "#000000CC"
+        self.position01 = try container.decodeIfPresent(Point01.self, forKey: .position01) ?? Point01(x: 0.5, y: 0.88)
+        self.animationStyle = try container.decodeIfPresent(String.self, forKey: .animationStyle) ?? "word-by-word"
+        self.segments = try container.decodeIfPresent([CaptionSegment].self, forKey: .segments) ?? []
     }
 }
 
@@ -913,21 +955,27 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
     public var zooms: [ZoomBlock]
     public var isZoomTrackHidden: Bool
     public var maskTracks: [MaskTrack]
+    public var isShortcutsTrackHidden: Bool
+    public var dismissedTypingSuggestionStarts: [Int]
 
     public init(
         slices: [ClipSlice] = [],
         zooms: [ZoomBlock] = [],
         isZoomTrackHidden: Bool = false,
-        maskTracks: [MaskTrack] = []
+        maskTracks: [MaskTrack] = [],
+        isShortcutsTrackHidden: Bool = false,
+        dismissedTypingSuggestionStarts: [Int] = []
     ) {
         self.slices = slices
         self.zooms = zooms
         self.isZoomTrackHidden = isZoomTrackHidden
         self.maskTracks = maskTracks
+        self.isShortcutsTrackHidden = isShortcutsTrackHidden
+        self.dismissedTypingSuggestionStarts = dismissedTypingSuggestionStarts
     }
 
     enum CodingKeys: String, CodingKey {
-        case slices, zooms, isZoomTrackHidden, maskTracks
+        case slices, zooms, isZoomTrackHidden, maskTracks, isShortcutsTrackHidden, dismissedTypingSuggestionStarts
     }
 
     public init(from decoder: Decoder) throws {
@@ -936,6 +984,8 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         self.zooms = try container.decodeIfPresent([ZoomBlock].self, forKey: .zooms) ?? []
         self.isZoomTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isZoomTrackHidden) ?? false
         self.maskTracks = try container.decodeIfPresent([MaskTrack].self, forKey: .maskTracks) ?? []
+        self.isShortcutsTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isShortcutsTrackHidden) ?? false
+        self.dismissedTypingSuggestionStarts = try container.decodeIfPresent([Int].self, forKey: .dismissedTypingSuggestionStarts) ?? []
     }
 }
 

@@ -859,6 +859,7 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
         ZStack {
             MetalPreviewView(session: session, canvasAspect: aspect)
             InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
+            PreviewShortcutKeycapsOverlayView(session: session, canvasSize: fittedSize)
 
             ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
                 .opacity(session.isReelModeActive ? 1.0 : 0.0)
@@ -896,6 +897,161 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
             w = h * max(0.2, aspect)
         }
         return CGSize(width: w, height: h)
+    }
+}
+
+// MARK: - Interactive 3D Keycap Overlay on Video Preview
+
+private struct PreviewShortcutKeycapsOverlayView: View {
+    @Bindable var session: ProjectSession
+    let canvasSize: CGSize
+
+    @State private var isHoveringKeycaps = false
+
+    var body: some View {
+        let sourceMs = session.currentSourceTimeMs
+        let activeCluster = session.activeShortcutCluster(atSourceMs: sourceMs)
+        let keyHeight = max(34.0, canvasSize.height * CGFloat(session.document.captions.shortcutsSizeRatio))
+        let spacing = keyHeight * 0.10
+        let bottomPadding = max(16.0, canvasSize.height * 0.05)
+
+        ZStack(alignment: .bottom) {
+            Color.clear
+
+            if let cluster = activeCluster {
+                HStack(spacing: spacing) {
+                    ForEach(cluster.keyCaps) { cap in
+                        NativeScreen3DKeycapView(
+                            cap: cap,
+                            keyHeight: keyHeight,
+                            isHovered: isHoveringKeycaps
+                        )
+                    }
+                }
+                .padding(.bottom, bottomPadding)
+                .scaleEffect(isHoveringKeycaps ? 1.02 : 1.0)
+                .brightness(isHoveringKeycaps ? 0.08 : 0.0)
+                .shadow(color: .black.opacity(0.42), radius: keyHeight * 0.22, y: keyHeight * 0.10)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        isHoveringKeycaps = hovering
+                    }
+                }
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                        session.selectedInspectorTab = .shortcuts
+                    }
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity.combined(with: .offset(y: -keyHeight * 0.08)).combined(with: .scale(scale: 0.96)),
+                        removal: .opacity.combined(with: .scale(scale: 0.96))
+                    )
+                )
+            }
+        }
+        .frame(width: canvasSize.width, height: canvasSize.height, alignment: .bottom)
+        .animation(.spring(response: 0.24, dampingFraction: 0.84), value: activeCluster?.id)
+    }
+}
+
+private struct NativeScreen3DKeycapView: View {
+    let cap: ProjectSession.ShortcutKeyCap
+    let keyHeight: CGFloat
+    let isHovered: Bool
+
+    var body: some View {
+        let keyWidth = keyHeight * CGFloat(cap.widthRatio)
+        let outerRadius = keyHeight * 0.125 // `qg / Gg = 32 / 256 = 0.125`
+        let borderThickness = max(1.2, keyHeight * (3.0 / 256.0))
+        let innerRadius = max(2.0, outerRadius - borderThickness)
+        let innerPad = (keyHeight - borderThickness * 2.0) * 0.125
+
+        ZStack {
+            // 1. Outer 3D Bevel Border Gradient (`#656565` top -> `#191919` bottom)
+            RoundedRectangle(cornerRadius: outerRadius, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.396, green: 0.396, blue: 0.396).opacity(isHovered ? 1.0 : 0.92),
+                            Color(red: 0.098, green: 0.098, blue: 0.098)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            // 2. Inner Keycap Body Gradient (`#2B2B2B` top -> `#191919` bottom)
+            RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            isHovered
+                                ? Color(red: 0.22, green: 0.22, blue: 0.24)
+                                : Color(red: 0.169, green: 0.169, blue: 0.169),
+                            isHovered
+                                ? Color(red: 0.13, green: 0.13, blue: 0.15)
+                                : Color(red: 0.098, green: 0.098, blue: 0.098)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .padding(borderThickness)
+
+            // 3. Keycap Symbol & Label Typography
+            Group {
+                switch cap.labelPlacement {
+                case .center:
+                    Text(cap.label)
+                        .font(.system(size: keyHeight * 0.33, weight: .regular))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.horizontal, innerPad)
+
+                case .bottomLeft:
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let sym = cap.symbol, !sym.isEmpty {
+                            Text(sym)
+                                .font(.system(size: keyHeight * 0.31, weight: .regular))
+                                .foregroundStyle(.white)
+                        }
+                        Spacer(minLength: 0)
+                        if !cap.label.isEmpty {
+                            Text(cap.label)
+                                .font(.system(size: keyHeight * 0.215, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.96))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .padding(borderThickness + innerPad)
+
+                case .bottomCenter:
+                    VStack(alignment: .center, spacing: 0) {
+                        if let sym = cap.symbol, !sym.isEmpty {
+                            Text(sym)
+                                .font(.system(size: keyHeight * 0.31, weight: .regular))
+                                .foregroundStyle(.white)
+                        }
+                        Spacer(minLength: 0)
+                        if !cap.label.isEmpty {
+                            Text(cap.label)
+                                .font(.system(size: keyHeight * 0.215, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.96))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .padding(borderThickness + innerPad)
+                }
+            }
+        }
+        .frame(width: keyWidth, height: keyHeight)
     }
 }
 

@@ -1117,6 +1117,7 @@ public final class RecordingCoordinator {
         let durationMs = 18000.0
         let cursorAppender = JSONLinesAppender(fileURL: telemetryDir.appendingPathComponent("cursor.jsonl"))
         let clicksAppender = JSONLinesAppender(fileURL: telemetryDir.appendingPathComponent("clicks.jsonl"))
+        let keysAppender = JSONLinesAppender(fileURL: telemetryDir.appendingPathComponent("keys.jsonl"))
 
         let totalSamples = Int(durationMs / 16.67)
         for i in 0...totalSamples {
@@ -1138,6 +1139,18 @@ public final class RecordingCoordinator {
             clicksAppender.append(ClickEvent(t: t + 90.0, type: "up", button: "left", x: cx, y: cy, count: 1))
         }
         clicksAppender.close()
+
+        // Sample shortcuts & typing burst ( & 6!)
+        keysAppender.append(KeyStrokeEvent(t: 4800.0, kind: "shortcut", modifiers: ["Alt", "Ctrl"], key: "Space", label: "⌥ ⌃ Space"))
+        keysAppender.append(KeyStrokeEvent(t: 6400.0, kind: "typing", modifiers: nil, key: "D", label: "D"))
+        keysAppender.append(KeyStrokeEvent(t: 7800.0, kind: "shortcut", modifiers: ["Meta"], key: "A", label: "⌘ A"))
+        keysAppender.append(KeyStrokeEvent(t: 9100.0, kind: "shortcut", modifiers: nil, key: "Delete", label: "⌫"))
+        let typingChars = ["A", "D", "D", "S", "F", "D", "A", "S", "F", "S", "D", "F", "G", "I", "T"]
+        for (idx, ch) in typingChars.enumerated() {
+            keysAppender.append(KeyStrokeEvent(t: 9900.0 + Double(idx) * 165.0, kind: "typing", modifiers: nil, key: ch, label: ch))
+        }
+        keysAppender.append(KeyStrokeEvent(t: 14400.0, kind: "shortcut", modifiers: ["Meta"], key: "ArrowRight", label: "⌘ →"))
+        keysAppender.close()
 
         let metadata = RecordingMetadata(
             durationMs: durationMs,

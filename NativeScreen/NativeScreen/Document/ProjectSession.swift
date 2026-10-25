@@ -67,6 +67,7 @@ public final class ProjectSession: Identifiable {
         case zoom = "Zoom"
         case masks = "Masks"
         case audio = "Audio"
+        case shortcuts = "Shortcuts"
 
         public var id: String { rawValue }
 
@@ -77,6 +78,7 @@ public final class ProjectSession: Identifiable {
             case .zoom: return "plus.magnifyingglass"
             case .masks: return "eye.slash.circle"
             case .audio: return "waveform"
+            case .shortcuts: return "command"
             }
         }
     }
@@ -1297,5 +1299,461 @@ public final class ProjectSession: Identifiable {
         if let realSamples = extracted {
             self.audioWaveformSamples = realSamples
         }
+    }
+
+    // MARK: - Speed Up Typing Suggestion Detection & Actions
+
+    public struct TypingSuggestionRange: Identifiable, Equatable, Sendable {
+        public var id: Int { startKeyMs }
+        public let startKeyMs: Int
+        public let sourceStartMs: Double
+        public let sourceEndMs: Double
+    }
+
+    /// Detects continuous typing bursts (`gap < 500ms`, `duration >= 1500ms`, `rate >= 2.0 keys/sec`)
+    /// that haven't been dismissed and lie inside a normal-speed (`~1x`) ClipSlice.
+    public var activeTypingSuggestions: [TypingSuggestionRange] {
+        guard !keyEvents.isEmpty else { return [] }
+        let maxGapMs = 500.0
+        let minDurationMs = 1500.0
+        let minRatePerSec = 2.0
+
+        var rawBursts: [(startMs: Double, endMs: Double)] = []
+        var currentBurst: [KeyStrokeEvent] = []
+
+        for ev in keyEvents {
+            if currentBurst.isEmpty {
+                currentBurst = [ev]
+                continue
+            }
+            let prev = currentBurst[currentBurst.count - 1]
+            if ev.t - prev.t < maxGapMs {
+                currentBurst.append(ev)
+                continue
+            }
+            let durMs = prev.t - currentBurst[0].t
+            let rate = Double(currentBurst.count) / max(0.001, durMs / 1000.0)
+            if durMs >= minDurationMs && rate >= minRatePerSec {
+                rawBursts.append((currentBurst[0].t, prev.t))
+            }
+            currentBurst = [ev]
+        }
+
+        if currentBurst.count >= 2 {
+            let prev = currentBurst[currentBurst.count - 1]
+            let durMs = prev.t - currentBurst[0].t
+            let rate = Double(currentBurst.count) / max(0.001, durMs / 1000.0)
+            if durMs >= minDurationMs && rate >= minRatePerSec {
+                rawBursts.append((currentBurst[0].t, prev.t))
+            }
+        }
+
+        let dismissed = Set(document.timeline.dismissedTypingSuggestionStarts)
+        var results: [TypingSuggestionRange] = []
+
+        for burst in rawBursts {
+            let keyInt = Int(round(burst.startMs))
+            guard !dismissed.contains(keyInt) else { continue }
+            // Only suggest if there is a ClipSlice containing `[burst.startMs, burst.endMs]` that is still at ~1x speed
+            if let slice = document.timeline.slices.first(where: {
+                burst.startMs >= $0.sourceStartMs + 120.0 && burst.endMs <= $0.sourceEndMs - 120.0
+            }), slice.speed <= 1.08 {
+                results.append(
+                    TypingSuggestionRange(
+                        startKeyMs: keyInt,
+                        sourceStartMs: burst.startMs,
+                        sourceEndMs: burst.endMs
+                    )
+                )
+            }
+        }
+        return results
+    }
+
+    public func applyTypingSuggestion(_ range: TypingSuggestionRange, speed: Double) {
+        let clampedSpeed = max(1.5, min(8.0, (speed * 10.0).rounded() / 10.0))
+        mutate { doc in
+            Self.splitAndSpeedUpSlice(in: &doc, startMs: range.sourceStartMs, endMs: range.sourceEndMs, speed: clampedSpeed)
+            if !doc.timeline.dismissedTypingSuggestionStarts.contains(range.startKeyMs) {
+                doc.timeline.dismissedTypingSuggestionStarts.append(range.startKeyMs)
+            }
+        }
+    }
+
+    public func applyAllTypingSuggestions(speed: Double) {
+        let clampedSpeed = max(1.5, min(8.0, (speed * 10.0).rounded() / 10.0))
+        let ranges = activeTypingSuggestions
+        guard !ranges.isEmpty else { return }
+        mutate { doc in
+            for r in ranges {
+                Self.splitAndSpeedUpSlice(in: &doc, startMs: r.sourceStartMs, endMs: r.sourceEndMs, speed: clampedSpeed)
+                if !doc.timeline.dismissedTypingSuggestionStarts.contains(r.startKeyMs) {
+                    doc.timeline.dismissedTypingSuggestionStarts.append(r.startKeyMs)
+                }
+            }
+        }
+    }
+
+    public func dismissTypingSuggestion(_ range: TypingSuggestionRange) {
+        mutate { doc in
+            if !doc.timeline.dismissedTypingSuggestionStarts.contains(range.startKeyMs) {
+                doc.timeline.dismissedTypingSuggestionStarts.append(range.startKeyMs)
+            }
+        }
+    }
+
+    private static func splitAndSpeedUpSlice(in doc: inout ProjectDocument, startMs: Double, endMs: Double, speed: Double) {
+        guard endMs - startMs >= 300.0 else { return }
+        guard let idx = doc.timeline.slices.firstIndex(where: {
+            startMs >= $0.sourceStartMs + 100.0 && endMs <= $0.sourceEndMs - 100.0
+        }) else {
+            return
+        }
+        let original = doc.timeline.slices[idx]
+        var beforeSlice = original
+        beforeSlice.id = UUID().uuidString
+        beforeSlice.sourceEndMs = startMs
+
+        var typingSlice = original
+        typingSlice.id = UUID().uuidString
+        typingSlice.sourceStartMs = startMs
+        typingSlice.sourceEndMs = endMs
+        typingSlice.speed = speed
+
+        var afterSlice = original
+        afterSlice.id = UUID().uuidString
+        afterSlice.sourceStartMs = endMs
+
+        doc.timeline.slices.replaceSubrange(idx...idx, with: [beforeSlice, typingSlice, afterSlice])
+    }
+
+    // MARK: - Keyboard Shortcuts Track & 3D Keycap Overlay Engine
+
+    public struct ShortcutKeyCap: Equatable, Hashable, Sendable, Identifiable {
+        public enum LabelPlacement: String, Sendable {
+            case center
+            case bottomLeft
+            case bottomCenter
+        }
+
+        public var id: String { "\(key)_\(symbol ?? "")_\(label)" }
+        public let key: String
+        public let widthRatio: Double
+        public let symbol: String?
+        public let label: String
+        public let labelPlacement: LabelPlacement
+    }
+
+    public struct ShortcutPressCluster: Identifiable, Equatable, Sendable {
+        public var id: Int { firstKeyDownMsInt }
+        public let firstKeyDownMsInt: Int
+        public let firstKeyDownMs: Double
+        public let lastKeyDownMs: Double
+        public var displayStartMs: Double
+        public var displayEndMs: Double
+        public let compactTimelineLabel: String
+        public let keyCaps: [ShortcutKeyCap]
+    }
+
+    /// Computes all visible/hidden shortcut clusters on the timeline according to `showSingleKeyShortcuts`.
+    public var detectedShortcutClusters: [ShortcutPressCluster] {
+        guard !keyEvents.isEmpty else { return [] }
+        let allowSingleLetters = document.captions.showSingleKeyShortcuts
+
+        struct NormalizedEvent {
+            let raw: KeyStrokeEvent
+            let modifiers: [String] // Canonical order: ["CapsLock", "Meta", "Shift", "Alt", "Ctrl"]
+            let primaryKey: String
+            var tokenCount: Int { modifiers.count + 1 }
+            var signature: String { (modifiers + [primaryKey]).joined(separator: "+") }
+        }
+
+        let normalized: [NormalizedEvent] = keyEvents.compactMap { ev in
+            guard let key = Self.normalizeKeyToken(from: ev) else { return nil }
+            let mods = Self.normalizeModifiers(from: ev.modifiers ?? [])
+            return NormalizedEvent(raw: ev, modifiers: mods, primaryKey: key)
+        }
+
+        // Step 1: Filter via the `F_` / `Ag` rule
+        var filtered: [NormalizedEvent] = []
+        for i in 0..<normalized.count {
+            let curr = normalized[i]
+            // If `Shift + single char` is followed within 1000ms by a single char with NO modifiers, it's just a capital letter while typing prose!
+            if curr.modifiers == ["Shift"], curr.primaryKey.count == 1, i + 1 < normalized.count {
+                let next = normalized[i + 1]
+                if next.modifiers.isEmpty && (next.raw.t - curr.raw.t) < 1000.0 {
+                    continue
+                }
+            }
+
+            if !allowSingleLetters && curr.tokenCount == 1 {
+                guard Self.isAllowedStandaloneSpecialKey(curr.primaryKey) else {
+                    continue
+                }
+            }
+            filtered.append(curr)
+        }
+
+        // Step 2: Group & filter via the `L_` / `Mg` rule (`2000ms` repeat merge + `1000ms` prose-typing suppression when `allowSingleLetters == true`)
+        struct RawGroup {
+            let modifiers: [String]
+            let primaryKey: String
+            let signature: String
+            var events: [NormalizedEvent]
+        }
+
+        var groups: [RawGroup] = []
+        for curr in filtered {
+            guard let last = groups.last else {
+                groups.append(RawGroup(modifiers: curr.modifiers, primaryKey: curr.primaryKey, signature: curr.signature, events: [curr]))
+                continue
+            }
+
+            // Crucial rule from `Mg`:
+            // When `showSingleKeyShortcuts` is ON, if two consecutive single-key alphanumeric presses (with no modifiers)
+            // occur within `1000ms` of each other (e.g. typing code `"addsfdasfsdf"`), pop the previous one and skip the current one!
+            if allowSingleLetters {
+                let firstOfLast = last.events[0]
+                if firstOfLast.modifiers.isEmpty && curr.modifiers.isEmpty
+                    && Self.isAlphaNumericSingleKey(firstOfLast.primaryKey)
+                    && Self.isAlphaNumericSingleKey(curr.primaryKey)
+                    && (curr.raw.t - firstOfLast.raw.t) < 1000.0 {
+                    groups.removeLast()
+                    continue
+                }
+            }
+
+            let lastEventInGroup = last.events[last.events.count - 1]
+            if (curr.raw.t - lastEventInGroup.raw.t) <= 2000.0 && last.signature == curr.signature {
+                groups[groups.count - 1].events.append(curr)
+            } else {
+                groups.append(RawGroup(modifiers: curr.modifiers, primaryKey: curr.primaryKey, signature: curr.signature, events: [curr]))
+            }
+        }
+
+        // Step 3: Build `ShortcutPressCluster` with non-overlapping `[displayStartMs, displayEndMs]`
+        var clusters: [ShortcutPressCluster] = groups.map { g in
+            let firstMs = g.events[0].raw.t
+            let lastMs = g.events[g.events.count - 1].raw.t
+            let startMs = max(0.0, firstMs - 80.0)
+            let endMs = lastMs + 1500.0
+            return ShortcutPressCluster(
+                firstKeyDownMsInt: Int(round(firstMs)),
+                firstKeyDownMs: firstMs,
+                lastKeyDownMs: lastMs,
+                displayStartMs: startMs,
+                displayEndMs: endMs,
+                compactTimelineLabel: Self.buildCompactTimelineLabel(modifiers: g.modifiers, primaryKey: g.primaryKey),
+                keyCaps: Self.buildKeyCaps(modifiers: g.modifiers, primaryKey: g.primaryKey)
+            )
+        }
+
+        // Clamp adjacent `displayEndMs` / `displayStartMs` so adjacent blocks touch cleanly on the timeline (`k_` & `D_`)
+        if clusters.count >= 2 {
+            for i in 0..<(clusters.count - 1) {
+                let nextFirst = clusters[i + 1].firstKeyDownMs
+                if clusters[i].displayEndMs > nextFirst {
+                    clusters[i].displayEndMs = max(clusters[i].firstKeyDownMs + 120.0, nextFirst)
+                    clusters[i + 1].displayStartMs = clusters[i].displayEndMs
+                }
+            }
+        }
+
+        // Filter to clusters that overlap at least one active ClipSlice
+        return clusters.filter { c in
+            document.timeline.slices.contains { slice in
+                min(c.displayEndMs, slice.sourceEndMs) > max(c.displayStartMs, slice.sourceStartMs)
+            }
+        }
+    }
+
+    public func isShortcutHidden(_ cluster: ShortcutPressCluster) -> Bool {
+        document.captions.hiddenShortcutStartMs.contains(cluster.firstKeyDownMsInt)
+    }
+
+    public func toggleShortcutHidden(_ cluster: ShortcutPressCluster) {
+        mutate { doc in
+            if !doc.captions.showKeystrokes {
+                doc.captions.showKeystrokes = true
+            }
+            if let idx = doc.captions.hiddenShortcutStartMs.firstIndex(of: cluster.firstKeyDownMsInt) {
+                doc.captions.hiddenShortcutStartMs.remove(at: idx)
+            } else {
+                doc.captions.hiddenShortcutStartMs.append(cluster.firstKeyDownMsInt)
+            }
+        }
+    }
+
+    public func setEveryShortcutWithSameLabelHidden(_ cluster: ShortcutPressCluster, hidden: Bool) {
+        let matchingIds = detectedShortcutClusters
+            .filter { $0.compactTimelineLabel == cluster.compactTimelineLabel }
+            .map(\.firstKeyDownMsInt)
+        mutate { doc in
+            if hidden {
+                for id in matchingIds where !doc.captions.hiddenShortcutStartMs.contains(id) {
+                    doc.captions.hiddenShortcutStartMs.append(id)
+                }
+            } else {
+                doc.captions.hiddenShortcutStartMs.removeAll { matchingIds.contains($0) }
+            }
+        }
+    }
+
+    public func setAllShortcutsHidden(_ hidden: Bool) {
+        let allIds = detectedShortcutClusters.map(\.firstKeyDownMsInt)
+        mutate { doc in
+            if hidden {
+                doc.captions.hiddenShortcutStartMs = allIds
+            } else {
+                doc.captions.hiddenShortcutStartMs.removeAll()
+            }
+        }
+    }
+
+    public func toggleShortcutsTrackVisibility() {
+        mutate { doc in
+            doc.timeline.isShortcutsTrackHidden.toggle()
+        }
+    }
+
+    /// Returns the currently active, non-hidden `ShortcutPressCluster` at `sourceMs` (for rendering 3D keycaps on the video preview & export).
+    public func activeShortcutCluster(atSourceMs sourceMs: Double) -> ShortcutPressCluster? {
+        guard document.captions.showKeystrokes, !document.timeline.isShortcutsTrackHidden else {
+            return nil
+        }
+        let hiddenSet = Set(document.captions.hiddenShortcutStartMs)
+        var candidate: ShortcutPressCluster?
+        for cluster in detectedShortcutClusters where !hiddenSet.contains(cluster.firstKeyDownMsInt) {
+            if cluster.displayStartMs > sourceMs {
+                break
+            }
+            candidate = cluster
+        }
+        guard let match = candidate, sourceMs >= match.displayStartMs && sourceMs <= match.displayEndMs else {
+            return nil
+        }
+        return match
+    }
+
+    // MARK: - Shortcut Normalization & Keycap Helpers
+
+    private static func normalizeModifiers(from rawMods: [String]) -> [String] {
+        var set = Set<String>()
+        for m in rawMods {
+            switch m.lowercased() {
+            case "capslock": set.insert("CapsLock")
+            case "meta", "cmd", "command": set.insert("Meta")
+            case "shift": set.insert("Shift")
+            case "alt", "opt", "option": set.insert("Alt")
+            case "ctrl", "control": set.insert("Ctrl")
+            default: break
+            }
+        }
+        // Canonical order (`fg` / `g`):
+        let order = ["CapsLock", "Meta", "Shift", "Alt", "Ctrl"]
+        return order.filter { set.contains($0) }
+    }
+
+    private static func normalizeKeyToken(from ev: KeyStrokeEvent) -> String? {
+        if let k = ev.key, !k.isEmpty {
+            if k == " " { return "Space" }
+            return k
+        }
+        return nil
+    }
+
+    private static func isAllowedStandaloneSpecialKey(_ key: String) -> Bool {
+        switch key {
+        case "CapsLock", "Backspace", "Delete", "ForwardDelete",
+             "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+             "Home", "End", "PageUp", "PageDown",
+             "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isAlphaNumericSingleKey(_ key: String) -> Bool {
+        guard key.count == 1, let scalar = key.unicodeScalars.first else { return false }
+        return CharacterSet.alphanumerics.contains(scalar)
+    }
+
+    private static func buildCompactTimelineLabel(modifiers: [String], primaryKey: String) -> String {
+        // Note:, timeline order is `["Meta", "Shift", "Alt", "Ctrl"]` (or `⌥ ⌃` as shown in)
+        let modSymbols: [String] = modifiers.map { mod in
+            switch mod {
+            case "Meta": return "⌘"
+            case "Shift": return "⇧"
+            case "Alt": return "⌥"
+            case "Ctrl": return "⌃"
+            case "CapsLock": return "⇪"
+            default: return mod
+            }
+        }
+        let keySymbol: String = {
+            switch primaryKey {
+            case "Delete", "Backspace": return "⌫"
+            case "ForwardDelete": return "⌦"
+            case "Enter": return "⏎"
+            case "Tab": return "⇥"
+            case "Escape": return "Esc"
+            case "Space", " ": return "Space"
+            case "ArrowUp": return "↑"
+            case "ArrowDown": return "↓"
+            case "ArrowLeft": return "←"
+            case "ArrowRight": return "→"
+            default: return primaryKey.uppercased()
+            }
+        }()
+        return (modSymbols + [keySymbol]).joined(separator: " ")
+    }
+
+    private static func buildKeyCaps(modifiers: [String], primaryKey: String) -> [ShortcutKeyCap] {
+        var caps: [ShortcutKeyCap] = modifiers.map { mod in
+            switch mod {
+            case "Meta":
+                return ShortcutKeyCap(key: mod, widthRatio: 1.33, symbol: "⌘", label: "command", labelPlacement: .bottomLeft)
+            case "Alt":
+                return ShortcutKeyCap(key: mod, widthRatio: 1.33, symbol: "⌥", label: "option", labelPlacement: .bottomLeft)
+            case "Ctrl":
+                return ShortcutKeyCap(key: mod, widthRatio: 1.33, symbol: "⌃", label: "control", labelPlacement: .bottomLeft)
+            case "Shift":
+                return ShortcutKeyCap(key: mod, widthRatio: 1.33, symbol: "⇧", label: "shift", labelPlacement: .bottomLeft)
+            case "CapsLock":
+                return ShortcutKeyCap(key: mod, widthRatio: 1.33, symbol: "⇪", label: "caps lock", labelPlacement: .bottomLeft)
+            default:
+                return ShortcutKeyCap(key: mod, widthRatio: 1.33, symbol: nil, label: mod.lowercased(), labelPlacement: .center)
+            }
+        }
+
+        let primaryCap: ShortcutKeyCap = {
+            switch primaryKey {
+            case "Space", " ":
+                return ShortcutKeyCap(key: "Space", widthRatio: 1.66, symbol: "␣", label: "space", labelPlacement: .bottomCenter)
+            case "Delete", "Backspace":
+                return ShortcutKeyCap(key: "Delete", widthRatio: 1.33, symbol: "⌫", label: "delete", labelPlacement: .bottomLeft)
+            case "ForwardDelete":
+                return ShortcutKeyCap(key: "ForwardDelete", widthRatio: 1.33, symbol: "⌦", label: "delete", labelPlacement: .bottomLeft)
+            case "Tab":
+                return ShortcutKeyCap(key: "Tab", widthRatio: 1.33, symbol: "⇥", label: "tab", labelPlacement: .bottomLeft)
+            case "Escape":
+                return ShortcutKeyCap(key: "Escape", widthRatio: 1.33, symbol: "⎋", label: "esc", labelPlacement: .bottomLeft)
+            case "Enter":
+                return ShortcutKeyCap(key: "Enter", widthRatio: 1.33, symbol: nil, label: "⏎", labelPlacement: .center)
+            case "ArrowUp":
+                return ShortcutKeyCap(key: "ArrowUp", widthRatio: 1.0, symbol: nil, label: "↑", labelPlacement: .center)
+            case "ArrowDown":
+                return ShortcutKeyCap(key: "ArrowDown", widthRatio: 1.0, symbol: nil, label: "↓", labelPlacement: .center)
+            case "ArrowLeft":
+                return ShortcutKeyCap(key: "ArrowLeft", widthRatio: 1.0, symbol: nil, label: "←", labelPlacement: .center)
+            case "ArrowRight":
+                return ShortcutKeyCap(key: "ArrowRight", widthRatio: 1.0, symbol: nil, label: "→", labelPlacement: .center)
+            default:
+                return ShortcutKeyCap(key: primaryKey, widthRatio: 1.0, symbol: nil, label: primaryKey.uppercased(), labelPlacement: .center)
+            }
+        }()
+        caps.append(primaryCap)
+        return caps
     }
 }
