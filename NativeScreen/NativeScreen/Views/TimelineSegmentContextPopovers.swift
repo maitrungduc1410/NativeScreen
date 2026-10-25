@@ -91,7 +91,9 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
                 }
             )
         )
-        volumeView.frame = NSRect(x: 0, y: 0, width: 256, height: 54)
+        volumeView.sizingOptions = []
+        volumeView.autoresizingMask = [.width]
+        volumeView.frame = NSRect(x: 0, y: 0, width: 276, height: 54)
         volumeItem.view = volumeView
         menu.addItem(volumeItem)
 
@@ -139,6 +141,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         }
         menu.addItem(resetAllItem)
 
+        syncCustomItemViewWidths(in: menu, minimumWidth: 276)
         activeMenu = menu
         popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
     }
@@ -165,7 +168,9 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
                 zoomId: zoomId
             )
         )
-        paletteView.frame = NSRect(x: 0, y: 0, width: 258, height: 64)
+        paletteView.sizingOptions = []
+        paletteView.autoresizingMask = [.width]
+        paletteView.frame = NSRect(x: 0, y: 0, width: 280, height: 64)
         paletteItem.view = paletteView
         menu.addItem(paletteItem)
 
@@ -187,7 +192,9 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
                 }
             )
         )
-        sliderView.frame = NSRect(x: 0, y: 0, width: 258, height: 54)
+        sliderView.sizingOptions = []
+        sliderView.autoresizingMask = [.width]
+        sliderView.frame = NSRect(x: 0, y: 0, width: 280, height: 54)
         sliderItem.view = sliderView
         menu.addItem(sliderItem)
 
@@ -229,6 +236,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
             session.deleteZoom(zoomId: zoomId)
         })
 
+        syncCustomItemViewWidths(in: menu, minimumWidth: 280)
         activeMenu = menu
         popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
     }
@@ -262,7 +270,9 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
                 maskId: maskId
             )
         )
-        paletteView.frame = NSRect(x: 0, y: 0, width: 252, height: 64)
+        paletteView.sizingOptions = []
+        paletteView.autoresizingMask = [.width]
+        paletteView.frame = NSRect(x: 0, y: 0, width: 264, height: 64)
         paletteItem.view = paletteView
         menu.addItem(paletteItem)
 
@@ -295,8 +305,32 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
             session.deleteMask(maskId: maskId)
         })
 
+        syncCustomItemViewWidths(in: menu, minimumWidth: 264)
         activeMenu = menu
         popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
+    }
+
+    /// Ensures all custom `NSMenuItem.view` rows (`PaletteRow`, `SliderRow`) span 100% of the final `NSMenu` width
+    /// with zero leftover space on the right!
+    private func syncCustomItemViewWidths(in menu: NSMenu, minimumWidth: CGFloat) {
+        let computedMenuWidth = max(minimumWidth, ceil(menu.size.width))
+        menu.minimumWidth = computedMenuWidth
+        for item in menu.items {
+            if let customView = item.view {
+                if let hosting = customView as? NSHostingView<AnyView> {
+                    hosting.sizingOptions = []
+                }
+                customView.autoresizingMask = [.width]
+                customView.frame = NSRect(
+                    x: 0,
+                    y: 0,
+                    width: computedMenuWidth,
+                    height: customView.frame.height
+                )
+                customView.needsLayout = true
+                customView.layoutSubtreeIfNeeded()
+            }
+        }
     }
 
     /// Pops up a timeline context menu so it ALWAYS extends **upward** above the clicked point (`top + right` by default),
@@ -432,6 +466,7 @@ private struct ZoomPaletteHeaderRowView: View {
                 session.setZoomPresentation(id: zoomId, presentation: .loupe)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
     }
@@ -499,6 +534,7 @@ private struct MaskPaletteHeaderRowView: View {
                 session.setMaskType(id: maskId, type: .blur)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
     }
@@ -627,6 +663,7 @@ private struct MenuEmbeddedSliderRowView: View {
             }
             .frame(height: 16)
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
     }

@@ -1098,6 +1098,8 @@ public final class HUDNativeMenuPresenter: NSObject {
         // 1. Section Header: "Before Recording"
         let beforeHeaderItem = NSMenuItem()
         let beforeHeaderView = NSHostingView(rootView: HUDMenuSectionHeaderView(title: "Before Recording"))
+        beforeHeaderView.sizingOptions = []
+        beforeHeaderView.autoresizingMask = [.width]
         beforeHeaderView.frame = NSRect(x: 0, y: 0, width: menuWidth, height: 26)
         beforeHeaderItem.view = beforeHeaderView
         menu.addItem(beforeHeaderItem)
@@ -1108,6 +1110,8 @@ public final class HUDNativeMenuPresenter: NSObject {
         let countdownIntrinsicW = ceil(countdownView.fittingSize.width)
         let effectiveWidth = max(menuWidth, countdownIntrinsicW)
         beforeHeaderView.frame.size.width = effectiveWidth
+        countdownView.sizingOptions = []
+        countdownView.autoresizingMask = [.width]
         countdownView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 38)
         countdownItem.view = countdownView
         menu.addItem(countdownItem)
@@ -1117,6 +1121,8 @@ public final class HUDNativeMenuPresenter: NSObject {
         // 3. Section Header: "While Recording"
         let whileHeaderItem = NSMenuItem()
         let whileHeaderView = NSHostingView(rootView: HUDMenuSectionHeaderView(title: "While Recording"))
+        whileHeaderView.sizingOptions = []
+        whileHeaderView.autoresizingMask = [.width]
         whileHeaderView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 26)
         whileHeaderItem.view = whileHeaderView
         menu.addItem(whileHeaderItem)
@@ -1132,6 +1138,8 @@ public final class HUDNativeMenuPresenter: NSObject {
                 )
             )
         )
+        desktopIconsView.sizingOptions = []
+        desktopIconsView.autoresizingMask = [.width]
         desktopIconsView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 34)
         desktopIconsItem.view = desktopIconsView
         menu.addItem(desktopIconsItem)
@@ -1146,6 +1154,8 @@ public final class HUDNativeMenuPresenter: NSObject {
                 )
             )
         )
+        dockIconView.sizingOptions = []
+        dockIconView.autoresizingMask = [.width]
         dockIconView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 34)
         dockIconItem.view = dockIconView
         menu.addItem(dockIconItem)
@@ -1160,9 +1170,12 @@ public final class HUDNativeMenuPresenter: NSObject {
                 )
             )
         )
+        highlightAreaView.sizingOptions = []
+        highlightAreaView.autoresizingMask = [.width]
         highlightAreaView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 36)
         highlightAreaItem.view = highlightAreaView
         menu.addItem(highlightAreaItem)
+        menu.minimumWidth = effectiveWidth
 
         activeMenu = menu
         popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
