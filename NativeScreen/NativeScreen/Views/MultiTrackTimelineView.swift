@@ -19,6 +19,7 @@ public struct MultiTrackTimelineView: View {
     @State private var verticalContentHeight: CGFloat = 180.0
     @State private var horizontalScrollView: NSScrollView?
     @State private var lastZoomForAnchor: Double = 1.0
+    @State private var splitWigglePhase: Bool = false
 
     private let labelColumnWidth: CGFloat = 104
     private let trackHorizontalInset: CGFloat = 20
@@ -195,12 +196,14 @@ public struct MultiTrackTimelineView: View {
                                                 totalTimelineMs: totalTimelineMs,
                                                 minorTickStepSec: stepInfo.minor
                                             )
+                                            .offset(y: trackSplitWiggleOffsetY(trackOrder: 0))
 
                                             // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
                                             zoomLaneView(
                                                 contentWidth: contentWidth,
                                                 totalTimelineMs: totalTimelineMs
                                             )
+                                            .offset(y: trackSplitWiggleOffsetY(trackOrder: 1))
 
                                             // Lane 3+: Dynamic Mask Tracks (`34pt` height)
                                             ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
@@ -210,6 +213,7 @@ public struct MultiTrackTimelineView: View {
                                                     contentWidth: contentWidth,
                                                     totalTimelineMs: totalTimelineMs
                                                 )
+                                                .offset(y: trackSplitWiggleOffsetY(trackOrder: 2 + trackIdx))
                                             }
                                         }
                                         .padding(.vertical, 8)
@@ -353,6 +357,28 @@ public struct MultiTrackTimelineView: View {
                         totalTimelineMs: totalTimelineMs
                     )
                 }
+                // Split Mode Track Wiggle Animation:
+                // When `isSplitModeActive` is enabled, each track (with all its segments moving together)
+                // gently oscillates up and down in alternating phase (`+1.6pt` vs `-1.6pt`)!
+                .onChange(of: session.isSplitModeActive) { _, isActive in
+                    if isActive {
+                        splitWigglePhase = false
+                        withAnimation(.easeInOut(duration: 0.42).repeatForever(autoreverses: true)) {
+                            splitWigglePhase = true
+                        }
+                    } else {
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            splitWigglePhase = false
+                        }
+                    }
+                }
+                .onAppear {
+                    if session.isSplitModeActive {
+                        withAnimation(.easeInOut(duration: 0.42).repeatForever(autoreverses: true)) {
+                            splitWigglePhase = true
+                        }
+                    }
+                }
                 // Trackpad 2-Finger Pinch-to-Zoom Gesture
                 .gesture(
                     MagnifyGesture()
@@ -376,6 +402,15 @@ public struct MultiTrackTimelineView: View {
     private struct ScrollMetrics: Equatable {
         let offsetY: CGFloat
         let contentHeight: CGFloat
+    }
+
+    /// Computes the gentle up/down vertical oscillation offset for an entire track lane when Split Mode is active.
+    /// Adjacent tracks (`trackOrder % 2 == 0` vs `1`) move in opposite vertical directions (`+1.6pt` vs `-1.6pt`)!
+    private func trackSplitWiggleOffsetY(trackOrder: Int) -> CGFloat {
+        guard session.isSplitModeActive else { return 0.0 }
+        let direction: CGFloat = (trackOrder % 2 == 0) ? 1.0 : -1.0
+        let amplitude: CGFloat = 1.65
+        return (splitWigglePhase ? amplitude : -amplitude) * direction
     }
 
     /// Adjusts the horizontal `NSScrollView` content offset whenever `timelineZoom` changes so the Playhead stays

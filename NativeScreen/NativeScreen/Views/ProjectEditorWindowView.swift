@@ -587,7 +587,9 @@ public struct ProjectEditorWindowView: View {
             switch event.keyCode {
             case 53: // ESC: Exit Split Mode or clear selection
                 if session.isSplitModeActive {
-                    session.isSplitModeActive = false
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        session.isSplitModeActive = false
+                    }
                     NSCursor.arrow.set()
                     return nil
                 }
