@@ -2012,25 +2012,41 @@ private struct HUDSwitchMenuRowView: View {
 private struct HUDLiquidGlassBackgroundView: NSViewRepresentable {
     let cornerRadius: CGFloat
 
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material = .menu
-        v.blendingMode = .behindWindow
-        v.state = .active
-        v.isEmphasized = true
-        v.wantsLayer = true
-        v.layer?.cornerRadius = cornerRadius
-        v.layer?.cornerCurve = .continuous
-        v.layer?.masksToBounds = true
-        return v
+    func makeNSView(context: Context) -> NSView {
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.style = .clear
+            glass.cornerRadius = cornerRadius
+            glass.tintColor = NSColor(red: 0.06, green: 0.06, blue: 0.09, alpha: 0.34)
+            return glass
+        } else {
+            let v = NSVisualEffectView()
+            v.material = .hudWindow
+            v.blendingMode = .behindWindow
+            v.state = .active
+            v.isEmphasized = false
+            v.alphaValue = 0.80
+            v.wantsLayer = true
+            v.layer?.cornerRadius = cornerRadius
+            v.layer?.cornerCurve = .continuous
+            v.layer?.masksToBounds = true
+            return v
+        }
     }
 
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = .menu
-        nsView.blendingMode = .behindWindow
-        nsView.state = .active
-        nsView.isEmphasized = true
-        nsView.layer?.cornerRadius = cornerRadius
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if #available(macOS 26.0, *), let glass = nsView as? NSGlassEffectView {
+            glass.style = .clear
+            glass.cornerRadius = cornerRadius
+            glass.tintColor = NSColor(red: 0.06, green: 0.06, blue: 0.09, alpha: 0.34)
+        } else if let v = nsView as? NSVisualEffectView {
+            v.material = .hudWindow
+            v.blendingMode = .behindWindow
+            v.state = .active
+            v.isEmphasized = false
+            v.alphaValue = 0.80
+            v.layer?.cornerRadius = cornerRadius
+        }
     }
 }
 
@@ -2622,14 +2638,10 @@ public struct WindowAndAreaPickerOverlayView: View {
                         .padding(.top, 4)
                     }
                     .padding(22)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color.black.opacity(0.35))
-                    )
+                    .background(HUDLiquidGlassBackgroundView(cornerRadius: 18))
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+                            .strokeBorder(.white.opacity(0.18), lineWidth: 1)
                     )
                 }
                 .frame(width: localRect.width, height: localRect.height)
@@ -2671,10 +2683,10 @@ public struct WindowAndAreaPickerOverlayView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(24)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .background(
+                    .background(HUDLiquidGlassBackgroundView(cornerRadius: 18))
+                    .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color.black.opacity(0.35))
+                            .strokeBorder(.white.opacity(0.18), lineWidth: 1)
                     )
                 }
                 .padding(8)

@@ -26,7 +26,9 @@ public struct ProjectEditorWindowView: View {
     @State private var exportProgress: Double = 0.0
     @State private var exportError: String?
     @State private var keyEventMonitor: Any?
+    @State private var flagsChangedMonitor: Any?
     @State private var mouseDownMonitor: Any?
+    @State private var isOptionKeyHeldForSplit = false
 
     public init(session: ProjectSession) {
         self.session = session
@@ -386,7 +388,7 @@ public struct ProjectEditorWindowView: View {
                     // Unified Transport Playback & Timeline Bar (layout:
                     // Left = Split Tool `✂️` | Center = Timecodes + Jump Start / Play / Jump End with Top Tooltips | Right = Extract Frame + Timeline Zoom Slider)
                     ZStack {
-                        // Left: Split Tool Button (`✂️` — Matches Images 4 & 5: `Split clip ⌥`, purple icon & dark purple pill when active!)
+                        // Left: Split Tool Button (`✂️` — Dual activation: Click to toggle OR Hold Option `⌥` key!)
                         HStack(spacing: 8) {
                             InstantTooltipButton(
                                 tooltip: "Split clip (⌥)",
@@ -395,7 +397,11 @@ public struct ProjectEditorWindowView: View {
                                 size: 32,
                                 cornerRadius: 8
                             ) {
+                                isOptionKeyHeldForSplit = false
                                 session.isSplitModeActive.toggle()
+                                if !session.isSplitModeActive {
+                                    NSCursor.arrow.set()
+                                }
                             } label: {
                                 Image(systemName: "scissors")
                                     .font(.system(size: 13.5, weight: .semibold))
@@ -574,6 +580,29 @@ public struct ProjectEditorWindowView: View {
             return event
         }
 
+        // Hold `Option` (`⌥`) key to temporarily enable Split Mode (`Split clip (⌥)`), and turn it off immediately on release!
+        flagsChangedMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            if let responder = event.window?.firstResponder, responder is NSTextView {
+                return event
+            }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let isOnlyOptionPressed = (flags == .option)
+
+            if isOnlyOptionPressed {
+                if !session.isSplitModeActive {
+                    isOptionKeyHeldForSplit = true
+                    session.isSplitModeActive = true
+                }
+            } else {
+                if isOptionKeyHeldForSplit {
+                    isOptionKeyHeldForSplit = false
+                    session.isSplitModeActive = false
+                    NSCursor.arrow.set()
+                }
+            }
+            return event
+        }
+
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if let responder = event.window?.firstResponder, responder is NSTextView {
                 if event.keyCode == 53 { // ESC while editing title
@@ -587,9 +616,8 @@ public struct ProjectEditorWindowView: View {
             switch event.keyCode {
             case 53: // ESC: Exit Split Mode or clear selection
                 if session.isSplitModeActive {
-                    withAnimation(.easeOut(duration: 0.16)) {
-                        session.isSplitModeActive = false
-                    }
+                    isOptionKeyHeldForSplit = false
+                    session.isSplitModeActive = false
                     NSCursor.arrow.set()
                     return nil
                 }
@@ -658,6 +686,10 @@ public struct ProjectEditorWindowView: View {
         if let monitor = keyEventMonitor {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil
+        }
+        if let fMonitor = flagsChangedMonitor {
+            NSEvent.removeMonitor(fMonitor)
+            flagsChangedMonitor = nil
         }
         if let mMonitor = mouseDownMonitor {
             NSEvent.removeMonitor(mMonitor)

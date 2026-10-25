@@ -577,24 +577,53 @@ public final class MetalFrameCompositor {
         let cx = screenFrameRect.minX + CGFloat(cursorState.position01.x) * screenFrameRect.width
         let cy = screenFrameRect.minY + CGFloat(1.0 - cursorState.position01.y) * screenFrameRect.height
 
-        // 1. Click Ripple Ring
+        // 1. Click Effect (`Circle` vs `Ripple`)
         if let progress = cursorState.activeClickProgress, cursorConfig.clickEffect.visualStyle != .none {
             let maxRippleRadius = 46.0 * canvasScale * CGFloat(cursorConfig.scale)
             let radius = max(4.0, maxRippleRadius * CGFloat(progress))
-            let alpha = CGFloat(max(0.0, (1.0 - progress) * 0.75 * cursorState.opacity))
+            let alpha = CGFloat(max(0.0, (1.0 - progress) * 0.72 * cursorState.opacity))
             let rippleExtent = CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2)
-            if let circle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                "inputExtent": CIVector(cgRect: rippleExtent),
-                "inputRadius": radius,
-                "inputColor": CIColor(red: 0.48, green: 0.42, blue: 1.0, alpha: alpha)
-            ])?.outputImage {
-                result = circle.composited(over: result)
+
+            if cursorConfig.clickEffect.visualStyle == .circle {
+                if let circle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                    "inputExtent": CIVector(cgRect: rippleExtent),
+                    "inputRadius": radius,
+                    "inputColor": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha * 0.65)
+                ])?.outputImage {
+                    result = circle.composited(over: result)
+                }
+            } else {
+                // Ripple ring wave (outer disc minus inner cutout disc)
+                let ringThickness = max(2.5, 6.0 * canvasScale * CGFloat(1.0 - progress * 0.5))
+                let innerRadius = max(0.0, radius - ringThickness)
+                let innerExtent = CGRect(x: cx - innerRadius, y: cy - innerRadius, width: innerRadius * 2, height: innerRadius * 2)
+                if let outer = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                    "inputExtent": CIVector(cgRect: rippleExtent),
+                    "inputRadius": radius,
+                    "inputColor": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha)
+                ])?.outputImage {
+                    if innerRadius > 1.0,
+                       let innerMask = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                           "inputExtent": CIVector(cgRect: innerExtent),
+                           "inputRadius": innerRadius,
+                           "inputColor": CIColor.white
+                       ])?.outputImage {
+                        let ring = outer.applyingFilter("CISourceOutCompositing", parameters: [
+                            kCIInputBackgroundImageKey: innerMask
+                        ]).cropped(to: rippleExtent)
+                        result = ring.composited(over: result)
+                    } else {
+                        result = outer.composited(over: result)
+                    }
+                }
             }
         }
 
-        // 2. High-DPI Vector Cursor Sprite
+        // 2. High-DPI Vector Cursor Sprite (With Set + Variant + Always-Use-Pointer support!)
         let (rawSprite, hotspot01) = CursorSpriteProvider.shared.ciCursorImage(
             themeId: cursorConfig.themeId,
+            variantId: cursorConfig.variantId,
+            alwaysUsePointer: cursorConfig.alwaysUsePointer,
             cursorType: cursorState.cursorType
         )
         let targetSpriteHeight = 32.0 * canvasScale * CGFloat(cursorConfig.scale)

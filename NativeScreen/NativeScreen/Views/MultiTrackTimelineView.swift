@@ -188,45 +188,52 @@ public struct MultiTrackTimelineView: View {
 
                                 // B2. HORIZONTALLY SCROLLABLE TRACK LANES
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    ZStack(alignment: .topLeading) {
-                                        VStack(alignment: .leading, spacing: rowSpacing) {
-                                            // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
-                                            clipLaneView(
-                                                contentWidth: contentWidth,
-                                                totalTimelineMs: totalTimelineMs,
-                                                minorTickStepSec: stepInfo.minor
-                                            )
-                                            .offset(y: trackSplitWiggleOffsetY(trackOrder: 0))
+                                    TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !session.isSplitModeActive)) { timelineCtx in
+                                        let baseWiggleY: CGFloat = session.isSplitModeActive
+                                            ? CGFloat(sin(timelineCtx.date.timeIntervalSinceReferenceDate * (2.0 * .pi / 0.70))) * 1.0
+                                            : 0.0
 
-                                            // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
-                                            zoomLaneView(
-                                                contentWidth: contentWidth,
-                                                totalTimelineMs: totalTimelineMs
-                                            )
-                                            .offset(y: trackSplitWiggleOffsetY(trackOrder: 1))
+                                        ZStack(alignment: .topLeading) {
+                                            VStack(alignment: .leading, spacing: rowSpacing) {
+                                                // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
+                                                clipLaneView(
+                                                    contentWidth: contentWidth,
+                                                    totalTimelineMs: totalTimelineMs,
+                                                    minorTickStepSec: stepInfo.minor
+                                                )
+                                                .offset(y: baseWiggleY)
 
-                                            // Lane 3+: Dynamic Mask Tracks (`34pt` height)
-                                            ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
-                                                maskLaneView(
-                                                    track: track,
-                                                    trackIndex: trackIdx,
+                                                // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
+                                                zoomLaneView(
                                                     contentWidth: contentWidth,
                                                     totalTimelineMs: totalTimelineMs
                                                 )
-                                                .offset(y: trackSplitWiggleOffsetY(trackOrder: 2 + trackIdx))
-                                            }
-                                        }
-                                        .padding(.vertical, 8)
-                                        .padding(.horizontal, trackHorizontalInset)
-                                        .background(
-                                            HorizontalScrollViewIntrospector { sv in
-                                                if horizontalScrollView !== sv {
-                                                    horizontalScrollView = sv
+                                                .offset(y: -baseWiggleY)
+
+                                                // Lane 3+: Dynamic Mask Tracks (`34pt` height)
+                                                ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
+                                                    let dir: CGFloat = ((2 + trackIdx) % 2 == 0) ? 1.0 : -1.0
+                                                    maskLaneView(
+                                                        track: track,
+                                                        trackIndex: trackIdx,
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                    .offset(y: baseWiggleY * dir)
                                                 }
                                             }
-                                        )
+                                            .padding(.vertical, 8)
+                                            .padding(.horizontal, trackHorizontalInset)
+                                            .background(
+                                                HorizontalScrollViewIntrospector { sv in
+                                                    if horizontalScrollView !== sv {
+                                                        horizontalScrollView = sv
+                                                    }
+                                                }
+                                            )
+                                        }
+                                        .frame(width: totalDocumentWidth)
                                     }
-                                    .frame(width: totalDocumentWidth)
                                     .coordinateSpace(name: "timelineContentSpace")
                                     .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
                                         switch phase {
@@ -357,28 +364,6 @@ public struct MultiTrackTimelineView: View {
                         totalTimelineMs: totalTimelineMs
                     )
                 }
-                // Split Mode Track Wiggle Animation:
-                // When `isSplitModeActive` is enabled, each track (with all its segments moving together)
-                // gently oscillates up and down in alternating phase (`+1.6pt` vs `-1.6pt`)!
-                .onChange(of: session.isSplitModeActive) { _, isActive in
-                    if isActive {
-                        splitWigglePhase = false
-                        withAnimation(.easeInOut(duration: 0.42).repeatForever(autoreverses: true)) {
-                            splitWigglePhase = true
-                        }
-                    } else {
-                        withAnimation(.easeOut(duration: 0.16)) {
-                            splitWigglePhase = false
-                        }
-                    }
-                }
-                .onAppear {
-                    if session.isSplitModeActive {
-                        withAnimation(.easeInOut(duration: 0.42).repeatForever(autoreverses: true)) {
-                            splitWigglePhase = true
-                        }
-                    }
-                }
                 // Trackpad 2-Finger Pinch-to-Zoom Gesture
                 .gesture(
                     MagnifyGesture()
@@ -402,15 +387,6 @@ public struct MultiTrackTimelineView: View {
     private struct ScrollMetrics: Equatable {
         let offsetY: CGFloat
         let contentHeight: CGFloat
-    }
-
-    /// Computes the gentle up/down vertical oscillation offset for an entire track lane when Split Mode is active.
-    /// Adjacent tracks (`trackOrder % 2 == 0` vs `1`) move in opposite vertical directions (`+1.6pt` vs `-1.6pt`)!
-    private func trackSplitWiggleOffsetY(trackOrder: Int) -> CGFloat {
-        guard session.isSplitModeActive else { return 0.0 }
-        let direction: CGFloat = (trackOrder % 2 == 0) ? 1.0 : -1.0
-        let amplitude: CGFloat = 1.65
-        return (splitWigglePhase ? amplitude : -amplitude) * direction
     }
 
     /// Adjusts the horizontal `NSScrollView` content offset whenever `timelineZoom` changes so the Playhead stays
@@ -452,16 +428,14 @@ public struct MultiTrackTimelineView: View {
                 let xStart = CGFloat(mapped.timelineStartMs / totalTimelineMs) * contentWidth
                 let blockW = max(12.0, CGFloat((mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs) * contentWidth)
                 let isSelected = (session.selectedSliceId == mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
+                let isPlayed = (session.effectivePreviewTimelineMs >= mapped.timelineStartMs && session.effectivePreviewTimelineMs <= mapped.timelineEndMs)
 
                 TimelineInteractiveSegmentView(
                     topTitle: "Clip",
                     subtitle: formatClipSubtitle(durationMs: mapped.slice.timelineDurationMs, speed: mapped.slice.speed),
-                    gradientColors: [
-                        Color(red: 0.61, green: 0.43, blue: 0.04),
-                        Color(red: 0.72, green: 0.51, blue: 0.05),
-                        Color(red: 0.80, green: 0.57, blue: 0.07)
-                    ],
+                    palette: .clip,
                     isSelected: isSelected,
+                    isPlayed: isPlayed,
                     isDimmed: false,
                     isSplitMode: session.isSplitModeActive,
                     xOffset: xStart,
@@ -541,16 +515,14 @@ public struct MultiTrackTimelineView: View {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedZoomId == zoom.id)
+                    let isPlayed = (session.effectivePreviewTimelineMs >= tStartMs && session.effectivePreviewTimelineMs <= tEndMs)
 
                     TimelineInteractiveSegmentView(
                         topTitle: zoom.presentation == .loupe ? "Loupe" : "Zoom",
                         subtitle: String(format: "🔍 %.1fx  %@", zoom.scale, zoom.mode == .followCursor ? "Auto" : "Manual"),
-                        gradientColors: [
-                            Color(red: 0.36, green: 0.29, blue: 0.96),
-                            Color(red: 0.47, green: 0.41, blue: 0.98),
-                            Color(red: 0.56, green: 0.50, blue: 0.99)
-                        ],
+                        palette: .zoom,
                         isSelected: isSelected,
+                        isPlayed: isPlayed,
                         isDimmed: isHidden || zoom.disabled,
                         isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
@@ -626,22 +598,14 @@ public struct MultiTrackTimelineView: View {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedMaskId == item.id)
+                    let isPlayed = (session.effectivePreviewTimelineMs >= tStartMs && session.effectivePreviewTimelineMs <= tEndMs)
 
                     TimelineInteractiveSegmentView(
-                        topTitle: item.type == .blur ? item.style.rawValue.capitalized : "Highlight",
-                        subtitle: nil,
-                        gradientColors: item.type == .blur
-                            ? [
-                                Color(red: 0.54, green: 0.26, blue: 0.40),
-                                Color(red: 0.61, green: 0.30, blue: 0.45),
-                                Color(red: 0.67, green: 0.34, blue: 0.50)
-                            ]
-                            : [
-                                Color(red: 0.14, green: 0.44, blue: 0.48),
-                                Color(red: 0.19, green: 0.54, blue: 0.58),
-                                Color(red: 0.25, green: 0.64, blue: 0.68)
-                            ],
+                        topTitle: "Mask",
+                        subtitle: item.type == .blur ? "Sensitive data" : "Highlight",
+                        palette: .mask,
                         isSelected: isSelected,
+                        isPlayed: isPlayed,
                         isDimmed: isHidden || item.disabled,
                         isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
@@ -958,7 +922,63 @@ private struct ClipSegmentDecoration: Equatable, View {
     }
 }
 
-// MARK: - Interactive Segment Block with Top-to-Bottom Gradient, Waveform, Inset Handles & Golden Split Badge
+// MARK: - Segment Shader Palette
+
+private struct SegmentShaderPalette: Equatable {
+    let fillTop: Color
+    let fillBottom: Color
+    let innerEdgeGlow: Color
+    let playedInnerEdgeGlow: Color
+    let ringBorder: Color
+    let playedRingBorder: Color
+
+    /// Clip (`#93610C`):
+    /// - `fillTop`: `#93610C` (`0.576, 0.380, 0.047`)
+    /// - `fillBottom` (`lightness(+15)`): `#DA9012` (`0.855, 0.565, 0.071`)
+    /// - `glow` (`darken(0.2).opacity(0.8)`): `#764E0A` (`0.463, 0.306, 0.039, 0.80`)
+    /// - `ring` (`lightness(+40)`): `#F4C677` (`0.957, 0.776, 0.467`)
+    /// - `playedRing` (`lightness(+15)`): `#DA9012` (`0.855, 0.565, 0.071`)
+    static let clip = SegmentShaderPalette(
+        fillTop: Color(red: 0.576, green: 0.380, blue: 0.047),
+        fillBottom: Color(red: 0.855, green: 0.565, blue: 0.071),
+        innerEdgeGlow: Color(red: 0.463, green: 0.306, blue: 0.039).opacity(0.80),
+        playedInnerEdgeGlow: Color(red: 0.576, green: 0.380, blue: 0.047).opacity(0.50),
+        ringBorder: Color(red: 0.957, green: 0.776, blue: 0.467),
+        playedRingBorder: Color(red: 0.855, green: 0.565, blue: 0.071)
+    )
+
+    /// Zoom (`#4D2FF5`):
+    /// - `fillTop`: `#4D2FF5` (`0.302, 0.184, 0.961`)
+    /// - `fillBottom` (`lightness(+15)`): `#8B78F9` (`0.545, 0.471, 0.976`)
+    /// - `glow` (`darken(0.2).opacity(0.8)`): `#2B0BDF` (`0.169, 0.043, 0.875, 0.80`)
+    /// - `ring` (`lightness(+40)`): `#F4F2FE` (`0.957, 0.949, 0.996`)
+    /// - `playedRing` (`lightness(+15)`): `#8B78F9` (`0.545, 0.471, 0.976`)
+    static let zoom = SegmentShaderPalette(
+        fillTop: Color(red: 0.302, green: 0.184, blue: 0.961),
+        fillBottom: Color(red: 0.545, green: 0.471, blue: 0.976),
+        innerEdgeGlow: Color(red: 0.169, green: 0.043, blue: 0.875).opacity(0.80),
+        playedInnerEdgeGlow: Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.50),
+        ringBorder: Color(red: 0.957, green: 0.949, blue: 0.996),
+        playedRingBorder: Color(red: 0.545, green: 0.471, blue: 0.976)
+    )
+
+    /// Mask (`#82345A`):
+    /// - `fillTop`: `#82345A` (`0.510, 0.204, 0.353`)
+    /// - `fillBottom` (`lightness(+15)`): `#B74B80` (`0.718, 0.294, 0.502`)
+    /// - `glow` (`darken(0.2).opacity(0.8)`): `#682A48` (`0.408, 0.165, 0.282, 0.80`)
+    /// - `ring` (`lightness(+40)`): `#DCA6C0` (`0.863, 0.651, 0.753`)
+    /// - `playedRing` (`lightness(+15)`): `#B74B80` (`0.718, 0.294, 0.502`)
+    static let mask = SegmentShaderPalette(
+        fillTop: Color(red: 0.510, green: 0.204, blue: 0.353),
+        fillBottom: Color(red: 0.718, green: 0.294, blue: 0.502),
+        innerEdgeGlow: Color(red: 0.408, green: 0.165, blue: 0.282).opacity(0.80),
+        playedInnerEdgeGlow: Color(red: 0.510, green: 0.204, blue: 0.353).opacity(0.50),
+        ringBorder: Color(red: 0.863, green: 0.651, blue: 0.753),
+        playedRingBorder: Color(red: 0.718, green: 0.294, blue: 0.502)
+    )
+}
+
+// MARK: - Interactive Segment Block with Shader Look, Waveform, Inset Handles & Normal-Weight Labels
 
 private struct TimelineInteractiveSegmentView: View {
     private enum SegmentDragMode {
@@ -969,8 +989,9 @@ private struct TimelineInteractiveSegmentView: View {
 
     let topTitle: String
     let subtitle: String?
-    let gradientColors: [Color]
+    let palette: SegmentShaderPalette
     let isSelected: Bool
+    let isPlayed: Bool
     let isDimmed: Bool
     let isSplitMode: Bool
     let xOffset: CGFloat
@@ -1006,43 +1027,58 @@ private struct TimelineInteractiveSegmentView: View {
         // 1px visual gap between adjacent touching segments
         let segWidth = max(6.0, width - 1.0)
         let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
+        let activeGlowColor = isPlayed ? palette.playedInnerEdgeGlow : palette.innerEdgeGlow
+        let outerRingColor: Color = isSelected
+            ? Color.white
+            : (isPlayed ? palette.playedRingBorder : palette.ringBorder)
 
         ZStack(alignment: .leading) {
-            // 1. Pure Top-to-Bottom Vertical LinearGradient (Darker at top, lighter at bottom — sRGB profile!)
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            // 1. `shadeBody` Vertical LinearGradient (`fillTop` -> `fillBottom`)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: gradientColors,
+                        colors: [palette.fillTop, palette.fillBottom],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
+
+            // 1b. Inner Edge Blurred Vignette (`glowColor * glowAlpha` with `inset: 3px, sigma: 7.5px` from `shadeBody`)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(activeGlowColor, lineWidth: 8.5)
+                .blur(radius: 5.5)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top (Equatable so it never redraws during hover skimming!)
             if let deco = clipDecoration {
                 EquatableView(content: deco)
             }
 
-            // 3. Crisp Specular Inner Rim & Selection Border
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            // 3. Crisp 1px Outer Ring Border (`#FFFFFF` when selected, `playedRing` when playhead is inside, `ring` otherwise!)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
-                    isSelected
-                        ? Color.white.opacity(0.85)
-                        : (isHovered ? Color.white.opacity(0.45) : Color.white.opacity(0.28)),
-                    lineWidth: isSelected ? 1.5 : 1.0
+                    outerRingColor.opacity(isSelected ? 0.96 : (isHovered ? 0.85 : 0.72)),
+                    lineWidth: 1.0
                 )
 
-            // 4. Centered Title & Subtitle
+            // 4. Centered Title & Subtitle (Regular/Normal weight — NOT bold!)
             if segWidth > 42 {
                 VStack(spacing: 1.5) {
-                    Text(topTitle)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(subtitle != nil ? 0.55 : 0.92))
-                        .lineLimit(1)
+                    if height >= 42 {
+                        Text(topTitle)
+                            .font(.system(size: 11.0, weight: .regular))
+                            .foregroundStyle(.white.opacity(subtitle != nil ? 0.48 : 0.92))
+                            .lineLimit(1)
+                    }
 
-                    if let sub = subtitle, segWidth > 76 {
+                    if let sub = subtitle, segWidth > 68 {
                         Text(sub)
-                            .font(.system(size: 11.5, weight: .semibold))
+                            .font(.system(size: 12.0, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.95))
+                            .lineLimit(1)
+                    } else if height < 42 {
+                        Text(subtitle ?? topTitle)
+                            .font(.system(size: 11.5, weight: .regular))
                             .foregroundStyle(.white.opacity(0.95))
                             .lineLimit(1)
                     }

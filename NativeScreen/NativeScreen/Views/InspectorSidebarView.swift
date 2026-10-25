@@ -6,6 +6,11 @@ import AppKit
 public struct InspectorSidebarView: View {
     @Bindable var session: ProjectSession
     @State private var systemWallpapers: [SystemWallpaperItem] = []
+    @State private var isRotationSectionExpanded: Bool = true
+    @State private var isAdvancedCursorSectionExpanded: Bool = false
+    @State private var lastRememberedIdleMs: Double = 2000.0
+    @State private var lastRememberedLoopMs: Double = 1000.0
+    @State private var lastRememberedShakeThreshold: Double = 4.0
 
     public init(session: ProjectSession) {
         self.session = session
@@ -259,143 +264,557 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 2. Cursor & Spring Physics Inspector
+    // MARK: - 2. Cursor & Spring Physics Inspector (Layout & Full 24 Cursor Sets + Variants)
 
     @ViewBuilder
     private var cursorInspector: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Cursor Style")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+        let cursor = session.document.cursor
+        let normalizedThemeId = CursorThemePreset.normalizeThemeId(cursor.themeId)
+        let activeTheme = CursorThemePreset.theme(withId: normalizedThemeId)
 
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                    ForEach(CursorThemePreset.allThemes) { theme in
-                        let currentId = session.document.cursor.themeId == "macos-default"
-                            ? "macos-tahoe"
-                            : session.document.cursor.themeId
-                        let isSelected = (currentId == theme.id)
+        VStack(alignment: .leading, spacing: 18) {
+            if let slice = session.currentActiveSlice, slice.hideCursor {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                        Text("Cursor is hidden in this part of the recording, so you will not see changes you make to it.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.88))
+                    }
+                    Button {
+                        session.selectedInspectorTab = .audio
+                    } label: {
+                        Text("Open clip settings")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .background(Color.yellow.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.yellow.opacity(0.28), lineWidth: 1)
+                )
+            }
 
-                        Button {
-                            session.mutate { $0.cursor.themeId = theme.id }
-                        } label: {
-                            Image(nsImage: CursorSpriteProvider.shared.previewNSImage(themeId: theme.id))
-                                .resizable()
-                                .interpolation(.high)
-                                .frame(width: 32, height: 32)
+            if cursor.hidden {
+                inspectorToggleRow(
+                    title: "Hide cursor",
+                    icon: "eye.slash",
+                    description: nil,
+                    isOn: Binding(
+                        get: { session.document.cursor.hidden },
+                        set: { v in session.mutate { $0.cursor.hidden = v } }
+                    )
+                )
+            } else {
+                // 1. Cursor size slider + Reset
+                VStack(alignment: .leading, spacing: 6) {
+                    coalescedSlider(
+                        title: "Cursor size",
+                        value: Binding(
+                            get: { session.document.cursor.scale },
+                            set: { v in session.mutate { $0.cursor.scale = v } }
+                        ),
+                        range: 0.5...3.5,
+                        defaultValue: 1.6
+                    )
+
+                    if cursor.scale < 0.75 {
+                        Text("With small cursor size, consider disabling mouse cursor motion blur as it might reduce cursor visibility")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                }
+
+                // 2. Cursor style (Single-row horizontal ScrollView + auto-center on click + Variant selector row!)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Cursor style")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.92))
+
+                    ScrollViewReader { scrollProxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(CursorThemePreset.allThemes) { theme in
+                                    let isSelected = (normalizedThemeId == theme.id)
+                                    let previewVariantId = isSelected ? cursor.variantId : nil
+
+                                    CursorStyleHorizontalCardView(
+                                        theme: theme,
+                                        selectedVariantId: previewVariantId,
+                                        isSelected: isSelected,
+                                        cardSize: 52,
+                                        iconSize: 32
+                                    ) {
+                                        session.mutate {
+                                            $0.cursor.themeId = theme.id
+                                            if !theme.pointerVariants.isEmpty {
+                                                let currentVar = $0.cursor.variantId
+                                                if currentVar == nil || !theme.pointerVariants.contains(where: { $0.id == currentVar }) {
+                                                    $0.cursor.variantId = theme.pointerVariants.first?.id
+                                                }
+                                            } else {
+                                                $0.cursor.variantId = nil
+                                            }
+                                        }
+                                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                                            scrollProxy.scrollTo(theme.id, anchor: .center)
+                                        }
+                                    }
+                                    .id(theme.id)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .onAppear {
+                            DispatchQueue.main.async {
+                                scrollProxy.scrollTo(normalizedThemeId, anchor: .center)
+                            }
+                        }
+                        .onChange(of: normalizedThemeId) { _, newId in
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                                scrollProxy.scrollTo(newId, anchor: .center)
+                            }
+                        }
+                    }
+
+                    // Variant Row (Shown whenever the selected cursor set has multiple variants, e.g. `custom-7`, `custom-1`, `halloween`)
+                    if !activeTheme.pointerVariants.isEmpty {
+                        let activeVariantId = cursor.variantId
+                            .flatMap { id in activeTheme.pointerVariants.contains(where: { $0.id == id }) ? id : nil }
+                            ?? activeTheme.pointerVariants[0].id
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Variant")
+                                .font(.system(size: 12.5, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.45))
+
+                            ScrollViewReader { variantProxy in
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 7) {
+                                        ForEach(activeTheme.pointerVariants) { variant in
+                                            let isVarSelected = (activeVariantId == variant.id)
+
+                                            Button {
+                                                session.mutate {
+                                                    $0.cursor.variantId = variant.id
+                                                }
+                                                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                                                    variantProxy.scrollTo(variant.id, anchor: .center)
+                                                }
+                                            } label: {
+                                                Image(nsImage: CursorSpriteProvider.shared.previewNSImage(themeId: activeTheme.id, variantId: variant.id))
+                                                    .resizable()
+                                                    .interpolation(.high)
+                                                    .aspectRatio(contentMode: .fit)
+                                                    .frame(width: 24, height: 24)
+                                                    .frame(width: 42, height: 42)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                            .fill(Color.white.opacity(isVarSelected ? 0.08 : 0.04))
+                                                    )
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                            .strokeBorder(
+                                                                isVarSelected
+                                                                    ? Color(red: 0.44, green: 0.34, blue: 0.98)
+                                                                    : Color.white.opacity(0.08),
+                                                                lineWidth: isVarSelected ? 1.5 : 1.0
+                                                            )
+                                                    )
+                                                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                            }
+                                            .buttonStyle(.plain)
+                                            .id(variant.id)
+                                        }
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                                .onAppear {
+                                    DispatchQueue.main.async {
+                                        variantProxy.scrollTo(activeVariantId, anchor: .center)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+                }
+
+                // 3. Always use pointer cursor
+                inspectorToggleRow(
+                    title: "Always use pointer cursor",
+                    icon: nil,
+                    description: "Don't change cursor, even if selecting text, etc.",
+                    isOn: Binding(
+                        get: { session.document.cursor.alwaysUsePointer },
+                        set: { v in session.mutate { $0.cursor.alwaysUsePointer = v } }
+                    )
+                )
+
+                inspectorDivider
+
+                // 4. Hide cursor if not moving + Loop cursor position + Hide cursor (`eye.slash`)
+                VStack(alignment: .leading, spacing: 16) {
+                    inspectorToggleRow(
+                        title: "Hide cursor if not moving",
+                        icon: nil,
+                        description: nil,
+                        isOn: Binding(
+                            get: { session.document.cursor.hideWhenIdleAfterMs != nil },
+                            set: { enabled in
+                                session.mutate {
+                                    if enabled {
+                                        $0.cursor.hideWhenIdleAfterMs = lastRememberedIdleMs
+                                    } else {
+                                        if let current = $0.cursor.hideWhenIdleAfterMs {
+                                            lastRememberedIdleMs = current
+                                        }
+                                        $0.cursor.hideWhenIdleAfterMs = nil
+                                    }
+                                }
+                            }
+                        )
+                    )
+
+                    if let idleMs = cursor.hideWhenIdleAfterMs {
+                        coalescedSlider(
+                            title: "Hide not moving cursor after",
+                            value: Binding(
+                                get: { idleMs / 1000.0 },
+                                set: { sec in
+                                    lastRememberedIdleMs = sec * 1000.0
+                                    session.mutate { $0.cursor.hideWhenIdleAfterMs = sec * 1000.0 }
+                                }
+                            ),
+                            range: 0.5...5.0,
+                            defaultValue: 2.0
+                        )
+                    }
+
+                    inspectorToggleRow(
+                        title: "Loop cursor position",
+                        icon: nil,
+                        description: "Near the end of the video, cursor will move back to its initial position",
+                        isOn: Binding(
+                            get: { session.document.cursor.loopBackToStartMs != nil },
+                            set: { enabled in
+                                session.mutate {
+                                    if enabled {
+                                        $0.cursor.loopBackToStartMs = lastRememberedLoopMs
+                                    } else {
+                                        if let current = $0.cursor.loopBackToStartMs {
+                                            lastRememberedLoopMs = current
+                                        }
+                                        $0.cursor.loopBackToStartMs = nil
+                                    }
+                                }
+                            }
+                        )
+                    )
+
+                    if let loopMs = cursor.loopBackToStartMs {
+                        coalescedSlider(
+                            title: "Loop cursor position duration",
+                            value: Binding(
+                                get: { loopMs / 1000.0 },
+                                set: { sec in
+                                    lastRememberedLoopMs = sec * 1000.0
+                                    session.mutate { $0.cursor.loopBackToStartMs = sec * 1000.0 }
+                                }
+                            ),
+                            range: 1.0...4.0,
+                            defaultValue: 1.0
+                        )
+                    }
+
+                    inspectorToggleRow(
+                        title: "Hide cursor",
+                        icon: "eye.slash",
+                        description: nil,
+                        isOn: Binding(
+                            get: { session.document.cursor.hidden },
+                            set: { v in session.mutate { $0.cursor.hidden = v } }
+                        )
+                    )
+                }
+
+                inspectorDivider
+
+                // 5. Click effect (`None` | `Circle` | `Ripple`) & Click sound (`None` | `Magic Mouse™` | `MX Master™`)
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Click effect")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        HStack(spacing: 6) {
+                            let currentVisual: ClickEffectStyle = {
+                                switch cursor.clickEffect.visualStyle {
+                                case .none: return .none
+                                case .circle: return .circle
+                                case .ripple, .pulse, .ring: return .ripple
+                                }
+                            }()
+
+                            inspectorPillOptionButton(title: "None", isSelected: currentVisual == .none) {
+                                session.mutate { $0.cursor.clickEffect.visualStyle = .none }
+                            }
+                            inspectorPillOptionButton(title: "Circle", isSelected: currentVisual == .circle) {
+                                session.mutate { $0.cursor.clickEffect.visualStyle = .circle }
+                            }
+                            inspectorPillOptionButton(title: "Ripple", isSelected: currentVisual == .ripple) {
+                                session.mutate { $0.cursor.clickEffect.visualStyle = .ripple }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Click sound")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        let normalizedSoundSet: String? = {
+                            switch cursor.clickEffect.soundSet {
+                            case "apple-magic-mouse", "magic-mouse": return "apple-magic-mouse"
+                            case "logitech-mx-master", "mx-master": return "logitech-mx-master"
+                            default: return nil
+                            }
+                        }()
+
+                        HStack(spacing: 6) {
+                            inspectorPillOptionButton(title: "None", isSelected: normalizedSoundSet == nil) {
+                                session.mutate { $0.cursor.clickEffect.soundSet = nil }
+                            }
+                            inspectorPillOptionButton(title: "Magic Mouse™", isSelected: normalizedSoundSet == "apple-magic-mouse") {
+                                session.mutate { $0.cursor.clickEffect.soundSet = "apple-magic-mouse" }
+                                CursorClickSoundPlayer.shared.playClickSound(
+                                    soundSet: "apple-magic-mouse",
+                                    volume: session.document.cursor.clickEffect.soundVolume
+                                )
+                            }
+                            inspectorPillOptionButton(title: "MX Master™", isSelected: normalizedSoundSet == "logitech-mx-master") {
+                                session.mutate { $0.cursor.clickEffect.soundSet = "logitech-mx-master" }
+                                CursorClickSoundPlayer.shared.playClickSound(
+                                    soundSet: "logitech-mx-master",
+                                    volume: session.document.cursor.clickEffect.soundVolume
+                                )
+                            }
+                        }
+
+                        if let activeSound = normalizedSoundSet {
+                            coalescedSlider(
+                                title: "Click sound volume",
+                                icon: "computermouse",
+                                value: Binding(
+                                    get: { session.document.cursor.clickEffect.soundVolume },
+                                    set: { v in session.mutate { $0.cursor.clickEffect.soundVolume = v } }
+                                ),
+                                range: 0.0...1.0,
+                                defaultValue: 0.50
+                            )
+
+                            Button {
+                                CursorClickSoundPlayer.shared.playClickSound(
+                                    soundSet: activeSound,
+                                    volume: session.document.cursor.clickEffect.soundVolume
+                                )
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "speaker.wave.2")
+                                        .font(.system(size: 13, weight: .medium))
+                                    Text("Play click sound preview")
+                                        .font(.system(size: 12.5, weight: .medium))
+                                }
+                                .foregroundStyle(.white.opacity(0.92))
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 50)
+                                .frame(height: 36)
                                 .background(
-                                    isSelected
-                                        ? Color(red: 0.44, green: 0.34, blue: 0.96).opacity(0.26)
-                                        : Color.white.opacity(0.04),
-                                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.white.opacity(0.04))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(
-                                            isSelected ? Color(red: 0.54, green: 0.44, blue: 1.0) : Color.white.opacity(0.08),
-                                            lineWidth: isSelected ? 1.5 : 0.8
-                                        )
+                                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+                }
+
+                inspectorDivider
+
+                // 6. Collapsible `Rotation` Section
+                inspectorCollapsibleSection(
+                    title: "Rotation",
+                    isExpanded: $isRotationSectionExpanded
+                ) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        coalescedSlider(
+                            title: "Rotate cursor",
+                            value: Binding(
+                                get: { session.document.cursor.baseRotationDegrees },
+                                set: { v in session.mutate { $0.cursor.baseRotationDegrees = v } }
+                            ),
+                            range: -180.0...180.0,
+                            defaultValue: 0.0
+                        )
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 7) {
+                                Image(systemName: "cursorarrow.motionlines")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.88))
+                                Text("Rotate while moving")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.92))
+                            }
+
+                            Text("How the cursor rotates as it chases the mouse.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.45))
+
+                            HStack(spacing: 6) {
+                                ForEach(CursorRotationMode.allCases) { mode in
+                                    let isSelected = (cursor.rotationMode == mode)
+                                    inspectorPillOptionButton(title: mode.label, isSelected: isSelected) {
+                                        session.mutate {
+                                            $0.cursor.rotationMode = mode
+                                            $0.cursor.velocityRotationEnabled = true
+                                        }
+                                    }
+                                }
+                                Spacer()
+                            }
+
+                            Text(cursor.rotationMode.descriptionText)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.45))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if cursor.rotationMode == .tilt {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Tilt amount")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.92))
+                                Text("How strongly horizontal movement leans the cursor.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.45))
+
+                                coalescedSliderRowOnly(
+                                    value: Binding(
+                                        get: { session.document.cursor.velocityRotationIntensity },
+                                        set: { v in
+                                            session.mutate {
+                                                $0.cursor.velocityRotationIntensity = v
+                                                $0.cursor.velocityRotationEnabled = (v > 0.01)
+                                            }
+                                        }
+                                    ),
+                                    range: 0.0...2.0,
+                                    defaultValue: 0.5
+                                )
+                                .padding(.top, 3)
+                            }
+                        }
+                    }
+                }
+
+                // 7. Collapsible `Advanced` Section
+                inspectorCollapsibleSection(
+                    title: "Advanced",
+                    isExpanded: $isAdvancedCursorSectionExpanded
+                ) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        if cursor.loopBackToStartMs == nil {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Stop cursor movement at the end of the video")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.92))
+                                Text("Near the end of the video, the last mouse movement often leads to clicking \"Stop Recording,\" which you might not want to be visible. Adjust how long before the end of the video the mouse cursor will stop moving.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.45))
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                coalescedSliderRowOnly(
+                                    value: Binding(
+                                        get: { session.document.cursor.stopMovementInLastPartMs },
+                                        set: { v in session.mutate { $0.cursor.stopMovementInLastPartMs = v } }
+                                    ),
+                                    range: 0.0...5000.0,
+                                    defaultValue: 0.0
+                                )
+                                .padding(.top, 2)
+                            }
+                        }
+
+                        inspectorToggleRow(
+                            title: "Remove cursor shakes",
+                            icon: nil,
+                            description: "If you use some accessibility apps that can control your mouse, it is possible those apps will cause sudden, short movements of your mouse. This option allows trying to detect and remove them.",
+                            isOn: Binding(
+                                get: { session.document.cursor.removeShakeThresholdPx > 0.01 },
+                                set: { enabled in
+                                    session.mutate {
+                                        if enabled {
+                                            $0.cursor.removeShakeThresholdPx = max(1.0, lastRememberedShakeThreshold)
+                                        } else {
+                                            if $0.cursor.removeShakeThresholdPx > 0.01 {
+                                                lastRememberedShakeThreshold = $0.cursor.removeShakeThresholdPx
+                                            }
+                                            $0.cursor.removeShakeThresholdPx = 0.0
+                                        }
+                                    }
+                                }
+                            )
+                        )
+
+                        if cursor.removeShakeThresholdPx > 0.01 {
+                            coalescedSlider(
+                                title: "Remove cursor shakes threshold",
+                                value: Binding(
+                                    get: { session.document.cursor.removeShakeThresholdPx },
+                                    set: { v in
+                                        lastRememberedShakeThreshold = v
+                                        session.mutate { $0.cursor.removeShakeThresholdPx = v }
+                                    }
+                                ),
+                                range: 1.0...20.0,
+                                defaultValue: 4.0
+                            )
+                        }
+
+                        inspectorToggleRow(
+                            title: "Optimize cursor changes",
+                            icon: nil,
+                            description: "NativeScreen will try to minimize rapid cursor changes (eg when quickly moving over some elements) when this option is enabled.",
+                            isOn: Binding(
+                                get: { session.document.cursor.optimizeCursorChanges },
+                                set: { v in session.mutate { $0.cursor.optimizeCursorChanges = v } }
+                            )
+                        )
+
+                        inspectorToggleRow(
+                            title: "Keep cursor in sync with hovers",
+                            icon: nil,
+                            description: "When something lights up under the moving mouse, like a menu item or a button, the cursor gets there just in time, setting off a little earlier or moving a little faster, so the highlight never shows before the cursor does.",
+                            isOn: Binding(
+                                get: { session.document.cursor.keepInSyncWithHovers },
+                                set: { v in session.mutate { $0.cursor.keepInSyncWithHovers = v } }
+                            )
+                        )
                     }
                 }
             }
-
-            Divider()
-
-            Toggle("Hide cursor", isOn: Binding(
-                get: { session.document.cursor.hidden },
-                set: { v in session.mutate { $0.cursor.hidden = v } }
-            ))
-            .font(.system(size: 12))
-
-            coalescedSlider(
-                title: "Cursor size",
-                value: Binding(
-                    get: { session.document.cursor.scale },
-                    set: { v in session.mutate { $0.cursor.scale = v } }
-                ),
-                range: 0.5...3.5,
-                defaultValue: 1.6
-            )
-
-            Toggle("Rotate cursor with velocity", isOn: Binding(
-                get: { session.document.cursor.velocityRotationEnabled },
-                set: { v in session.mutate { $0.cursor.velocityRotationEnabled = v } }
-            ))
-            .font(.system(size: 12))
-
-            Divider()
-
-            Toggle("Smooth spring movement", isOn: Binding(
-                get: { session.document.cursor.smoothMovementEnabled },
-                set: { v in session.mutate { $0.cursor.smoothMovementEnabled = v } }
-            ))
-            .font(.system(size: 12))
-
-            // Cursor Animation Presets (`Smooth`, `Medium`, `Rapid`)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Cursor animation style")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 6) {
-                    cursorSpringPresetButton(
-                        title: "Smooth",
-                        icon: "cursorarrow.click.2",
-                        preset: SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
-                    )
-                    cursorSpringPresetButton(
-                        title: "Medium",
-                        icon: "cursorarrow.click",
-                        preset: SpringConfig(stiffness: 340.0, damping: 60.0, mass: 3.0)
-                    )
-                    cursorSpringPresetButton(
-                        title: "Rapid",
-                        icon: "cursorarrow.motionlines",
-                        preset: SpringConfig(stiffness: 530.0, damping: 40.0, mass: 1.0)
-                    )
-                }
-            }
-
-            coalescedSlider(
-                title: "Spring stiffness",
-                value: Binding(
-                    get: { session.document.cursor.spring.stiffness },
-                    set: { v in session.mutate { $0.cursor.spring.stiffness = v } }
-                ),
-                range: 80...600,
-                defaultValue: 470.0
-            )
-
-            coalescedSlider(
-                title: "Spring damping",
-                value: Binding(
-                    get: { session.document.cursor.spring.damping },
-                    set: { v in session.mutate { $0.cursor.spring.damping = v } }
-                ),
-                range: 30...120,
-                defaultValue: 70.0
-            )
-
-            coalescedSlider(
-                title: "Remove cursor shake",
-                value: Binding(
-                    get: { session.document.cursor.removeShakeThresholdPx },
-                    set: { v in session.mutate { $0.cursor.removeShakeThresholdPx = v } }
-                ),
-                range: 0...20,
-                defaultValue: 4.0
-            )
-
-            Toggle("Loop cursor position before end", isOn: Binding(
-                get: { session.document.cursor.loopBackToStartMs != nil },
-                set: { enabled in session.mutate { $0.cursor.loopBackToStartMs = enabled ? 800.0 : nil } }
-            ))
-            .font(.system(size: 12))
         }
     }
 
@@ -793,52 +1212,251 @@ public struct InspectorSidebarView: View {
     }
 
     @ViewBuilder
+    private var inspectorDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.07))
+            .frame(height: 1)
+    }
+
+    @ViewBuilder
+    private func inspectorToggleRow(
+        title: String,
+        icon: String?,
+        description: String?,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    if let icon = icon {
+                        Image(systemName: icon)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.88))
+                    }
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+                if let desc = description {
+                    Text(desc)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 4)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
+        }
+    }
+
+    @ViewBuilder
+    private func inspectorPillOptionButton(
+        title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.white.opacity(isSelected ? 0.96 : 0.80))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(isSelected ? 0.08 : 0.035))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(
+                            isSelected ? Color(red: 0.50, green: 0.44, blue: 0.78).opacity(0.85) : Color.white.opacity(0.06),
+                            lineWidth: 1.0
+                        )
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func inspectorCollapsibleSection<Content: View>(
+        title: String,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                HStack {
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.92))
+                    Spacer()
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(width: 26, height: 26)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                        )
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                content()
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.035))
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
     private func coalescedSlider(
         title: String,
+        icon: String? = nil,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        defaultValue: Double
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                if let icon = icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.88))
+                }
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+            }
+
+            coalescedSliderRowOnly(value: value, range: range, defaultValue: defaultValue)
+        }
+    }
+
+    @ViewBuilder
+    private func coalescedSliderRowOnly(
         value: Binding<Double>,
         range: ClosedRange<Double>,
         defaultValue: Double
     ) -> some View {
         let isModified = abs(value.wrappedValue - defaultValue) > 0.005
 
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.92))
-
-            HStack(spacing: 12) {
-                Slider(value: value, in: range) { editing in
-                    if editing {
-                        session.beginInteractiveEdit()
-                    } else {
-                        session.endInteractiveEdit()
-                    }
+        HStack(spacing: 12) {
+            Slider(value: value, in: range) { editing in
+                if editing {
+                    session.beginInteractiveEdit()
+                } else {
+                    session.endInteractiveEdit()
                 }
-                .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
-                .controlSize(.regular)
-
-                Button {
-                    withAnimation(.easeOut(duration: 0.14)) {
-                        value.wrappedValue = defaultValue
-                    }
-                } label: {
-                    Text("Reset")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
-                        .frame(width: 66, height: 32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(!isModified)
             }
+            .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
+            .controlSize(.regular)
+
+            Button {
+                withAnimation(.easeOut(duration: 0.14)) {
+                    value.wrappedValue = defaultValue
+                }
+            } label: {
+                Text("Reset")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
+                    .frame(width: 66, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(!isModified)
+        }
+    }
+}
+
+/// Interactive Cursor Style card that displays the active cursor SVG sprite (and cycles through its variants on hover when unselected, `ve` component!).
+private struct CursorStyleHorizontalCardView: View {
+    let theme: CursorThemePreset
+    let selectedVariantId: String?
+    let isSelected: Bool
+    let cardSize: CGFloat
+    let iconSize: CGFloat
+    let action: () -> Void
+
+    @State private var isHovered = false
+    @State private var hoverVariantIndex: Int = 0
+    @State private var hoverCycleTask: Task<Void, Never>?
+
+    var body: some View {
+        let displayedVariantId: String? = {
+            if isSelected {
+                return selectedVariantId
+            }
+            if isHovered && !theme.pointerVariants.isEmpty {
+                let idx = hoverVariantIndex % theme.pointerVariants.count
+                return theme.pointerVariants[idx].id
+            }
+            return selectedVariantId
+        }()
+
+        Button(action: action) {
+            Image(nsImage: CursorSpriteProvider.shared.previewNSImage(themeId: theme.id, variantId: displayedVariantId))
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: iconSize, height: iconSize)
+                .frame(width: cardSize, height: cardSize)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(isSelected ? 0.08 : (isHovered ? 0.065 : 0.04)))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(
+                            isSelected
+                                ? Color(red: 0.44, green: 0.34, blue: 0.98)
+                                : Color.white.opacity(isHovered ? 0.16 : 0.08),
+                            lineWidth: isSelected ? 1.5 : 1.0
+                        )
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+            hoverCycleTask?.cancel()
+            if hovering && !isSelected && theme.pointerVariants.count >= 2 {
+                hoverCycleTask = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(120))
+                    while !Task.isCancelled {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            hoverVariantIndex = (hoverVariantIndex + 1) % theme.pointerVariants.count
+                        }
+                        try? await Task.sleep(for: .milliseconds(950))
+                    }
+                }
+            } else {
+                hoverVariantIndex = 0
+            }
+        }
+        .onDisappear {
+            hoverCycleTask?.cancel()
         }
     }
 }

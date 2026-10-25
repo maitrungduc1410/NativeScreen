@@ -2,108 +2,274 @@ import Foundation
 import AppKit
 import CoreGraphics
 import CoreImage
+import AVFoundation
+
+/// Descriptor for a single cursor SVG variant inside a cursor set
+/// (e.g. `pointer-1__8-5.svg` -> `id = "pointer-1"`, `kind = "pointer"`, `variantNumber = 1`, `hotspot01 = (0.08, 0.05)`).
+public struct CursorVariantDescriptor: Identifiable, Equatable, Sendable {
+    public let id: String          // e.g. "pointer-1", "pointer-2"
+    public let setId: String       // e.g. "custom-7", "macos-tahoe"
+    public let kind: String        // e.g. "pointer", "pointinghand", "ibeamstroke"
+    public let variantNumber: Int  // 1, 2, 3...
+    public let hotspot01: Point01
+    public let fileURL: URL
+}
 
 /// High-DPI Vector Cursor Theme Catalog & Sprite Rasterizer.
-/// Includes the full collection of cursor styles (macOS Tahoe, macOS Classic, Touch Circle,
-/// White Bold Arrow, Neo Sharp, Retro Pixel, Minimal Dart, Outline Arrow, plus dynamic Pointing Hand & I-Beam shapes).
+/// Loads all 24 official cursor sets (`macos`, `macos-tahoe`, `touch`, `custom-1`...`custom-20`, `halloween`)
+/// and all of their SVG variants & hotspots from `CursorAssets.bundle/cursors/sets/`.
 public struct CursorThemePreset: Identifiable, Equatable, Sendable {
     public let id: String
     public let name: String
     public let subtitle: String
-    public let hotspot01: Point01 // Normalized hotspot within sprite (top-left origin)
+    public let hotspot01: Point01
+    public let pointerVariants: [CursorVariantDescriptor]
+    public let allSprites: [CursorVariantDescriptor]
 
-    public static let allThemes: [CursorThemePreset] = [
-        CursorThemePreset(
-            id: "macos-tahoe",
-            name: "macOS Tahoe",
-            subtitle: "Rounded modern macOS pointer",
-            hotspot01: Point01(x: 0.22, y: 0.14)
-        ),
-        CursorThemePreset(
-            id: "macos-classic",
-            name: "macOS Classic",
-            subtitle: "Crisp classic Apple arrow",
-            hotspot01: Point01(x: 0.22, y: 0.14)
-        ),
-        CursorThemePreset(
-            id: "white-arrow",
-            name: "White Studio",
-            subtitle: "Bright white arrow with dark border",
-            hotspot01: Point01(x: 0.22, y: 0.14)
-        ),
-        CursorThemePreset(
-            id: "figma-collaborator",
-            name: "Figma Dart",
-            subtitle: "Sleek angled presentation dart",
-            hotspot01: Point01(x: 0.20, y: 0.18)
-        ),
-        CursorThemePreset(
-            id: "Outline-bold",
-            name: "Bold Outline",
-            subtitle: "High-contrast hollow arrow",
-            hotspot01: Point01(x: 0.22, y: 0.14)
-        ),
-        CursorThemePreset(
-            id: "touch-circle",
-            name: "Touch Circle",
-            subtitle: "Translucent iOS/iPadOS touch disc",
-            hotspot01: Point01(x: 0.50, y: 0.50)
-        ),
-        CursorThemePreset(
-            id: "touch-ring",
-            name: "Spotlight Ring",
-            subtitle: "Crisp ring with center dot",
-            hotspot01: Point01(x: 0.50, y: 0.50)
-        ),
-        CursorThemePreset(
-            id: "retro-pixel",
-            name: "Retro Pixel",
-            subtitle: "Classic 1984 pixel art pointer",
-            hotspot01: Point01(x: 0.22, y: 0.14)
-        )
+    /// the display order ( & 4: `macos`, `macos-tahoe`, `touch`, `custom-7`, `custom-4`, `custom-2`, ...).
+    public static let preferredOrder: [String] = [
+        "macos",
+        "macos-tahoe",
+        "touch",
+        "custom-7",
+        "custom-4",
+        "custom-2",
+        "custom-1",
+        "custom-3",
+        "custom-5",
+        "custom-6",
+        "custom-8",
+        "custom-9",
+        "custom-10",
+        "custom-11",
+        "custom-12",
+        "custom-13",
+        "custom-14",
+        "custom-15",
+        "custom-16",
+        "custom-17",
+        "custom-18",
+        "custom-19",
+        "custom-20",
+        "halloween"
     ]
 
+    public static let allThemes: [CursorThemePreset] = loadAllBundledThemes()
+
     public static func theme(withId id: String) -> CursorThemePreset {
-        if id == "macos-default" {
-            return allThemes[0]
+        let normalized = normalizeThemeId(id)
+        return allThemes.first(where: { $0.id == normalized }) ?? allThemes.first(where: { $0.id == "macos-tahoe" }) ?? allThemes[0]
+    }
+
+    public static func normalizeThemeId(_ id: String) -> String {
+        switch id {
+        case "macos-default": return "macos-tahoe"
+        case "macos-classic": return "macos"
+        case "touch-circle", "touch-ring": return "touch"
+        case "white-arrow": return "custom-4"
+        case "figma-collaborator": return "custom-6"
+        case "Outline-bold": return "custom-2"
+        case "retro-pixel": return "custom-8"
+        default: return id
         }
-        return allThemes.first(where: { $0.id == id }) ?? allThemes[0]
+    }
+
+    // MARK: - Bundle Discovery
+
+    public static func cursorAssetsRootURL() -> URL? {
+        if let bundleURL = Bundle.main.url(forResource: "CursorAssets", withExtension: "bundle") {
+            return bundleURL
+        }
+        if let resURL = Bundle.main.resourceURL?.appendingPathComponent("CursorAssets.bundle"),
+           FileManager.default.fileExists(atPath: resURL.path) {
+            return resURL
+        }
+        return nil
+    }
+
+    private static func loadAllBundledThemes() -> [CursorThemePreset] {
+        guard let root = cursorAssetsRootURL() else {
+            return fallbackProceduralThemes()
+        }
+        let setsURL = root.appendingPathComponent("cursors/sets", isDirectory: true)
+        let fm = FileManager.default
+        guard let dirNames = try? fm.contentsOfDirectory(atPath: setsURL.path) else {
+            return fallbackProceduralThemes()
+        }
+
+        var loadedById: [String: CursorThemePreset] = [:]
+        for setId in dirNames {
+            let setDir = setsURL.appendingPathComponent(setId, isDirectory: true)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: setDir.path, isDirectory: &isDir), isDir.boolValue,
+                  let files = try? fm.contentsOfDirectory(atPath: setDir.path) else {
+                continue
+            }
+
+            let descriptors: [CursorVariantDescriptor] = files
+                .filter { $0.hasSuffix(".svg") }
+                .compactMap { parseDescriptor(filename: $0, setId: setId, setDir: setDir) }
+                .sorted { a, b in
+                    if a.kind != b.kind {
+                        if a.kind == "pointer" { return true }
+                        if b.kind == "pointer" { return false }
+                        return a.kind < b.kind
+                    }
+                    return a.variantNumber < b.variantNumber
+                }
+
+            guard !descriptors.isEmpty else { continue }
+            let pointers = descriptors.filter { $0.kind == "pointer" }
+            let primary = pointers.first ?? descriptors[0]
+
+            loadedById[setId] = CursorThemePreset(
+                id: setId,
+                name: displayName(forSetId: setId),
+                subtitle: setId,
+                hotspot01: primary.hotspot01,
+                pointerVariants: pointers.count >= 2 ? pointers : [],
+                allSprites: descriptors
+            )
+        }
+
+        guard !loadedById.isEmpty else {
+            return fallbackProceduralThemes()
+        }
+
+        var ordered: [CursorThemePreset] = []
+        for id in preferredOrder {
+            if let preset = loadedById.removeValue(forKey: id) {
+                ordered.append(preset)
+            }
+        }
+        for (_, remaining) in loadedById.sorted(by: { $0.key < $1.key }) {
+            ordered.append(remaining)
+        }
+        return ordered
+    }
+
+    /// Parses filenames like `pointer-1__14-6.svg` or `pointer-1__8-7.svg.svg`.
+    private static func parseDescriptor(filename: String, setId: String, setDir: URL) -> CursorVariantDescriptor? {
+        var base = filename
+        while base.hasSuffix(".svg") {
+            base = String(base.dropLast(4))
+        }
+        let parts = base.components(separatedBy: "__")
+        guard parts.count == 2 else { return nil }
+
+        let idPart = parts[0] // e.g. "pointer-1"
+        let hotspotPart = parts[1] // e.g. "14-6"
+
+        let idPieces = idPart.split(separator: "-")
+        let kind = idPieces.first.map(String.init) ?? "pointer"
+        let variantNum = idPieces.last.flatMap { Int($0) } ?? 1
+
+        let hotspotPieces = hotspotPart.split(separator: "-")
+        let hx = hotspotPieces.first.flatMap { Double($0) } ?? 14.0
+        let hy = hotspotPieces.last.flatMap { Double($0) } ?? 10.0
+
+        return CursorVariantDescriptor(
+            id: idPart,
+            setId: setId,
+            kind: kind,
+            variantNumber: variantNum,
+            hotspot01: Point01(x: hx / 100.0, y: hy / 100.0),
+            fileURL: setDir.appendingPathComponent(filename)
+        )
+    }
+
+    private static func displayName(forSetId setId: String) -> String {
+        switch setId {
+        case "macos": return "macOS Classic"
+        case "macos-tahoe": return "macOS Tahoe"
+        case "touch": return "Touch"
+        case "halloween": return "Halloween"
+        default:
+            if setId.hasPrefix("custom-"), let num = Int(setId.dropFirst(7)) {
+                return "Style \(num)"
+            }
+            return setId.capitalized
+        }
+    }
+
+    private static func fallbackProceduralThemes() -> [CursorThemePreset] {
+        [
+            CursorThemePreset(
+                id: "macos-tahoe",
+                name: "macOS Tahoe",
+                subtitle: "Rounded modern macOS pointer",
+                hotspot01: Point01(x: 0.14, y: 0.06),
+                pointerVariants: [],
+                allSprites: []
+            ),
+            CursorThemePreset(
+                id: "macos",
+                name: "macOS Classic",
+                subtitle: "Classic macOS pointer",
+                hotspot01: Point01(x: 0.34, y: 0.24),
+                pointerVariants: [],
+                allSprites: []
+            ),
+            CursorThemePreset(
+                id: "touch",
+                name: "Touch",
+                subtitle: "Touch circle",
+                hotspot01: Point01(x: 0.50, y: 0.50),
+                pointerVariants: [],
+                allSprites: []
+            )
+        ]
     }
 }
+
+// MARK: - High-DPI Cursor Sprite Provider (Loads SVG sets + Variants into GPU-Cached CIImages & NSImages)
 
 public final class CursorSpriteProvider {
     public static let shared = CursorSpriteProvider()
 
-    private var ciCache: [String: CIImage] = [:]
+    private var ciCache: [String: (image: CIImage, hotspot01: Point01)] = [:]
     private var nsImageCache: [String: NSImage] = [:]
     private let lock = NSLock()
 
     private init() {}
 
-    public func ciCursorImage(themeId: String, cursorType: String) -> (image: CIImage, hotspot01: Point01) {
-        let effectiveTheme = (themeId == "macos-default") ? "macos-tahoe" : themeId
-        let cacheKey = "\(effectiveTheme)__\(cursorType)"
+    /// Resolves the active `CIImage` sprite and its normalized `(0..1)` hotspot for the given `CursorConfig` and `cursorType`.
+    public func ciCursorImage(
+        themeId: String,
+        variantId: String? = nil,
+        alwaysUsePointer: Bool = false,
+        cursorType: String
+    ) -> (image: CIImage, hotspot01: Point01) {
+        let normalizedTheme = CursorThemePreset.normalizeThemeId(themeId)
+        let effectiveType = alwaysUsePointer ? "arrow" : cursorType
+        let cacheKey = "\(normalizedTheme)__\(variantId ?? "default")__\(effectiveType)"
 
         lock.lock()
         if let cached = ciCache[cacheKey] {
             lock.unlock()
-            return (cached, hotspot(forTheme: effectiveTheme, cursorType: cursorType))
+            return cached
         }
         lock.unlock()
 
-        let rendered = renderHighResCursorCGImage(themeId: effectiveTheme, cursorType: cursorType, pixelSize: 256)
-        let ciImg = CIImage(cgImage: rendered)
+        let resolved = resolveCGImageAndHotspot(
+            themeId: normalizedTheme,
+            variantId: variantId,
+            cursorType: effectiveType,
+            pixelSize: 256,
+            forInspectorPreview: false
+        )
+        let result = (image: CIImage(cgImage: resolved.cgImage), hotspot01: resolved.hotspot01)
 
         lock.lock()
-        ciCache[cacheKey] = ciImg
+        ciCache[cacheKey] = result
         lock.unlock()
-
-        return (ciImg, hotspot(forTheme: effectiveTheme, cursorType: cursorType))
+        return result
     }
 
-    public func previewNSImage(themeId: String, cursorType: String = "arrow") -> NSImage {
-        let effectiveTheme = (themeId == "macos-default") ? "macos-tahoe" : themeId
-        let cacheKey = "preview_\(effectiveTheme)__\(cursorType)"
+    /// Returns a crisp `NSImage` for the Cursor Inspector horizontal selector cards (and variant cards).
+    public func previewNSImage(themeId: String, variantId: String? = nil, cursorType: String = "arrow") -> NSImage {
+        let normalizedTheme = CursorThemePreset.normalizeThemeId(themeId)
+        let cacheKey = "preview__\(normalizedTheme)__\(variantId ?? "default")__\(cursorType)"
 
         lock.lock()
         if let cached = nsImageCache[cacheKey] {
@@ -112,8 +278,14 @@ public final class CursorSpriteProvider {
         }
         lock.unlock()
 
-        let cgImg = renderHighResCursorCGImage(themeId: effectiveTheme, cursorType: cursorType, pixelSize: 128)
-        let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: 64, height: 64))
+        let resolved = resolveCGImageAndHotspot(
+            themeId: normalizedTheme,
+            variantId: variantId,
+            cursorType: cursorType,
+            pixelSize: 128,
+            forInspectorPreview: true
+        )
+        let nsImg = NSImage(cgImage: resolved.cgImage, size: NSSize(width: 64, height: 64))
 
         lock.lock()
         nsImageCache[cacheKey] = nsImg
@@ -121,22 +293,72 @@ public final class CursorSpriteProvider {
         return nsImg
     }
 
-    private func hotspot(forTheme themeId: String, cursorType: String) -> Point01 {
-        if cursorType == "pointingHand" {
-            return Point01(x: 0.38, y: 0.16)
+    private func mapTelemetryCursorKind(_ rawKind: String) -> String {
+        switch rawKind {
+        case "arrow", "pointer", "default": return "pointer"
+        case "pointingHand", "pointinghand": return "pointinghand"
+        case "iBeam", "ibeam", "ibeamstroke": return "ibeamstroke"
+        case "crosshair", "cross": return "cross"
+        case "closedHand", "closedhand": return "closedhand"
+        case "openHand", "openhand": return "openhand"
+        default: return "pointer"
         }
-        if cursorType == "iBeam" {
-            return Point01(x: 0.50, y: 0.50)
-        }
-        if cursorType == "crosshair" {
-            return Point01(x: 0.50, y: 0.50)
-        }
-        return CursorThemePreset.theme(withId: themeId).hotspot01
     }
 
-    // MARK: - High-Resolution Vector Rasterizer (256x256 Retina Sprite with Soft Drop Shadow)
+    private func resolveCGImageAndHotspot(
+        themeId: String,
+        variantId: String?,
+        cursorType: String,
+        pixelSize: Int,
+        forInspectorPreview: Bool
+    ) -> (cgImage: CGImage, hotspot01: Point01) {
+        let theme = CursorThemePreset.theme(withId: themeId)
+        let mappedKind = mapTelemetryCursorKind(cursorType)
 
-    private func renderHighResCursorCGImage(themeId: String, cursorType: String, pixelSize: Int) -> CGImage {
+        // Find matching descriptor in the bundled SVG cursor set
+        var chosenDescriptor: CursorVariantDescriptor?
+        if mappedKind == "pointer" {
+            if let vId = variantId,
+               let match = theme.pointerVariants.first(where: { $0.id == vId }) ?? theme.allSprites.first(where: { $0.id == vId }) {
+                chosenDescriptor = match
+            } else {
+                chosenDescriptor = theme.allSprites.first(where: { $0.kind == "pointer" }) ?? theme.allSprites.first
+            }
+        } else {
+            chosenDescriptor = theme.allSprites.first(where: { $0.kind == mappedKind })
+                ?? ( variantId.flatMap { id in theme.pointerVariants.first(where: { $0.id == id }) } )
+                ?? theme.allSprites.first(where: { $0.kind == "pointer" })
+                ?? theme.allSprites.first
+        }
+
+        if let desc = chosenDescriptor,
+           let svgImage = NSImage(contentsOf: desc.fileURL),
+           svgImage.size.width > 0, svgImage.size.height > 0 {
+            // Note from NativeScreen's: `macos` classic SVGs have extra transparent margin around the sprite
+            // so scales `setId === "macos"` by `1.75` around its center/hotspot!
+            let extraScale: CGFloat = (theme.id == "macos") ? 1.68 : 1.0
+            let cgImg = rasterizeNSImage(
+                svgImage,
+                pixelSize: pixelSize,
+                extraScale: extraScale,
+                hotspot01: desc.hotspot01,
+                centerInPreviewBox: forInspectorPreview
+            )
+            return (cgImg, desc.hotspot01)
+        }
+
+        // Procedural fallback if bundle is unavailable
+        let fallbackCG = renderFallbackProceduralCGImage(themeId: theme.id, pixelSize: pixelSize)
+        return (fallbackCG, theme.hotspot01)
+    }
+
+    private func rasterizeNSImage(
+        _ nsImage: NSImage,
+        pixelSize: Int,
+        extraScale: CGFloat,
+        hotspot01: Point01,
+        centerInPreviewBox: Bool
+    ) -> CGImage {
         let size = CGSize(width: pixelSize, height: pixelSize)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let ctx = CGContext(
@@ -149,117 +371,72 @@ public final class CursorSpriteProvider {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         )!
 
-        // Flip to top-left origin so SVG/Quartz coordinates match naturally
-        ctx.translateBy(x: 0, y: size.height)
-        ctx.scaleBy(x: size.width / 256.0, y: -size.height / 256.0)
+        NSGraphicsContext.saveGraphicsState()
+        let graphicsContext = NSGraphicsContext(cgContext: ctx, flipped: false)
+        NSGraphicsContext.current = graphicsContext
 
-        // Dynamic cursor shape override when hovering links or text inputs
-        if cursorType == "iBeam" {
-            drawIBeamCursor(in: ctx)
-            return ctx.makeImage()!
-        }
-        if cursorType == "pointingHand" && themeId != "touch-circle" && themeId != "touch-ring" {
-            drawPointingHandCursor(in: ctx)
-            return ctx.makeImage()!
-        }
+        let srcW = max(1.0, nsImage.size.width)
+        let srcH = max(1.0, nsImage.size.height)
+        let fitScale = min(size.width / srcW, size.height / srcH) * extraScale
+        let drawW = srcW * fitScale
+        let drawH = srcH * fitScale
 
-        switch themeId {
-        case "macos-tahoe":
-            drawMacOSTahoeArrow(in: ctx, fillColor: CGColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0), strokeColor: .white)
-        case "macos-classic":
-            drawMacOSClassicArrow(in: ctx, fillColor: CGColor(red: 0.04, green: 0.04, blue: 0.05, alpha: 1.0), strokeColor: .white)
-        case "white-arrow":
-            drawMacOSTahoeArrow(in: ctx, fillColor: .white, strokeColor: CGColor(red: 0.08, green: 0.08, blue: 0.11, alpha: 1.0))
-        case "figma-collaborator":
-            drawFigmaDartCursor(in: ctx)
-        case "Outline-bold":
-            drawBoldOutlineArrow(in: ctx)
-        case "touch-circle":
-            drawTouchDiscCursor(in: ctx)
-        case "touch-ring":
-            drawSpotlightRingCursor(in: ctx)
-        case "retro-pixel":
-            drawRetroPixelArrow(in: ctx)
-        default:
-            drawMacOSTahoeArrow(in: ctx, fillColor: CGColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0), strokeColor: .white)
+        let drawRect: NSRect
+        if centerInPreviewBox {
+            drawRect = NSRect(
+                x: (size.width - drawW) * 0.5,
+                y: (size.height - drawH) * 0.5,
+                width: drawW,
+                height: drawH
+            )
+        } else {
+            // Keep the hotspot at its exact normalized coordinate `(hotspot01.x, 1.0 - hotspot01.y)` when `extraScale != 1`!
+            let anchorX = size.width * CGFloat(hotspot01.x)
+            let anchorY = size.height * CGFloat(1.0 - hotspot01.y)
+            drawRect = NSRect(
+                x: anchorX - drawW * CGFloat(hotspot01.x),
+                y: anchorY - drawH * CGFloat(1.0 - hotspot01.y),
+                width: drawW,
+                height: drawH
+            )
         }
 
+        nsImage.draw(
+            in: drawRect,
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1.0,
+            respectFlipped: true,
+            hints: [.interpolation: NSImageInterpolation.high]
+        )
+
+        NSGraphicsContext.restoreGraphicsState()
         return ctx.makeImage()!
     }
 
-    // 1. macOS Tahoe Rounded Arrow (Matches the `sets/macos-tahoe/pointer-1__14-6.svg`)
-    private func drawMacOSTahoeArrow(in ctx: CGContext, fillColor: CGColor, strokeColor: CGColor) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 7), blur: 14, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
+    private func renderFallbackProceduralCGImage(themeId: String, pixelSize: Int) -> CGImage {
+        let size = CGSize(width: pixelSize, height: pixelSize)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(
+            data: nil,
+            width: pixelSize,
+            height: pixelSize,
+            bitsPerComponent: 8,
+            bytesPerRow: pixelSize * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        ctx.translateBy(x: 0, y: size.height)
+        ctx.scaleBy(x: size.width / 256.0, y: -size.height / 256.0)
 
         let path = CGMutablePath()
         path.move(to: CGPoint(x: 56, y: 34))
         path.addLine(to: CGPoint(x: 186, y: 152))
-        path.addQuadCurve(to: CGPoint(x: 174, y: 170), control: CGPoint(x: 194, y: 162))
         path.addLine(to: CGPoint(x: 128, y: 170))
         path.addLine(to: CGPoint(x: 156, y: 226))
-        path.addQuadCurve(to: CGPoint(x: 136, y: 242), control: CGPoint(x: 160, y: 238))
-        path.addQuadCurve(to: CGPoint(x: 120, y: 234), control: CGPoint(x: 126, y: 244))
+        path.addLine(to: CGPoint(x: 120, y: 234))
         path.addLine(to: CGPoint(x: 92, y: 178))
-        path.addLine(to: CGPoint(x: 62, y: 206))
-        path.addQuadCurve(to: CGPoint(x: 48, y: 194), control: CGPoint(x: 50, y: 210))
-        path.addLine(to: CGPoint(x: 48, y: 42))
-        path.addQuadCurve(to: CGPoint(x: 56, y: 34), control: CGPoint(x: 48, y: 30))
-        path.closeSubpath()
-
-        ctx.addPath(path)
-        ctx.setFillColor(strokeColor)
-        ctx.setStrokeColor(strokeColor)
-        ctx.setLineWidth(18)
-        ctx.setLineJoin(.round)
-        ctx.setLineCap(.round)
-        ctx.drawPath(using: .fillStroke)
-        ctx.restoreGState()
-
-        ctx.saveGState()
-        ctx.addPath(path)
-        ctx.setFillColor(fillColor)
-        ctx.fillPath()
-        ctx.restoreGState()
-    }
-
-    // 2. macOS Classic Sharp Arrow
-    private func drawMacOSClassicArrow(in ctx: CGContext, fillColor: CGColor, strokeColor: CGColor) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 6), blur: 12, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
-
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: 52, y: 30))
-        path.addLine(to: CGPoint(x: 184, y: 158))
-        path.addLine(to: CGPoint(x: 124, y: 162))
-        path.addLine(to: CGPoint(x: 156, y: 228))
-        path.addLine(to: CGPoint(x: 128, y: 240))
-        path.addLine(to: CGPoint(x: 96, y: 174))
-        path.addLine(to: CGPoint(x: 52, y: 212))
-        path.closeSubpath()
-
-        ctx.addPath(path)
-        ctx.setStrokeColor(strokeColor)
-        ctx.setLineWidth(14)
-        ctx.setLineJoin(.round)
-        ctx.strokePath()
-
-        ctx.addPath(path)
-        ctx.setFillColor(fillColor)
-        ctx.fillPath()
-        ctx.restoreGState()
-    }
-
-    // 3. Figma / Modern Presentation Dart
-    private func drawFigmaDartCursor(in ctx: CGContext) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 7), blur: 14, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
-
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: 46, y: 42))
-        path.addLine(to: CGPoint(x: 208, y: 108))
-        path.addLine(to: CGPoint(x: 132, y: 142))
-        path.addLine(to: CGPoint(x: 104, y: 218))
+        path.addLine(to: CGPoint(x: 48, y: 206))
         path.closeSubpath()
 
         ctx.addPath(path)
@@ -267,141 +444,49 @@ public final class CursorSpriteProvider {
         ctx.setLineWidth(16)
         ctx.setLineJoin(.round)
         ctx.strokePath()
-
         ctx.addPath(path)
-        ctx.setFillColor(CGColor(red: 0.42, green: 0.32, blue: 0.98, alpha: 1.0))
+        ctx.setFillColor(CGColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0))
         ctx.fillPath()
-        ctx.restoreGState()
+        return ctx.makeImage()!
     }
+}
 
-    // 4. Bold Outline Arrow
-    private func drawBoldOutlineArrow(in ctx: CGContext) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 6), blur: 12, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.6))
+// MARK: - Click Sound Effect Player (`Magic Mouse™` & `MX Master™` from `CursorAssets.bundle/sounds/clicks/`)
 
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: 54, y: 34))
-        path.addLine(to: CGPoint(x: 186, y: 158))
-        path.addLine(to: CGPoint(x: 124, y: 164))
-        path.addLine(to: CGPoint(x: 154, y: 226))
-        path.addLine(to: CGPoint(x: 126, y: 238))
-        path.addLine(to: CGPoint(x: 96, y: 174))
-        path.addLine(to: CGPoint(x: 54, y: 210))
-        path.closeSubpath()
+@MainActor
+public final class CursorClickSoundPlayer {
+    public static let shared = CursorClickSoundPlayer()
 
-        ctx.addPath(path)
-        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.18))
-        ctx.fillPath()
+    private var activePlayers: [AVAudioPlayer] = []
 
-        ctx.addPath(path)
-        ctx.setStrokeColor(CGColor.white)
-        ctx.setLineWidth(12)
-        ctx.setLineJoin(.round)
-        ctx.strokePath()
-        ctx.restoreGState()
-    }
+    private init() {}
 
-    // 5. Touch Circle Disc (Matches `touch-cursor.svg`)
-    private func drawTouchDiscCursor(in ctx: CGContext) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 5), blur: 12, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.45))
+    public func playClickSound(soundSet: String?, kind: String = "click", volume: Double = 0.5) {
+        guard let rawSet = soundSet, !rawSet.isEmpty else { return }
+        let folderName: String
+        switch rawSet {
+        case "apple-magic-mouse", "magic-mouse":
+            folderName = "apple-magic-mouse"
+        case "logitech-mx-master", "mx-master":
+            folderName = "logitech-mx-master"
+        default:
+            return
+        }
 
-        let rect = CGRect(x: 44, y: 44, width: 168, height: 168)
-        ctx.setFillColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.46))
-        ctx.fillEllipse(in: rect)
+        guard let root = CursorThemePreset.cursorAssetsRootURL() else { return }
+        let wavURL = root
+            .appendingPathComponent("sounds/clicks/\(folderName)/\(kind).wav")
+        guard FileManager.default.fileExists(atPath: wavURL.path) else { return }
 
-        ctx.setStrokeColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.92))
-        ctx.setLineWidth(7)
-        ctx.strokeEllipse(in: rect)
-        ctx.restoreGState()
-    }
-
-    // 6. Spotlight Ring Cursor
-    private func drawSpotlightRingCursor(in ctx: CGContext) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 5), blur: 12, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
-
-        let outer = CGRect(x: 42, y: 42, width: 172, height: 172)
-        ctx.setStrokeColor(CGColor(red: 0.48, green: 0.38, blue: 1.0, alpha: 0.95))
-        ctx.setLineWidth(12)
-        ctx.strokeEllipse(in: outer)
-
-        let centerDot = CGRect(x: 112, y: 112, width: 32, height: 32)
-        ctx.setFillColor(CGColor.white)
-        ctx.fillEllipse(in: centerDot)
-        ctx.restoreGState()
-    }
-
-    // 7. Retro Pixel Arrow (Matches `custom-3` pixel-art style)
-    private func drawRetroPixelArrow(in ctx: CGContext) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 6), blur: 10, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
-
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: 52, y: 32))
-        path.addLine(to: CGPoint(x: 180, y: 160))
-        path.addLine(to: CGPoint(x: 120, y: 160))
-        path.addLine(to: CGPoint(x: 148, y: 224))
-        path.addLine(to: CGPoint(x: 116, y: 236))
-        path.addLine(to: CGPoint(x: 88, y: 172))
-        path.addLine(to: CGPoint(x: 52, y: 208))
-        path.closeSubpath()
-
-        ctx.addPath(path)
-        ctx.setFillColor(CGColor.white)
-        ctx.fillPath()
-
-        ctx.addPath(path)
-        ctx.setStrokeColor(CGColor(red: 0.08, green: 0.08, blue: 0.08, alpha: 1.0))
-        ctx.setLineWidth(12)
-        ctx.setLineJoin(.miter)
-        ctx.strokePath()
-        ctx.restoreGState()
-    }
-
-    // 8. Pointing Hand Cursor (`pointingHand`)
-    private func drawPointingHandCursor(in ctx: CGContext) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 6), blur: 12, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
-
-        let path = CGMutablePath()
-        // Index finger + palm silhouette
-        path.addRoundedRect(in: CGRect(x: 84, y: 28, width: 30, height: 115), cornerWidth: 14, cornerHeight: 14)
-        path.addRoundedRect(in: CGRect(x: 114, y: 78, width: 28, height: 80), cornerWidth: 12, cornerHeight: 12)
-        path.addRoundedRect(in: CGRect(x: 142, y: 88, width: 28, height: 75), cornerWidth: 12, cornerHeight: 12)
-        path.addRoundedRect(in: CGRect(x: 170, y: 102, width: 26, height: 68), cornerWidth: 12, cornerHeight: 12)
-        path.addRoundedRect(in: CGRect(x: 72, y: 112, width: 124, height: 104), cornerWidth: 42, cornerHeight: 42)
-
-        ctx.addPath(path)
-        ctx.setStrokeColor(CGColor.black)
-        ctx.setLineWidth(14)
-        ctx.setLineJoin(.round)
-        ctx.strokePath()
-
-        ctx.addPath(path)
-        ctx.setFillColor(CGColor.white)
-        ctx.fillPath()
-        ctx.restoreGState()
-    }
-
-    // 9. Text Selection I-Beam Cursor (`iBeam`)
-    private func drawIBeamCursor(in ctx: CGContext) {
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: 4), blur: 10, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.6))
-
-        let path = CGMutablePath()
-        path.addRoundedRect(in: CGRect(x: 118, y: 40, width: 20, height: 176), cornerWidth: 8, cornerHeight: 8)
-        path.addRoundedRect(in: CGRect(x: 84, y: 34, width: 88, height: 20), cornerWidth: 9, cornerHeight: 9)
-        path.addRoundedRect(in: CGRect(x: 84, y: 202, width: 88, height: 20), cornerWidth: 9, cornerHeight: 9)
-
-        ctx.addPath(path)
-        ctx.setStrokeColor(CGColor.white)
-        ctx.setLineWidth(10)
-        ctx.strokePath()
-
-        ctx.addPath(path)
-        ctx.setFillColor(CGColor(red: 0.06, green: 0.06, blue: 0.08, alpha: 1.0))
-        ctx.fillPath()
-        ctx.restoreGState()
+        do {
+            let player = try AVAudioPlayer(contentsOf: wavURL)
+            player.volume = Float(max(0.0, min(1.0, volume)))
+            player.prepareToPlay()
+            player.play()
+            activePlayers.removeAll { !$0.isPlaying }
+            activePlayers.append(player)
+        } catch {
+            // Ignore audio device errors
+        }
     }
 }

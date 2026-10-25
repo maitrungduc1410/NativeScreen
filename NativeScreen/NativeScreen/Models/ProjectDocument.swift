@@ -338,11 +338,35 @@ public struct FrameStyleConfig: Codable, Equatable, Hashable, Sendable {
 
 public enum ClickEffectStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case none = "none"
+    case circle = "circle"
     case ripple = "ripple"
     case pulse = "pulse"
     case ring = "ring"
 
     public var id: String { rawValue }
+}
+
+public enum CursorRotationMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case tilt = "velocity"
+    case follow = "directional"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .tilt: return "Tilt"
+        case .follow: return "Follow"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .tilt:
+            return "Leans with fast horizontal movement, settling back upright at rest."
+        case .follow:
+            return "Points along the direction of travel, like pulled on a leash - and keeps its bearing at rest."
+        }
+    }
 }
 
 public struct ClickEffectConfig: Codable, Equatable, Hashable, Sendable {
@@ -352,10 +376,10 @@ public struct ClickEffectConfig: Codable, Equatable, Hashable, Sendable {
     public var soundVolume: Double
 
     public init(
-        visualStyle: ClickEffectStyle = .ripple,
+        visualStyle: ClickEffectStyle = .none,
         color: String = "#FFFFFF",
-        soundSet: String? = "magic-mouse",
-        soundVolume: Double = 0.25
+        soundSet: String? = nil,
+        soundVolume: Double = 0.50
     ) {
         self.visualStyle = visualStyle
         self.color = color
@@ -368,39 +392,103 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
     public var hidden: Bool
     public var scale: Double
     public var themeId: String
+    public var variantId: String?
+    public var alwaysUsePointer: Bool
     public var smoothMovementEnabled: Bool
     public var spring: SpringConfig
-    public var removeShakeThresholdPx: Double
+    public var baseRotationDegrees: Double
+    public var rotationMode: CursorRotationMode
     public var velocityRotationEnabled: Bool
     public var velocityRotationIntensity: Double
     public var hideWhenIdleAfterMs: Double?
     public var loopBackToStartMs: Double?
+    public var stopMovementInLastPartMs: Double
+    public var removeShakeThresholdPx: Double
+    public var optimizeCursorChanges: Bool
+    public var keepInSyncWithHovers: Bool
     public var clickEffect: ClickEffectConfig
 
     public init(
         hidden: Bool = false,
         scale: Double = 1.6,
         themeId: String = "macos-tahoe",
+        variantId: String? = nil,
+        alwaysUsePointer: Bool = false,
         smoothMovementEnabled: Bool = true,
         spring: SpringConfig = .defaultCursor,
-        removeShakeThresholdPx: Double = 4.0,
+        baseRotationDegrees: Double = 0.0,
+        rotationMode: CursorRotationMode = .tilt,
         velocityRotationEnabled: Bool = true,
         velocityRotationIntensity: Double = 0.5,
-        hideWhenIdleAfterMs: Double? = 3000.0,
+        hideWhenIdleAfterMs: Double? = nil,
         loopBackToStartMs: Double? = nil,
+        stopMovementInLastPartMs: Double = 0.0,
+        removeShakeThresholdPx: Double = 4.0,
+        optimizeCursorChanges: Bool = true,
+        keepInSyncWithHovers: Bool = true,
         clickEffect: ClickEffectConfig = ClickEffectConfig()
     ) {
         self.hidden = hidden
         self.scale = scale
         self.themeId = themeId
+        self.variantId = variantId
+        self.alwaysUsePointer = alwaysUsePointer
         self.smoothMovementEnabled = smoothMovementEnabled
         self.spring = spring
-        self.removeShakeThresholdPx = removeShakeThresholdPx
+        self.baseRotationDegrees = baseRotationDegrees
+        self.rotationMode = rotationMode
         self.velocityRotationEnabled = velocityRotationEnabled
         self.velocityRotationIntensity = velocityRotationIntensity
         self.hideWhenIdleAfterMs = hideWhenIdleAfterMs
         self.loopBackToStartMs = loopBackToStartMs
+        self.stopMovementInLastPartMs = stopMovementInLastPartMs
+        self.removeShakeThresholdPx = removeShakeThresholdPx
+        self.optimizeCursorChanges = optimizeCursorChanges
+        self.keepInSyncWithHovers = keepInSyncWithHovers
         self.clickEffect = clickEffect
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case hidden
+        case scale
+        case themeId
+        case variantId
+        case alwaysUsePointer
+        case smoothMovementEnabled
+        case spring
+        case baseRotationDegrees
+        case rotationMode
+        case velocityRotationEnabled
+        case velocityRotationIntensity
+        case hideWhenIdleAfterMs
+        case loopBackToStartMs
+        case stopMovementInLastPartMs
+        case removeShakeThresholdPx
+        case optimizeCursorChanges
+        case keepInSyncWithHovers
+        case clickEffect
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        self.scale = try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.6
+        self.themeId = try container.decodeIfPresent(String.self, forKey: .themeId) ?? "macos-tahoe"
+        self.variantId = try container.decodeIfPresent(String.self, forKey: .variantId)
+        self.alwaysUsePointer = try container.decodeIfPresent(Bool.self, forKey: .alwaysUsePointer) ?? false
+        self.smoothMovementEnabled = try container.decodeIfPresent(Bool.self, forKey: .smoothMovementEnabled) ?? true
+        self.spring = try container.decodeIfPresent(SpringConfig.self, forKey: .spring) ?? .defaultCursor
+        self.baseRotationDegrees = try container.decodeIfPresent(Double.self, forKey: .baseRotationDegrees) ?? 0.0
+        self.rotationMode = try container.decodeIfPresent(CursorRotationMode.self, forKey: .rotationMode) ?? .tilt
+        self.velocityRotationEnabled = try container.decodeIfPresent(Bool.self, forKey: .velocityRotationEnabled) ?? true
+        self.velocityRotationIntensity = try container.decodeIfPresent(Double.self, forKey: .velocityRotationIntensity) ?? 0.5
+        self.hideWhenIdleAfterMs = try container.decodeIfPresent(Double.self, forKey: .hideWhenIdleAfterMs)
+        self.loopBackToStartMs = try container.decodeIfPresent(Double.self, forKey: .loopBackToStartMs)
+        self.stopMovementInLastPartMs = try container.decodeIfPresent(Double.self, forKey: .stopMovementInLastPartMs) ?? 0.0
+        self.removeShakeThresholdPx = try container.decodeIfPresent(Double.self, forKey: .removeShakeThresholdPx) ?? 4.0
+        self.optimizeCursorChanges = try container.decodeIfPresent(Bool.self, forKey: .optimizeCursorChanges) ?? true
+        self.keepInSyncWithHovers = try container.decodeIfPresent(Bool.self, forKey: .keepInSyncWithHovers) ?? true
+        self.clickEffect = try container.decodeIfPresent(ClickEffectConfig.self, forKey: .clickEffect) ?? ClickEffectConfig()
     }
 }
 

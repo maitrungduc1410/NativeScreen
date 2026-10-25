@@ -203,6 +203,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             }
 
             if session.isPlaying {
+                let prevSourceMs = session.committedSourceTimeMs
                 let now = ProcessInfo.processInfo.systemUptime
                 let dtMs = max(0.0, min(50.0, (now - lastFrameTickUptime) * 1000.0)) * session.previewPlaybackRate
                 lastFrameTickUptime = now
@@ -215,6 +216,18 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     view.enableSetNeedsDisplay = true
                 } else {
                     session.playheadTimelineMs = nextTimelineMs
+                }
+
+                let newSourceMs = session.committedSourceTimeMs
+                if let soundSet = session.document.cursor.clickEffect.soundSet,
+                   (session.currentActiveSlice?.speed ?? 1.0) <= 2.0,
+                   newSourceMs > prevSourceMs {
+                    if session.clickEvents.contains(where: { $0.type == "down" && $0.t > prevSourceMs && $0.t <= newSourceMs }) {
+                        CursorClickSoundPlayer.shared.playClickSound(
+                            soundSet: soundSet,
+                            volume: session.document.cursor.clickEffect.soundVolume
+                        )
+                    }
                 }
             }
 

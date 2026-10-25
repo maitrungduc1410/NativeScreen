@@ -140,16 +140,23 @@ public struct SpringTrajectorySolver: Sendable {
         var filteredTargetY = firstPos.y
         var lastMoveTimeMs = 0.0
         var currentOpacity = 1.0
+        var lastDirectionalBearingRad = 0.0
+        var lastStableCursorKind = "arrow"
+        var lastCursorKindChangeMs = -1000.0
 
         let shakeThreshold01 = max(0.0, document.cursor.removeShakeThresholdPx) / 1600.0
+        let stopMoveCutoffMs = (document.cursor.loopBackToStartMs == nil && document.cursor.stopMovementInLastPartMs > 0)
+            ? max(0.0, totalDuration - document.cursor.stopMovementInLastPartMs)
+            : nil
 
         var eventIdx = 0
         let eventCount = cursorEvents.count
 
         for step in 0..<totalSteps {
             let tMs = Double(step) * stepMs
+            let sampleLookupMs = stopMoveCutoffMs.map { min(tMs, $0) } ?? tMs
 
-            while eventIdx + 1 < eventCount && cursorEvents[eventIdx + 1].t <= tMs {
+            while eventIdx + 1 < eventCount && cursorEvents[eventIdx + 1].t <= sampleLookupMs {
                 eventIdx += 1
             }
 
@@ -163,12 +170,25 @@ public struct SpringTrajectorySolver: Sendable {
                 if eventIdx + 1 < eventCount {
                     let e1 = cursorEvents[eventIdx + 1]
                     let span = max(0.001, e1.t - e0.t)
-                    let frac = max(0.0, min(1.0, (tMs - e0.t) / span))
+                    let frac = max(0.0, min(1.0, (sampleLookupMs - e0.t) / span))
                     rawTargetX = e0.x + (e1.x - e0.x) * frac
                     rawTargetY = e0.y + (e1.y - e0.y) * frac
                 } else {
                     rawTargetX = e0.x
                     rawTargetY = e0.y
+                }
+            }
+
+            if document.cursor.alwaysUsePointer {
+                cursorKind = "arrow"
+            } else if document.cursor.optimizeCursorChanges {
+                if cursorKind != lastStableCursorKind {
+                    if tMs - lastCursorKindChangeMs >= 90.0 {
+                        lastStableCursorKind = cursorKind
+                        lastCursorKindChangeMs = tMs
+                    } else {
+                        cursorKind = lastStableCursorKind
+                    }
                 }
             }
 
@@ -215,12 +235,27 @@ public struct SpringTrajectorySolver: Sendable {
                 currentOpacity = 1.0
             }
 
-            var rotation = 0.0
+            let baseRad = -document.cursor.baseRotationDegrees * .pi / 180.0
+            var dynamicRad = 0.0
             if document.cursor.velocityRotationEnabled {
-                let maxTilt = 0.35 // ~20 degrees max (`maxTiltDeg: 20` in NativeScreen)
-                let rawTilt = -velX * 0.14 * document.cursor.velocityRotationIntensity
-                rotation = max(-maxTilt, min(maxTilt, rawTilt))
+                switch document.cursor.rotationMode {
+                case .tilt:
+                    let maxTilt = 0.35 // ~20 degrees max (`maxTiltDeg: 20` in NativeScreen)
+                    let rawTilt = -velX * 0.14 * document.cursor.velocityRotationIntensity
+                    dynamicRad = max(-maxTilt, min(maxTilt, rawTilt))
+                case .follow:
+                    let speed = hypot(velX, velY)
+                    if speed > 0.04 {
+                        let targetAngle = atan2(-velY, velX) - (.pi * 0.75)
+                        var delta = targetAngle - lastDirectionalBearingRad
+                        while delta > .pi { delta -= 2.0 * .pi }
+                        while delta < -.pi { delta += 2.0 * .pi }
+                        lastDirectionalBearingRad += delta * min(1.0, dt * 14.0)
+                    }
+                    dynamicRad = lastDirectionalBearingRad
+                }
             }
+            let rotation = baseRad + dynamicRad
 
             var activeRipple: Double? = nil
             let rippleDurationMs = 450.0
