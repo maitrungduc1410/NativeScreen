@@ -20,8 +20,6 @@ public struct ProjectEditorWindowView: View {
     @FocusState private var isTitleFieldFocused: Bool
 
     @State private var isShowingExportSheet = false
-    @State private var isShowingAspectRatioPopover = false
-    @State private var isShowingReelModePopover = false
     @State private var exportCodec: HardwareVideoExporter.ExportCodec = .h264
     @State private var exportResolution: HardwareVideoExporter.ExportResolution = .qhd2k
     @State private var isExporting = false
@@ -467,7 +465,7 @@ public struct ProjectEditorWindowView: View {
                         HStack(spacing: 10) {
                             Spacer()
 
-                            // Playback Speed Button (`1x`)
+                            // Playback Speed Button (`1x` — Opens Native Liquid Glass NSMenu on click)
                             InstantTooltipButton(
                                 tooltip: "Playback speed",
                                 edge: .top,
@@ -475,23 +473,11 @@ public struct ProjectEditorWindowView: View {
                                 size: 34,
                                 cornerRadius: 8
                             ) {
-                                let rates: [Double] = [1.0, 1.25, 1.5, 2.0, 0.5]
-                                if let idx = rates.firstIndex(where: { abs($0 - session.previewPlaybackRate) < 0.03 }) {
-                                    session.previewPlaybackRate = rates[(idx + 1) % rates.count]
-                                } else {
-                                    session.previewPlaybackRate = 1.0
-                                }
+                                NativeSegmentContextMenuPresenter.shared.presentPlaybackSpeedMenu(session: session)
                             } label: {
                                 Text(String(format: "%gx", session.previewPlaybackRate))
                                     .font(.system(size: 12.5, weight: .regular).monospacedDigit())
                                     .foregroundStyle(.white.opacity(0.92))
-                            }
-                            .contextMenu {
-                                ForEach([0.5, 1.0, 1.25, 1.5, 2.0], id: \.self) { rate in
-                                    Button(String(format: "%gx", rate)) {
-                                        session.previewPlaybackRate = rate
-                                    }
-                                }
                             }
 
                             Slider(value: $session.timelineZoom, in: 1.0...6.0)

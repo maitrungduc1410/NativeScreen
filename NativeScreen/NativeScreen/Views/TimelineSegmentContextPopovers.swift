@@ -642,6 +642,31 @@ extension NativeSegmentContextMenuPresenter {
         }
     }
 
+    public func presentPlaybackSpeedMenu(session: ProjectSession) {
+        let menu = NSMenu(title: "Playback Speed")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let rates: [Double] = [0.25, 0.5, 1.0, 1.25, 1.5, 2.0]
+        for rate in rates {
+            let item = makeCommandItem(title: String(format: "%gx", rate), keyEquivalent: "", modifiers: []) {
+                session.previewPlaybackRate = rate
+            }
+            item.state = abs(session.previewPlaybackRate - rate) < 0.03 ? .on : .off
+            menu.addItem(item)
+        }
+
+        activeMenu = menu
+        let mouseLoc = NSEvent.mouseLocation
+        if let win = NSApp.keyWindow, let contentView = win.contentView {
+            let ptInWin = win.convertPoint(fromScreen: mouseLoc)
+            let ptInView = contentView.convert(ptInWin, from: nil)
+            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 16, y: ptInView.y + 12), in: contentView)
+        } else {
+            menu.popUp(positioning: nil, at: mouseLoc, in: nil)
+        }
+    }
+
     private func renderAspectRatioIconNSImage(size: CGSize) -> NSImage {
         let canvasSize = NSSize(width: 18, height: 16)
         let img = NSImage(size: canvasSize, flipped: false) { _ in
