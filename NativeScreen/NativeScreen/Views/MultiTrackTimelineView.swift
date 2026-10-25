@@ -1023,9 +1023,7 @@ private struct TimelineInteractiveSegmentView: View {
             }
         )
         .contentShape(Rectangle())
-        .offset(x: xOffset, y: verticalDragOffset)
-        .zIndex(activeDragMode != nil ? 60 : (isHovered ? 30 : 1))
-        .onContinuousHover { phase in
+        .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
                 lastHoverLocalX = pt.x
@@ -1041,8 +1039,6 @@ private struct TimelineInteractiveSegmentView: View {
                     hoverSplitX = nil
                     if segWidth >= 28 && (pt.x <= edgeHandleHitWidth || pt.x >= segWidth - edgeHandleHitWidth) {
                         NSCursor.resizeLeftRight.set()
-                    } else if allowDragMove {
-                        NSCursor.openHand.set()
                     } else {
                         NSCursor.arrow.set()
                     }
@@ -1057,6 +1053,8 @@ private struct TimelineInteractiveSegmentView: View {
                 }
             }
         }
+        .offset(x: xOffset, y: verticalDragOffset)
+        .zIndex(activeDragMode != nil ? 60 : (isHovered ? 30 : 1))
         .highPriorityGesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .named("timelineContentSpace"))
                 .onChanged { value in
@@ -1080,9 +1078,6 @@ private struct TimelineInteractiveSegmentView: View {
                             NSCursor.resizeLeftRight.set()
                         } else {
                             activeDragMode = .moveBody
-                            if allowDragMove && !isSplitMode {
-                                NSCursor.closedHand.set()
-                            }
                         }
                     }
 
