@@ -285,6 +285,7 @@ public struct FrameInsetConfig: Codable, Equatable, Hashable, Sendable {
 
 public struct FrameShadowConfig: Codable, Equatable, Hashable, Sendable {
     public var enabled: Bool
+    public var isDirectional: Bool
     public var intensity: Double
     public var blur: Double
     public var distance: Double
@@ -292,16 +293,32 @@ public struct FrameShadowConfig: Codable, Equatable, Hashable, Sendable {
 
     public init(
         enabled: Bool = true,
+        isDirectional: Bool = true,
         intensity: Double = 0.42,
         blur: Double = 36.0,
         distance: Double = 22.0,
         angleDegrees: Double = 90.0
     ) {
         self.enabled = enabled
+        self.isDirectional = isDirectional
         self.intensity = intensity
         self.blur = blur
         self.distance = distance
         self.angleDegrees = angleDegrees
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled, isDirectional, intensity, blur, distance, angleDegrees
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        self.isDirectional = try container.decodeIfPresent(Bool.self, forKey: .isDirectional) ?? true
+        self.intensity = try container.decodeIfPresent(Double.self, forKey: .intensity) ?? 0.42
+        self.blur = try container.decodeIfPresent(Double.self, forKey: .blur) ?? 36.0
+        self.distance = try container.decodeIfPresent(Double.self, forKey: .distance) ?? 22.0
+        self.angleDegrees = try container.decodeIfPresent(Double.self, forKey: .angleDegrees) ?? 90.0
     }
 }
 
@@ -555,7 +572,7 @@ public struct MotionConfig: Codable, Equatable, Hashable, Sendable {
 
     public init(
         cameraSpring: SpringConfig = .defaultCamera,
-        motionBlurIntensity: Double = 0.0,
+        motionBlurIntensity: Double = 1.0,
         avoidEmptyBoundsWhenZooming: Bool = true
     ) {
         self.cameraSpring = cameraSpring

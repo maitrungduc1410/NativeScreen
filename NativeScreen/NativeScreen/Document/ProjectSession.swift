@@ -736,6 +736,26 @@ public final class ProjectSession: Identifiable {
         selectZoom(newZoom.id)
     }
 
+    public func addZoomInRange(sourceStartMs: Double, sourceEndMs: Double) {
+        guard sourceEndMs - sourceStartMs >= 350.0 else { return }
+        let midMs = (sourceStartMs + sourceEndMs) * 0.5
+        let cursorState = trajectorySolver.evaluate(atSourceMs: midMs).cursor
+        let newZoom = ZoomBlock(
+            sourceStartMs: sourceStartMs,
+            sourceEndMs: sourceEndMs,
+            scale: 1.8,
+            mode: .followCursor,
+            presentation: .screen,
+            manualCenter01: cursorState.position01
+        )
+        mutate { doc in
+            doc.timeline.isZoomTrackHidden = false
+            doc.timeline.zooms.append(newZoom)
+            doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+        selectedZoomId = newZoom.id
+    }
+
     public func regenerateAutoZooms() {
         let generated = AutoZoomClusterGenerator.generateZooms(
             clicks: clickEvents,

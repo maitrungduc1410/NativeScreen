@@ -1,13 +1,19 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 /// Native macOS Inspector Sidebar with dark pill selectors,
 /// non-truncating responsive controls, and quick "Reset" buttons on sliders.
 public struct InspectorSidebarView: View {
     @Bindable var session: ProjectSession
     @State private var systemWallpapers: [SystemWallpaperItem] = []
-    @State private var isRotationSectionExpanded: Bool = true
+    @State private var isRotationSectionExpanded: Bool = false
     @State private var isAdvancedCursorSectionExpanded: Bool = false
+    @State private var isAdvancedShadowSectionExpanded: Bool = false
+    @State private var wallpaperCategory: String = "macOS"
+    @State private var hoveredScreenAnimPreset: String? = nil
+    @State private var hoveredCursorAnimPreset: String? = nil
+    @State private var selectedAudioGenre: String = "Lo-Fi"
     @State private var lastRememberedIdleMs: Double = 2000.0
     @State private var lastRememberedLoopMs: Double = 1000.0
     @State private var lastRememberedShakeThreshold: Double = 4.0
@@ -18,42 +24,50 @@ public struct InspectorSidebarView: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            // Vertical Icon Navigation Rail with Instant Speech-Bubble Tooltips (Left side, style)
-            VStack(spacing: 10) {
+            // Vertical Icon Navigation Rail with Purple Active Dot Indicator (Left side)
+            VStack(spacing: 14) {
                 ForEach(ProjectSession.InspectorTab.allCases) { tab in
                     let isSelected = (session.selectedInspectorTab == tab)
                     InstantTooltipButton(
-                        tooltip: tab.rawValue,
+                        tooltip: tab == .zoom ? "Animations" : tab.rawValue,
                         edge: .leading,
-                        isActive: isSelected,
-                        activeColor: Color.white.opacity(0.11),
+                        isActive: false,
                         size: 38,
                         cornerRadius: 9
                     ) {
-                        session.selectedInspectorTab = tab
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            session.selectedInspectorTab = tab
+                        }
                     } label: {
-                        Image(systemName: tab.systemImage)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(isSelected ? Color(red: 0.62, green: 0.52, blue: 1.0) : .secondary)
+                        ZStack {
+                            Image(systemName: tab == .zoom ? "point.topleft.down.to.point.bottomright.curvepath" : tab.systemImage)
+                                .font(.system(size: 14.5, weight: .semibold))
+                                .foregroundStyle(
+                                    isSelected
+                                        ? Color(red: 0.56, green: 0.46, blue: 1.0)
+                                        : .white.opacity(0.45)
+                                )
+
+                            if isSelected {
+                                Circle()
+                                    .fill(Color(red: 0.56, green: 0.46, blue: 1.0))
+                                    .frame(width: 4.5, height: 4.5)
+                                    .offset(x: 13.5)
+                            }
+                        }
                     }
                 }
                 Spacer()
             }
-            .padding(.vertical, 14)
-            .padding(.horizontal, 7)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 6)
             .frame(maxHeight: .infinity)
-            .background(Color(red: 0.07, green: 0.07, blue: 0.09))
+            .background(Color(red: 0.04, green: 0.04, blue: 0.055))
             .zIndex(50)
 
-            Divider()
-
-            // Active Inspector Content Panel
+            // Active Inspector Content Panel (Wrapped in the rounded dark container with spacious 24pt section rhythm!)
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text(session.selectedInspectorTab.rawValue)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-
+                VStack(alignment: .leading, spacing: 24) {
                     switch session.selectedInspectorTab {
                     case .background:
                         backgroundInspector
@@ -69,11 +83,17 @@ public struct InspectorSidebarView: View {
                         shortcutsInspector
                     }
                 }
-                .padding(18)
+                .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(red: 0.08, green: 0.08, blue: 0.10))
+                )
+                .padding(.vertical, 8)
+                .padding(.trailing, 8)
             }
-            .frame(width: 332)
-            .background(Color(red: 0.09, green: 0.09, blue: 0.12))
+            .frame(width: 344)
+            .background(Color(red: 0.04, green: 0.04, blue: 0.055))
         }
         .onAppear {
             if systemWallpapers.isEmpty {
@@ -82,72 +102,98 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 1. Background & Frame Style Inspector
+    // MARK: - 1. Background & Frame Style Inspector ( & 10!)
 
     @ViewBuilder
     private var backgroundInspector: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Pill selector (Mesh, macOS, Gradient, Color)
-            HStack(spacing: 6) {
-                ForEach([BackgroundType.mesh, .wallpaper, .gradient, .solid]) { mode in
-                    let isSelected = (session.document.background.type == mode)
-                    Button {
-                        session.mutate { $0.background.type = mode }
-                    } label: {
-                        Text(mode.label)
-                            .font(.system(size: 12, weight: .semibold))
-                            .lineLimit(1)
-                            .foregroundStyle(isSelected ? .white : .secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(
-                                isSelected
-                                    ? Color.white.opacity(0.14)
-                                    : Color.white.opacity(0.04),
-                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .strokeBorder(isSelected ? Color.white.opacity(0.28) : Color.clear, lineWidth: 1)
-                            )
+        let bgType = session.document.background.type
+        let isWallpaperMode = (bgType == .mesh || bgType == .wallpaper)
+
+        VStack(alignment: .leading, spacing: 24) {
+            // 1. Background Type Selector (`Wallpaper` | `Gradient` | `Color` | `Image`)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Background")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                HStack(spacing: 6) {
+                    inspectorPillOptionButton(title: "Wallpaper", isSelected: isWallpaperMode) {
+                        session.mutate { $0.background.type = (wallpaperCategory == "macOS" ? .wallpaper : .mesh) }
                     }
-                    .buttonStyle(.plain)
+                    inspectorPillOptionButton(title: "Gradient", isSelected: bgType == .gradient) {
+                        session.mutate { $0.background.type = .gradient }
+                    }
+                    inspectorPillOptionButton(title: "Color", isSelected: bgType == .solid) {
+                        session.mutate { $0.background.type = .solid }
+                    }
+                    inspectorPillOptionButton(title: "Image", isSelected: bgType == .image) {
+                        session.mutate { $0.background.type = .image }
+                    }
                 }
             }
 
-            switch session.document.background.type {
-            case .mesh:
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Wallpaper Presets")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button {
-                            if let random = MeshPreset.builtIn.randomElement() {
-                                session.mutate {
-                                    $0.background.type = .mesh
-                                    $0.background.meshPresetId = random.id
+            if isWallpaperMode {
+                // 2. Wallpaper Category Pills + Full-Width `Pick random wallpaper` + 8-Column Grid
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Wallpaper")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.92))
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(["macOS", "Spring", "Sunset", "Radiant"], id: \.self) { cat in
+                                inspectorPillOptionButton(title: cat, isSelected: wallpaperCategory == cat) {
+                                    wallpaperCategory = cat
+                                    session.mutate {
+                                        $0.background.type = (cat == "macOS") ? .wallpaper : .mesh
+                                    }
                                 }
                             }
-                        } label: {
-                            Label("Random", systemImage: "wand.and.stars")
-                                .font(.system(size: 10, weight: .medium))
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
                     }
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                    Button {
+                        if wallpaperCategory == "macOS", let randomSys = systemWallpapers.randomElement() {
+                            session.selectSystemWallpaper(randomSys)
+                        } else if let randomPreset = MeshPreset.builtIn.randomElement() {
+                            session.mutate {
+                                $0.background.type = .mesh
+                                $0.background.meshPresetId = randomPreset.id
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "wand.and.stars")
+                                .font(.system(size: 12.5, weight: .medium))
+                            Text("Pick random wallpaper")
+                                .font(.system(size: 12.5, weight: .medium))
+                        }
+                        .foregroundStyle(.white.opacity(0.92))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(0.035))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // 8-Column Square Thumbnail Grid
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 8)
+                    LazyVGrid(columns: columns, spacing: 6) {
                         ForEach(MeshPreset.builtIn) { preset in
-                            let isSelected = (session.document.background.meshPresetId == preset.id)
+                            let isSelected = (session.document.background.type == .mesh && session.document.background.meshPresetId == preset.id)
                             Button {
                                 session.mutate {
                                     $0.background.type = .mesh
                                     $0.background.meshPresetId = preset.id
                                 }
                             } label: {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .fill(
                                         LinearGradient(
                                             colors: preset.colorsHex.map { Color(hex: $0) },
@@ -155,75 +201,56 @@ public struct InspectorSidebarView: View {
                                             endPoint: .bottomTrailing
                                         )
                                     )
-                                    .frame(height: 38)
+                                    .aspectRatio(1.0, contentMode: .fit)
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 2 : 1)
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                     )
                             }
                             .buttonStyle(.plain)
-                            .help(preset.name)
                         }
-                    }
-                }
 
-            case .wallpaper:
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("macOS System Wallpapers")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                         ForEach(systemWallpapers) { item in
-                            let isSelected = (session.document.background.systemWallpaperName == item.name)
+                            let isSelected = (session.document.background.type == .wallpaper && session.document.background.systemWallpaperName == item.name)
                             Button {
                                 session.selectSystemWallpaper(item)
                             } label: {
-                                VStack(spacing: 4) {
+                                Group {
                                     if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
                                         Image(nsImage: nsImg)
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
-                                            .frame(height: 44)
-                                            .frame(maxWidth: .infinity)
-                                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                    .strokeBorder(isSelected ? Color.white : Color.clear, lineWidth: 2)
-                                            )
                                     } else {
-                                        RoundedRectangle(cornerRadius: 7)
-                                            .fill(Color.secondary.opacity(0.2))
-                                            .frame(height: 44)
+                                        Color.secondary.opacity(0.2)
                                     }
-                                    Text(item.name)
-                                        .font(.system(size: 9))
-                                        .lineLimit(1)
-                                        .foregroundStyle(.secondary)
                                 }
+                                .aspectRatio(1.0, contentMode: .fit)
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
                     }
                 }
-
-            case .gradient, .solid, .image:
+            } else {
                 HStack {
                     Text("Hex Color")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.75))
                     Spacer()
                     TextField("#1E1E2E", text: Binding(
                         get: { session.document.background.solidColor },
                         set: { hex in session.mutate { $0.background.solidColor = hex } }
                     ))
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 96)
+                    .frame(width: 104)
                 }
             }
 
-            Divider()
-
+            // 3. Background blur slider
             coalescedSlider(
                 title: "Background blur",
                 value: Binding(
@@ -231,38 +258,106 @@ public struct InspectorSidebarView: View {
                     set: { v in session.mutate { $0.background.blurRadius = v } }
                 ),
                 range: 0...60,
-                defaultValue: 0.0
+                defaultValue: 0.0,
+                showResetButton: false
             )
 
-            coalescedSlider(
-                title: "Padding",
-                value: Binding(
-                    get: { session.document.canvas.paddingRatio },
-                    set: { v in session.mutate { $0.canvas.paddingRatio = v } }
-                ),
-                range: 0.0...0.30,
-                defaultValue: 0.10
-            )
+            inspectorDivider
 
-            coalescedSlider(
-                title: "Screen rounded corners",
-                value: Binding(
-                    get: { session.document.frameStyle.borderRadius },
-                    set: { v in session.mutate { $0.frameStyle.borderRadius = v } }
-                ),
-                range: 0...44,
-                defaultValue: 16.0
-            )
+            // 4. Padding, Screen rounded corners & Inset toggle
+            VStack(alignment: .leading, spacing: 22) {
+                coalescedSlider(
+                    title: "Padding",
+                    value: Binding(
+                        get: { session.document.canvas.paddingRatio },
+                        set: { v in session.mutate { $0.canvas.paddingRatio = v } }
+                    ),
+                    range: 0.0...0.30,
+                    defaultValue: 0.10
+                )
 
-            coalescedSlider(
-                title: "Shadow intensity",
-                value: Binding(
-                    get: { session.document.frameStyle.shadow.intensity },
-                    set: { v in session.mutate { $0.frameStyle.shadow.intensity = v } }
-                ),
-                range: 0...1.0,
-                defaultValue: 0.42
-            )
+                coalescedSlider(
+                    title: "Screen rounded corners",
+                    value: Binding(
+                        get: { session.document.frameStyle.borderRadius },
+                        set: { v in session.mutate { $0.frameStyle.borderRadius = v } }
+                    ),
+                    range: 0...44,
+                    defaultValue: 16.0
+                )
+
+                inspectorToggleRow(
+                    title: "Inset",
+                    icon: nil,
+                    description: "Add inset around the screen.",
+                    isOn: Binding(
+                        get: { session.document.frameStyle.inset.enabled },
+                        set: { v in session.mutate { $0.frameStyle.inset.enabled = v } }
+                    )
+                )
+            }
+
+            inspectorDivider
+
+            // 5. Shadow (`Classic` | `Directional` + `Advanced shadow settings`)
+            VStack(alignment: .leading, spacing: 16) {
+                coalescedSlider(
+                    title: "Shadow",
+                    value: Binding(
+                        get: { session.document.frameStyle.shadow.intensity },
+                        set: { v in session.mutate { $0.frameStyle.shadow.intensity = v } }
+                    ),
+                    range: 0.0...0.85,
+                    defaultValue: 0.42
+                )
+
+                HStack(spacing: 6) {
+                    let isDir = session.document.frameStyle.shadow.isDirectional
+                    inspectorPillOptionButton(title: "Classic", isSelected: !isDir) {
+                        session.mutate { $0.frameStyle.shadow.isDirectional = false }
+                    }
+                    inspectorPillOptionButton(title: "Directional", isSelected: isDir) {
+                        session.mutate { $0.frameStyle.shadow.isDirectional = true }
+                    }
+                }
+
+                inspectorCollapsibleSection(
+                    title: "Advanced shadow settings",
+                    isExpanded: $isAdvancedShadowSectionExpanded
+                ) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        coalescedSlider(
+                            title: "Shadow Distance",
+                            value: Binding(
+                                get: { session.document.frameStyle.shadow.distance },
+                                set: { v in session.mutate { $0.frameStyle.shadow.distance = v } }
+                            ),
+                            range: 0...80,
+                            defaultValue: 22.0
+                        )
+
+                        coalescedSlider(
+                            title: "Shadow Angle",
+                            value: Binding(
+                                get: { session.document.frameStyle.shadow.angleDegrees },
+                                set: { v in session.mutate { $0.frameStyle.shadow.angleDegrees = v } }
+                            ),
+                            range: 0...180,
+                            defaultValue: 90.0
+                        )
+
+                        coalescedSlider(
+                            title: "Shadow Blur",
+                            value: Binding(
+                                get: { session.document.frameStyle.shadow.blur },
+                                set: { v in session.mutate { $0.frameStyle.shadow.blur = v } }
+                            ),
+                            range: 0...60,
+                            defaultValue: 36.0
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -274,7 +369,7 @@ public struct InspectorSidebarView: View {
         let normalizedThemeId = CursorThemePreset.normalizeThemeId(cursor.themeId)
         let activeTheme = CursorThemePreset.theme(withId: normalizedThemeId)
 
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 24) {
             if let slice = session.currentActiveSlice, slice.hideCursor {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top, spacing: 8) {
@@ -471,7 +566,7 @@ public struct InspectorSidebarView: View {
                 inspectorDivider
 
                 // 4. Hide cursor if not moving + Loop cursor position + Hide cursor (`eye.slash`)
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 20) {
                     inspectorToggleRow(
                         title: "Hide cursor if not moving",
                         icon: nil,
@@ -828,209 +923,262 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 3. Auto-Zoom & Camera Motion Blur Inspector
+    // MARK: - 3. Animations
 
     @ViewBuilder
     private var zoomInspector: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Button {
-                    session.addZoomAtPlayhead()
-                } label: {
-                    Label("Add Zoom", systemImage: "plus.magnifyingglass")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.indigo)
-                .controlSize(.small)
+        let camSpring = session.document.motion.cameraSpring
+        let isFocusedCam = abs(camSpring.stiffness - SpringConfig.focusedCamera.stiffness) < 10.0
 
-                Button {
-                    session.regenerateAutoZooms()
-                } label: {
-                    Label("Auto-Cluster", systemImage: "sparkles")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+        let curSpring = session.document.cursor.spring
+        let isCursorSmoothEnabled = session.document.cursor.smoothMovementEnabled
+        let activeCursorPresetName: String = {
+            if !isCursorSmoothEnabled { return "None" }
+            if abs(curSpring.stiffness - 530.0) < 15.0 { return "Rapid" }
+            if abs(curSpring.stiffness - 340.0) < 15.0 { return "Medium" }
+            return "Smooth"
+        }()
+
+        let screenDescriptionText: String? = {
+            guard let hovered = hoveredScreenAnimPreset else { return nil }
+            if hovered == "Focused" {
+                return "Animation stabilizes quickly making it easier to follow and read the content"
             }
+            return "Animation is more fluid. Great for more creative content not focused on reading"
+        }()
 
-            if let zoomId = session.selectedZoomId,
-               let zoom = session.document.timeline.zooms.first(where: { $0.id == zoomId }) {
-                Divider()
-                Text("Selected Zoom")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+        let hoveredScreenSpring: SpringConfig? = {
+            guard let hovered = hoveredScreenAnimPreset else { return nil }
+            return (hovered == "Focused") ? .focusedCamera : .smoothCamera
+        }()
 
-                coalescedSlider(
-                    title: String(format: "Zoom level (%d%%)", Int(round(((zoom.scale * 10.0).rounded() / 10.0) * 100))),
-                    value: Binding(
-                        get: { (zoom.scale * 10.0).rounded() / 10.0 },
-                        set: { v in
-                            session.setZoomScale(id: zoomId, scale: v)
-                        }
-                    ),
-                    range: 1.0...4.0,
-                    defaultValue: 1.8
-                )
+        let hoveredCursorSpring: SpringConfig? = {
+            guard let hovered = hoveredCursorAnimPreset else { return nil }
+            switch hovered {
+            case "Smooth": return SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
+            case "Medium": return SpringConfig(stiffness: 340.0, damping: 60.0, mass: 3.0)
+            case "Rapid":  return SpringConfig(stiffness: 530.0, damping: 40.0, mass: 1.0)
+            case "None":   return SpringConfig(stiffness: 2500.0, damping: 200.0, mass: 0.2)
+            default: return nil
+            }
+        }()
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Focus Target")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 26) {
+            // 1. Screen animation style (`Focused` | `Smooth` + Live Description & Moving Dot on Hover)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Screen animation style")
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
 
-                    Picker("", selection: Binding(
-                        get: { zoom.mode },
-                        set: { m in
-                            session.mutate { doc in
-                                if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
-                                    doc.timeline.zooms[idx].mode = m
-                                }
+                HStack(spacing: 8) {
+                    animationPresetCardButton(
+                        title: "Focused",
+                        icon: "target",
+                        isSelected: isFocusedCam,
+                        width: 96,
+                        height: 76,
+                        onHoverChanged: { hovering in
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                hoveredScreenAnimPreset = hovering ? "Focused" : nil
                             }
                         }
-                    )) {
-                        Text("Follow Cursor").tag(ZoomMode.followCursor)
-                        Text("Manual Center").tag(ZoomMode.manual)
+                    ) {
+                        session.mutate { $0.motion.cameraSpring = .focusedCamera }
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
 
-                Button(role: .destructive) {
-                    session.deleteZoom(zoomId: zoomId)
-                } label: {
-                    Label("Delete Selected Zoom", systemImage: "trash")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            Divider()
-
-            // Camera Animation Presets
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Screen animation style")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 6) {
-                    cameraSpringPresetButton(
-                        title: "Focused",
-                        icon: "scope",
-                        preset: .focusedCamera
-                    )
-                    cameraSpringPresetButton(
+                    animationPresetCardButton(
                         title: "Smooth",
                         icon: "point.topleft.down.to.point.bottomright.curvepath",
-                        preset: .smoothCamera
-                    )
+                        isSelected: !isFocusedCam,
+                        width: 96,
+                        height: 76,
+                        onHoverChanged: { hovering in
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                hoveredScreenAnimPreset = hovering ? "Smooth" : nil
+                            }
+                        }
+                    ) {
+                        session.mutate { $0.motion.cameraSpring = .smoothCamera }
+                    }
+
+                    Spacer()
+                }
+
+                if let desc = screenDescriptionText, let spring = hoveredScreenSpring {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(desc)
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.48))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        SpringPhysicsDemoDotView(spring: spring)
+                            .id("screen_dot_\(hoveredScreenAnimPreset ?? "")")
+                    }
+                    .padding(.top, 2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
 
-            // Cursor Animation Presets (`Smooth`, `Medium`, `Rapid`)
-            VStack(alignment: .leading, spacing: 6) {
+            // 2. Cursor animation style (`Smooth` | `Medium` | `Rapid` | `None` + Moving Dot on Hover)
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Cursor animation style")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
 
-                HStack(spacing: 6) {
-                    cursorSpringPresetButton(
+                HStack(spacing: 8) {
+                    animationPresetCardButton(
                         title: "Smooth",
                         icon: "cursorarrow.click.2",
-                        preset: SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
-                    )
-                    cursorSpringPresetButton(
+                        isSelected: activeCursorPresetName == "Smooth",
+                        width: nil,
+                        height: 74,
+                        onHoverChanged: { hovering in
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                hoveredCursorAnimPreset = hovering ? "Smooth" : nil
+                            }
+                        }
+                    ) {
+                        session.mutate {
+                            $0.cursor.smoothMovementEnabled = true
+                            $0.cursor.spring = SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
+                        }
+                    }
+
+                    animationPresetCardButton(
                         title: "Medium",
                         icon: "cursorarrow.click",
-                        preset: SpringConfig(stiffness: 340.0, damping: 60.0, mass: 3.0)
-                    )
-                    cursorSpringPresetButton(
+                        isSelected: activeCursorPresetName == "Medium",
+                        width: nil,
+                        height: 74,
+                        onHoverChanged: { hovering in
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                hoveredCursorAnimPreset = hovering ? "Medium" : nil
+                            }
+                        }
+                    ) {
+                        session.mutate {
+                            $0.cursor.smoothMovementEnabled = true
+                            $0.cursor.spring = SpringConfig(stiffness: 340.0, damping: 60.0, mass: 3.0)
+                        }
+                    }
+
+                    animationPresetCardButton(
                         title: "Rapid",
                         icon: "cursorarrow.motionlines",
-                        preset: SpringConfig(stiffness: 530.0, damping: 40.0, mass: 1.0)
-                    )
+                        isSelected: activeCursorPresetName == "Rapid",
+                        width: nil,
+                        height: 74,
+                        onHoverChanged: { hovering in
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                hoveredCursorAnimPreset = hovering ? "Rapid" : nil
+                            }
+                        }
+                    ) {
+                        session.mutate {
+                            $0.cursor.smoothMovementEnabled = true
+                            $0.cursor.spring = SpringConfig(stiffness: 530.0, damping: 40.0, mass: 1.0)
+                        }
+                    }
+
+                    animationPresetCardButton(
+                        title: "None",
+                        icon: "cursorarrow",
+                        isSelected: activeCursorPresetName == "None",
+                        width: nil,
+                        height: 74,
+                        onHoverChanged: { hovering in
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                hoveredCursorAnimPreset = hovering ? "None" : nil
+                            }
+                        }
+                    ) {
+                        session.mutate {
+                            $0.cursor.smoothMovementEnabled = false
+                        }
+                    }
+                }
+
+                if let spring = hoveredCursorSpring {
+                    SpringPhysicsDemoDotView(spring: spring)
+                        .id("cursor_dot_\(hoveredCursorAnimPreset ?? "")")
+                        .padding(.top, 4)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
 
-            coalescedSlider(
-                title: "Camera motion blur",
-                value: Binding(
-                    get: { session.document.motion.motionBlurIntensity },
-                    set: { v in session.mutate { $0.motion.motionBlurIntensity = v } }
-                ),
-                range: 0.0...1.5,
-                defaultValue: 0.0
-            )
+            inspectorDivider
 
-            Toggle("Avoid empty area when zooming", isOn: Binding(
-                get: { session.document.motion.avoidEmptyBoundsWhenZooming },
-                set: { v in session.mutate { $0.motion.avoidEmptyBoundsWhenZooming = v } }
-            ))
-            .font(.system(size: 12))
+            // 3. Motion blur (`0.0 ... 1.0`, default = `1.0` max & 4!)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Motion blur")
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                Text("Elements that are moving will have a cinematic motion blur effect applied")
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Slider(
+                    value: Binding(
+                        get: { min(1.0, max(0.0, session.document.motion.motionBlurIntensity)) },
+                        set: { v in session.mutate { $0.motion.motionBlurIntensity = v } }
+                    ),
+                    in: 0.0...1.0
+                ) { editing in
+                    if editing {
+                        session.beginInteractiveEdit()
+                    } else {
+                        session.endInteractiveEdit()
+                    }
+                }
+                .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
+                .controlSize(.regular)
+                .padding(.top, 4)
+            }
         }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: hoveredScreenAnimPreset)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: hoveredCursorAnimPreset)
     }
 
     @ViewBuilder
-    private func cursorSpringPresetButton(title: String, icon: String, preset: SpringConfig) -> some View {
-        let cur = session.document.cursor.spring
-        let isRapid = abs(cur.stiffness - 530.0) < 10.0
-        let isMedium = abs(cur.stiffness - 340.0) < 10.0
-        let isSelected: Bool = {
-            if abs(preset.stiffness - 530.0) < 10.0 { return isRapid }
-            if abs(preset.stiffness - 340.0) < 10.0 { return isMedium }
-            return !isRapid && !isMedium // Default (`Smooth`)
-        }()
-        Button {
-            session.mutate { $0.cursor.spring = preset }
-        } label: {
-            VStack(spacing: 4) {
+    private func animationPresetCardButton(
+        title: String,
+        icon: String,
+        isSelected: Bool,
+        width: CGFloat?,
+        height: CGFloat,
+        onHoverChanged: @escaping (Bool) -> Void,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 10.5, weight: .medium))
-            }
-            .foregroundStyle(isSelected ? .white : .secondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.28) : Color.white.opacity(0.04))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isSelected ? Color(red: 0.54, green: 0.44, blue: 1.0) : Color.white.opacity(0.08), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
+                    .font(.system(size: 19, weight: .regular))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.88))
 
-    @ViewBuilder
-    private func cameraSpringPresetButton(title: String, icon: String, preset: SpringConfig) -> some View {
-        let cam = session.document.motion.cameraSpring
-        let isFocused = abs(cam.stiffness - SpringConfig.focusedCamera.stiffness) < 10.0
-        let isSelected = (abs(preset.stiffness - SpringConfig.focusedCamera.stiffness) < 10.0) ? isFocused : !isFocused
-        Button {
-            session.mutate { $0.motion.cameraSpring = preset }
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.88))
+                    .lineLimit(1)
             }
-            .foregroundStyle(isSelected ? .white : .secondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .frame(width: width, height: height, alignment: .leading)
+            .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.28) : Color.white.opacity(0.04))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(isSelected ? 0.075 : 0.03))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isSelected ? Color(red: 0.54, green: 0.44, blue: 1.0) : Color.white.opacity(0.08), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.white.opacity(isSelected ? 0.14 : 0.05), lineWidth: 1)
             )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            onHoverChanged(hovering)
+        }
     }
 
     // MARK: - 4. Multi-Track Masks & Sensitive Data Blur Inspector
@@ -1168,82 +1316,102 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 5. Audio & Clip Slice Speed Inspector
+    // MARK: - 5. Audio Inspector
 
     @ViewBuilder
     private var audioAndSliceInspector: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            coalescedSlider(
-                title: "System audio volume",
-                value: Binding(
-                    get: { session.document.audio.systemAudioVolume },
-                    set: { v in session.mutate { $0.audio.systemAudioVolume = v } }
-                ),
-                range: 0...1.5,
-                defaultValue: 1.0
-            )
+        VStack(alignment: .leading, spacing: 24) {
+            // 1. System audio section
+            VStack(alignment: .leading, spacing: 14) {
+                Text("System audio")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.45))
 
-            coalescedSlider(
-                title: "Microphone volume",
-                value: Binding(
-                    get: { session.document.audio.microphoneVolume },
-                    set: { v in session.mutate { $0.audio.microphoneVolume = v } }
-                ),
-                range: 0...1.5,
-                defaultValue: 1.0
-            )
-
-            Toggle("Voice enhancement", isOn: Binding(
-                get: { session.document.audio.voiceEnhancement },
-                set: { v in session.mutate { $0.audio.voiceEnhancement = v } }
-            ))
-            .font(.system(size: 12))
-
-            if let sliceId = session.selectedSliceId,
-               let slice = session.document.timeline.slices.first(where: { $0.id == sliceId }) {
-                Divider()
-                Text("Selected Clip Slice")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                coalescedSlider(
-                    title: String(format: "Slice system audio (%d%%)", Int(round((slice.muted ? 0.0 : slice.systemAudioVolume) * 100))),
-                    value: Binding(
-                        get: { slice.muted ? 0.0 : slice.systemAudioVolume },
-                        set: { v in
-                            session.setSliceSystemAudioVolume(id: sliceId, volume: v)
-                        }
-                    ),
-                    range: 0.0...1.5,
-                    defaultValue: 1.0
+                inspectorToggleRow(
+                    title: "Mute system audio",
+                    icon: nil,
+                    description: nil,
+                    isOn: Binding(
+                        get: { session.document.audio.muteSystemAudio },
+                        set: { v in session.mutate { $0.audio.muteSystemAudio = v } }
+                    )
                 )
 
-                coalescedSlider(
-                    title: String(format: "Playback speed (%.2fx)", slice.speed),
-                    value: Binding(
-                        get: { slice.speed },
-                        set: { v in
-                            session.mutate { doc in
-                                if let idx = doc.timeline.slices.firstIndex(where: { $0.id == sliceId }) {
-                                    doc.timeline.slices[idx].speed = v
+                if !session.document.audio.muteSystemAudio {
+                    coalescedSlider(
+                        title: "System audio volume",
+                        value: Binding(
+                            get: { session.document.audio.systemAudioVolume },
+                            set: { v in session.mutate { $0.audio.systemAudioVolume = v } }
+                        ),
+                        range: 0...1.5,
+                        defaultValue: 1.0
+                    )
+                }
+            }
+
+            inspectorDivider
+
+            // 2. Background audio section
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Background audio")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.45))
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(["Lo-Fi", "Commercial", "Electronic", "Instrumental"], id: \.self) { genre in
+                            inspectorPillOptionButton(title: genre, isSelected: selectedAudioGenre == genre) {
+                                selectedAudioGenre = genre
+                            }
+                        }
+                    }
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(["Sunny Lo-Fi", "Lean Groove", "Bright Lounge", "Chill Hop"], id: \.self) { trackName in
+                            let isSelected = (session.document.audio.backgroundMusic.relativePath == trackName)
+                            inspectorPillOptionButton(title: trackName, isSelected: isSelected) {
+                                session.mutate {
+                                    $0.audio.backgroundMusic.relativePath = isSelected ? nil : trackName
                                 }
                             }
                         }
-                    ),
-                    range: 0.25...4.0,
-                    defaultValue: 1.0
-                )
-
-                if session.document.timeline.slices.count > 1 {
-                    Button(role: .destructive) {
-                        session.deleteSelectedSlice()
-                    } label: {
-                        Label("Delete Selected Clip", systemImage: "trash")
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
+
+                inspectorDivider
+
+                Button {
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [.audio]
+                    panel.allowsMultipleSelection = false
+                    if panel.runModal() == .OK, let url = panel.url {
+                        session.mutate {
+                            $0.audio.backgroundMusic.relativePath = url.lastPathComponent
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "hifispeaker.and.homepodmini.badge.plus")
+                            .font(.system(size: 13.5, weight: .medium))
+                        Text("Add background audio")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color.white.opacity(0.035))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -1426,9 +1594,10 @@ public struct InspectorSidebarView: View {
         icon: String? = nil,
         value: Binding<Double>,
         range: ClosedRange<Double>,
-        defaultValue: Double
+        defaultValue: Double,
+        showResetButton: Bool = true
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 7) {
                 if let icon = icon {
                     Image(systemName: icon)
@@ -1440,7 +1609,12 @@ public struct InspectorSidebarView: View {
                     .foregroundStyle(.white.opacity(0.92))
             }
 
-            coalescedSliderRowOnly(value: value, range: range, defaultValue: defaultValue)
+            coalescedSliderRowOnly(
+                value: value,
+                range: range,
+                defaultValue: defaultValue,
+                showResetButton: showResetButton
+            )
         }
     }
 
@@ -1448,7 +1622,8 @@ public struct InspectorSidebarView: View {
     private func coalescedSliderRowOnly(
         value: Binding<Double>,
         range: ClosedRange<Double>,
-        defaultValue: Double
+        defaultValue: Double,
+        showResetButton: Bool = true
     ) -> some View {
         let isModified = abs(value.wrappedValue - defaultValue) > 0.005
 
@@ -1463,27 +1638,93 @@ public struct InspectorSidebarView: View {
             .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
             .controlSize(.regular)
 
-            Button {
-                withAnimation(.easeOut(duration: 0.14)) {
-                    value.wrappedValue = defaultValue
+            if showResetButton {
+                Button {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        value.wrappedValue = defaultValue
+                    }
+                } label: {
+                    Text("Reset")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
+                        .frame(width: 66, height: 32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
-            } label: {
-                Text("Reset")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
-                    .frame(width: 66, height: 32)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .buttonStyle(.plain)
+                .disabled(!isModified)
             }
-            .buttonStyle(.plain)
-            .disabled(!isModified)
+        }
+    }
+}
+
+/// Interactive Spring Physics Demo Dot:
+/// Simulates a `10pt` grey circular dot moving back and forth from `0` to `width - 10` using the exact Newtonian spring ODE
+/// (`stiffness`, `damping`, `mass`) of the hovered/selected `Screen animation style` or `Cursor animation style`!
+private struct SpringPhysicsDemoDotView: View {
+    let spring: SpringConfig
+
+    @State private var position01: Double = 0.0
+    @State private var velocity01: Double = 0.0
+    @State private var target01: Double = 1.0
+    @State private var holdCounter: Int = 0
+
+    private let dotSize: CGFloat = 10.0
+
+    var body: some View {
+        GeometryReader { geo in
+            let travelW = max(10.0, geo.size.width - dotSize)
+
+            Circle()
+                .fill(Color.white.opacity(0.42))
+                .frame(width: dotSize, height: dotSize)
+                .offset(x: CGFloat(position01) * travelW)
+        }
+        .frame(height: dotSize)
+        .onAppear {
+            position01 = 0.0
+            velocity01 = 0.0
+            target01 = 1.0
+            holdCounter = 0
+        }
+        .task(id: spring) {
+            let dt = 1.0 / 60.0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(16))
+                let k = max(5.0, spring.stiffness)
+                let c = max(1.0, spring.damping)
+                let m = max(0.1, spring.mass)
+
+                let displacement = position01 - target01
+                let accel = (-k * displacement - c * velocity01) / m
+                velocity01 += accel * dt
+                let nextPos = position01 + velocity01 * dt
+
+                // Clamp overshoot just `clamp: true`
+                if (target01 > 0.5 && nextPos >= 1.0) || (target01 < 0.5 && nextPos <= 0.0) {
+                    position01 = target01
+                    velocity01 = 0.0
+                } else {
+                    position01 = nextPos
+                }
+
+                if abs(position01 - target01) < 0.008 && abs(velocity01) < 0.02 {
+                    position01 = target01
+                    velocity01 = 0.0
+                    holdCounter += 1
+                    if holdCounter >= 6 { // ~100ms pause at each endpoint
+                        holdCounter = 0
+                        target01 = (target01 > 0.5) ? 0.0 : 1.0
+                    }
+                }
+            }
         }
     }
 }

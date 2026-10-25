@@ -20,6 +20,7 @@ public struct MultiTrackTimelineView: View {
     @State private var horizontalScrollView: NSScrollView?
     @State private var lastZoomForAnchor: Double = 1.0
     @State private var splitWigglePhase: Bool = false
+    @State private var zoomTrackHoverX: CGFloat? = nil
 
     private let labelColumnWidth: CGFloat = 104
     private let trackHorizontalInset: CGFloat = 20
@@ -562,10 +563,66 @@ public struct MultiTrackTimelineView: View {
     @ViewBuilder
     private func zoomLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
         let isHidden = session.document.timeline.isZoomTrackHidden
+        let addPreview = (!session.isSplitModeActive && !isHidden)
+            ? hoverAddZoomSpan(contentWidth: contentWidth, totalTimelineMs: totalTimelineMs)
+            : nil
 
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.white.opacity(0.018))
+
+            // Empty-Track Prompt when no zooms exist and not hovering
+            if session.document.timeline.zooms.isEmpty && addPreview == nil {
+                Text("Click or drag to add zoom on cursor")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.35))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.08))
+                    )
+                    .allowsHitTesting(false)
+            }
+
+            // Hover `+` Ghost Add-Zoom Preview Block (`Screenshot_2026-10-25_at_11.39.25_PM.png`!)
+            if let preview = addPreview {
+                let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
+                let previewW = max(24.0, CGFloat((preview.tEndMs - preview.tStartMs) / totalTimelineMs) * contentWidth - 1.0)
+                let palette = SegmentShaderPalette.zoom
+
+                Button {
+                    session.isPlaying = false
+                    session.addZoomInRange(sourceStartMs: preview.srcStartMs, sourceEndMs: preview.srcEndMs)
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [palette.fillTop, palette.fillBottom],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(palette.innerEdgeGlow, lineWidth: 7.0)
+                            .blur(radius: 4.5)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(palette.ringBorder.opacity(0.82), lineWidth: 1.0)
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.96))
+                    }
+                    .frame(width: previewW, height: zoomRowHeight)
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .offset(x: previewX)
+                .transition(.opacity.animation(.easeOut(duration: 0.12)))
+            }
 
             ForEach(session.document.timeline.zooms) { zoom in
                 if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: zoom.sourceStartMs, sourceEndMs: zoom.sourceEndMs) {
@@ -643,6 +700,52 @@ public struct MultiTrackTimelineView: View {
             }
         }
         .frame(width: contentWidth, height: zoomRowHeight)
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let pt):
+                zoomTrackHoverX = max(0.0, min(contentWidth, pt.x))
+            case .ended:
+                zoomTrackHoverX = nil
+            }
+        }
+    }
+
+    private func hoverAddZoomSpan(
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> (tStartMs: Double, tEndMs: Double, srcStartMs: Double, srcEndMs: Double)? {
+        guard let hoverX = zoomTrackHoverX, contentWidth > 10 else { return nil }
+        let hoverTimelineMs = Double(hoverX / contentWidth) * totalTimelineMs
+
+        // Build sorted existing zoom timeline spans
+        var existingSpans: [(start: Double, end: Double)] = []
+        for zoom in session.document.timeline.zooms {
+            if let (ts, te) = timelineSpan(forSourceStartMs: zoom.sourceStartMs, sourceEndMs: zoom.sourceEndMs) {
+                existingSpans.append((ts, te))
+            }
+        }
+        existingSpans.sort { $0.start < $1.start }
+
+        // If cursor is inside (or within 4pt of) an existing zoom segment, do NOT show the `+` preview
+        let marginMs = Double(4.0 / contentWidth) * totalTimelineMs
+        for span in existingSpans {
+            if hoverTimelineMs >= span.start - marginMs && hoverTimelineMs <= span.end + marginMs {
+                return nil
+            }
+        }
+
+        let availStart = existingSpans.last(where: { $0.end <= hoverTimelineMs })?.end ?? 0.0
+        let availEnd = existingSpans.first(where: { $0.start >= hoverTimelineMs })?.start ?? totalTimelineMs
+        guard availEnd - availStart >= 500.0 else { return nil }
+
+        let desiredDur = min(2800.0, availEnd - availStart)
+        let tStart = max(availStart, min(availEnd - desiredDur, hoverTimelineMs - desiredDur * 0.5))
+        let tEnd = min(availEnd, tStart + desiredDur)
+
+        let srcStart = session.timeMapper.sourceTime(forTimelineMs: tStart).sourceMs
+        let srcEnd = session.timeMapper.sourceTime(forTimelineMs: tEnd).sourceMs
+        guard srcEnd - srcStart >= 350.0 else { return nil }
+        return (tStart, tEnd, srcStart, srcEnd)
     }
 
     // MARK: - 3. Mask Lane (`34pt` height, Touching Edge-to-Edge + Native NSMenu Liquid Glass Context Menu)

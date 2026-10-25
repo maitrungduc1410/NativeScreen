@@ -154,12 +154,29 @@ public final class MetalFrameCompositor {
             by: CGAffineTransform(translationX: screenFrameRect.minX, y: screenFrameRect.minY)
         )
 
-        // Fast GPU Rounded-Rectangle Drop Shadow (Generates shadow directly from `screenFrameRect` shape)
+        // Screen Inset Border (`Inset` toggle in Background tab)
+        if doc.frameStyle.inset.enabled && doc.frameStyle.inset.size > 0.1 {
+            let insetPx = CGFloat(doc.frameStyle.inset.size) * (outputSize.height / 900.0)
+            let outerInsetRect = screenFrameRect.insetBy(dx: -insetPx, dy: -insetPx)
+            let c = CIColor(hexString: doc.frameStyle.inset.color)
+            if let insetBox = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                "inputExtent": CIVector(cgRect: outerInsetRect),
+                "inputRadius": scaledRadius + insetPx,
+                "inputColor": CIColor(red: c.red, green: c.green, blue: c.blue, alpha: CGFloat(doc.frameStyle.inset.opacity))
+            ])?.outputImage {
+                positionedScreen = positionedScreen.composited(over: insetBox)
+            }
+        }
+
+        // Fast GPU Rounded-Rectangle Drop Shadow (`Classic` vs `Directional` + `Distance`, `Angle`, `Blur`)
         if doc.frameStyle.shadow.enabled && doc.frameStyle.shadow.intensity > 0.01 {
-            let shadowOffset = CGFloat(doc.frameStyle.shadow.distance) * (outputSize.height / 900.0)
+            let shadowDist = CGFloat(doc.frameStyle.shadow.distance) * (outputSize.height / 900.0)
             let shadowBlur = CGFloat(doc.frameStyle.shadow.blur) * (outputSize.height / 900.0)
             let shadowAlpha = CGFloat(doc.frameStyle.shadow.intensity)
-            let shadowRect = screenFrameRect.offsetBy(dx: 0, dy: -shadowOffset * 0.45)
+            let angleRad = CGFloat(doc.frameStyle.shadow.angleDegrees) * .pi / 180.0
+            let dx = doc.frameStyle.shadow.isDirectional ? (cos(angleRad) * shadowDist * 0.55) : 0.0
+            let dy = doc.frameStyle.shadow.isDirectional ? (-sin(angleRad) * shadowDist * 0.55) : (-shadowDist * 0.20)
+            let shadowRect = screenFrameRect.offsetBy(dx: dx, dy: dy)
 
             if let shadowBox = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
                 "inputExtent": CIVector(cgRect: shadowRect),
@@ -167,7 +184,7 @@ public final class MetalFrameCompositor {
                 "inputColor": CIColor(red: 0, green: 0, blue: 0, alpha: shadowAlpha)
             ])?.outputImage {
                 let blurredShadow = shadowBox
-                    .applyingGaussianBlur(sigma: Double(max(1.0, shadowBlur * 0.42)))
+                    .applyingGaussianBlur(sigma: Double(max(1.0, shadowBlur * 0.45)))
                     .cropped(to: canvasRect)
                 positionedScreen = positionedScreen.composited(over: blurredShadow)
             }
@@ -253,20 +270,41 @@ public final class MetalFrameCompositor {
             }
         }
 
-        // --- PASS 5: Camera Motion Blur (Velocity-Driven Shutter Blur, Settled at Clip End) ---
-        let camSpeed = hypot(cameraState.velocity01PerSec.x, cameraState.velocity01PerSec.y) + abs(cameraState.scaleVelocityPerSec) * 0.35
-        let remainingSliceMs = activeSlice.map { max(0.0, $0.sourceEndMs - sourceTimeMs) } ?? 1000.0
-        let endSettleFactor = min(1.0, max(0.0, (remainingSliceMs - 60.0) / 180.0))
-        if doc.motion.motionBlurIntensity > 0.05 && camSpeed > 0.35 && endSettleFactor > 0.05 {
-            let blurRadius = min(14.0, camSpeed * 12.0 * doc.motion.motionBlurIntensity * endSettleFactor)
-            if blurRadius > 0.5 {
-                let angle = atan2(-cameraState.velocity01PerSec.y, cameraState.velocity01PerSec.x)
+        // --- PASS 5: True 1-Frame Shutter Motion Blur ---
+        // Compares the current camera state (`sourceTimeMs`) with the camera state 1 frame earlier (`sourceTimeMs - 16.67ms`).
+        // - Translational pan blur (`CIMotionBlur`) ONLY fires when the camera center actually translates across pixels (`panPixelsPerFrame > 1.8`).
+        // - Radial zoom blur (`CIZoomBlur`) ONLY fires during the fast impulse of a zoom change (`scalePixelsPerFrame > 1.8`).
+        // - As soon as per-frame displacement drops below 1.8px (`rf.isStatic`), blur is 0.0 so the image settles crystal-clear!
+        if doc.motion.motionBlurIntensity > 0.02 {
+            let prevCam = session.trajectorySolver.evaluate(atSourceMs: max(0.0, sourceTimeMs - 16.67)).camera
+            let blurStrength = CGFloat(min(1.0, max(0.0, doc.motion.motionBlurIntensity)))
+
+            let dxPx = CGFloat(cameraState.center01.x - prevCam.center01.x) * outputSize.width * zoomScale
+            let dyPx = CGFloat(-(cameraState.center01.y - prevCam.center01.y)) * outputSize.height * zoomScale
+            let panPixelsPerFrame = hypot(dxPx, dyPx) * blurStrength
+
+            let scaleDelta = abs(CGFloat(cameraState.scale - prevCam.scale))
+            let scalePixelsPerFrame = scaleDelta * min(outputSize.width, outputSize.height) * 0.22 * blurStrength
+
+            if panPixelsPerFrame > 1.8 {
+                let panBlurRadius = min(6.5, Double(panPixelsPerFrame * 0.36))
+                let angle = Double(atan2(dyPx, dxPx))
                 positionedScreen = positionedScreen
                     .cropped(to: canvasRect)
                     .clampedToExtent()
                     .applyingFilter("CIMotionBlur", parameters: [
-                        kCIInputRadiusKey: blurRadius,
+                        kCIInputRadiusKey: panBlurRadius,
                         kCIInputAngleKey: angle
+                    ])
+                    .cropped(to: canvasRect)
+            } else if scalePixelsPerFrame > 1.8 {
+                let zoomAmount = min(2.8, Double(scalePixelsPerFrame * 0.16))
+                positionedScreen = positionedScreen
+                    .cropped(to: canvasRect)
+                    .clampedToExtent()
+                    .applyingFilter("CIZoomBlur", parameters: [
+                        kCIInputCenterKey: CIVector(x: canvasRect.midX, y: canvasRect.midY),
+                        kCIInputAmountKey: zoomAmount
                     ])
                     .cropped(to: canvasRect)
             }
