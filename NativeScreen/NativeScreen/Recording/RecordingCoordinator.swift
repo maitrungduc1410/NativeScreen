@@ -360,8 +360,10 @@ public final class RecordingCoordinator {
 
     private var currentDesiredPanelSize: NSSize {
         if let hosting = hudPanel?.contentView {
+            hosting.needsLayout = true
+            hosting.layoutSubtreeIfNeeded()
             let fittingW = ceil(hosting.fittingSize.width)
-            if fittingW >= 240 {
+            if fittingW >= 248 {
                 return NSSize(width: fittingW, height: Self.barHeight)
             }
         }
@@ -391,6 +393,7 @@ public final class RecordingCoordinator {
             panel.backgroundColor = .clear
             panel.isOpaque = false
             panel.hasShadow = true
+            panel.sharingType = .none // Exclude Recording HUD from all screen recordings (ScreenCaptureKit / CGWindowList)
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isMovableByWindowBackground = true
             panel.onPanelMoved = { [weak self] newOrigin in
@@ -613,6 +616,7 @@ public final class RecordingCoordinator {
             overlay.level = .floating
             overlay.ignoresMouseEvents = false
             overlay.acceptsMouseMovedEvents = true
+            overlay.sharingType = .none
             overlay.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let hosting = NSHostingView(
                 rootView: WindowAndAreaPickerOverlayView(coordinator: self, screen: screen)
@@ -875,8 +879,13 @@ public final class RecordingCoordinator {
             recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     guard let self = self, self.isRecording, !self.isRecordingPaused else { return }
+                    let prevSecInt = Int(self.recordingElapsedSeconds)
                     let now = ProcessInfo.processInfo.systemUptime
                     self.recordingElapsedSeconds = max(0.0, now - self.recordingStartUptime - self.accumulatedPausedSeconds)
+                    let newSecInt = Int(self.recordingElapsedSeconds)
+                    if newSecInt != prevSecInt {
+                        self.updateHUDPanelFrameForCurrentState(animated: false)
+                    }
                 }
             }
         } catch {
@@ -2134,12 +2143,12 @@ public struct RecordingHUDBarView: View {
                 .frame(width: 1, height: 28)
                 .padding(.horizontal, 2)
 
-            // 3. Camera, Microphone & System Audio Selector Buttons (Matches Images 1, 2, 3, 4!)
+            // 3. Camera, Microphone & System Audio Selector Buttons (No tooltips since they have explicit text labels!)
             HStack(spacing: 4) {
                 // 3a. Camera Button (`No camera` or `<Camera Name>`)
                 let hasCamera = (coordinator.selectedCameraDeviceID != nil)
                 HUDInteractiveItemButton(
-                    tooltip: "Select camera",
+                    tooltip: nil,
                     isSelected: coordinator.activeHUDMenuKind == .camera,
                     width: nil,
                     height: buttonHeight,
@@ -2167,7 +2176,7 @@ public struct RecordingHUDBarView: View {
                 // 3b. Microphone Button (`No microphone` or `<Microphone Name>`)
                 let hasMic = (coordinator.captureMicrophone && coordinator.selectedMicrophoneDeviceID != nil)
                 HUDInteractiveItemButton(
-                    tooltip: "Select microphone",
+                    tooltip: nil,
                     isSelected: coordinator.activeHUDMenuKind == .microphone,
                     width: nil,
                     height: buttonHeight,
@@ -2195,7 +2204,7 @@ public struct RecordingHUDBarView: View {
                 // 3c. System Audio Button (`System audio`, `Sound from 1 app`, or `No system audio` with `tv.music.note` icon — Images 1, 2, 3, 4!)
                 let sysAudioActive = coordinator.isSystemAudioEffectivelyActive
                 HUDInteractiveItemButton(
-                    tooltip: "Select system audio",
+                    tooltip: nil,
                     isSelected: coordinator.activeHUDMenuKind == .systemAudio,
                     width: nil,
                     height: buttonHeight,
@@ -2351,6 +2360,7 @@ public struct RecordingHUDBarView: View {
             }
         }
         .padding(.horizontal, 16)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - 3. Active Recording Compact HUD Bar ( — `[⏹ 0:04 | ⏸  ↺  🗑]`)
@@ -2382,10 +2392,13 @@ public struct RecordingHUDBarView: View {
                     }
 
                     Text(formatCompactElapsed(coordinator.recordingElapsedSeconds))
-                        .font(.system(size: 15, weight: .bold).monospacedDigit())
+                        .font(.system(size: 15, weight: .regular).monospacedDigit())
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .foregroundStyle(coordinator.isRecordingPaused ? Color.orange : stopRed)
                 }
-                .padding(.horizontal, 8)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 10)
             }
 
             Rectangle()
@@ -2437,7 +2450,8 @@ public struct RecordingHUDBarView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func formatCompactElapsed(_ sec: TimeInterval) -> String {

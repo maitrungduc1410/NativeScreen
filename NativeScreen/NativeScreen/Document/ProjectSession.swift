@@ -769,8 +769,8 @@ public final class ProjectSession: Identifiable {
             sourceEndMs: endMs,
             type: type,
             style: style,
-            intensity: 36.0,
-            cornerRadius: 10.0,
+            intensity: type == .spotlight ? 50.0 : 36.0,
+            cornerRadius: 12.0,
             keyframes: [MaskKeyframe(sourceMs: startMs, rect01: initialRect)]
         )
 
@@ -1261,15 +1261,20 @@ public final class ProjectSession: Identifiable {
             }
 
             guard peaks.count >= 8 else { return nil }
+            let sortedPeaks = peaks.sorted()
+            let p95Idx = min(sortedPeaks.count - 1, Int(Double(sortedPeaks.count) * 0.95))
+            let referencePeak = max(0.04, sortedPeaks[p95Idx])
+
             var buckets = [Float](repeating: 0.08, count: bucketCount)
             for b in 0..<bucketCount {
                 let startIdx = (b * peaks.count) / bucketCount
                 let endIdx = max(startIdx + 1, ((b + 1) * peaks.count) / bucketCount)
-                var sum: Float = 0
+                var localMax: Float = 0
                 for j in startIdx..<min(peaks.count, endIdx) {
-                    sum = max(sum, peaks[j])
+                    localMax = max(localMax, peaks[j])
                 }
-                buckets[b] = min(0.96, max(0.08, pow(sum, 0.65)))
+                let normalized = min(1.0, localMax / referencePeak)
+                buckets[b] = min(0.96, max(0.06, pow(normalized, 0.58)))
             }
             return buckets
         }.value

@@ -278,6 +278,69 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         menu.addItem(.separator())
 
+        // 1b. Mask Intensity Slider (Blur intensity 4..160 OR Highlight intensity 0..95%)
+        let intensityItem = NSMenuItem()
+        let isHighlight = (mask.type == .spotlight)
+        let intensityView = NSHostingView(
+            rootView: MenuEmbeddedSliderRowView(
+                title: isHighlight ? "Highlight intensity" : "Blur intensity",
+                initialValue: mask.intensity,
+                range: isHighlight ? (0.0...95.0) : (4.0...160.0),
+                formatValue: { val in
+                    isHighlight ? "\(Int(round(val)))%" : "\(Int(round(val)))"
+                },
+                onEditingChanged: { editing in
+                    if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
+                },
+                onValueChanged: { newVal in
+                    session.mutate { doc in
+                        for tIdx in doc.timeline.maskTracks.indices {
+                            if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == maskId }) {
+                                doc.timeline.maskTracks[tIdx].items[mIdx].intensity = newVal
+                                return
+                            }
+                        }
+                    }
+                }
+            )
+        )
+        intensityView.sizingOptions = []
+        intensityView.autoresizingMask = [.width]
+        intensityView.frame = NSRect(x: 0, y: 0, width: 264, height: 54)
+        intensityItem.view = intensityView
+        menu.addItem(intensityItem)
+
+        // 1c. Mask Corner Radius Slider (`0..120`)
+        let radiusItem = NSMenuItem()
+        let radiusView = NSHostingView(
+            rootView: MenuEmbeddedSliderRowView(
+                title: "Corner radius",
+                initialValue: mask.cornerRadius,
+                range: 0.0...120.0,
+                formatValue: { "\(Int(round($0)))px" },
+                onEditingChanged: { editing in
+                    if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
+                },
+                onValueChanged: { newVal in
+                    session.mutate { doc in
+                        for tIdx in doc.timeline.maskTracks.indices {
+                            if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == maskId }) {
+                                doc.timeline.maskTracks[tIdx].items[mIdx].cornerRadius = newVal
+                                return
+                            }
+                        }
+                    }
+                }
+            )
+        )
+        radiusView.sizingOptions = []
+        radiusView.autoresizingMask = [.width]
+        radiusView.frame = NSRect(x: 0, y: 0, width: 264, height: 54)
+        radiusItem.view = radiusView
+        menu.addItem(radiusItem)
+
+        menu.addItem(.separator())
+
         // 2. Split mask at current time (C), Disable (D)
         menu.addItem(makeCommandItem(title: "Split mask at current time", keyEquivalent: "c", modifiers: []) {
             session.splitMask(id: maskId, atSourceMs: session.currentSourceTimeMs)

@@ -64,6 +64,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         // Video frame decoder for recorded `.mp4` / `.m3u8`
         private var player: AVPlayer?
         private var videoOutput: AVPlayerItemVideoOutput?
+        private var playerItemStatusObserver: NSKeyValueObservation?
         private var loadedVideoURL: URL?
         private var lastDecodedFrame: CIImage?
         private var lastSeekedSourceMs: Double = -1.0
@@ -123,6 +124,8 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             lastSeekedSourceMs = -1.0
             isDecoderSeeking = false
             pendingSeekSourceMs = nil
+            playerItemStatusObserver?.invalidate()
+            playerItemStatusObserver = nil
 
             guard FileManager.default.fileExists(atPath: url.path) else {
                 player = nil
@@ -143,7 +146,34 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             avPlayer.isMuted = true
             self.player = avPlayer
             self.videoOutput = output
-            seekDecoderCoalesced(toSourceMs: session.currentSourceTimeMs, fastSkim: false)
+
+            let initialSourceMs = session.currentSourceTimeMs
+
+            // 1. Immediately decode the initial frame via AVAssetImageGenerator so the editor canvas
+            //    shows the real recorded video frame on the very first draw (no waiting for AVPlayerItem warmup)!
+            Task { @MainActor [weak self] in
+                let gen = AVAssetImageGenerator(asset: asset)
+                gen.appliesPreferredTrackTransform = true
+                gen.requestedTimeToleranceBefore = CMTime(seconds: 0.25, preferredTimescale: 600)
+                gen.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
+                let cmTime = CMTime(seconds: initialSourceMs / 1000.0, preferredTimescale: 600)
+                if let (cgImg, _) = try? await gen.image(at: cmTime),
+                   let self = self, self.lastDecodedFrame == nil {
+                    self.lastDecodedFrame = CIImage(cgImage: cgImg)
+                    self.mtkView?.needsDisplay = true
+                }
+            }
+
+            // 2. Also observe when AVPlayerItem becomes `.readyToPlay` so `AVPlayerItemVideoOutput` can copy the exact CVPixelBuffer
+            playerItemStatusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] observedItem, _ in
+                guard observedItem.status == .readyToPlay else { return }
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    self.lastSeekedSourceMs = -1.0
+                    self.isDecoderSeeking = false
+                    self.seekDecoderCoalesced(toSourceMs: self.session.currentSourceTimeMs, fastSkim: false)
+                }
+            }
         }
 
         private func seekDecoderCoalesced(toSourceMs sourceMs: Double, fastSkim: Bool) {

@@ -432,7 +432,10 @@ public struct MultiTrackTimelineView: View {
 
                 TimelineInteractiveSegmentView(
                     topTitle: "Clip",
-                    subtitle: formatClipSubtitle(durationMs: mapped.slice.timelineDurationMs, speed: mapped.slice.speed),
+                    subtitleContent: .clip(
+                        durationText: formatClipDurationOnly(durationMs: mapped.slice.timelineDurationMs),
+                        speedText: formatSpeedMultiplier(mapped.slice.speed)
+                    ),
                     palette: .clip,
                     isSelected: isSelected,
                     isPlayed: isPlayed,
@@ -519,7 +522,10 @@ public struct MultiTrackTimelineView: View {
 
                     TimelineInteractiveSegmentView(
                         topTitle: zoom.presentation == .loupe ? "Loupe" : "Zoom",
-                        subtitle: String(format: "🔍 %.1fx  %@", zoom.scale, zoom.mode == .followCursor ? "Auto" : "Manual"),
+                        subtitleContent: .zoom(
+                            scaleText: formatSpeedMultiplier(zoom.scale),
+                            modeText: zoom.mode == .followCursor ? "Auto" : "Manual"
+                        ),
                         palette: .zoom,
                         isSelected: isSelected,
                         isPlayed: isPlayed,
@@ -602,7 +608,11 @@ public struct MultiTrackTimelineView: View {
 
                     TimelineInteractiveSegmentView(
                         topTitle: "Mask",
-                        subtitle: item.type == .blur ? "Sensitive data" : "Highlight",
+                        subtitleContent: .mask(
+                            text: item.type == .blur
+                                ? "Sensitive data"
+                                : String(format: "Highlight %d%%", Int(round(item.intensity)))
+                        ),
                         palette: .mask,
                         isSelected: isSelected,
                         isPlayed: isPlayed,
@@ -685,15 +695,19 @@ public struct MultiTrackTimelineView: View {
         return nil
     }
 
-    private func formatClipSubtitle(durationMs: Double, speed: Double) -> String {
+    private func formatClipDurationOnly(durationMs: Double) -> String {
         let totalSec = Int(round(durationMs / 1000.0))
         let mins = totalSec / 60
         let secs = totalSec % 60
-        let timeStr = mins > 0 ? "\(mins)m \(secs)s" : "\(secs)s"
-        if abs(speed - 1.0) > 0.05 {
-            return String(format: "%@  ⏱ %.1fx", timeStr, speed)
+        return mins > 0 ? "\(mins)m \(secs)s" : "\(secs)s"
+    }
+
+    private func formatSpeedMultiplier(_ val: Double) -> String {
+        let rounded = (val * 10.0).rounded() / 10.0
+        if abs(rounded - rounded.rounded()) < 0.05 {
+            return String(format: "%.0f×", rounded)
         }
-        return "\(timeStr)  ⏱ 1x"
+        return String(format: "%.1f×", rounded)
     }
 }
 
@@ -860,8 +874,8 @@ private struct ClipSegmentDecoration: Equatable, View {
                 let totalBuckets = waveformSamples.count
                 let clampedVol = CGFloat(min(1.5, max(0.0, volumeScale)))
 
-                let stepPx: CGFloat = 4.0
-                let pointCount = max(2, min(320, Int(size.width / stepPx)))
+                let stepPx: CGFloat = 2.5
+                let pointCount = max(2, min(480, Int(size.width / stepPx)))
                 var wavePath = Path()
                 wavePath.move(to: CGPoint(x: 0, y: size.height))
 
@@ -875,7 +889,7 @@ private struct ClipSegmentDecoration: Equatable, View {
                     let amp = waveformSamples[b0] * (1.0 - t) + waveformSamples[b1] * t
 
                     let x = CGFloat(localFrac) * size.width
-                    let waveH = min(size.height * 0.72, CGFloat(amp) * (size.height * 0.44) * clampedVol)
+                    let waveH = min(size.height * 0.82, CGFloat(amp) * (size.height * 0.68) * clampedVol)
                     wavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
                 }
                 wavePath.addLine(to: CGPoint(x: size.width, y: size.height))
@@ -885,10 +899,10 @@ private struct ClipSegmentDecoration: Equatable, View {
                     wavePath,
                     with: .linearGradient(
                         Gradient(colors: [
-                            Color(red: 0.56, green: 0.38, blue: 0.68).opacity(0.62),
-                            Color(red: 0.45, green: 0.28, blue: 0.54).opacity(0.45)
+                            Color(red: 0.54, green: 0.36, blue: 0.68).opacity(0.76),
+                            Color(red: 0.44, green: 0.27, blue: 0.54).opacity(0.58)
                         ]),
-                        startPoint: CGPoint(x: 0, y: size.height * 0.5),
+                        startPoint: CGPoint(x: 0, y: size.height * 0.35),
                         endPoint: CGPoint(x: 0, y: size.height)
                     )
                 )
@@ -978,7 +992,13 @@ private struct SegmentShaderPalette: Equatable {
     )
 }
 
-// MARK: - Interactive Segment Block with Shader Look, Waveform, Inset Handles & Normal-Weight Labels
+// MARK: - Interactive Segment Block with Shader Look, Waveform, Inset Handles & Normal-Weight Icon Labels
+
+private enum SegmentSubtitleContent: Equatable {
+    case clip(durationText: String, speedText: String)
+    case zoom(scaleText: String, modeText: String)
+    case mask(text: String)
+}
 
 private struct TimelineInteractiveSegmentView: View {
     private enum SegmentDragMode {
@@ -988,7 +1008,7 @@ private struct TimelineInteractiveSegmentView: View {
     }
 
     let topTitle: String
-    let subtitle: String?
+    let subtitleContent: SegmentSubtitleContent
     let palette: SegmentShaderPalette
     let isSelected: Bool
     let isPlayed: Bool
@@ -1027,10 +1047,8 @@ private struct TimelineInteractiveSegmentView: View {
         // 1px visual gap between adjacent touching segments
         let segWidth = max(6.0, width - 1.0)
         let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
-        let activeGlowColor = isPlayed ? palette.playedInnerEdgeGlow : palette.innerEdgeGlow
-        let outerRingColor: Color = isSelected
-            ? Color.white
-            : (isPlayed ? palette.playedRingBorder : palette.ringBorder)
+        // Always keep the segment colors and border 100% vibrant (do NOT darken when mouse leaves!)
+        let outerRingColor: Color = isSelected ? Color.white : palette.ringBorder
 
         ZStack(alignment: .leading) {
             // 1. `shadeBody` Vertical LinearGradient (`fillTop` -> `fillBottom`)
@@ -1043,48 +1061,32 @@ private struct TimelineInteractiveSegmentView: View {
                     )
                 )
 
-            // 1b. Inner Edge Blurred Vignette (`glowColor * glowAlpha` with `inset: 3px, sigma: 7.5px` from `shadeBody`)
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(activeGlowColor, lineWidth: 8.5)
-                .blur(radius: 5.5)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
             // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top (Equatable so it never redraws during hover skimming!)
             if let deco = clipDecoration {
                 EquatableView(content: deco)
             }
 
-            // 3. Crisp 1px Outer Ring Border (`#FFFFFF` when selected, `playedRing` when playhead is inside, `ring` otherwise!)
+            // 3. Crisp 1px Outer Ring Border (Constant vibrant opacity whether hovered or not!)
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
-                    outerRingColor.opacity(isSelected ? 0.96 : (isHovered ? 0.85 : 0.72)),
+                    outerRingColor.opacity(isSelected ? 0.98 : 0.84),
                     lineWidth: 1.0
                 )
 
-            // 4. Centered Title & Subtitle (Regular/Normal weight — NOT bold!)
+            // 4. Centered Title & Icon Subtitle (Matches Images 5, 6, 7 — Regular/Normal weight!)
             if segWidth > 42 {
                 VStack(spacing: 1.5) {
-                    if height >= 42 {
-                        Text(topTitle)
-                            .font(.system(size: 11.0, weight: .regular))
-                            .foregroundStyle(.white.opacity(subtitle != nil ? 0.48 : 0.92))
-                            .lineLimit(1)
-                    }
+                    Text(topTitle)
+                        .font(.system(size: 11.0, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.48))
+                        .lineLimit(1)
 
-                    if let sub = subtitle, segWidth > 68 {
-                        Text(sub)
-                            .font(.system(size: 12.0, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.95))
-                            .lineLimit(1)
-                    } else if height < 42 {
-                        Text(subtitle ?? topTitle)
-                            .font(.system(size: 11.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.95))
-                            .lineLimit(1)
+                    if segWidth > 64 {
+                        subtitleRowView
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
                 .allowsHitTesting(false)
             }
 
@@ -1232,6 +1234,56 @@ private struct TimelineInteractiveSegmentView: View {
                     NSCursor.arrow.set()
                 }
         )
+    }
+
+    @ViewBuilder
+    private var subtitleRowView: some View {
+        switch subtitleContent {
+        case .clip(let durationText, let speedText):
+            HStack(spacing: 6) {
+                Text(durationText)
+                    .font(.system(size: 12.0, weight: .regular))
+                HStack(spacing: 3) {
+                    Image(systemName: "gauge.with.dots.needle.67percent")
+                        .font(.system(size: 10.5, weight: .regular))
+                    Text(speedText)
+                        .font(.system(size: 12.0, weight: .regular))
+                }
+            }
+            .foregroundStyle(.white.opacity(0.96))
+            .lineLimit(1)
+
+        case .zoom(let scaleText, let modeText):
+            // (`magnifyingglass` + `1.6×` + `computermouse.fill` + `Auto`)
+            HStack(spacing: 8) {
+                HStack(spacing: 3.5) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 10.5, weight: .semibold))
+                    Text(scaleText)
+                        .font(.system(size: 12.0, weight: .regular))
+                }
+                HStack(spacing: 3.5) {
+                    Image(systemName: "computermouse.fill")
+                        .font(.system(size: 10.5, weight: .regular))
+                    Text(modeText)
+                        .font(.system(size: 12.0, weight: .regular))
+                }
+            }
+            .foregroundStyle(.white.opacity(0.96))
+            .lineLimit(1)
+
+        case .mask(let text):
+            // Matches Images 6 & 7 (White solid rounded rectangle chip icon + `Sensitive data` or `Highlight 50%`)
+            HStack(spacing: 5) {
+                RoundedRectangle(cornerRadius: 2.2, style: .continuous)
+                    .fill(Color.white.opacity(0.96))
+                    .frame(width: 11.0, height: 8.0)
+                Text(text)
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.96))
+            }
+            .lineLimit(1)
+        }
     }
 }
 

@@ -555,7 +555,7 @@ public struct MotionConfig: Codable, Equatable, Hashable, Sendable {
 
     public init(
         cameraSpring: SpringConfig = .defaultCamera,
-        motionBlurIntensity: Double = 0.5,
+        motionBlurIntensity: Double = 0.0,
         avoidEmptyBoundsWhenZooming: Bool = true
     ) {
         self.cameraSpring = cameraSpring

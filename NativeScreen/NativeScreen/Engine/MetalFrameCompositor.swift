@@ -253,19 +253,23 @@ public final class MetalFrameCompositor {
             }
         }
 
-        // --- PASS 5: Camera Motion Blur (Velocity-Driven Shutter Blur) ---
+        // --- PASS 5: Camera Motion Blur (Velocity-Driven Shutter Blur, Settled at Clip End) ---
         let camSpeed = hypot(cameraState.velocity01PerSec.x, cameraState.velocity01PerSec.y) + abs(cameraState.scaleVelocityPerSec) * 0.35
-        if doc.motion.motionBlurIntensity > 0.05 && camSpeed > 0.15 {
-            let blurRadius = min(14.0, camSpeed * 12.0 * doc.motion.motionBlurIntensity)
-            let angle = atan2(-cameraState.velocity01PerSec.y, cameraState.velocity01PerSec.x)
-            positionedScreen = positionedScreen
-                .cropped(to: canvasRect)
-                .clampedToExtent()
-                .applyingFilter("CIMotionBlur", parameters: [
-                    kCIInputRadiusKey: blurRadius,
-                    kCIInputAngleKey: angle
-                ])
-                .cropped(to: canvasRect)
+        let remainingSliceMs = activeSlice.map { max(0.0, $0.sourceEndMs - sourceTimeMs) } ?? 1000.0
+        let endSettleFactor = min(1.0, max(0.0, (remainingSliceMs - 60.0) / 180.0))
+        if doc.motion.motionBlurIntensity > 0.05 && camSpeed > 0.35 && endSettleFactor > 0.05 {
+            let blurRadius = min(14.0, camSpeed * 12.0 * doc.motion.motionBlurIntensity * endSettleFactor)
+            if blurRadius > 0.5 {
+                let angle = atan2(-cameraState.velocity01PerSec.y, cameraState.velocity01PerSec.x)
+                positionedScreen = positionedScreen
+                    .cropped(to: canvasRect)
+                    .clampedToExtent()
+                    .applyingFilter("CIMotionBlur", parameters: [
+                        kCIInputRadiusKey: blurRadius,
+                        kCIInputAngleKey: angle
+                    ])
+                    .cropped(to: canvasRect)
+            }
         }
 
         composite = positionedScreen
@@ -479,12 +483,12 @@ public final class MetalFrameCompositor {
                         .cropped(to: pixelRect)
                 default:
                     // Fast Pyramid Downsample -> Small Sigma Blur -> Upsample ONLY inside `paddedRect`!
-                    // 25x faster on GPU than blurring the entire 4K screen frame at sigma 30!
-                    let sigma = max(6.0, mask.intensity * 0.75)
-                    let pad = CGFloat(sigma * 2.2)
+                    // Supports ultra-strong blur up to intensity 160!
+                    let sigma = max(4.0, mask.intensity * 0.92)
+                    let pad = CGFloat(sigma * 2.4)
                     let paddedRect = pixelRect.insetBy(dx: -pad, dy: -pad).intersection(screenExtent)
                     let downscale: CGFloat = 0.25
-                    let smallSigma = max(1.5, sigma * Double(downscale))
+                    let smallSigma = max(1.2, sigma * Double(downscale))
 
                     filteredPatch = output
                         .cropped(to: paddedRect)
@@ -495,7 +499,8 @@ public final class MetalFrameCompositor {
                         .cropped(to: pixelRect)
                 }
 
-                let scaledCornerRadius = CGFloat(mask.cornerRadius) * (screenExtent.height / 900.0)
+                let maxRadius = min(pixelRect.width, pixelRect.height) * 0.5
+                let scaledCornerRadius = min(maxRadius, CGFloat(mask.cornerRadius) * (screenExtent.height / 900.0))
                 if scaledCornerRadius > 0.5,
                    let roundedStencil = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
                        "inputExtent": CIVector(cgRect: pixelRect),
@@ -515,15 +520,36 @@ public final class MetalFrameCompositor {
                 }
 
             case .spotlight:
+                // `mask.intensity` is 0..100% dimming opacity (e.g. 50% -> surroundings are 50% brightness)
+                let dimStrength01 = max(0.0, min(0.95, mask.intensity / 100.0))
+                let keepFactor = CGFloat(1.0 - dimStrength01)
                 let dimmed = output.applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: 0.35, y: 0, z: 0, w: 0),
-                    "inputGVector": CIVector(x: 0, y: 0.35, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: 0.35, w: 0),
+                    "inputRVector": CIVector(x: keepFactor, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: keepFactor, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: keepFactor, w: 0),
                     "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1)
                 ]).cropped(to: screenExtent)
 
                 let brightRegion = output.cropped(to: pixelRect)
-                output = brightRegion.composited(over: dimmed)
+                let maxRadius = min(pixelRect.width, pixelRect.height) * 0.5
+                let scaledCornerRadius = min(maxRadius, CGFloat(mask.cornerRadius) * (screenExtent.height / 900.0))
+                if scaledCornerRadius > 0.5,
+                   let roundedStencil = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                       "inputExtent": CIVector(cgRect: pixelRect),
+                       "inputRadius": scaledCornerRadius,
+                       "inputColor": CIColor.white
+                   ])?.outputImage {
+                    let clearBG = CIImage.empty().cropped(to: pixelRect)
+                    let clippedBright = brightRegion
+                        .applyingFilter("CIBlendWithMask", parameters: [
+                            kCIInputBackgroundImageKey: clearBG,
+                            kCIInputMaskImageKey: roundedStencil
+                        ])
+                        .cropped(to: pixelRect)
+                    output = clippedBright.composited(over: dimmed)
+                } else {
+                    output = brightRegion.composited(over: dimmed)
+                }
             }
         }
 
@@ -656,31 +682,7 @@ public final class MetalFrameCompositor {
             return existing
         }
         let rect = CGRect(origin: .zero, size: size)
-        var base = CIImage(color: CIColor(red: 0.09, green: 0.10, blue: 0.14, alpha: 1.0)).cropped(to: rect)
-
-        let headerRect = CGRect(x: 0, y: size.height * 0.90, width: size.width, height: size.height * 0.10)
-        let header = CIImage(color: CIColor(red: 0.14, green: 0.16, blue: 0.22, alpha: 1.0)).cropped(to: headerRect)
-        base = header.composited(over: base)
-
-        let blocks: [(CGRect, CIColor)] = [
-            (CGRect(x: size.width * 0.06, y: size.height * 0.66, width: size.width * 0.40, height: size.height * 0.18),
-             CIColor(red: 0.22, green: 0.34, blue: 0.68, alpha: 1.0)),
-            (CGRect(x: size.width * 0.52, y: size.height * 0.56, width: size.width * 0.42, height: size.height * 0.28),
-             CIColor(red: 0.32, green: 0.20, blue: 0.58, alpha: 1.0)),
-            (CGRect(x: size.width * 0.06, y: size.height * 0.18, width: size.width * 0.42, height: size.height * 0.38),
-             CIColor(red: 0.16, green: 0.42, blue: 0.38, alpha: 1.0)),
-            (CGRect(x: size.width * 0.52, y: size.height * 0.18, width: size.width * 0.42, height: size.height * 0.28),
-             CIColor(red: 0.58, green: 0.24, blue: 0.34, alpha: 1.0))
-        ]
-        for (bRect, col) in blocks {
-            if let card = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                "inputExtent": CIVector(cgRect: bRect),
-                "inputRadius": 18.0,
-                "inputColor": col
-            ])?.outputImage {
-                base = card.composited(over: base)
-            }
-        }
+        let base = CIImage(color: CIColor(red: 0.06, green: 0.06, blue: 0.08, alpha: 1.0)).cropped(to: rect)
         syntheticScreenTexture = base
         return base
     }

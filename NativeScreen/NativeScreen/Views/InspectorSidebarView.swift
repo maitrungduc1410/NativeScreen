@@ -332,7 +332,7 @@ public struct InspectorSidebarView: View {
                     }
                 }
 
-                // 2. Cursor style (Single-row horizontal ScrollView + auto-center on click + Variant selector row!)
+                // 2. Cursor style (Single-row horizontal ScrollView with "App Store style" ~50% half-card peek on the right edge + auto-center on click!)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Cursor style")
                         .font(.system(size: 13, weight: .medium))
@@ -349,8 +349,8 @@ public struct InspectorSidebarView: View {
                                         theme: theme,
                                         selectedVariantId: previewVariantId,
                                         isSelected: isSelected,
-                                        cardSize: 52,
-                                        iconSize: 32
+                                        cardSize: 50,
+                                        iconSize: 31
                                     ) {
                                         session.mutate {
                                             $0.cursor.themeId = theme.id
@@ -371,10 +371,14 @@ public struct InspectorSidebarView: View {
                                 }
                             }
                             .padding(.vertical, 2)
+                            .padding(.trailing, 18)
                         }
+                        .padding(.trailing, -18)
                         .onAppear {
-                            DispatchQueue.main.async {
-                                scrollProxy.scrollTo(normalizedThemeId, anchor: .center)
+                            if normalizedThemeId != "macos" && normalizedThemeId != "macos-tahoe" {
+                                DispatchQueue.main.async {
+                                    scrollProxy.scrollTo(normalizedThemeId, anchor: .center)
+                                }
                             }
                         }
                         .onChange(of: normalizedThemeId) { _, newId in
@@ -384,7 +388,7 @@ public struct InspectorSidebarView: View {
                         }
                     }
 
-                    // Variant Row (Shown whenever the selected cursor set has multiple variants, e.g. `custom-7`, `custom-1`, `halloween`)
+                    // Variant Row (Shown whenever the selected cursor set has multiple variants, with ~50% half-card peek on the right edge!)
                     if !activeTheme.pointerVariants.isEmpty {
                         let activeVariantId = cursor.variantId
                             .flatMap { id in activeTheme.pointerVariants.contains(where: { $0.id == id }) ? id : nil }
@@ -397,7 +401,7 @@ public struct InspectorSidebarView: View {
 
                             ScrollViewReader { variantProxy in
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 7) {
+                                    HStack(spacing: 8) {
                                         ForEach(activeTheme.pointerVariants) { variant in
                                             let isVarSelected = (activeVariantId == variant.id)
 
@@ -413,8 +417,8 @@ public struct InspectorSidebarView: View {
                                                     .resizable()
                                                     .interpolation(.high)
                                                     .aspectRatio(contentMode: .fit)
-                                                    .frame(width: 24, height: 24)
-                                                    .frame(width: 42, height: 42)
+                                                    .frame(width: 26, height: 26)
+                                                    .frame(width: 48, height: 48)
                                                     .background(
                                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                                                             .fill(Color.white.opacity(isVarSelected ? 0.08 : 0.04))
@@ -435,10 +439,14 @@ public struct InspectorSidebarView: View {
                                         }
                                     }
                                     .padding(.vertical, 2)
+                                    .padding(.trailing, 18)
                                 }
+                                .padding(.trailing, -18)
                                 .onAppear {
-                                    DispatchQueue.main.async {
-                                        variantProxy.scrollTo(activeVariantId, anchor: .center)
+                                    if activeVariantId != activeTheme.pointerVariants.first?.id {
+                                        DispatchQueue.main.async {
+                                            variantProxy.scrollTo(activeVariantId, anchor: .center)
+                                        }
                                     }
                                 }
                             }
@@ -953,7 +961,7 @@ public struct InspectorSidebarView: View {
                     set: { v in session.mutate { $0.motion.motionBlurIntensity = v } }
                 ),
                 range: 0.0...1.5,
-                defaultValue: 0.5
+                defaultValue: 0.0
             )
 
             Toggle("Avoid empty area when zooming", isOn: Binding(
@@ -1070,7 +1078,11 @@ public struct InspectorSidebarView: View {
                 .buttonStyle(.bordered)
             }
 
-            if let maskId = session.selectedMaskId,
+            let activeOrSelectedMaskId = session.selectedMaskId
+                ?? session.activeMasks(atSourceMs: session.currentSourceTimeMs).first?.id
+                ?? session.document.timeline.maskTracks.first?.items.first?.id
+
+            if let maskId = activeOrSelectedMaskId,
                let mask = findMask(byId: maskId) {
                 Divider()
 
@@ -1081,10 +1093,17 @@ public struct InspectorSidebarView: View {
 
                     Picker("", selection: Binding(
                         get: { mask.type },
-                        set: { newType in updateMask(id: maskId) { $0.type = newType } }
+                        set: { newType in
+                            updateMask(id: maskId) {
+                                $0.type = newType
+                                if newType == .spotlight && ($0.intensity < 5.0 || $0.intensity > 95.0) {
+                                    $0.intensity = 50.0
+                                }
+                            }
+                        }
                     )) {
-                        Text("Blur / Redact").tag(MaskType.blur)
-                        Text("Spotlight").tag(MaskType.spotlight)
+                        Text("Sensitive data").tag(MaskType.blur)
+                        Text("Highlight").tag(MaskType.spotlight)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -1107,17 +1126,27 @@ public struct InspectorSidebarView: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                     }
-                }
 
-                coalescedSlider(
-                    title: "Intensity",
-                    value: Binding(
-                        get: { mask.intensity },
-                        set: { v in updateMask(id: maskId) { $0.intensity = v } }
-                    ),
-                    range: 6...80,
-                    defaultValue: 36.0
-                )
+                    coalescedSlider(
+                        title: "Blur intensity",
+                        value: Binding(
+                            get: { mask.intensity },
+                            set: { v in updateMask(id: maskId) { $0.intensity = v } }
+                        ),
+                        range: 4...160,
+                        defaultValue: 36.0
+                    )
+                } else {
+                    coalescedSlider(
+                        title: String(format: "Highlight intensity (%d%%)", Int(round(mask.intensity))),
+                        value: Binding(
+                            get: { mask.intensity },
+                            set: { v in updateMask(id: maskId) { $0.intensity = v } }
+                        ),
+                        range: 0...95,
+                        defaultValue: 50.0
+                    )
+                }
 
                 coalescedSlider(
                     title: "Corner radius",
@@ -1125,8 +1154,8 @@ public struct InspectorSidebarView: View {
                         get: { mask.cornerRadius },
                         set: { v in updateMask(id: maskId) { $0.cornerRadius = v } }
                     ),
-                    range: 0...40,
-                    defaultValue: 10.0
+                    range: 0...120,
+                    defaultValue: 12.0
                 )
 
                 Button(role: .destructive) {
