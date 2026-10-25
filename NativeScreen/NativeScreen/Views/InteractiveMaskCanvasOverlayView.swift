@@ -34,11 +34,12 @@ public struct InteractiveMaskCanvasOverlayView: View {
         )
 
         ZStack(alignment: .topLeading) {
-            // Clicking empty canvas deselects mask
+            // Clicking empty preview canvas deselects any active mask and opens the Background Inspector tab!
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
                     session.selectedMaskId = nil
+                    session.selectedInspectorTab = .background
                 }
 
             if !session.isPlaying {

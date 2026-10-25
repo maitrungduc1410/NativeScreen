@@ -12,6 +12,7 @@ public struct ProjectEditorWindowView: View {
     @State private var isEditingProjectName = false
     @State private var draftProjectName = ""
     @State private var isHoveringTitle = false
+    @State private var isHoveringPreviewCanvas = false
     @State private var titleBarFrameInWindow: CGRect = .zero
     @State private var trafficLightCenterY: CGFloat = 26.0
     @State private var trafficLightRightEdgeX: CGFloat = 82.0
@@ -73,7 +74,7 @@ public struct ProjectEditorWindowView: View {
                         HStack(spacing: 2) {
                             TextField("Project name", text: $draftProjectName)
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 13, weight: .regular))
                                 .foregroundStyle(.white)
                                 .fixedSize(horizontal: true, vertical: false)
                                 .focused($isTitleFieldFocused)
@@ -113,11 +114,11 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             HStack(spacing: 1) {
                                 Text(session.document.name)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(size: 13, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.95))
 
                                 Text(".nativescreen")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.system(size: 13, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.35))
                             }
                             .padding(.horizontal, 10)
@@ -230,13 +231,13 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 11.5))
+                                    .font(.system(size: 11.5, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.75))
                                 Text(session.document.canvas.aspectRatioMode == .auto
                                      ? "Auto Aspect"
                                      : session.document.canvas.aspectRatioPreset.label)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .font(.system(size: 12, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.88))
                                     .lineLimit(1)
                             }
                             .fixedSize()
@@ -254,9 +255,9 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "crop")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 12, weight: .regular))
                                 Text("Crop")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: 12, weight: .regular))
                             }
                             .foregroundStyle(hasCustomCrop ? Color(red: 0.62, green: 0.52, blue: 1.0) : .white.opacity(0.88))
                             .padding(.horizontal, 11)
@@ -332,9 +333,9 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "iphone")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 12, weight: .regular))
                                 Text("Reel mode")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: 12, weight: .regular))
                             }
                             .foregroundStyle(
                                 session.isReelModeActive
@@ -369,9 +370,9 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "camera.viewfinder")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 12, weight: .regular))
                                 Text("Export frame")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: 12, weight: .regular))
                             }
                             .foregroundStyle(.white.opacity(0.88))
                             .padding(.horizontal, 11)
@@ -413,14 +414,27 @@ public struct ProjectEditorWindowView: View {
                                     .opacity(session.isReelModeActive ? 1.0 : 0.0)
                                     .scaleEffect(session.isReelModeActive ? 1.0 : 0.985)
                                     .animation(.easeInOut(duration: 0.22), value: session.isReelModeActive)
+
+                                // Subtle bright hover highlight over the video preview canvas
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.white.opacity(isHoveringPreviewCanvas ? 0.035 : 0.0))
+                                    .allowsHitTesting(false)
                             }
                             .frame(width: fittedSize.width, height: fittedSize.height)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(
+                                        Color.white.opacity(isHoveringPreviewCanvas ? 0.28 : 0.08),
+                                        lineWidth: isHoveringPreviewCanvas ? 1.5 : 1.0
+                                    )
                             )
                             .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+                            .onHover { hovering in
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    isHoveringPreviewCanvas = hovering
+                                }
+                            }
 
                             // Floating Left Quick Dock (Instant Tooltip + Smooth Highlight)
                             HStack {
@@ -512,7 +526,7 @@ public struct ProjectEditorWindowView: View {
                         // Center: Timecode + 3 Transport Buttons with Hover Highlight & Top Tooltips
                         HStack(spacing: 16) {
                             Text(formatTimecode(session.effectivePreviewTimelineMs))
-                                .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
+                                .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
                                 .foregroundStyle(.secondary)
                                 .frame(width: 64, alignment: .trailing)
 
@@ -526,7 +540,7 @@ public struct ProjectEditorWindowView: View {
                                 session.seek(toTimelineMs: 0.0)
                             } label: {
                                 Image(systemName: "backward.end")
-                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .font(.system(size: 13.5, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.85))
                             }
 
@@ -554,12 +568,12 @@ public struct ProjectEditorWindowView: View {
                                 session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
                             } label: {
                                 Image(systemName: "forward.end")
-                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .font(.system(size: 13.5, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.85))
                             }
 
                             Text(formatTimecode(session.timeMapper.totalTimelineDurationMs))
-                                .font(.system(size: 12.5, weight: .medium, design: .default).monospacedDigit())
+                                .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
                                 .foregroundStyle(.secondary.opacity(0.75))
                                 .frame(width: 64, alignment: .leading)
                         }
@@ -608,7 +622,7 @@ public struct ProjectEditorWindowView: View {
                                 }
                             } label: {
                                 Text(String(format: "%gx", session.previewPlaybackRate))
-                                    .font(.system(size: 12.5, weight: .semibold).monospacedDigit())
+                                    .font(.system(size: 12.5, weight: .regular).monospacedDigit())
                                     .foregroundStyle(.white.opacity(0.92))
                             }
                             .contextMenu {
