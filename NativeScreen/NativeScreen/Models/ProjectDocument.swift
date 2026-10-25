@@ -70,30 +70,56 @@ public enum AspectRatioMode: String, Codable, CaseIterable, Sendable {
 
 public enum AspectRatioPreset: String, Codable, CaseIterable, Identifiable, Sendable {
     case widescreen16x9 = "16:9"
-    case vertical9x16 = "9:16"
     case square1x1 = "1:1"
     case classic4x3 = "4:3"
+    case vertical9x16 = "9:16"
+    case tall3x4 = "3:4"
+    case portrait4x5 = "4:5"
     case mac16x10 = "16:10"
 
     public var id: String { rawValue }
 
-    public var label: String {
+    public var titleName: String {
         switch self {
-        case .widescreen16x9: return "16:9 Wide"
-        case .vertical9x16: return "9:16 Vertical"
-        case .square1x1: return "1:1 Square"
-        case .classic4x3: return "4:3 Classic"
-        case .mac16x10: return "16:10 Display"
+        case .widescreen16x9: return "Wide"
+        case .square1x1: return "Square"
+        case .classic4x3: return "Classic"
+        case .vertical9x16: return "Vertical"
+        case .tall3x4: return "Tall"
+        case .portrait4x5: return "Portrait"
+        case .mac16x10: return "Display"
         }
+    }
+
+    public var ratioString: String {
+        rawValue
+    }
+
+    public var label: String {
+        "\(titleName) \(ratioString)"
     }
 
     public var ratio: Double {
         switch self {
         case .widescreen16x9: return 16.0 / 9.0
-        case .vertical9x16: return 9.0 / 16.0
         case .square1x1: return 1.0
         case .classic4x3: return 4.0 / 3.0
+        case .vertical9x16: return 9.0 / 16.0
+        case .tall3x4: return 3.0 / 4.0
+        case .portrait4x5: return 4.0 / 5.0
         case .mac16x10: return 16.0 / 10.0
+        }
+    }
+
+    /// Proportional icon dimensions `(width, height)` inside a 16x16 icon frame aspect ratio icons!).
+    public var iconSize: CGSize {
+        switch self {
+        case .widescreen16x9, .mac16x10: return CGSize(width: 14, height: 8)
+        case .square1x1: return CGSize(width: 12, height: 12)
+        case .classic4x3: return CGSize(width: 13, height: 10)
+        case .vertical9x16: return CGSize(width: 8, height: 14)
+        case .tall3x4: return CGSize(width: 10, height: 13)
+        case .portrait4x5: return CGSize(width: 10, height: 12)
         }
     }
 }

@@ -20,6 +20,8 @@ public struct ProjectEditorWindowView: View {
     @FocusState private var isTitleFieldFocused: Bool
 
     @State private var isShowingExportSheet = false
+    @State private var isShowingAspectRatioPopover = false
+    @State private var isShowingReelModePopover = false
     @State private var exportCodec: HardwareVideoExporter.ExportCodec = .h264
     @State private var exportResolution: HardwareVideoExporter.ExportResolution = .qhd2k
     @State private var isExporting = false
@@ -212,187 +214,120 @@ public struct ProjectEditorWindowView: View {
             // 2. CENTER WORKSPACE: Preview Canvas + Floating Left Quick Dock + Right Inspector Sidebar
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    // Top Sub-Toolbar Right Above Preview Canvas (Aspect Ratio + Crop + Reel Mode + Extract Frame)
+                    // Top Sub-Toolbar Right Above Preview Canvas (Consistent Liquid Glass Popovers + Generous Hover Hitboxes)
                     HStack(spacing: 10) {
-                        // 1. Aspect Ratio Menu
-                        Menu {
-                            Button("Auto (Match Source)") {
-                                session.mutate { $0.canvas.aspectRatioMode = .auto }
-                            }
-                            Divider()
-                            ForEach(AspectRatioPreset.allCases) { preset in
-                                Button(preset.label) {
-                                    session.mutate {
-                                        $0.canvas.aspectRatioMode = .preset
-                                        $0.canvas.aspectRatioPreset = preset
+                        // 1. Output Aspect Ratio Pill Button (With Icon + Bright Name + Dimmed Ratio + Liquid Glass Popover)
+                        SubToolbarPillButton(
+                            tooltip: isShowingAspectRatioPopover ? nil : "Output aspect ratio",
+                            edge: .top,
+                            isActive: false
+                        ) {
+                            isShowingAspectRatioPopover.toggle()
+                        } label: {
+                            HStack(spacing: 7) {
+                                AspectIconView()
+
+                                if session.document.canvas.aspectRatioMode == .auto {
+                                    Text("Auto")
+                                        .font(.system(size: 12.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.92))
+                                } else {
+                                    HStack(spacing: 4) {
+                                        Text(session.document.canvas.aspectRatioPreset.titleName)
+                                            .font(.system(size: 12.5, weight: .regular))
+                                            .foregroundStyle(.white.opacity(0.95))
+
+                                        Text(session.document.canvas.aspectRatioPreset.ratioString)
+                                            .font(.system(size: 12.5, weight: .regular))
+                                            .foregroundStyle(.white.opacity(0.45))
                                     }
                                 }
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 11.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.75))
-                                Text(session.document.canvas.aspectRatioMode == .auto
-                                     ? "Auto Aspect"
-                                     : session.document.canvas.aspectRatioPreset.label)
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.88))
-                                    .lineLimit(1)
+
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.50))
                             }
                             .fixedSize()
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
+                        .popover(isPresented: $isShowingAspectRatioPopover, arrowEdge: .bottom) {
+                            AspectRatioLiquidGlassPopoverView(session: session) {
+                                isShowingAspectRatioPopover = false
+                            }
+                        }
 
-                        // 2. Crop Button (Opens Standalone Movable Crop Window tied to this Project Session)
+                        // 2. Crop Pill Button (Opens Standalone Movable Crop Window tied to this Project Session)
                         let hasCustomCrop = (session.document.canvas.cropRect01 != .full)
-                        Button {
+                        SubToolbarPillButton(
+                            tooltip: "Crop recording",
+                            edge: .top,
+                            isActive: hasCustomCrop
+                        ) {
                             ProjectWorkspaceStore.shared.presentCropWindow(for: session)
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "crop")
-                                    .font(.system(size: 12, weight: .regular))
+                                    .font(.system(size: 12.5, weight: .regular))
+                                    .foregroundStyle(hasCustomCrop ? Color(red: 0.58, green: 0.52, blue: 1.0) : .white.opacity(0.88))
+
                                 Text("Crop")
-                                    .font(.system(size: 12, weight: .regular))
+                                    .font(.system(size: 12.5, weight: .regular))
+                                    .foregroundStyle(hasCustomCrop ? Color(red: 0.58, green: 0.52, blue: 1.0) : .white.opacity(0.88))
                             }
-                            .foregroundStyle(hasCustomCrop ? Color(red: 0.62, green: 0.52, blue: 1.0) : .white.opacity(0.88))
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .background(
-                                hasCustomCrop
-                                    ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.20)
-                                    : Color.white.opacity(0.06),
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .strokeBorder(
-                                        hasCustomCrop ? Color(red: 0.54, green: 0.44, blue: 1.0).opacity(0.6) : Color.clear,
-                                        lineWidth: 1
-                                    )
-                            )
+                            .fixedSize()
                         }
-                        .buttonStyle(.plain)
 
-                        // 3. Reel Mode Dropdown Menu (Disable | Instagram | TikTok)
-                        Menu {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.22)) {
-                                    session.isReelModeActive = false
-                                }
-                            } label: {
-                                HStack {
-                                    if !session.isReelModeActive {
-                                        Image(systemName: "checkmark")
-                                    }
-                                    Text("Disable")
-                                }
-                            }
-
-                            Divider()
-
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.22)) {
-                                    session.reelPlatformStyle = .instagramReels
-                                    session.isReelModeActive = true
-                                    session.mutate {
-                                        $0.canvas.aspectRatioMode = .preset
-                                        $0.canvas.aspectRatioPreset = .vertical9x16
-                                    }
-                                }
-                            } label: {
-                                HStack {
-                                    if session.isReelModeActive && session.reelPlatformStyle == .instagramReels {
-                                        Image(systemName: "checkmark")
-                                    }
-                                    Text("Instagram")
-                                }
-                            }
-
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.22)) {
-                                    session.reelPlatformStyle = .tiktok
-                                    session.isReelModeActive = true
-                                    session.mutate {
-                                        $0.canvas.aspectRatioMode = .preset
-                                        $0.canvas.aspectRatioPreset = .vertical9x16
-                                    }
-                                }
-                            } label: {
-                                HStack {
-                                    if session.isReelModeActive && session.reelPlatformStyle == .tiktok {
-                                        Image(systemName: "checkmark")
-                                    }
-                                    Text("TikTok")
-                                }
-                            }
+                        // 3. Reel Mode Pill Button (Glowing Purple Highlight when active + Liquid Glass Popover)
+                        SubToolbarPillButton(
+                            tooltip: isShowingReelModePopover ? nil : "Reel mode overlay",
+                            edge: .top,
+                            isActive: session.isReelModeActive
+                        ) {
+                            isShowingReelModePopover.toggle()
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "iphone")
-                                    .font(.system(size: 12, weight: .regular))
-                                Text("Reel mode")
-                                    .font(.system(size: 12, weight: .regular))
-                            }
-                            .foregroundStyle(
-                                session.isReelModeActive
-                                    ? Color(red: 0.65, green: 0.56, blue: 1.0)
-                                    : .white.opacity(0.88)
-                            )
-                            .fixedSize()
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .background(
-                                session.isReelModeActive
-                                    ? Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.22)
-                                    : Color.white.opacity(0.06),
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .strokeBorder(
-                                        session.isReelModeActive
-                                            ? Color(red: 0.54, green: 0.44, blue: 1.0).opacity(0.65)
-                                            : Color.clear,
-                                        lineWidth: 1
-                                    )
-                            )
-                        }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
+                                ReelPhoneIconView(isActive: session.isReelModeActive)
 
-                        // 4. Export Still Frame Button (Opens CapCut-style "Export still frames" modal)
-                        Button {
+                                Text("Reel mode")
+                                    .font(.system(size: 12.5, weight: .regular))
+                                    .foregroundStyle(
+                                        session.isReelModeActive
+                                            ? Color(red: 0.58, green: 0.52, blue: 1.0)
+                                            : .white.opacity(0.88)
+                                    )
+                            }
+                            .fixedSize()
+                        }
+                        .popover(isPresented: $isShowingReelModePopover, arrowEdge: .bottom) {
+                            ReelModeLiquidGlassPopoverView(session: session) {
+                                isShowingReelModePopover = false
+                            }
+                        }
+
+                        // 4. Export Still Frame Pill Button (Opens CapCut-style "Export still frames" modal)
+                        SubToolbarPillButton(
+                            tooltip: "Export still frame",
+                            edge: .top,
+                            isActive: false
+                        ) {
                             session.openStillFrameExportModal()
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "camera.viewfinder")
-                                    .font(.system(size: 12, weight: .regular))
+                                    .font(.system(size: 12.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.88))
+
                                 Text("Export frame")
-                                    .font(.system(size: 12, weight: .regular))
+                                    .font(.system(size: 12.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.88))
                             }
-                            .foregroundStyle(.white.opacity(0.88))
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Export Still Frame…") {
-                                session.openStillFrameExportModal()
-                            }
-                            Button("Copy Current Frame to Clipboard") {
-                                session.copyCurrentFrameToClipboard()
-                            }
+                            .fixedSize()
                         }
                     }
                     .padding(.top, 12)
                     .padding(.bottom, 6)
                     .frame(maxWidth: .infinity)
                     .background(Color(red: 0.03, green: 0.03, blue: 0.04))
+                    .zIndex(75)
 
                     GeometryReader { geo in
                         let aspect = session.document.canvas.effectiveAspectRatio(
@@ -488,7 +423,7 @@ public struct ProjectEditorWindowView: View {
                     // Unified Transport Playback & Timeline Bar (layout:
                     // Left = Split Tool `✂️` | Center = Timecodes + Jump Start / Play / Jump End with Top Tooltips | Right = Extract Frame + Timeline Zoom Slider)
                     ZStack {
-                        // Left: Split Tool Button (`✂️`)
+                        // Left: Split Tool Button (`✂️` only — delete button removed as requested)
                         HStack(spacing: 8) {
                             InstantTooltipButton(
                                 tooltip: session.isSplitModeActive ? "Exit Split Tool (ESC)" : "Split clip, zoom, or mask",
@@ -502,21 +437,6 @@ public struct ProjectEditorWindowView: View {
                                 Image(systemName: "scissors")
                                     .font(.system(size: 13.5, weight: .semibold))
                                     .foregroundStyle(session.isSplitModeActive ? .white : .white.opacity(0.80))
-                            }
-
-                            if session.selectedMaskId != nil || session.selectedZoomId != nil || (session.selectedSliceId != nil && session.document.timeline.slices.count > 1) {
-                                InstantTooltipButton(
-                                    tooltip: "Delete selected item (Backspace)",
-                                    edge: .top,
-                                    size: 32,
-                                    cornerRadius: 8
-                                ) {
-                                    session.deleteSelectedTimelineItem()
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(.red.opacity(0.88))
-                                }
                             }
 
                             Spacer()

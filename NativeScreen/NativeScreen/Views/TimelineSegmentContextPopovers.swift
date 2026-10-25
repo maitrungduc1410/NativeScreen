@@ -153,6 +153,277 @@ public struct ClipSliceContextPopoverView: View {
     }
 }
 
+// MARK: - 4. Output Aspect Ratio Liquid Glass Dropdown Popover ( & 4!)
+
+public struct AspectRatioLiquidGlassPopoverView: View {
+    @Bindable var session: ProjectSession
+    let onDismiss: () -> Void
+
+    private let presets: [AspectRatioPreset] = [
+        .widescreen16x9,
+        .square1x1,
+        .classic4x3,
+        .vertical9x16,
+        .tall3x4,
+        .portrait4x5
+    ]
+
+    public init(session: ProjectSession, onDismiss: @escaping () -> Void) {
+        self.session = session
+        self.onDismiss = onDismiss
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            // 1. "Auto" Option
+            let isAuto = (session.document.canvas.aspectRatioMode == .auto)
+            AspectRatioOptionRow(
+                title: "Auto",
+                ratioText: nil,
+                iconSize: nil,
+                isSelected: isAuto
+            ) {
+                session.mutate { $0.canvas.aspectRatioMode = .auto }
+                onDismiss()
+            }
+
+            Divider()
+                .padding(.vertical, 3)
+
+            // 2. Preset Options with Custom Proportional Aspect Ratio Icons
+            ForEach(presets) { preset in
+                let isSelected = (session.document.canvas.aspectRatioMode == .preset && session.document.canvas.aspectRatioPreset == preset)
+                AspectRatioOptionRow(
+                    title: preset.titleName,
+                    ratioText: preset.ratioString,
+                    iconSize: preset.iconSize,
+                    isSelected: isSelected
+                ) {
+                    session.mutate {
+                        $0.canvas.aspectRatioMode = .preset
+                        $0.canvas.aspectRatioPreset = preset
+                    }
+                    onDismiss()
+                }
+            }
+        }
+        .padding(8)
+        .frame(width: 196)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct AspectRatioOptionRow: View {
+    let title: String
+    let ratioText: String?
+    let iconSize: CGSize?
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                if let size = iconSize {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 2.2, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.88), lineWidth: 1.4)
+                            .frame(width: size.width, height: size.height)
+                    }
+                    .frame(width: 18, height: 16)
+                }
+
+                HStack(spacing: 5) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.95))
+
+                    if let ratioText = ratioText {
+                        Text(ratioText)
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.45))
+                    }
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+// MARK: - 5. Reel Mode Liquid Glass Dropdown Popover ( from previous turn!)
+
+public struct ReelModeLiquidGlassPopoverView: View {
+    @Bindable var session: ProjectSession
+    let onDismiss: () -> Void
+
+    public init(session: ProjectSession, onDismiss: @escaping () -> Void) {
+        self.session = session
+        self.onDismiss = onDismiss
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ReelOptionRow(
+                title: "Disable",
+                isSelected: !session.isReelModeActive
+            ) {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    session.isReelModeActive = false
+                }
+                onDismiss()
+            }
+
+            Divider()
+                .padding(.vertical, 3)
+
+            ReelOptionRow(
+                title: "Instagram",
+                isSelected: session.isReelModeActive && session.reelPlatformStyle == .instagramReels
+            ) {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    session.reelPlatformStyle = .instagramReels
+                    session.isReelModeActive = true
+                    session.mutate {
+                        $0.canvas.aspectRatioMode = .preset
+                        $0.canvas.aspectRatioPreset = .vertical9x16
+                    }
+                }
+                onDismiss()
+            }
+
+            ReelOptionRow(
+                title: "TikTok",
+                isSelected: session.isReelModeActive && session.reelPlatformStyle == .tiktok
+            ) {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    session.reelPlatformStyle = .tiktok
+                    session.isReelModeActive = true
+                    session.mutate {
+                        $0.canvas.aspectRatioMode = .preset
+                        $0.canvas.aspectRatioPreset = .vertical9x16
+                    }
+                }
+                onDismiss()
+            }
+        }
+        .padding(8)
+        .frame(width: 156)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct ReelOptionRow: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 14)
+                } else {
+                    Color.clear
+                        .frame(width: 14, height: 12)
+                }
+
+                Text(title)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.95))
+
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+// MARK: - 6. Custom Aspect Ratio Icon & Reel Mode Phone Icon
+
+public struct AspectIconView: View {
+    public init() {}
+
+    public var body: some View {
+        Canvas { context, size in
+            let outerRect = CGRect(x: 1, y: 2, width: size.width - 2, height: size.height - 4)
+            let outerPath = Path(roundedRect: outerRect, cornerRadius: 2.2)
+            context.stroke(outerPath, with: .color(.white.opacity(0.92)), lineWidth: 1.4)
+
+            // Inner nested ratio lines in bottom-left corner Aspect Ratio icon!)
+            var inner1 = Path()
+            inner1.move(to: CGPoint(x: outerRect.minX, y: outerRect.minY + outerRect.height * 0.42))
+            inner1.addLine(to: CGPoint(x: outerRect.minX + outerRect.width * 0.68, y: outerRect.minY + outerRect.height * 0.42))
+            inner1.addLine(to: CGPoint(x: outerRect.minX + outerRect.width * 0.68, y: outerRect.maxY))
+            context.stroke(inner1, with: .color(.white.opacity(0.85)), lineWidth: 1.2)
+
+            var inner2 = Path()
+            inner2.move(to: CGPoint(x: outerRect.minX + outerRect.width * 0.44, y: outerRect.minY + outerRect.height * 0.42))
+            inner2.addLine(to: CGPoint(x: outerRect.minX + outerRect.width * 0.44, y: outerRect.maxY))
+            context.stroke(inner2, with: .color(.white.opacity(0.85)), lineWidth: 1.2)
+        }
+        .frame(width: 16, height: 15)
+    }
+}
+
+public struct ReelPhoneIconView: View {
+    public var isActive: Bool
+
+    public init(isActive: Bool) {
+        self.isActive = isActive
+    }
+
+    public var body: some View {
+        let color = isActive ? Color(red: 0.58, green: 0.52, blue: 1.0) : Color.white.opacity(0.88)
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                .strokeBorder(color, lineWidth: 1.4)
+                .frame(width: 11, height: 15)
+
+            RoundedRectangle(cornerRadius: 1.0, style: .continuous)
+                .fill(color)
+                .frame(width: 7, height: 3.5)
+                .padding(.bottom, 2.2)
+        }
+        .frame(width: 14, height: 15)
+    }
+}
+
 // MARK: - 2. Zoom Block Liquid Glass Context Popover
 
 public struct ZoomBlockContextPopoverView: View {

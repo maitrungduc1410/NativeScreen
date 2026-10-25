@@ -253,32 +253,32 @@ public struct MultiTrackTimelineView: View {
                     // C. UNIFIED CONTINUOUS GHOST PLAYHEAD + COMMITTED PLAYHEAD OVERLAY
                     // Spans seamlessly from the top of the Ruler through all tracks with zero gap between head and line!
                     ZStack(alignment: .topLeading) {
-                        // 1. Ghost Hover Playhead (Smoothly ducks its teardrop head down when near the main purple playhead!)
-                        if let gx = hoverXInViewport, gx >= -6 && gx <= viewportWidth + 6 {
+                        // 1. Ghost Hover Playhead (Smoothly ducks its teardrop head well below the main purple playhead!)
+                        if let gx = hoverXInViewport, gx >= -8 && gx <= viewportWidth + 8 {
                             let distToMain = abs(gx - playheadXInViewport)
-                            let proximity01 = max(0.0, min(1.0, 1.0 - (distToMain / 22.0)))
-                            let duckYOffset = 13.0 * proximity01 * proximity01
+                            let proximity01 = max(0.0, min(1.0, 1.0 - (distToMain / 26.0)))
+                            let duckYOffset = 22.0 * proximity01 * (2.0 - proximity01)
 
                             UnifiedPlayheadCanvasView(
-                                headColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.90),
-                                stemColor: Color.white.opacity(0.22),
-                                headTopY: 2.0 + duckYOffset,
+                                headColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.92),
+                                stemColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.65),
+                                headTopY: 1.5 + duckYOffset,
                                 totalHeight: outerGeo.size.height
                             )
-                            .frame(width: 14, height: outerGeo.size.height)
-                            .offset(x: gx - 7.0)
+                            .frame(width: 18, height: outerGeo.size.height)
+                            .offset(x: gx - 9.0)
                         }
 
-                        // 2. Main Committed Purple Playhead (100% connected teardrop + vertical stem)
-                        if playheadXInViewport >= -6 && playheadXInViewport <= viewportWidth + 6 {
+                        // 2. Main Committed Purple Playhead (100% connected single-path teardrop + vertical stem)
+                        if playheadXInViewport >= -8 && playheadXInViewport <= viewportWidth + 8 {
                             UnifiedPlayheadCanvasView(
                                 headColor: Color(red: 0.44, green: 0.30, blue: 1.0),
-                                stemColor: Color(red: 0.44, green: 0.30, blue: 1.0).opacity(0.85),
-                                headTopY: 2.0,
+                                stemColor: Color(red: 0.44, green: 0.30, blue: 1.0).opacity(0.90),
+                                headTopY: 1.5,
                                 totalHeight: outerGeo.size.height
                             )
-                            .frame(width: 14, height: outerGeo.size.height)
-                            .offset(x: playheadXInViewport - 7.0)
+                            .frame(width: 18, height: outerGeo.size.height)
+                            .offset(x: playheadXInViewport - 9.0)
                         }
                     }
                     .frame(width: viewportWidth, height: outerGeo.size.height, alignment: .topLeading)
@@ -696,7 +696,7 @@ public struct MultiTrackTimelineView: View {
     }
 }
 
-// MARK: - Unified Continuous Playhead Canvas (100% Connected Teardrop + Stem + Ducking Support)
+// MARK: - Unified Continuous Playhead Canvas (Zero-Overlap Single-Path Teardrop + Stem)
 
 private struct UnifiedPlayheadCanvasView: View {
     let headColor: Color
@@ -707,11 +707,11 @@ private struct UnifiedPlayheadCanvasView: View {
     var body: some View {
         Canvas { context, size in
             let centerX = size.width * 0.5
-            let radius: CGFloat = 5.4
+            let radius: CGFloat = 6.6
             let circleCenterY = headTopY + radius
             let tipY = circleCenterY + radius * 1.65
 
-            // 1. Continuous Teardrop Head
+            // 1. Continuous Teardrop Head (ends cleanly at `tipY`)
             var headPath = Path()
             headPath.addArc(
                 center: CGPoint(x: centerX, y: circleCenterY),
@@ -724,12 +724,12 @@ private struct UnifiedPlayheadCanvasView: View {
             headPath.closeSubpath()
             context.fill(headPath, with: .color(headColor))
 
-            // 2. Directly Connected Vertical Stem (Starts inside the teardrop tip so there is ZERO gap!)
+            // 2. Vertical Stem starting at `tipY` (ZERO overlap with the teardrop tip so translucent playheads never show a bright overlap artifact!)
             let stemRect = CGRect(
                 x: centerX - 0.75,
-                y: tipY - 1.5,
+                y: tipY,
                 width: 1.5,
-                height: max(10, totalHeight - tipY + 2.0)
+                height: max(10, totalHeight - tipY)
             )
             context.fill(Path(stemRect), with: .color(stemColor))
         }
@@ -963,7 +963,7 @@ private struct TimelineInteractiveSegmentView: View {
                 .allowsHitTesting(false)
             }
 
-            // 5. Interactive Split Mode Cut Line + Golden Teardrop Badge (`2s ✂️`)
+            // 5. Interactive Split Mode Cut Line + Golden Teardrop Badge (`2s ✂️` — Positioned inside the top of the segment so it is NEVER clipped by the scroll view!)
             if isSplitMode, let splitX = hoverSplitX {
                 let cutOffsetSec = Int(round((Double(splitX / max(1, segWidth)) * (endMs - startMs)) / 1000.0))
                 ZStack(alignment: .top) {
@@ -971,21 +971,21 @@ private struct TimelineInteractiveSegmentView: View {
                         .fill(Color.white.opacity(0.92))
                         .frame(width: 1.5, height: height)
 
-                    // Golden Split Teardrop Badge above the cut line
-                    VStack(spacing: 0) {
+                    // Golden Split Teardrop Badge right at the top of the cut line (never clipped!)
+                    VStack(spacing: 1) {
                         Text("\(cutOffsetSec)s")
-                            .font(.system(size: 9, weight: .bold).monospacedDigit())
+                            .font(.system(size: 9.5, weight: .bold).monospacedDigit())
                         Image(systemName: "scissors")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: 8.5, weight: .bold))
                     }
                     .foregroundStyle(.black.opacity(0.88))
                     .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 3.5)
                     .background(
                         Color(red: 0.90, green: 0.65, blue: 0.24),
-                        in: Capsule()
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                     )
-                    .offset(y: -26)
+                    .offset(y: 2)
                 }
                 .offset(x: splitX)
                 .allowsHitTesting(false)
@@ -1013,14 +1013,14 @@ private struct TimelineInteractiveSegmentView: View {
         }
         .opacity(isDimmed ? 0.35 : 1.0)
         .frame(width: segWidth, height: height)
-        .background(
+        .overlay(
             RightClickDetectorView {
                 onRightClick()
             }
         )
         .contentShape(Rectangle())
         .offset(x: xOffset, y: verticalDragOffset)
-        .zIndex(activeDragMode != nil ? 60 : 1)
+        .zIndex(activeDragMode != nil ? 60 : (isHovered ? 30 : 1))
         .onContinuousHover { phase in
             switch phase {
             case .active(let pt):
@@ -1160,8 +1160,28 @@ private struct RightClickDetectorView: NSViewRepresentable {
     final class RightClickCatcherNSView: NSView {
         var onRightClick: (() -> Void)?
 
+        // Crucial: return `nil` from `hitTest` for normal left-clicks/drags/hovers so SwiftUI gestures work 100% normally,
+        // and ONLY intercept right-clicks (or Control + Left Click)!
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard bounds.contains(point), let event = NSApp.currentEvent else {
+                return nil
+            }
+            if event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control)) {
+                return self
+            }
+            return nil
+        }
+
         override func rightMouseDown(with event: NSEvent) {
             onRightClick?()
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.modifierFlags.contains(.control) {
+                onRightClick?()
+            } else {
+                super.mouseDown(with: event)
+            }
         }
     }
 }

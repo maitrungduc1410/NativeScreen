@@ -129,6 +129,100 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     }
 }
 
+/// Pill Button with generous hitbox (`height: 30`), smooth hover highlight,
+/// active purple state (like `Reel mode` in), and optional instant hover tooltip!
+public struct SubToolbarPillButton<LabelContent: View>: View {
+    let tooltip: String?
+    let edge: TooltipEdge
+    let isActive: Bool
+    let action: () -> Void
+    @ViewBuilder let label: () -> LabelContent
+
+    @State private var isHovered = false
+    @State private var buttonSize: CGSize = CGSize(width: 96, height: 30)
+    @State private var bubbleSize: CGSize = CGSize(width: 120, height: 28)
+
+    public init(
+        tooltip: String? = nil,
+        edge: TooltipEdge = .top,
+        isActive: Bool = false,
+        action: @escaping () -> Void,
+        @ViewBuilder label: @escaping () -> LabelContent
+    ) {
+        self.tooltip = tooltip
+        self.edge = edge
+        self.isActive = isActive
+        self.action = action
+        self.label = label
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            label()
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background(
+                    GeometryReader { geo in
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(fillColor)
+                            .onAppear { buttonSize = geo.size }
+                            .onChange(of: geo.size) { _, s in buttonSize = s }
+                    }
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: 1)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+        .overlay(alignment: .center) {
+            if isHovered, let tooltip = tooltip, !tooltip.isEmpty {
+                InstantTooltipBubble(text: tooltip, edge: edge)
+                    .fixedSize()
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear
+                                .onAppear { bubbleSize = geo.size }
+                                .onChange(of: geo.size) { _, s in bubbleSize = s }
+                        }
+                    )
+                    .offset(
+                        x: 0,
+                        y: edge == .top
+                            ? -((buttonSize.height * 0.5) + (bubbleSize.height * 0.5) + 6)
+                            : ((buttonSize.height * 0.5) + (bubbleSize.height * 0.5) + 6)
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(999)
+                    .allowsHitTesting(false)
+            }
+        }
+        .zIndex(isHovered ? 500 : 1)
+    }
+
+    private var fillColor: Color {
+        if isActive {
+            return isHovered
+                ? Color(red: 0.20, green: 0.18, blue: 0.34)
+                : Color(red: 0.14, green: 0.13, blue: 0.24)
+        }
+        return isHovered ? Color.white.opacity(0.11) : Color.white.opacity(0.035)
+    }
+
+    private var borderColor: Color {
+        if isActive {
+            return Color(red: 0.50, green: 0.44, blue: 0.95).opacity(isHovered ? 0.55 : 0.35)
+        }
+        return Color.white.opacity(isHovered ? 0.16 : 0.06)
+    }
+}
+
 public struct InstantTooltipBubble: View {
     let text: String
     let edge: TooltipEdge
