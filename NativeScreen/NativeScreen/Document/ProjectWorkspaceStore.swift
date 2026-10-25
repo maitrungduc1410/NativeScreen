@@ -78,10 +78,15 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
         let editorView = ProjectEditorWindowView(session: session)
             .ignoresSafeArea(.container, edges: .top)
+            .frame(minWidth: 1180, minHeight: 740)
         let hostingController = NSHostingController(rootView: editorView)
+        hostingController.sizingOptions = [.minSize]
+
+        let initialSize = NSSize(width: 1320, height: 840)
+        let minWinSize = NSSize(width: 1180, height: 740)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 840),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -89,7 +94,9 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         // Crucial: prevent Objective-C over-release when the window closes while Swift holds a reference
         window.isReleasedWhenClosed = false
         window.contentViewController = hostingController
-        window.minSize = NSSize(width: 1080, height: 720)
+        window.minSize = minWinSize
+        window.contentMinSize = minWinSize
+        window.setContentSize(initialSize)
         window.title = "\(session.document.name).nativescreen"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
@@ -102,6 +109,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.toolbarStyle = .unified
 
         window.delegate = self
+        window.setFrame(NSRect(origin: .zero, size: initialSize), display: false)
         window.center()
 
         // Cascade slightly if multiple project windows are open simultaneously

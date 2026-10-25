@@ -109,8 +109,8 @@ public final class RecordingCoordinator {
     // MARK: - Show / Hide Floating Recording HUD Bar (`NSPanel`)
 
     public func showRecordingHUD() {
-        let panelW: CGFloat = 840
-        let panelH: CGFloat = 66
+        let panelW: CGFloat = 736
+        let panelH: CGFloat = 68
 
         if hudPanel == nil {
             let panel = DraggableHUDPanel(
@@ -696,16 +696,25 @@ public final class RecordingCoordinator {
     }
 }
 
-// MARK: - Floating Recording HUD Bar View (`NSPanel` Content — Matches the Recording Bar)
+// MARK: - Floating Recording HUD Bar View (`NSPanel` Content — Liquid Glass + Unified 44pt Hover-Highlight Buttons)
 
 public struct RecordingHUDBarView: View {
     @Bindable var coordinator: RecordingCoordinator
     @Bindable private var workspace = ProjectWorkspaceStore.shared
 
+    @State private var isShowingProjectsPopover = false
+
+    private let buttonHeight: CGFloat = 44
+
     public var body: some View {
-        HStack(spacing: 12) {
-            // Close button (ESC)
-            Button {
+        HStack(spacing: 10) {
+            // 1. Close button (ESC)
+            HUDInteractiveItemButton(
+                isSelected: false,
+                width: 30,
+                height: 30,
+                cornerRadius: 15
+            ) {
                 if coordinator.isRecording {
                     Task { await coordinator.stopRecordingAndOpenEditor() }
                 } else {
@@ -714,141 +723,110 @@ public struct RecordingHUDBarView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .frame(width: 28, height: 28)
-                    .background(.white.opacity(0.14), in: Circle())
+                    .foregroundStyle(.white.opacity(0.92))
             }
-            .buttonStyle(.plain)
 
             Divider()
-                .frame(height: 26)
+                .frame(height: 28)
+                .padding(.horizontal, 2)
 
             if !coordinator.isRecording {
-                // Capture Target Mode Buttons (Display, Window, Area, Device)
+                // 2. Capture Target Mode Buttons (Display, Window, Area, Device — Uniform 44pt height + Hover Highlight)
                 HStack(spacing: 4) {
                     ForEach(CaptureTargetMode.allCases) { mode in
                         let isSelected = (coordinator.isPickingTarget && coordinator.selectedMode == mode)
-                        Button {
+                        HUDInteractiveItemButton(
+                            isSelected: isSelected,
+                            width: 58,
+                            height: buttonHeight,
+                            cornerRadius: 10
+                        ) {
                             coordinator.selectMode(mode)
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: mode.systemImage)
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.system(size: 16, weight: .regular))
                                 Text(mode.title)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.system(size: 11, weight: .regular))
                                     .lineLimit(1)
                             }
-                            .foregroundStyle(isSelected ? .white : .white.opacity(0.65))
-                            .frame(width: 58, height: 46)
-                            .background(
-                                isSelected
-                                    ? Color.white.opacity(0.16)
-                                    : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            )
+                            .foregroundStyle(isSelected ? .white : .white.opacity(0.75))
                         }
-                        .buttonStyle(.plain)
                     }
                 }
 
                 Divider()
-                    .frame(height: 26)
+                    .frame(height: 28)
+                    .padding(.horizontal, 2)
 
-                // Single-Line Microphone & System Audio Pills
-                HStack(spacing: 8) {
-                    Button {
+                // 3. Microphone & System Audio Buttons (Uniform 44pt height + Hover Highlight, No Red Record Button!)
+                HStack(spacing: 6) {
+                    HUDInteractiveItemButton(
+                        isSelected: coordinator.captureMicrophone,
+                        width: nil,
+                        height: buttonHeight,
+                        cornerRadius: 10
+                    ) {
                         coordinator.captureMicrophone.toggle()
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 7) {
                             Image(systemName: coordinator.captureMicrophone ? "mic.fill" : "mic.slash")
-                                .font(.system(size: 13))
+                                .font(.system(size: 13.5, weight: .regular))
                             Text(coordinator.captureMicrophone ? "Microphone" : "No microphone")
-                                .font(.system(size: 12.5, weight: .medium))
+                                .font(.system(size: 12.5, weight: .regular))
                                 .lineLimit(1)
                         }
                         .fixedSize(horizontal: true, vertical: false)
-                        .foregroundStyle(coordinator.captureMicrophone ? .white : .white.opacity(0.60))
+                        .foregroundStyle(coordinator.captureMicrophone ? .white : .white.opacity(0.70))
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.white.opacity(coordinator.captureMicrophone ? 0.14 : 0.06), in: Capsule())
                     }
-                    .buttonStyle(.plain)
 
-                    Button {
+                    HUDInteractiveItemButton(
+                        isSelected: coordinator.captureSystemAudio,
+                        width: nil,
+                        height: buttonHeight,
+                        cornerRadius: 10
+                    ) {
                         coordinator.captureSystemAudio.toggle()
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 7) {
                             Image(systemName: coordinator.captureSystemAudio ? "speaker.wave.2.fill" : "speaker.slash")
-                                .font(.system(size: 13))
-                            Text(coordinator.captureSystemAudio ? "System Audio" : "No audio")
-                                .font(.system(size: 12.5, weight: .medium))
+                                .font(.system(size: 13.5, weight: .regular))
+                            Text(coordinator.captureSystemAudio ? "System audio" : "No audio")
+                                .font(.system(size: 12.5, weight: .regular))
                                 .lineLimit(1)
                         }
                         .fixedSize(horizontal: true, vertical: false)
-                        .foregroundStyle(coordinator.captureSystemAudio ? .white : .white.opacity(0.60))
+                        .foregroundStyle(coordinator.captureSystemAudio ? .white : .white.opacity(0.70))
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.white.opacity(coordinator.captureSystemAudio ? 0.14 : 0.06), in: Capsule())
                     }
-                    .buttonStyle(.plain)
                 }
 
                 Divider()
-                    .frame(height: 26)
+                    .frame(height: 28)
+                    .padding(.horizontal, 2)
 
-                // Projects Folder Menu (Like the 📁 icon right on the Recording Bar!)
-                Menu {
-                    Button("Open .nativescreen Project…") {
-                        workspace.promptOpenProjectDialog()
-                    }
-
-                    Button("Create Interactive Showcase Project") {
-                        _ = coordinator.createInteractiveSampleProject()
-                    }
-
-                    if !workspace.recentProjectURLs.isEmpty {
-                        Divider()
-                        Section("Recent Projects") {
-                            ForEach(workspace.recentProjectURLs.prefix(10), id: \.path) { url in
-                                Button(url.deletingPathExtension().lastPathComponent) {
-                                    _ = workspace.openOrFocusProject(at: url)
-                                }
-                            }
-                        }
-                    }
-
-                    Divider()
-                    Button("Show Projects Folder in Finder") {
-                        NSWorkspace.shared.open(ProjectWorkspaceStore.defaultProjectsDirectory)
-                    }
+                // 4. Projects Folder Button (Uniform 44pt height + Hover Highlight + Liquid Glass Popover)
+                HUDInteractiveItemButton(
+                    isSelected: isShowingProjectsPopover,
+                    width: 44,
+                    height: buttonHeight,
+                    cornerRadius: 10
+                ) {
+                    isShowingProjectsPopover.toggle()
                 } label: {
                     Image(systemName: "folder")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.78))
-                        .frame(width: 34, height: 34)
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.85))
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-
-                // Record Button
-                Button {
-                    Task { await coordinator.startRecording() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(.red)
-                            .frame(width: 9, height: 9)
-                        Text("Record")
-                            .font(.system(size: 12.5, weight: .semibold))
-                            .lineLimit(1)
+                .popover(isPresented: $isShowingProjectsPopover, arrowEdge: .top) {
+                    HUDProjectsLiquidGlassPopoverView(
+                        coordinator: coordinator,
+                        workspace: workspace
+                    ) {
+                        isShowingProjectsPopover = false
                     }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 8)
-                    .background(Color.indigo, in: Capsule())
-                    .foregroundStyle(.white)
                 }
-                .buttonStyle(.plain)
             } else {
                 // Active Recording Status & Stop Button
                 HStack(spacing: 12) {
@@ -856,17 +834,17 @@ public struct RecordingHUDBarView: View {
                         .fill(.red)
                         .frame(width: 9, height: 9)
                     Text(formatElapsed(coordinator.recordingElapsedSeconds))
-                        .font(.system(size: 13.5, weight: .semibold).monospacedDigit())
+                        .font(.system(size: 13.5, weight: .medium, design: .default).monospacedDigit())
                         .foregroundStyle(.white)
                     Button {
                         Task { await coordinator.stopRecordingAndOpenEditor() }
                     } label: {
                         Label("Stop Recording", systemImage: "stop.fill")
-                            .font(.system(size: 12.5, weight: .semibold))
+                            .font(.system(size: 12.5, weight: .medium))
                             .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(.red, in: Capsule())
+                            .frame(height: 36)
+                            .background(.red, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                             .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
@@ -874,12 +852,17 @@ public struct RecordingHUDBarView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 9)
-        .background(Color(red: 0.11, green: 0.12, blue: 0.16).opacity(0.94), in: Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(.white.opacity(0.15), lineWidth: 1)
+        .frame(height: 64)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black.opacity(0.32))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        )
+        .preferredColorScheme(.dark)
     }
 
     private func formatElapsed(_ sec: TimeInterval) -> String {
@@ -887,6 +870,143 @@ public struct RecordingHUDBarView: View {
         let m = total / 60
         let s = total % 60
         return String(format: "%02d:%02d", m, s)
+    }
+}
+
+private struct HUDInteractiveItemButton<LabelContent: View>: View {
+    let isSelected: Bool
+    let width: CGFloat?
+    let height: CGFloat
+    let cornerRadius: CGFloat
+    let action: () -> Void
+    @ViewBuilder let label: () -> LabelContent
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            label()
+                .frame(width: width, height: height)
+                .background(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(backgroundColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: 0.8)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private var backgroundColor: Color {
+        if isSelected {
+            return isHovered ? Color.white.opacity(0.22) : Color.white.opacity(0.15)
+        }
+        return isHovered ? Color.white.opacity(0.11) : Color.clear
+    }
+
+    private var borderColor: Color {
+        if isSelected {
+            return Color.white.opacity(0.24)
+        }
+        return isHovered ? Color.white.opacity(0.14) : Color.clear
+    }
+}
+
+private struct HUDProjectsLiquidGlassPopoverView: View {
+    @Bindable var coordinator: RecordingCoordinator
+    @Bindable var workspace: ProjectWorkspaceStore
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HUDPopoverRow(title: "Open .nativescreen Project…", icon: "folder") {
+                onDismiss()
+                workspace.promptOpenProjectDialog()
+            }
+
+            HUDPopoverRow(title: "Create Interactive Showcase Project", icon: "sparkles.tv") {
+                onDismiss()
+                _ = coordinator.createInteractiveSampleProject()
+            }
+
+            if !workspace.recentProjectURLs.isEmpty {
+                Divider()
+                    .padding(.vertical, 3)
+
+                Text("Recent Projects")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 2)
+
+                ForEach(workspace.recentProjectURLs.prefix(8), id: \.path) { url in
+                    HUDPopoverRow(
+                        title: url.deletingPathExtension().lastPathComponent,
+                        icon: "film"
+                    ) {
+                        onDismiss()
+                        _ = workspace.openOrFocusProject(at: url)
+                    }
+                }
+            }
+
+            Divider()
+                .padding(.vertical, 3)
+
+            HUDPopoverRow(title: "Show Projects Folder in Finder", icon: "arrow.up.forward.app") {
+                onDismiss()
+                NSWorkspace.shared.open(ProjectWorkspaceStore.defaultProjectsDirectory)
+            }
+        }
+        .padding(8)
+        .frame(width: 260)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct HUDPopoverRow: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 16)
+
+                Text(title)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 
@@ -940,7 +1060,7 @@ public struct WindowAndAreaPickerOverlayView: View {
 
                         HStack(spacing: 8) {
                             Text("\(Int(win.bounds.width)) × \(Int(win.bounds.height))")
-                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .font(.system(size: 13, weight: .regular, design: .default).monospacedDigit())
                                 .foregroundStyle(.white.opacity(0.85))
 
                             Menu {
@@ -955,7 +1075,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                                 }
                             } label: {
                                 Text("Resize")
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.system(size: 11.5, weight: .medium))
                             }
                             .menuStyle(.borderlessButton)
                             .fixedSize()
@@ -983,10 +1103,14 @@ public struct WindowAndAreaPickerOverlayView: View {
                         .padding(.top, 4)
                     }
                     .padding(22)
-                    .background(Color(red: 0.12, green: 0.13, blue: 0.20).opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.black.opacity(0.35))
+                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                            .strokeBorder(.white.opacity(0.16), lineWidth: 1)
                     )
                 }
                 .frame(width: localRect.width, height: localRect.height)
@@ -1008,7 +1132,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(.white)
                         Text("\(Int(screen.frame.width)) × \(Int(screen.frame.height)) • Press ESC to cancel")
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.system(size: 13, weight: .regular, design: .default).monospacedDigit())
                             .foregroundStyle(.white.opacity(0.75))
 
                         Button {
@@ -1028,7 +1152,11 @@ public struct WindowAndAreaPickerOverlayView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(24)
-                    .background(Color(red: 0.12, green: 0.13, blue: 0.20).opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.black.opacity(0.35))
+                    )
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1049,7 +1177,7 @@ public struct WindowAndAreaPickerOverlayView: View {
 
                     VStack(spacing: 10) {
                         Text("\(Int(localRect.width)) × \(Int(localRect.height))")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 13.5, weight: .medium, design: .default).monospacedDigit())
                             .foregroundStyle(.white)
 
                         HStack(spacing: 8) {
