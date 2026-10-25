@@ -405,9 +405,9 @@ public struct MultiTrackTimelineView: View {
                     topTitle: "Clip",
                     subtitle: formatClipSubtitle(durationMs: mapped.slice.timelineDurationMs, speed: mapped.slice.speed),
                     gradientColors: [
-                        Color(red: 0.78, green: 0.49, blue: 0.08),
-                        Color(red: 0.68, green: 0.41, blue: 0.05),
-                        Color(red: 0.88, green: 0.56, blue: 0.14)
+                        Color(red: 0.61, green: 0.43, blue: 0.04),
+                        Color(red: 0.72, green: 0.51, blue: 0.05),
+                        Color(red: 0.80, green: 0.57, blue: 0.07)
                     ],
                     isSelected: isSelected,
                     isDimmed: false,
@@ -493,9 +493,9 @@ public struct MultiTrackTimelineView: View {
                         topTitle: zoom.presentation == .loupe ? "Loupe" : "Zoom",
                         subtitle: String(format: "🔍 %.1fx  %@", zoom.scale, zoom.mode == .followCursor ? "Auto" : "Manual"),
                         gradientColors: [
-                            Color(red: 0.42, green: 0.28, blue: 0.99),
-                            Color(red: 0.36, green: 0.23, blue: 0.96),
-                            Color(red: 0.54, green: 0.43, blue: 1.00)
+                            Color(red: 0.36, green: 0.29, blue: 0.96),
+                            Color(red: 0.47, green: 0.41, blue: 0.98),
+                            Color(red: 0.56, green: 0.50, blue: 0.99)
                         ],
                         isSelected: isSelected,
                         isDimmed: isHidden || zoom.disabled,
@@ -578,14 +578,14 @@ public struct MultiTrackTimelineView: View {
                         subtitle: nil,
                         gradientColors: item.type == .blur
                             ? [
-                                Color(red: 0.55, green: 0.20, blue: 0.38),
-                                Color(red: 0.48, green: 0.16, blue: 0.33),
-                                Color(red: 0.65, green: 0.26, blue: 0.46)
+                                Color(red: 0.54, green: 0.26, blue: 0.40),
+                                Color(red: 0.61, green: 0.30, blue: 0.45),
+                                Color(red: 0.67, green: 0.34, blue: 0.50)
                             ]
                             : [
-                                Color(red: 0.18, green: 0.54, blue: 0.58),
                                 Color(red: 0.14, green: 0.44, blue: 0.48),
-                                Color(red: 0.24, green: 0.64, blue: 0.68)
+                                Color(red: 0.19, green: 0.54, blue: 0.58),
+                                Color(red: 0.25, green: 0.64, blue: 0.68)
                             ],
                         isSelected: isSelected,
                         isDimmed: isHidden || item.disabled,
@@ -907,7 +907,7 @@ private struct TimelineInteractiveSegmentView: View {
         let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
 
         ZStack(alignment: .leading) {
-            // 1. Rich Vibrant Pill Body + Inner Specular Top/Bottom Edge Glow (style!)
+            // 1. Pure Top-to-Bottom Vertical LinearGradient (Darker at top, lighter at bottom — sRGB profile!)
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(
                     LinearGradient(
@@ -915,17 +915,6 @@ private struct TimelineInteractiveSegmentView: View {
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(
-                            RadialGradient(
-                                colors: [Color.white.opacity(0.16), Color.clear],
-                                center: .center,
-                                startRadius: 2,
-                                endRadius: max(30, segWidth * 0.55)
-                            )
-                        )
                 )
 
             // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top (Equatable so it never redraws during hover skimming!)
