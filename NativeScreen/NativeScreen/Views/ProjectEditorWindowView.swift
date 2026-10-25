@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 import UniformTypeIdentifiers
 
 /// Full Native macOS Editor Window for a single `.nativescreen` project session.
@@ -21,10 +22,14 @@ public struct ProjectEditorWindowView: View {
 
     @State private var isShowingExportSheet = false
     @State private var isShowingCommandMenu = false
-    @State private var exportCodec: HardwareVideoExporter.ExportCodec = .h264
-    @State private var exportResolution: HardwareVideoExporter.ExportResolution = .qhd2k
+    @State private var exportConfig = HardwareVideoExporter.ExportConfiguration()
     @State private var isExporting = false
     @State private var exportProgress: Double = 0.0
+    @State private var exportStartedAtMs: Double = 0.0
+    @State private var exportMeasurementStart: (progress01: Double, atMs: Double)?
+    @State private var exportLatestSample: (progress01: Double, atMs: Double)?
+    @State private var activeExportDestinationLabel: String = ""
+    @State private var activeExportTask: Task<Void, Never>?
     @State private var exportError: String?
     @State private var keyEventMonitor: Any?
     @State private var flagsChangedMonitor: Any?
@@ -583,6 +588,43 @@ public struct ProjectEditorWindowView: View {
                 .zIndex(500)
                 .transition(.opacity)
             }
+
+            // 5. EXPORT SETTINGS MODAL OVERLAY
+            if isShowingExportSheet && !isExporting {
+                ExportSettingsModalView(
+                    session: session,
+                    config: $exportConfig,
+                    errorMessage: exportError,
+                    onStartExport: {
+                        runHardwareExport()
+                    },
+                    onCancel: {
+                        withAnimation(.easeOut(duration: 0.14)) {
+                            isShowingExportSheet = false
+                            exportError = nil
+                        }
+                    }
+                )
+                .zIndex(550)
+                .transition(.opacity)
+            }
+
+            // 6. FULL-WINDOW DARK EXPORT PROGRESS OVERLAY
+            if isExporting {
+                ExportingFullOverlayView(
+                    projectName: session.document.name,
+                    destinationPath: activeExportDestinationLabel,
+                    progress: exportProgress,
+                    startedAtMs: exportStartedAtMs,
+                    measurementStart: exportMeasurementStart,
+                    latestSample: exportLatestSample,
+                    onStopExport: {
+                        cancelActiveExport()
+                    }
+                )
+                .zIndex(600)
+                .transition(.opacity)
+            }
         }
         .background(
             WindowTitlebarCleaner { centerY, rightX in
@@ -595,9 +637,6 @@ public struct ProjectEditorWindowView: View {
             }
         )
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $isShowingExportSheet) {
-            exportModalSheet
-        }
         .sheet(isPresented: $session.isShowingStillFrameExportModal) {
             ExportStillFrameModalView(session: session) {
                 session.isShowingStillFrameExportModal = false
@@ -677,6 +716,29 @@ public struct ProjectEditorWindowView: View {
             if event.keyCode == 40 && flags == .command {
                 withAnimation(.easeOut(duration: 0.14)) {
                     isShowingCommandMenu.toggle()
+                }
+                return nil
+            }
+
+            if isExporting {
+                if event.keyCode == 53 { // ESC stops active export
+                    cancelActiveExport()
+                    return nil
+                }
+                return nil
+            }
+
+            if isShowingExportSheet {
+                if event.keyCode == 53 { // ESC closes Export modal
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        isShowingExportSheet = false
+                        exportError = nil
+                    }
+                    return nil
+                }
+                if event.keyCode == 36 || event.keyCode == 76 { // Return / Enter triggers Export
+                    runHardwareExport()
+                    return nil
                 }
                 return nil
             }
@@ -850,92 +912,126 @@ public struct ProjectEditorWindowView: View {
         }
     }
 
-    // MARK: - Hardware Export Sheet
-
-    private var exportModalSheet: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Export Video (Hardware Accelerated)")
-                .font(.title3.bold())
-
-            Form {
-                Picker("Codec", selection: $exportCodec) {
-                    ForEach(HardwareVideoExporter.ExportCodec.allCases) { c in
-                        Text(c.rawValue).tag(c)
-                    }
-                }
-                Picker("Resolution", selection: $exportResolution) {
-                    ForEach(HardwareVideoExporter.ExportResolution.allCases) { r in
-                        Text(r.rawValue).tag(r)
-                    }
-                }
-            }
-
-            if isExporting {
-                VStack(alignment: .leading, spacing: 6) {
-                    ProgressView(value: exportProgress)
-                    Text("Rendering via Metal + VideoToolbox: \(Int(exportProgress * 100))%")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if let err = exportError {
-                Text(err)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    isShowingExportSheet = false
-                }
-                .disabled(isExporting)
-
-                Button("Export MP4…") {
-                    runHardwareExport()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isExporting)
-            }
-        }
-        .padding(22)
-        .frame(width: 420)
-    }
+    // MARK: - Export Execution & Cooperative Cancellation (`Stop export`)
 
     private func runHardwareExport() {
-        let savePanel = NSSavePanel()
-        savePanel.allowedContentTypes = [.mpeg4Movie]
-        savePanel.nameFieldStringValue = "\(session.document.name).mp4"
+        session.isPlaying = false
+        exportConfig.normalizeForConstraints()
 
-        guard savePanel.runModal() == .OK, let outURL = savePanel.url else { return }
+        let outURL: URL
+        let isClipboardExport = (exportConfig.target == .clipboard)
 
-        isExporting = true
+        if isClipboardExport {
+            let ext = exportConfig.format.fileExtension
+            let cleanName = session.document.name.replacingOccurrences(of: "/", with: "-")
+            outURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(cleanName)-\(Int(Date().timeIntervalSince1970)).\(ext)")
+            activeExportDestinationLabel = "Clipboard (\(cleanName).\(ext))"
+        } else {
+            let savePanel = NSSavePanel()
+            switch exportConfig.format {
+            case .mp4:
+                savePanel.allowedContentTypes = [.mpeg4Movie]
+            case .prores:
+                savePanel.allowedContentTypes = [.quickTimeMovie]
+            case .gif:
+                savePanel.allowedContentTypes = [.gif]
+            }
+            savePanel.nameFieldStringValue = "\(session.document.name).\(exportConfig.format.fileExtension)"
+
+            guard savePanel.runModal() == .OK, let chosenURL = savePanel.url else { return }
+            outURL = chosenURL
+            activeExportDestinationLabel = chosenURL.path
+        }
+
+        let nowMs = ProcessInfo.processInfo.systemUptime * 1000.0
+        exportStartedAtMs = nowMs
+        exportMeasurementStart = nil
+        exportLatestSample = nil
         exportProgress = 0.0
         exportError = nil
+        isExporting = true
         DockProgressIndicatingController.shared.setProgress(0.0)
 
-        Task {
+        let capturedConfig = exportConfig
+        activeExportTask?.cancel()
+        activeExportTask = Task { @MainActor in
             do {
                 try await HardwareVideoExporter.exportProject(
                     session: session,
                     outputURL: outURL,
-                    codec: exportCodec,
-                    resolution: exportResolution,
-                    fps: 60
+                    config: capturedConfig
                 ) { progress in
-                    self.exportProgress = progress
+                    recordExportProgressSample(progress)
                     DockProgressIndicatingController.shared.setProgress(progress)
                 }
+
+                guard !Task.isCancelled else { return }
+
                 DockProgressIndicatingController.shared.setProgress(nil)
                 isExporting = false
                 isShowingExportSheet = false
-                NSWorkspace.shared.activateFileViewerSelecting([outURL])
-            } catch {
+                activeExportTask = nil
+
+                if isClipboardExport {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.writeObjects([outURL as NSURL])
+                    NSSound.beep()
+                } else {
+                    NSWorkspace.shared.activateFileViewerSelecting([outURL])
+                }
+            } catch is CancellationError {
                 DockProgressIndicatingController.shared.setProgress(nil)
                 isExporting = false
+                activeExportTask = nil
+            } catch {
+                if Task.isCancelled {
+                    DockProgressIndicatingController.shared.setProgress(nil)
+                    isExporting = false
+                    activeExportTask = nil
+                    return
+                }
+                DockProgressIndicatingController.shared.setProgress(nil)
+                isExporting = false
+                activeExportTask = nil
                 exportError = error.localizedDescription
             }
+        }
+    }
+
+    private func recordExportProgressSample(_ progress01: Double) {
+        let clamped = min(1.0, max(0.0, progress01))
+        if let latest = exportLatestSample, abs(latest.progress01 - clamped) < 0.0001 {
+            return
+        }
+        exportProgress = clamped
+        if clamped <= 0.0 {
+            exportMeasurementStart = nil
+            exportLatestSample = nil
+            return
+        }
+        let nowMs = ProcessInfo.processInfo.systemUptime * 1000.0
+        let sample = (progress01: clamped, atMs: nowMs)
+        let prev = exportLatestSample
+        exportLatestSample = sample
+
+        // Matches `ExportTimeEstimator.reportProgress`:
+        // Reset `measurementStart` if none exists, if progress jumped backwards, or after a >3s stall.
+        if exportMeasurementStart == nil
+            || prev == nil
+            || clamped < (prev?.progress01 ?? 0.0)
+            || (nowMs - (prev?.atMs ?? nowMs)) > 3000.0 {
+            exportMeasurementStart = sample
+        }
+    }
+
+    private func cancelActiveExport() {
+        activeExportTask?.cancel()
+        activeExportTask = nil
+        DockProgressIndicatingController.shared.setProgress(nil)
+        withAnimation(.easeOut(duration: 0.15)) {
+            isExporting = false
         }
     }
 
@@ -1989,3 +2085,676 @@ private struct CommandMenuRowView: View {
         }
     }
 }
+
+// MARK: - 5. Export Settings Modal
+
+private struct ExportSettingsModalView: View {
+    @Bindable var session: ProjectSession
+    @Binding var config: HardwareVideoExporter.ExportConfiguration
+    let errorMessage: String?
+    let onStartExport: () -> Void
+    let onCancel: () -> Void
+
+    @State private var isAdvancedExpanded: Bool = false
+    @State private var isHoveringPrimaryExport: Bool = false
+    @State private var isHoveringCancel: Bool = false
+    @State private var isHoveringAdvancedToggle: Bool = false
+
+    private let purpleAccent = Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
+    private let purpleBorder = Color(red: 0.44, green: 0.34, blue: 0.98)
+
+    private var canvasAspect: Double {
+        let sourceW = Double(session.metadata.captureTarget.pixelSize.width)
+        let sourceH = Double(session.metadata.captureTarget.pixelSize.height)
+        return session.document.canvas.effectiveAspectRatio(sourceWidth: sourceW, sourceHeight: sourceH)
+    }
+
+    private var outputPixels: (width: Int, height: Int) {
+        config.outputPixelSize(canvasAspect: canvasAspect)
+    }
+
+    private var durationMs: Double {
+        max(500.0, session.timeMapper.totalTimelineDurationMs)
+    }
+
+    private var estimatedTimeText: String {
+        HardwareVideoExporter.estimateExportDurationString(
+            config: config,
+            canvasAspect: canvasAspect,
+            durationMs: durationMs
+        )
+    }
+
+    private var estimatedSizeText: String {
+        HardwareVideoExporter.estimateOutputSizeString(
+            config: config,
+            canvasAspect: canvasAspect,
+            durationMs: durationMs,
+            hasAudio: !session.audioWaveformSamples.isEmpty
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            // Backdrop
+            Color.black.opacity(0.62)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    onCancel()
+                }
+
+            // Main Export Settings Card
+            VStack(alignment: .leading, spacing: 28) {
+                // TOP 2-COLUMN GRID
+                VStack(alignment: .leading, spacing: 26) {
+                    // Row 1: Format (Left) + Frame rate (Right)
+                    HStack(alignment: .top, spacing: 36) {
+                        // Left Column: Format
+                        VStack(alignment: .leading, spacing: 11) {
+                            sectionHeader(icon: "video", title: "Format", badgeIcon: true)
+
+                            HStack(spacing: 6) {
+                                ForEach(HardwareVideoExporter.ExportFormat.allCases) { fmt in
+                                    selectionPillButton(
+                                        label: fmt.label,
+                                        isSelected: config.format == fmt
+                                    ) {
+                                        withAnimation(.easeInOut(duration: 0.14)) {
+                                            config.format = fmt
+                                            if fmt == .gif && config.fps > 30 {
+                                                config.fps = 15
+                                            } else if fmt != .gif && config.fps < 24 {
+                                                config.fps = 60
+                                            }
+                                            config.normalizeForConstraints()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .frame(width: 224, alignment: .leading)
+
+                        // Right Column: Frame rate
+                        VStack(alignment: .leading, spacing: 11) {
+                            sectionHeader(icon: "camera.aperture", title: "Frame rate")
+
+                            Menu {
+                                ForEach(config.format.allowedFPSModes, id: \.self) { fpsOption in
+                                    Button {
+                                        config.fps = fpsOption
+                                    } label: {
+                                        HStack {
+                                            Text("\(fpsOption) FPS")
+                                            if config.fps == fpsOption {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Text("\(config.fps)")
+                                        .font(.system(size: 13.5, weight: .medium).monospacedDigit())
+                                        .foregroundStyle(.white.opacity(0.95))
+                                    Text("FPS")
+                                        .font(.system(size: 13.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.42))
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.65))
+                                        .padding(.leading, 4)
+                                }
+                                .padding(.horizontal, 14)
+                                .frame(height: 36)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .fill(Color.white.opacity(0.04))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                            }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    // Row 2: Resolution (Left) + Compression / Profile / GIF Quality (Right)
+                    HStack(alignment: .top, spacing: 36) {
+                        // Left Column: Resolution + Pixel Dimensions
+                        VStack(alignment: .leading, spacing: 11) {
+                            sectionHeader(icon: "rectangle.dashed", title: "Resolution")
+
+                            HStack(spacing: 6) {
+                                ForEach(config.format.allResolutionHeights, id: \.self) { resH in
+                                    let isEnabled = config.enabledResolutionHeights.contains(resH)
+                                    selectionPillButton(
+                                        label: HardwareVideoExporter.ExportConfiguration.resolutionLabel(forHeight: resH),
+                                        isSelected: config.resolutionHeight == resH,
+                                        isDisabled: !isEnabled
+                                    ) {
+                                        guard isEnabled else { return }
+                                        config.resolutionHeight = resH
+                                    }
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("\(outputPixels.width)px × \(outputPixels.height)px")
+                                    .font(.system(size: 13, weight: .regular).monospacedDigit())
+                                    .foregroundStyle(.white.opacity(0.36))
+
+                                if config.format == .gif && config.resolutionHeight >= 1080 {
+                                    Text("Will result in a large file size")
+                                        .font(.system(size: 12.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.36))
+                                }
+                            }
+                            .padding(.top, 2)
+                        }
+                        .frame(width: 224, alignment: .leading)
+
+                        // Right Column: Format-Specific Quality & Advanced Controls
+                        VStack(alignment: .leading, spacing: 16) {
+                            switch config.format {
+                            case .mp4:
+                                VStack(alignment: .leading, spacing: 11) {
+                                    sectionHeader(icon: "scribble.variable", title: "Compression")
+
+                                    HStack(spacing: 6) {
+                                        ForEach(HardwareVideoExporter.ExportCompression.allCases) { comp in
+                                            selectionPillButton(
+                                                label: comp.label,
+                                                isSelected: config.compression == comp
+                                            ) {
+                                                withAnimation(.easeInOut(duration: 0.12)) {
+                                                    config.compression = comp
+                                                    config.normalizeForConstraints()
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(config.compression.descriptionText)
+                                            .font(.system(size: 13, weight: .regular))
+                                            .foregroundStyle(.white.opacity(0.36))
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .lineSpacing(2)
+
+                                        Text("Quality setting does not impact export speed.")
+                                            .font(.system(size: 13, weight: .regular))
+                                            .foregroundStyle(.white.opacity(0.36))
+                                    }
+                                    .padding(.top, 2)
+                                }
+
+                                // Advanced Accordion (`Codec: H.264 | HEVC | Both`)
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Button {
+                                        withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+                                            isAdvancedExpanded.toggle()
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text("Advanced")
+                                                .font(.system(size: 13.5, weight: .medium))
+                                                .foregroundStyle(.white.opacity(0.90))
+
+                                            Spacer()
+
+                                            Image(systemName: isAdvancedExpanded ? "chevron.up" : "chevron.down")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundStyle(.white.opacity(0.75))
+                                                .frame(width: 26, height: 26)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                        .fill(Color.white.opacity(isHoveringAdvancedToggle ? 0.10 : 0.06))
+                                                )
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                                )
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .onHover { isHoveringAdvancedToggle = $0 }
+
+                                    if isAdvancedExpanded {
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            sectionHeader(icon: "film", title: "Codec")
+
+                                            let codecChoices: [HardwareVideoExporter.MP4CodecOption] = (config.target == .file)
+                                                ? [.h264, .h265, .both]
+                                                : [.h264, .h265]
+
+                                            HStack(spacing: 6) {
+                                                ForEach(codecChoices) { codecOpt in
+                                                    selectionPillButton(
+                                                        label: codecOpt.label,
+                                                        isSelected: config.mp4Codec == codecOpt
+                                                    ) {
+                                                        config.mp4Codec = codecOpt
+                                                    }
+                                                }
+                                            }
+
+                                            Text(config.mp4Codec.descriptionText)
+                                                .font(.system(size: 12.5, weight: .regular))
+                                                .foregroundStyle(.white.opacity(0.36))
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                        .padding(.top, 2)
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                    }
+                                }
+                                .padding(.top, 4)
+
+                            case .prores:
+                                VStack(alignment: .leading, spacing: 11) {
+                                    sectionHeader(icon: "film", title: "Profile")
+
+                                    HStack(spacing: 6) {
+                                        ForEach(HardwareVideoExporter.ProResProfileOption.allCases) { prof in
+                                            selectionPillButton(
+                                                label: prof.label,
+                                                isSelected: config.proResProfile == prof
+                                            ) {
+                                                config.proResProfile = prof
+                                            }
+                                        }
+                                    }
+
+                                    Text(config.proResProfile.descriptionText)
+                                        .font(.system(size: 13, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.36))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .padding(.top, 2)
+                                }
+
+                            case .gif:
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Toggle(isOn: $config.gifHighQuality) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text("High quality")
+                                                .font(.system(size: 13.5, weight: .medium))
+                                                .foregroundStyle(.white.opacity(0.92))
+                                            Text("Keeps more detail and fewer compression artifacts, for a larger file. Turn off for the best balance of file size and quality.")
+                                                .font(.system(size: 12.5, weight: .regular))
+                                                .foregroundStyle(.white.opacity(0.38))
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }
+                                    .toggleStyle(.switch)
+                                    .tint(purpleAccent)
+
+                                    Toggle(isOn: $config.gifDisableLoop) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text("Disable loop")
+                                                .font(.system(size: 13.5, weight: .medium))
+                                                .foregroundStyle(.white.opacity(0.92))
+                                            Text("Exported GIF will only play once and then stop.")
+                                                .font(.system(size: 12.5, weight: .regular))
+                                                .foregroundStyle(.white.opacity(0.38))
+                                        }
+                                    }
+                                    .toggleStyle(.switch)
+                                    .tint(purpleAccent)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                // Error Banner (if any)
+                if let err = errorMessage, !err.isEmpty {
+                    Text(err)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Color(red: 1.0, green: 0.42, blue: 0.42))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.red.opacity(0.12))
+                        )
+                }
+
+                // BOTTOM SECTION: `Export to` + Action Buttons + Live Estimation Line
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Export to")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.90))
+
+                    HStack(spacing: 10) {
+                        // Left: `File` | `Clipboard` Target Pills
+                        HStack(spacing: 6) {
+                            ForEach(HardwareVideoExporter.ExportTarget.allCases) { tgt in
+                                selectionPillButton(
+                                    label: tgt.label,
+                                    icon: tgt.iconName,
+                                    isSelected: config.target == tgt,
+                                    height: 38
+                                ) {
+                                    config.target = tgt
+                                    config.normalizeForConstraints()
+                                }
+                            }
+                        }
+
+                        Spacer()
+
+                        // Right: Primary Purple Action (`Export to file... ↵`) + `Cancel`
+                        HStack(spacing: 8) {
+                            Button(action: onStartExport) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: config.target.iconName)
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text(config.target.primaryButtonTitle)
+                                        .font(.system(size: 13.5, weight: .semibold))
+                                    Image(systemName: "return")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.75))
+                                        .padding(.leading, 2)
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18)
+                                .frame(height: 38)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .fill(isHoveringPrimaryExport ? Color(red: 0.35, green: 0.23, blue: 0.99) : purpleAccent)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { isHoveringPrimaryExport = $0 }
+
+                            Button(action: onCancel) {
+                                Text("Cancel")
+                                    .font(.system(size: 13.5, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
+                                    .padding(.horizontal, 18)
+                                    .frame(height: 38)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .fill(Color.white.opacity(isHoveringCancel ? 0.09 : 0.04))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { isHoveringCancel = $0 }
+                        }
+                    }
+
+                    // Bottom-Right Estimation Line (`Estimation — Export time 19 seconds — Output size 35–85MB`)
+                    HStack {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Text("Estimation — Export time \(estimatedTimeText) — Output size \(estimatedSizeText)")
+                                .font(.system(size: 12.5, weight: .regular).monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.30))
+
+                            if config.format == .gif {
+                                Text("GIF files are much larger than MP4 files. Use MP4 when you can.")
+                                    .font(.system(size: 12.0, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.26))
+                            } else if config.format == .prores {
+                                Text("ProRes is made for editing apps. Use MP4 to share.")
+                                    .font(.system(size: 12.0, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.26))
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 26)
+            .frame(width: 740)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(red: 0.067, green: 0.067, blue: 0.078))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.68), radius: 38, x: 0, y: 18)
+        }
+        .onAppear {
+            if config.mp4Codec != .h264 {
+                isAdvancedExpanded = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sectionHeader(icon: String, title: String, badgeIcon: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            if badgeIcon {
+                Image(systemName: icon)
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(.black.opacity(0.9))
+                    .frame(width: 17, height: 15)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.white.opacity(0.92))
+                    )
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+            }
+
+            Text(title)
+                .font(.system(size: 13.5, weight: .medium))
+                .foregroundStyle(.white.opacity(0.92))
+        }
+    }
+
+    @ViewBuilder
+    private func selectionPillButton(
+        label: String,
+        icon: String? = nil,
+        isSelected: Bool,
+        isDisabled: Bool = false,
+        height: CGFloat = 36,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 12.5, weight: .semibold))
+                }
+                Text(label)
+                    .font(.system(size: 13.5, weight: .medium))
+            }
+            .foregroundStyle(
+                isDisabled
+                    ? .white.opacity(0.28)
+                    : (isSelected ? .white : .white.opacity(0.86))
+            )
+            .padding(.horizontal, 14)
+            .frame(height: height)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? purpleAccent.opacity(0.18)
+                            : Color.white.opacity(0.038)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(
+                        isSelected
+                            ? purpleBorder
+                            : Color.white.opacity(0.06),
+                        lineWidth: isSelected ? 1.35 : 1.0
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+    }
+}
+
+// MARK: - 6. Full-Window Exporting Status Overlay
+
+private struct ExportingFullOverlayView: View {
+    let projectName: String
+    let destinationPath: String
+    let progress: Double
+    let startedAtMs: Double
+    let measurementStart: (progress01: Double, atMs: Double)?
+    let latestSample: (progress01: Double, atMs: Double)?
+    let onStopExport: () -> Void
+
+    @State private var nowUptimeMs: Double = ProcessInfo.processInfo.systemUptime * 1000.0
+    @State private var isHoveringStop: Bool = false
+
+    private let clockTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
+    private let purpleAccent = Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
+
+    private var elapsedMs: Double {
+        max(0.0, nowUptimeMs - startedAtMs)
+    }
+
+    /// Computes live remaining time in ms.
+    private var timeLeftMs: Double? {
+        guard let start = measurementStart, let latest = latestSample else { return nil }
+        if latest.progress01 >= 1.0 { return 0.0 }
+        // If no sample arrived for >3s, consider stalled
+        if nowUptimeMs - latest.atMs > 3000.0 { return nil }
+        let measuredSpanMs = latest.atMs - start.atMs
+        // Require at least 1000ms of measurement before displaying ETA (`if return null`)
+        if measuredSpanMs < 1000.0 { return nil }
+        let progressDelta = latest.progress01 - start.progress01
+        guard progressDelta > 0.0005 else { return nil }
+        let msPerFullProgress = measuredSpanMs / progressDelta
+        let estimatedCompletionMs = latest.atMs + (1.0 - latest.progress01) * msPerFullProgress
+        return max(0.0, estimatedCompletionMs - nowUptimeMs)
+    }
+
+    /// Matches `q` and `J` (0 decimals for <5min total, 1 decimal for >5min, 2 decimals for >30min).
+    private var percentageText: String {
+        let totalEstMs = elapsedMs + (timeLeftMs ?? 0.0)
+        let pct = min(100.0, max(0.0, progress * 100.0))
+        if totalEstMs > 30.0 * 60_000.0 {
+            return String(format: "%.2f%%", pct)
+        } else if totalEstMs > 5.0 * 60_000.0 {
+            return String(format: "%.1f%%", pct)
+        } else {
+            return "\(Int(floor(pct)))%"
+        }
+    }
+
+    private func formatMMSS(_ ms: Double, roundCeil: Bool) -> String {
+        let rawSec = max(0.0, ms / 1000.0)
+        let totalSec = Int(roundCeil ? ceil(rawSec) : floor(rawSec))
+        let mins = totalSec / 60
+        let secs = totalSec % 60
+        return String(format: "%02d:%02d", mins, secs)
+    }
+
+    private var infoTooltipText: String {
+        if destinationPath.isEmpty {
+            return projectName
+        }
+        return "\(projectName) → \(destinationPath)"
+    }
+
+    var body: some View {
+        ZStack {
+            // Full-window solid dark background (`position: fixed; inset: 0; background`)
+            Color(red: 0.035, green: 0.035, blue: 0.045)
+                .ignoresSafeArea()
+
+            VStack(spacing: 52) {
+                // Center Progress Stack (`max-width: 320px`)
+                VStack(spacing: 12) {
+                    // Header: `Exporting video • 33% ⓘ`
+                    HStack(spacing: 6) {
+                        Text("Exporting video • \(percentageText)")
+                            .font(.system(size: 19, weight: .bold).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.96))
+
+                        InstantTooltipButton(
+                            tooltip: infoTooltipText,
+                            edge: .top,
+                            size: 22,
+                            cornerRadius: 6
+                        ) {
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 14.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.48))
+                        }
+                    }
+
+                    // Purple Progress Bar (`320pt × 6pt`)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.11))
+                                .frame(height: 6)
+
+                            Capsule(style: .continuous)
+                                .fill(purpleAccent)
+                                .frame(
+                                    width: max(6, geo.size.width * CGFloat(min(1.0, max(0.0, progress)))),
+                                    height: 6
+                                )
+                                .animation(.easeOut(duration: 0.12), value: progress)
+                        }
+                    }
+                    .frame(width: 320, height: 6)
+
+                    // Time Elapsed & Remaining ETA (`00:04 • 00:06 left`)
+                    Group {
+                        if progress <= 0.001 {
+                            Text("Preparing export...")
+                        } else if let remainingMs = timeLeftMs {
+                            Text("\(formatMMSS(elapsedMs, roundCeil: false)) • \(formatMMSS(remainingMs, roundCeil: true)) left")
+                        } else {
+                            Text("\(formatMMSS(elapsedMs, roundCeil: false)) • Estimating time left...")
+                        }
+                    }
+                    .font(.system(size: 13.5, weight: .regular).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.45))
+                }
+                .frame(width: 320)
+
+                // `Stop export` Button
+                Button(action: onStopExport) {
+                    Text("Stop export")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .padding(.horizontal, 18)
+                        .frame(height: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color.white.opacity(isHoveringStop ? 0.09 : 0.045))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .onHover { isHoveringStop = $0 }
+            }
+        }
+        .onReceive(clockTimer) { _ in
+            nowUptimeMs = ProcessInfo.processInfo.systemUptime * 1000.0
+        }
+    }
+}
+
