@@ -628,6 +628,18 @@ public struct InspectorSidebarView: View {
                     .foregroundStyle(.secondary)
 
                 coalescedSlider(
+                    title: String(format: "Slice system audio (%d%%)", Int(round((slice.muted ? 0.0 : slice.systemAudioVolume) * 100))),
+                    value: Binding(
+                        get: { slice.muted ? 0.0 : slice.systemAudioVolume },
+                        set: { v in
+                            session.setSliceSystemAudioVolume(id: sliceId, volume: v)
+                        }
+                    ),
+                    range: 0.0...1.5,
+                    defaultValue: 1.0
+                )
+
+                coalescedSlider(
                     title: String(format: "Playback speed (%.2fx)", slice.speed),
                     value: Binding(
                         get: { slice.speed },

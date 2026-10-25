@@ -222,11 +222,18 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             let targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
 
             if let output = videoOutput {
-                let sliceSpeed = session.currentActiveSlice?.speed ?? 1.0
+                let activeSlice = session.currentActiveSlice
+                let sliceSpeed = activeSlice?.speed ?? 1.0
+                let sliceVol = (activeSlice?.muted == true) ? 0.0 : (activeSlice?.systemAudioVolume ?? 1.0)
+                let effectiveVolume = Float(min(2.0, max(0.0, sliceVol * session.document.audio.systemAudioVolume)))
                 let desiredRate = Float(session.previewPlaybackRate * sliceSpeed)
-                if session.isPlaying, let player = player, abs(player.rate - desiredRate) > 0.05 {
-                    player.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
-                    player.rate = desiredRate
+                if session.isPlaying, let player = player {
+                    player.isMuted = (effectiveVolume <= 0.001)
+                    player.volume = effectiveVolume
+                    if abs(player.rate - desiredRate) > 0.05 {
+                        player.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                        player.rate = desiredRate
+                    }
                 } else if !session.isPlaying, let player = player, player.rate != 0 {
                     player.pause()
                 }

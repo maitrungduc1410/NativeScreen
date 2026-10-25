@@ -1027,6 +1027,16 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    public func setSliceSystemAudioVolume(id: String, volume: Double) {
+        mutate { doc in
+            if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {
+                let clamped = max(0.0, min(2.0, volume))
+                doc.timeline.slices[idx].systemAudioVolume = clamped
+                doc.timeline.slices[idx].muted = (clamped <= 0.001)
+            }
+        }
+    }
+
     public func toggleSliceHideCursor(id: String) {
         mutate { doc in
             if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {

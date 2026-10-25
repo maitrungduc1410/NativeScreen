@@ -429,6 +429,7 @@ public struct MultiTrackTimelineView: View {
                         sourceStartMs: mapped.slice.sourceStartMs,
                         sourceEndMs: mapped.slice.sourceEndMs,
                         totalSourceMs: session.metadata.durationMs,
+                        volumeScale: mapped.slice.muted ? 0.0 : mapped.slice.systemAudioVolume,
                         waveformSamples: session.audioWaveformSamples
                     ),
                     onClickAtLocalX: { localX in
@@ -781,15 +782,17 @@ private struct ClipSegmentDecoration: Equatable, View {
     let sourceStartMs: Double
     let sourceEndMs: Double
     let totalSourceMs: Double
+    let volumeScale: Double
     let waveformSamples: [Float]
 
     var body: some View {
         Canvas { context, size in
-            // A. Audio Waveform along bottom of Clip
-            if !waveformSamples.isEmpty && totalSourceMs > 1.0 {
+            // A. Audio Waveform along bottom of Clip (Scaled per-segment by `volumeScale`!)
+            if !waveformSamples.isEmpty && totalSourceMs > 1.0 && volumeScale > 0.005 {
                 let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
                 let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
                 let totalBuckets = waveformSamples.count
+                let clampedVol = CGFloat(min(1.5, max(0.0, volumeScale)))
 
                 let stepPx: CGFloat = 4.0
                 let pointCount = max(2, min(320, Int(size.width / stepPx)))
@@ -806,7 +809,7 @@ private struct ClipSegmentDecoration: Equatable, View {
                     let amp = waveformSamples[b0] * (1.0 - t) + waveformSamples[b1] * t
 
                     let x = CGFloat(localFrac) * size.width
-                    let waveH = CGFloat(amp) * (size.height * 0.44)
+                    let waveH = min(size.height * 0.72, CGFloat(amp) * (size.height * 0.44) * clampedVol)
                     wavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
                 }
                 wavePath.addLine(to: CGPoint(x: size.width, y: size.height))

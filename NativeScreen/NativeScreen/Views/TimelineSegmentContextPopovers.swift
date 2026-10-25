@@ -75,19 +75,19 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         menu.addItem(.separator())
 
-        // 5. System audio volume SliderRow inside NSMenuItem.view (Uses unified Purple Accent!)
+        // 5. Per-Segment System audio volume SliderRow inside NSMenuItem.view (Applies ONLY to this `sliceId`!)
         let volumeItem = NSMenuItem()
         let volumeView = NSHostingView(
             rootView: MenuEmbeddedSliderRowView(
                 title: "System audio volume",
-                initialValue: session.document.audio.systemAudioVolume,
+                initialValue: slice.muted ? 0.0 : slice.systemAudioVolume,
                 range: 0.0...1.5,
                 formatValue: { "\(Int(round($0 * 100)))%" },
                 onEditingChanged: { editing in
                     if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
                 },
                 onValueChanged: { newVal in
-                    session.mutate { $0.audio.systemAudioVolume = newVal }
+                    session.setSliceSystemAudioVolume(id: sliceId, volume: newVal)
                 }
             )
         )

@@ -566,6 +566,7 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var sourceStartMs: Double
     public var sourceEndMs: Double
     public var speed: Double
+    public var systemAudioVolume: Double
     public var muted: Bool
     public var hideCursor: Bool
     public var disableSmoothCursor: Bool
@@ -575,6 +576,7 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
         sourceStartMs: Double,
         sourceEndMs: Double,
         speed: Double = 1.0,
+        systemAudioVolume: Double = 1.0,
         muted: Bool = false,
         hideCursor: Bool = false,
         disableSmoothCursor: Bool = false
@@ -583,9 +585,33 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.sourceStartMs = sourceStartMs
         self.sourceEndMs = sourceEndMs
         self.speed = max(0.1, speed)
+        self.systemAudioVolume = max(0.0, min(2.0, systemAudioVolume))
         self.muted = muted
         self.hideCursor = hideCursor
         self.disableSmoothCursor = disableSmoothCursor
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case sourceStartMs
+        case sourceEndMs
+        case speed
+        case systemAudioVolume
+        case muted
+        case hideCursor
+        case disableSmoothCursor
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.sourceStartMs = try container.decode(Double.self, forKey: .sourceStartMs)
+        self.sourceEndMs = try container.decode(Double.self, forKey: .sourceEndMs)
+        self.speed = max(0.1, try container.decodeIfPresent(Double.self, forKey: .speed) ?? 1.0)
+        self.systemAudioVolume = max(0.0, min(2.0, try container.decodeIfPresent(Double.self, forKey: .systemAudioVolume) ?? 1.0))
+        self.muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
+        self.hideCursor = try container.decodeIfPresent(Bool.self, forKey: .hideCursor) ?? false
+        self.disableSmoothCursor = try container.decodeIfPresent(Bool.self, forKey: .disableSmoothCursor) ?? false
     }
 
     public var sourceDurationMs: Double {
