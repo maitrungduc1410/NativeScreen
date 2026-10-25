@@ -463,33 +463,9 @@ public struct ProjectEditorWindowView: View {
                                 .frame(width: 64, alignment: .leading)
                         }
 
-                        // Right: Extract Current Frame Icon + Divider + Playback Speed (`1x`) + Timeline Zoom Slider
+                        // Right: Playback Speed (`1x`) + Timeline Zoom Slider
                         HStack(spacing: 10) {
                             Spacer()
-
-                            InstantTooltipButton(
-                                tooltip: "Export still frame",
-                                edge: .top,
-                                size: 32,
-                                cornerRadius: 8
-                            ) {
-                                session.openStillFrameExportModal()
-                            } label: {
-                                Image(systemName: "camera.viewfinder")
-                                    .font(.system(size: 13.5, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.82))
-                            }
-                            .contextMenu {
-                                Button("Export Still Frame…") {
-                                    session.openStillFrameExportModal()
-                                }
-                                Button("Copy Current Frame to Clipboard") {
-                                    session.copyCurrentFrameToClipboard()
-                                }
-                            }
-
-                            Divider()
-                                .frame(height: 16)
 
                             // Playback Speed Button (`1x`)
                             InstantTooltipButton(

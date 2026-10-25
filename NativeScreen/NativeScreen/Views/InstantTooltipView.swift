@@ -212,14 +212,14 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
                 ? Color(red: 0.20, green: 0.18, blue: 0.34)
                 : Color(red: 0.14, green: 0.13, blue: 0.24)
         }
-        return isHovered ? Color.white.opacity(0.11) : Color.white.opacity(0.035)
+        return isHovered ? Color.white.opacity(0.10) : Color.clear
     }
 
     private var borderColor: Color {
         if isActive {
             return Color(red: 0.50, green: 0.44, blue: 0.95).opacity(isHovered ? 0.55 : 0.35)
         }
-        return Color.white.opacity(isHovered ? 0.16 : 0.06)
+        return Color.clear
     }
 }
 
