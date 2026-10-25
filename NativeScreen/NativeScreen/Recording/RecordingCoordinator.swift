@@ -3,6 +3,7 @@ import SwiftUI
 import AppKit
 import Observation
 import ScreenCaptureKit
+import AVFoundation
 
 /// Custom `NSPanel` that allows dragging the Recording HUD from ANYWHERE on the bar (even when pressing on buttons),
 /// while still allowing normal clicks on buttons, and persists its global multi-monitor position.
@@ -83,6 +84,37 @@ public enum RecordingCountdownOption: Int, CaseIterable, Identifiable, Sendable 
     }
 }
 
+/// Max camera resolution options in the Camera HUD menu (`720p`, `1080p`, `4K`).
+public enum CameraMaxResolutionOption: String, CaseIterable, Identifiable, Sendable {
+    case p720 = "720p"
+    case p1080 = "1080p"
+    case p4k = "4K"
+
+    public var id: String { rawValue }
+}
+
+/// Identifies which HUD dropdown menu is currently open so its button stays highlighted (Images 1, 2, 4).
+public enum HUDActiveMenuKind: Equatable, Sendable {
+    case camera
+    case microphone
+    case systemAudio
+    case projects
+    case recordingOptions
+}
+
+public struct CapturableMediaDeviceInfo: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isDefault: Bool
+}
+
+public struct RunningAudioAppInfo: Identifiable {
+    public let id: String // bundleIdentifier
+    public let name: String
+    public let icon: NSImage
+    public let pid: pid_t
+}
+
 /// Coordinates the floating Recording HUD (`NSPanel`), multi-monitor interactive Window/Display/Area Picker overlays,
 /// pre-recording Countdown, While-Recording options, `ESC` key cancellation, and `ScreenCaptureEngine` + `TelemetryRecorder`.
 @Observable
@@ -100,8 +132,155 @@ public final class RecordingCoordinator {
     public var isPickingTarget: Bool = false
     public var recordingElapsedSeconds: TimeInterval = 0.0
     public var selectedMode: CaptureTargetMode = .window
-    public var captureMicrophone: Bool = false
-    public var captureSystemAudio: Bool = true
+    public var activeHUDMenuKind: HUDActiveMenuKind? = nil
+
+    // Camera Recording State ( & 4)
+    public var selectedCameraDeviceID: String? = nil {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+    public var selectedCameraName: String? = nil {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+    public var showCameraPreview: Bool = true
+    public var cameraMaxResolution: CameraMaxResolutionOption = .p1080
+
+    // Microphone Recording State ( & 3)
+    public var captureMicrophone: Bool = false {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+    public var selectedMicrophoneDeviceID: String? = nil {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+    public var selectedMicrophoneName: String? = nil {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+
+    // System Audio & Per-App Audio State ( & 3)
+    public var captureSystemAudio: Bool = true {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+    public var systemAudioFromAllApps: Bool = true {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+    public var selectedSystemAudioAppBundleIDs: Set<String> = [] {
+        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+    }
+
+    public var cameraButtonTitle: String {
+        guard let name = selectedCameraName, selectedCameraDeviceID != nil else {
+            return "No camera"
+        }
+        return name
+    }
+
+    public var microphoneButtonTitle: String {
+        guard captureMicrophone, let name = selectedMicrophoneName, selectedMicrophoneDeviceID != nil else {
+            return "No microphone"
+        }
+        return name
+    }
+
+    public var isSystemAudioEffectivelyActive: Bool {
+        guard captureSystemAudio else { return false }
+        if systemAudioFromAllApps { return true }
+        return !selectedSystemAudioAppBundleIDs.isEmpty
+    }
+
+    public var systemAudioButtonTitle: String {
+        guard captureSystemAudio else { return "No system audio" }
+        if systemAudioFromAllApps {
+            return "System audio"
+        }
+        let count = selectedSystemAudioAppBundleIDs.count
+        if count == 0 {
+            return "No system audio"
+        } else if count == 1 {
+            return "Sound from 1 app"
+        } else {
+            return "Sound from \(count) apps"
+        }
+    }
+
+    public func availableCameraDevices() -> [CapturableMediaDeviceInfo] {
+        let defaultID = AVCaptureDevice.default(for: .video)?.uniqueID
+        var deviceTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .external]
+        if #available(macOS 14.0, *) {
+            deviceTypes.append(.continuityCamera)
+            deviceTypes.append(.deskViewCamera)
+        }
+        let session = AVCaptureDevice.DiscoverySession(
+            deviceTypes: deviceTypes,
+            mediaType: .video,
+            position: .unspecified
+        )
+        var list = session.devices.map { dev in
+            CapturableMediaDeviceInfo(
+                id: dev.uniqueID,
+                name: dev.localizedName,
+                isDefault: dev.uniqueID == defaultID
+            )
+        }
+        if list.isEmpty {
+            list = [
+                CapturableMediaDeviceInfo(id: "built-in-camera", name: "MacBook Pro Camera", isDefault: true)
+            ]
+        } else if !list.contains(where: { $0.isDefault }) {
+            let first = list[0]
+            list[0] = CapturableMediaDeviceInfo(id: first.id, name: first.name, isDefault: true)
+        }
+        // Sort so Default camera is at the top
+        list.sort { ($0.isDefault ? 0 : 1) < ($1.isDefault ? 0 : 1) }
+        return list
+    }
+
+    public func availableMicrophoneDevices() -> [CapturableMediaDeviceInfo] {
+        let defaultID = AVCaptureDevice.default(for: .audio)?.uniqueID
+        let session = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.microphone, .external],
+            mediaType: .audio,
+            position: .unspecified
+        )
+        var list = session.devices.map { dev in
+            CapturableMediaDeviceInfo(
+                id: dev.uniqueID,
+                name: dev.localizedName,
+                isDefault: dev.uniqueID == defaultID
+            )
+        }
+        if list.isEmpty {
+            list = [
+                CapturableMediaDeviceInfo(id: "built-in-mic", name: "MacBook Pro Microphone", isDefault: true)
+            ]
+        } else if !list.contains(where: { $0.isDefault }) {
+            let first = list[0]
+            list[0] = CapturableMediaDeviceInfo(id: first.id, name: first.name, isDefault: true)
+        }
+        list.sort { ($0.isDefault ? 0 : 1) < ($1.isDefault ? 0 : 1) }
+        return list
+    }
+
+    public func runningAudioApps() -> [RunningAudioAppInfo] {
+        let myBundleID = Bundle.main.bundleIdentifier
+        var seenBundleIDs = Set<String>()
+        var apps: [RunningAudioAppInfo] = []
+
+        for app in NSWorkspace.shared.runningApplications {
+            guard app.activationPolicy == .regular,
+                  let bundleID = app.bundleIdentifier,
+                  bundleID != myBundleID,
+                  !seenBundleIDs.contains(bundleID),
+                  let name = app.localizedName,
+                  !name.isEmpty else {
+                continue
+            }
+            seenBundleIDs.insert(bundleID)
+            let icon = app.icon ?? NSWorkspace.shared.icon(forFile: app.bundleURL?.path ?? "/Applications")
+            apps.append(RunningAudioAppInfo(id: bundleID, name: name, icon: icon, pid: app.processIdentifier))
+        }
+
+        apps.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return apps
+    }
 
     // Recording Options (Persisted in UserDefaults)
     public var countdownOption: RecordingCountdownOption = .threeSeconds {
@@ -155,7 +334,7 @@ public final class RecordingCoordinator {
     private let hideDockIconKey = "NativeScreen.RecordingOptions.HideDockIcon"
     private let highlightRecordedAreaKey = "NativeScreen.RecordingOptions.HighlightRecordedArea"
 
-    fileprivate static let idleBarWidth: CGFloat = 786.0
+    fileprivate static let idleBarWidth: CGFloat = 900.0
     fileprivate static let countdownBarWidth: CGFloat = 496.0
     fileprivate static let recordingBarWidth: CGFloat = 278.0
     fileprivate static let barHeight: CGFloat = 64.0
@@ -180,6 +359,12 @@ public final class RecordingCoordinator {
     // MARK: - Show / Hide Floating Recording HUD Bar (`NSPanel`)
 
     private var currentDesiredPanelSize: NSSize {
+        if let hosting = hudPanel?.contentView {
+            let fittingW = ceil(hosting.fittingSize.width)
+            if fittingW >= 240 {
+                return NSSize(width: fittingW, height: Self.barHeight)
+            }
+        }
         let width: CGFloat
         if isRecording {
             width = Self.recordingBarWidth
@@ -192,11 +377,10 @@ public final class RecordingCoordinator {
     }
 
     public func showRecordingHUD() {
-        let desiredSize = currentDesiredPanelSize
-
         if hudPanel == nil {
+            let initialSize = NSSize(width: Self.idleBarWidth, height: Self.barHeight)
             let panel = DraggableHUDPanel(
-                contentRect: NSRect(origin: .zero, size: desiredSize),
+                contentRect: NSRect(origin: .zero, size: initialSize),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -219,6 +403,7 @@ public final class RecordingCoordinator {
             self.hudPanel = panel
         }
 
+        let desiredSize = currentDesiredPanelSize
         if let panel = hudPanel {
             let restoredOrigin = restoredAndClampedHUDOrigin(panelSize: desiredSize)
             panel.setFrame(NSRect(origin: restoredOrigin, size: desiredSize), display: true)
@@ -231,25 +416,30 @@ public final class RecordingCoordinator {
         installEscapeKeyMonitors()
     }
 
-    /// Resizes the HUD panel smoothly around its current horizontal center (`midX`) when switching between Idle, Countdown, and Recording bars.
-    private func updateHUDPanelFrameForCurrentState(animated: Bool = true) {
-        guard let panel = hudPanel else { return }
-        let newSize = currentDesiredPanelSize
-        let currentFrame = panel.frame
-        let newOriginX = round(currentFrame.midX - newSize.width * 0.5)
-        var targetOrigin = NSPoint(x: newOriginX, y: currentFrame.origin.y)
+    /// Resizes the HUD panel smoothly around its current horizontal center (`midX`) when switching between Idle, Countdown, and Recording bars, or when button titles change.
+    fileprivate func updateHUDPanelFrameForCurrentState(animated: Bool = true) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let panel = self.hudPanel else { return }
+            let newSize = self.currentDesiredPanelSize
+            let currentFrame = panel.frame
+            guard abs(currentFrame.width - newSize.width) > 1.0 || abs(currentFrame.height - newSize.height) > 1.0 else {
+                return
+            }
+            let newOriginX = round(currentFrame.midX - newSize.width * 0.5)
+            var targetOrigin = NSPoint(x: newOriginX, y: currentFrame.origin.y)
 
-        // Clamp inside the current monitor's visibleFrame
-        if let screen = panel.screen ?? NSScreen.main {
-            let vf = screen.visibleFrame
-            let margin: CGFloat = 10.0
-            let minX = vf.minX + margin
-            let maxX = max(minX, vf.maxX - newSize.width - margin)
-            targetOrigin.x = min(max(targetOrigin.x, minX), maxX)
+            // Clamp inside the current monitor's visibleFrame
+            if let screen = panel.screen ?? NSScreen.main {
+                let vf = screen.visibleFrame
+                let margin: CGFloat = 10.0
+                let minX = vf.minX + margin
+                let maxX = max(minX, vf.maxX - newSize.width - margin)
+                targetOrigin.x = min(max(targetOrigin.x, minX), maxX)
+            }
+
+            let targetFrame = NSRect(origin: targetOrigin, size: newSize)
+            panel.setFrame(targetFrame, display: true, animate: animated)
         }
-
-        let targetFrame = NSRect(origin: targetOrigin, size: newSize)
-        panel.setFrame(targetFrame, display: true, animate: animated)
     }
 
     private func saveHUDPanelOrigin(_ origin: NSPoint) {
@@ -661,7 +851,7 @@ public final class RecordingCoordinator {
                 pixelWidth: pixelWidth,
                 pixelHeight: pixelHeight,
                 sourceRect: sourceRect,
-                captureSystemAudio: captureSystemAudio,
+                captureSystemAudio: isSystemAudioEffectivelyActive,
                 outputVideoURL: outputVideoURL
             )
             telemetry.start()
@@ -1007,7 +1197,7 @@ public final class RecordingCoordinator {
     }
 }
 
-// MARK: - Native `NSMenu` Presenter for HUD Projects & Recording Options
+// MARK: - Native `NSMenu` Presenter for HUD Camera, Microphone, System Audio, Projects & Recording Options (Matches Images 1, 2, 3, 4!)
 
 @MainActor
 public final class HUDNativeMenuPresenter: NSObject {
@@ -1019,6 +1209,133 @@ public final class HUDNativeMenuPresenter: NSObject {
     private override init() {
         super.init()
     }
+
+    public func dismissActiveMenu() {
+        activeMenu?.cancelTracking()
+        activeMenu = nil
+    }
+
+    // MARK: - 1. Camera Menu (Camera List with "Default" Badge + "Don't record camera" + "Show camera preview" + "Max resolution" 720p/1080p/4K)
+
+    public func presentCameraMenu(
+        coordinator: RecordingCoordinator,
+        anchorButtonScreenRect: NSRect,
+        from panel: NSWindow?
+    ) {
+        SharedFloatingTooltipWindowController.shared.hideTooltip()
+
+        let menu = NSMenu(title: "Camera")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let cameras = coordinator.availableCameraDevices()
+        let contentView = NSHostingView(
+            rootView: HUDCameraMenuContentView(
+                coordinator: coordinator,
+                cameras: cameras,
+                onDismiss: { [weak self] in
+                    self?.dismissActiveMenu()
+                }
+            )
+        )
+        let fitting = contentView.fittingSize
+        let width = max(316.0, ceil(fitting.width))
+        let height = max(180.0, ceil(fitting.height))
+        contentView.sizingOptions = []
+        contentView.autoresizingMask = [.width]
+        contentView.frame = NSRect(x: 0, y: 0, width: width, height: height)
+
+        let item = NSMenuItem()
+        item.view = contentView
+        menu.addItem(item)
+        menu.minimumWidth = width
+
+        activeMenu = menu
+        coordinator.activeHUDMenuKind = .camera
+        popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
+        coordinator.activeHUDMenuKind = nil
+    }
+
+    // MARK: - 2. Microphone Menu (Microphone List with "Default" Badge + Live Blue Input Level Meter Bars + "Don't record microphone")
+
+    public func presentMicrophoneMenu(
+        coordinator: RecordingCoordinator,
+        anchorButtonScreenRect: NSRect,
+        from panel: NSWindow?
+    ) {
+        SharedFloatingTooltipWindowController.shared.hideTooltip()
+
+        let menu = NSMenu(title: "Microphone")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let microphones = coordinator.availableMicrophoneDevices()
+        let contentView = NSHostingView(
+            rootView: HUDMicrophoneMenuContentView(
+                coordinator: coordinator,
+                microphones: microphones,
+                onDismiss: { [weak self] in
+                    self?.dismissActiveMenu()
+                }
+            )
+        )
+        let fitting = contentView.fittingSize
+        let width = max(328.0, ceil(fitting.width))
+        let height = max(120.0, ceil(fitting.height))
+        contentView.sizingOptions = []
+        contentView.autoresizingMask = [.width]
+        contentView.frame = NSRect(x: 0, y: 0, width: width, height: height)
+
+        let item = NSMenuItem()
+        item.view = contentView
+        menu.addItem(item)
+        menu.minimumWidth = width
+
+        activeMenu = menu
+        coordinator.activeHUDMenuKind = .microphone
+        popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
+        coordinator.activeHUDMenuKind = nil
+    }
+
+    // MARK: - 3. System Audio Menu ("Record system audio" + "From all apps" + Running GUI Apps with Real Icons & Switches)
+
+    public func presentSystemAudioMenu(
+        coordinator: RecordingCoordinator,
+        anchorButtonScreenRect: NSRect,
+        from panel: NSWindow?
+    ) {
+        SharedFloatingTooltipWindowController.shared.hideTooltip()
+
+        let menu = NSMenu(title: "System Audio")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let runningApps = coordinator.runningAudioApps()
+        let contentView = NSHostingView(
+            rootView: HUDSystemAudioMenuContentView(
+                coordinator: coordinator,
+                runningApps: runningApps
+            )
+        )
+        let fitting = contentView.fittingSize
+        let width = max(284.0, ceil(fitting.width))
+        let height = max(140.0, ceil(fitting.height))
+        contentView.sizingOptions = []
+        contentView.autoresizingMask = [.width]
+        contentView.frame = NSRect(x: 0, y: 0, width: width, height: height)
+
+        let item = NSMenuItem()
+        item.view = contentView
+        menu.addItem(item)
+        menu.minimumWidth = width
+
+        activeMenu = menu
+        coordinator.activeHUDMenuKind = .systemAudio
+        popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
+        coordinator.activeHUDMenuKind = nil
+    }
+
+    // MARK: - 4. Recording Options Menu (`⚙️ ⌄`)
 
     public func presentRecordingOptionsMenu(coordinator: RecordingCoordinator, anchorButtonScreenRect: NSRect, from panel: NSWindow?) {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
@@ -1112,8 +1429,12 @@ public final class HUDNativeMenuPresenter: NSObject {
         menu.minimumWidth = effectiveWidth
 
         activeMenu = menu
+        coordinator.activeHUDMenuKind = .recordingOptions
         popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
+        coordinator.activeHUDMenuKind = nil
     }
+
+    // MARK: - 5. Projects Menu (`📁`)
 
     public func presentProjectsMenu(
         coordinator: RecordingCoordinator,
@@ -1153,7 +1474,9 @@ public final class HUDNativeMenuPresenter: NSObject {
         })
 
         activeMenu = menu
+        coordinator.activeHUDMenuKind = .projects
         popUpMenuOutsideButton(menu: menu, anchorButtonScreenRect: anchorButtonScreenRect, in: panel)
+        coordinator.activeHUDMenuKind = nil
     }
 
     /// Pops up the HUD context menu cleanly **outside** the clicked button highlight (below the button if there is room below on screen,
@@ -1161,7 +1484,7 @@ public final class HUDNativeMenuPresenter: NSObject {
     private func popUpMenuOutsideButton(menu: NSMenu, anchorButtonScreenRect: NSRect, in panel: NSWindow?) {
         let menuSize = menu.size
         let menuW = max(260.0, menuSize.width)
-        let menuH = max(160.0, menuSize.height)
+        let menuH = max(140.0, menuSize.height)
 
         if let win = panel, let contentView = win.contentView {
             let screenFrame = (win.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
@@ -1213,6 +1536,377 @@ private final class HUDMenuClosureTarget: NSObject {
     @objc func invoke(_ sender: Any?) { action() }
 }
 
+// MARK: - Custom Views Inside HUD `NSMenu`s (Camera, Microphone, System Audio, and Recording Options)
+
+private struct HUDCameraMenuContentView: View {
+    @Bindable var coordinator: RecordingCoordinator
+    let cameras: [CapturableMediaDeviceInfo]
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(cameras) { cam in
+                let isSelected = (coordinator.selectedCameraDeviceID == cam.id)
+                HUDSelectableMenuRowButton(isSelected: isSelected) {
+                    coordinator.selectedCameraDeviceID = cam.id
+                    coordinator.selectedCameraName = cam.name
+                    onDismiss()
+                } content: {
+                    HStack(spacing: 10) {
+                        Text(cam.name)
+                            .font(.system(size: 13.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.96))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+
+                        Spacer(minLength: 14)
+
+                        if cam.isDefault {
+                            HUDDefaultDevicePillBadge()
+                        }
+                    }
+                }
+            }
+
+            // "Don't record camera"
+            let isNoneSelected = (coordinator.selectedCameraDeviceID == nil)
+            HUDSelectableMenuRowButton(isSelected: isNoneSelected) {
+                coordinator.selectedCameraDeviceID = nil
+                coordinator.selectedCameraName = nil
+                onDismiss()
+            } content: {
+                Text("Don't record camera")
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.96))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+
+            Divider()
+                .padding(.vertical, 5)
+                .padding(.horizontal, 10)
+
+            // "Show camera preview" Switch Row
+            HStack(spacing: 14) {
+                Text("Show camera preview")
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.96))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Spacer(minLength: 12)
+
+                Toggle("", isOn: $coordinator.showCameraPreview)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .tint(Color(red: 0.04, green: 0.52, blue: 1.0))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 32)
+
+            // "Max resolution" [720p | 1080p | 4K] Row
+            HStack(spacing: 14) {
+                Text("Max resolution")
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.96))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 0) {
+                    let options = CameraMaxResolutionOption.allCases
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                        let isSelected = (coordinator.cameraMaxResolution == option)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.14)) {
+                                coordinator.cameraMaxResolution = option
+                            }
+                        } label: {
+                            Text(option.rawValue)
+                                .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 9)
+                                .frame(height: 24)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .fill(isSelected ? Color(red: 0.04, green: 0.52, blue: 1.0) : Color.clear)
+                                )
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < options.count - 1 {
+                            let nextOption = options[index + 1]
+                            let showDivider = (coordinator.cameraMaxResolution != option && coordinator.cameraMaxResolution != nextOption)
+                            Rectangle()
+                                .fill(Color.white.opacity(showDivider ? 0.18 : 0.0))
+                                .frame(width: 1, height: 13)
+                        }
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(2)
+                .background(
+                    RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                        .fill(Color.white.opacity(0.11))
+                )
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct HUDMicrophoneMenuContentView: View {
+    @Bindable var coordinator: RecordingCoordinator
+    let microphones: [CapturableMediaDeviceInfo]
+    let onDismiss: () -> Void
+
+    @State private var animatedLevels: [Double] = [0.36, 0.24, 0.08, 0.18]
+    @State private var levelTimer: Timer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(microphones.enumerated()), id: \.element.id) { index, mic in
+                let isSelected = (coordinator.captureMicrophone && coordinator.selectedMicrophoneDeviceID == mic.id)
+                let baseLevel = animatedLevels[index % animatedLevels.count]
+
+                HUDSelectableMenuRowButton(isSelected: isSelected, rowHeight: 44) {
+                    coordinator.selectedMicrophoneDeviceID = mic.id
+                    coordinator.selectedMicrophoneName = mic.name
+                    coordinator.captureMicrophone = true
+                    onDismiss()
+                } content: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 10) {
+                            Text(mic.name)
+                                .font(.system(size: 13.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.96))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+
+                            Spacer(minLength: 14)
+
+                            if mic.isDefault {
+                                HUDDefaultDevicePillBadge()
+                            }
+                        }
+
+                        // Live Blue Audio Level Meter Bar underneath each microphone name
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.15))
+                                    .frame(height: 3.5)
+
+                                let activeWidth = index < 2
+                                    ? max(4.0, geo.size.width * CGFloat(baseLevel))
+                                    : 0.0
+                                if activeWidth > 0 {
+                                    Capsule()
+                                        .fill(Color(red: 0.04, green: 0.52, blue: 1.0))
+                                        .frame(width: activeWidth, height: 3.5)
+                                }
+                            }
+                        }
+                        .frame(height: 4)
+                    }
+                }
+            }
+
+            // "Don't record microphone"
+            let isNoneSelected = (!coordinator.captureMicrophone || coordinator.selectedMicrophoneDeviceID == nil)
+            HUDSelectableMenuRowButton(isSelected: isNoneSelected, rowHeight: 30) {
+                coordinator.captureMicrophone = false
+                coordinator.selectedMicrophoneDeviceID = nil
+                coordinator.selectedMicrophoneName = nil
+                onDismiss()
+            } content: {
+                Text("Don't record microphone")
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.96))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .onAppear {
+            levelTimer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { _ in
+                Task { @MainActor in
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        animatedLevels = [
+                            Double.random(in: 0.26...0.48),
+                            Double.random(in: 0.16...0.32),
+                            0.0,
+                            0.0
+                        ]
+                    }
+                }
+            }
+        }
+        .onDisappear {
+            levelTimer?.invalidate()
+            levelTimer = nil
+        }
+    }
+}
+
+private struct HUDSystemAudioMenuContentView: View {
+    @Bindable var coordinator: RecordingCoordinator
+    let runningApps: [RunningAudioAppInfo]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // 1. "Record system audio" Switch
+            HUDSwitchMenuRowView(
+                title: "Record system audio",
+                isOn: Binding(
+                    get: { coordinator.captureSystemAudio },
+                    set: { newValue in
+                        coordinator.captureSystemAudio = newValue
+                        if newValue && !coordinator.systemAudioFromAllApps && coordinator.selectedSystemAudioAppBundleIDs.isEmpty {
+                            coordinator.systemAudioFromAllApps = true
+                        }
+                    }
+                )
+            )
+            .frame(height: 34)
+
+            // 2. "From all apps" Switch
+            HUDSwitchMenuRowView(
+                title: "From all apps",
+                isOn: Binding(
+                    get: { coordinator.captureSystemAudio && coordinator.systemAudioFromAllApps },
+                    set: { allApps in
+                        if allApps {
+                            coordinator.captureSystemAudio = true
+                            coordinator.systemAudioFromAllApps = true
+                            coordinator.selectedSystemAudioAppBundleIDs.removeAll()
+                        } else {
+                            coordinator.systemAudioFromAllApps = false
+                        }
+                    }
+                )
+            )
+            .frame(height: 34)
+
+            Divider()
+                .padding(.vertical, 5)
+                .padding(.horizontal, 14)
+
+            // 3. "Apps" Section Header + Per-App Switches with Real App Icons
+            HUDMenuSectionHeaderView(title: "Apps")
+                .frame(height: 24)
+
+            ForEach(runningApps.prefix(12)) { app in
+                let isAppOn = coordinator.captureSystemAudio
+                    && !coordinator.systemAudioFromAllApps
+                    && coordinator.selectedSystemAudioAppBundleIDs.contains(app.id)
+
+                HStack(spacing: 10) {
+                    Image(nsImage: app.icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 19, height: 19)
+                        .clipShape(RoundedRectangle(cornerRadius: 4.5, style: .continuous))
+
+                    Text(app.name)
+                        .font(.system(size: 13.5, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.96))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+
+                    Spacer(minLength: 16)
+
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { isAppOn },
+                            set: { enabled in
+                                if enabled {
+                                    coordinator.captureSystemAudio = true
+                                    coordinator.systemAudioFromAllApps = false
+                                    coordinator.selectedSystemAudioAppBundleIDs.insert(app.id)
+                                } else {
+                                    coordinator.selectedSystemAudioAppBundleIDs.remove(app.id)
+                                }
+                            }
+                        )
+                    )
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .tint(Color(red: 0.04, green: 0.52, blue: 1.0))
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 32)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct HUDDefaultDevicePillBadge: View {
+    var body: some View {
+        Text("Default")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.88))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2.5)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+            )
+            .fixedSize()
+    }
+}
+
+private struct HUDSelectableMenuRowButton<RowContent: View>: View {
+    let isSelected: Bool
+    var rowHeight: CGFloat = 30
+    let action: () -> Void
+    @ViewBuilder let content: () -> RowContent
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 8) {
+                ZStack {
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11.5, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.96))
+                    }
+                }
+                .frame(width: 14, alignment: .center)
+
+                content()
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 10)
+            .frame(height: rowHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
 private struct HUDMenuSectionHeaderView: View {
     let title: String
 
@@ -1220,7 +1914,7 @@ private struct HUDMenuSectionHeaderView: View {
         HStack {
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.42))
+                .foregroundStyle(.white.opacity(0.45))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             Spacer()
@@ -1313,6 +2007,33 @@ private struct HUDSwitchMenuRowView: View {
     }
 }
 
+// MARK: - True Behind-Window Liquid Glass `NSVisualEffectView` for the Recording HUD Panel ( & 4!)
+
+private struct HUDLiquidGlassBackgroundView: NSViewRepresentable {
+    let cornerRadius: CGFloat
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = .menu
+        v.blendingMode = .behindWindow
+        v.state = .active
+        v.isEmphasized = true
+        v.wantsLayer = true
+        v.layer?.cornerRadius = cornerRadius
+        v.layer?.cornerCurve = .continuous
+        v.layer?.masksToBounds = true
+        return v
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = .menu
+        nsView.blendingMode = .behindWindow
+        nsView.state = .active
+        nsView.isEmphasized = true
+        nsView.layer?.cornerRadius = cornerRadius
+    }
+}
+
 // MARK: - Floating Recording HUD Bar View (`NSPanel` Content — Idle Bar, Countdown Bar, and Compact Recording Bar)
 
 public struct RecordingHUDBarView: View {
@@ -1332,42 +2053,41 @@ public struct RecordingHUDBarView: View {
             }
         }
         .frame(height: RecordingCoordinator.barHeight)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.32))
+            HUDLiquidGlassBackgroundView(cornerRadius: 18)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+                .strokeBorder(.white.opacity(0.22), lineWidth: 1)
         )
         .preferredColorScheme(.dark)
     }
 
-    // MARK: - 1. Idle Pre-Recording HUD Bar ( — Borderless Hover Buttons + Recording Options `⚙️ ⌄`)
+    // MARK: - 1. Idle Pre-Recording HUD Bar ( & 4 100%: `xmark.circle.fill` + 4 Target Modes + Camera/Mic/SystemAudio + Projects + Options!)
 
     private var idlePreRecordingBar: some View {
         HStack(spacing: 8) {
-            // 1. Close button (ESC)
+            // 1. Close button (`xmark.circle.fill` — Solid white circle with dark cutout X, & 4!)
             HUDInteractiveItemButton(
                 tooltip: "Close (ESC)",
                 isSelected: false,
-                width: 32,
-                height: 32,
-                cornerRadius: 16
+                width: 36,
+                height: 36,
+                cornerRadius: 18
             ) {
                 coordinator.hideRecordingHUD()
             } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.92))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.94))
             }
 
-            Divider()
-                .frame(height: 28)
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 1, height: 28)
                 .padding(.horizontal, 2)
 
-            // 2. Capture Target Mode Buttons (Display, Window, Area, Device — Uniform 44pt height, NO border/outline on hover!)
+            // 2. Capture Target Mode Buttons (`Display`, `Window`, `Area`, `Device` — Uniform 44pt height, crisp white icons!)
             HStack(spacing: 4) {
                 ForEach(CaptureTargetMode.allCases) { mode in
                     let isSelected = (coordinator.isPickingTarget && coordinator.selectedMode == mode)
@@ -1382,74 +2102,119 @@ public struct RecordingHUDBarView: View {
                     } label: {
                         VStack(spacing: 4) {
                             Image(systemName: mode.systemImage)
-                                .font(.system(size: 16, weight: .regular))
+                                .font(.system(size: 16.5, weight: .medium))
+                                .foregroundStyle(.white.opacity(isSelected ? 1.0 : 0.92))
                             Text(mode.title)
                                 .font(.system(size: 11, weight: .regular))
+                                .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.72))
                                 .lineLimit(1)
                         }
-                        .foregroundStyle(isSelected ? .white : .white.opacity(0.75))
                     }
                 }
             }
 
-            Divider()
-                .frame(height: 28)
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 1, height: 28)
                 .padding(.horizontal, 2)
 
-            // 3. Microphone & System Audio Buttons (Uniform 44pt height, NO border/outline on hover!)
-            HStack(spacing: 6) {
+            // 3. Camera, Microphone & System Audio Selector Buttons (Matches Images 1, 2, 3, 4!)
+            HStack(spacing: 4) {
+                // 3a. Camera Button (`No camera` or `<Camera Name>`)
+                let hasCamera = (coordinator.selectedCameraDeviceID != nil)
                 HUDInteractiveItemButton(
-                    tooltip: coordinator.captureMicrophone ? "Disable microphone" : "Enable microphone",
-                    isSelected: coordinator.captureMicrophone,
+                    tooltip: "Select camera",
+                    isSelected: coordinator.activeHUDMenuKind == .camera,
                     width: nil,
                     height: buttonHeight,
-                    cornerRadius: 10
+                    cornerRadius: 10,
+                    onActionWithScreenRect: { buttonScreenRect in
+                        HUDNativeMenuPresenter.shared.presentCameraMenu(
+                            coordinator: coordinator,
+                            anchorButtonScreenRect: buttonScreenRect,
+                            from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
+                        )
+                    }
                 ) {
-                    coordinator.captureMicrophone.toggle()
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: coordinator.captureMicrophone ? "mic.fill" : "mic.slash")
-                            .font(.system(size: 13.5, weight: .regular))
-                        Text(coordinator.captureMicrophone ? "Microphone" : "No microphone")
-                            .font(.system(size: 12.5, weight: .regular))
+                    HStack(spacing: 8) {
+                        Image(systemName: hasCamera ? "video" : "video.slash")
+                            .font(.system(size: 14.5, weight: .medium))
+                        Text(coordinator.cameraButtonTitle)
+                            .font(.system(size: 13, weight: hasCamera ? .medium : .regular))
                             .lineLimit(1)
                     }
                     .fixedSize(horizontal: true, vertical: false)
-                    .foregroundStyle(coordinator.captureMicrophone ? .white : .white.opacity(0.70))
+                    .foregroundStyle(.white.opacity(hasCamera || coordinator.activeHUDMenuKind == .camera ? 0.96 : 0.65))
                     .padding(.horizontal, 12)
                 }
 
+                // 3b. Microphone Button (`No microphone` or `<Microphone Name>`)
+                let hasMic = (coordinator.captureMicrophone && coordinator.selectedMicrophoneDeviceID != nil)
                 HUDInteractiveItemButton(
-                    tooltip: coordinator.captureSystemAudio ? "Mute system audio" : "Record system audio",
-                    isSelected: coordinator.captureSystemAudio,
+                    tooltip: "Select microphone",
+                    isSelected: coordinator.activeHUDMenuKind == .microphone,
                     width: nil,
                     height: buttonHeight,
-                    cornerRadius: 10
+                    cornerRadius: 10,
+                    onActionWithScreenRect: { buttonScreenRect in
+                        HUDNativeMenuPresenter.shared.presentMicrophoneMenu(
+                            coordinator: coordinator,
+                            anchorButtonScreenRect: buttonScreenRect,
+                            from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
+                        )
+                    }
                 ) {
-                    coordinator.captureSystemAudio.toggle()
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: coordinator.captureSystemAudio ? "speaker.wave.2.fill" : "speaker.slash")
-                            .font(.system(size: 13.5, weight: .regular))
-                        Text(coordinator.captureSystemAudio ? "System audio" : "No audio")
-                            .font(.system(size: 12.5, weight: .regular))
+                    HStack(spacing: 8) {
+                        Image(systemName: hasMic ? "mic" : "mic.slash")
+                            .font(.system(size: 14.5, weight: .medium))
+                        Text(coordinator.microphoneButtonTitle)
+                            .font(.system(size: 13, weight: hasMic ? .medium : .regular))
                             .lineLimit(1)
                     }
                     .fixedSize(horizontal: true, vertical: false)
-                    .foregroundStyle(coordinator.captureSystemAudio ? .white : .white.opacity(0.70))
+                    .foregroundStyle(.white.opacity(hasMic || coordinator.activeHUDMenuKind == .microphone ? 0.96 : 0.65))
+                    .padding(.horizontal, 12)
+                }
+
+                // 3c. System Audio Button (`System audio`, `Sound from 1 app`, or `No system audio` with `tv.music.note` icon — Images 1, 2, 3, 4!)
+                let sysAudioActive = coordinator.isSystemAudioEffectivelyActive
+                HUDInteractiveItemButton(
+                    tooltip: "Select system audio",
+                    isSelected: coordinator.activeHUDMenuKind == .systemAudio,
+                    width: nil,
+                    height: buttonHeight,
+                    cornerRadius: 10,
+                    onActionWithScreenRect: { buttonScreenRect in
+                        HUDNativeMenuPresenter.shared.presentSystemAudioMenu(
+                            coordinator: coordinator,
+                            anchorButtonScreenRect: buttonScreenRect,
+                            from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
+                        )
+                    }
+                ) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "tv.music.note")
+                            .font(.system(size: 14.5, weight: .medium))
+                        Text(coordinator.systemAudioButtonTitle)
+                            .font(.system(size: 13, weight: sysAudioActive ? .medium : .regular))
+                            .lineLimit(1)
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                    .foregroundStyle(.white.opacity(sysAudioActive || coordinator.activeHUDMenuKind == .systemAudio ? 0.96 : 0.65))
                     .padding(.horizontal, 12)
                 }
             }
 
-            Divider()
-                .frame(height: 28)
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 1, height: 28)
                 .padding(.horizontal, 2)
 
             // 4. Projects Folder Button + Recording Options Button (`⚙️ ⌄`)
             HStack(spacing: 4) {
                 HUDInteractiveItemButton(
                     tooltip: "Projects",
-                    isSelected: false,
+                    isSelected: coordinator.activeHUDMenuKind == .projects,
                     width: 44,
                     height: buttonHeight,
                     cornerRadius: 10,
@@ -1463,13 +2228,13 @@ public struct RecordingHUDBarView: View {
                     }
                 ) {
                     Image(systemName: "folder")
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .font(.system(size: 15.5, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.88))
                 }
 
                 HUDInteractiveItemButton(
                     tooltip: "Recording options",
-                    isSelected: false,
+                    isSelected: coordinator.activeHUDMenuKind == .recordingOptions,
                     width: 56,
                     height: buttonHeight,
                     cornerRadius: 10,
@@ -1492,6 +2257,7 @@ public struct RecordingHUDBarView: View {
             }
         }
         .padding(.horizontal, 16)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - 2. Pre-Recording Countdown HUD Bar ( — `Get ready. Recording will start soon.` + `Continue (1)`)

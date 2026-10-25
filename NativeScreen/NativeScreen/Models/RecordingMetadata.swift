@@ -21,9 +21,9 @@ public enum CaptureTargetMode: String, Codable, CaseIterable, Identifiable, Send
 
     public var systemImage: String {
         switch self {
-        case .display: return "display"
+        case .display: return "dock.rectangle"
         case .window: return "macwindow"
-        case .area: return "viewfinder"
+        case .area: return "viewfinder.rectangular"
         case .device: return "iphone"
         }
     }
