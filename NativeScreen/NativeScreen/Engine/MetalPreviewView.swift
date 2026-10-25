@@ -264,8 +264,8 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 }
             }
 
-            var sourceMs = session.currentSourceTimeMs
-            var targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
+            let sourceMs = session.currentSourceTimeMs
+            let targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
 
             if let output = videoOutput {
                 let activeSlice = session.currentActiveSlice
@@ -277,33 +277,39 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     player.isMuted = (effectiveVolume <= 0.001)
                     player.volume = effectiveVolume
 
+                    // Only seek AVPlayer when starting playback (`rate` changed) or jumping across a cut boundary (`drift > 180ms` while not actively seeking).
+                    // Never snap `sourceMs` to `displayTime` (which is quantized at 60Hz = 16.67ms steps), because the 120Hz spring camera & cursor
+                    // MUST advance at smooth 8.33ms steps (`session.currentSourceTimeMs`) to avoid 60Hz-vs-120Hz frame-doubling judder during zooms!
                     let playerCurrentMs = max(0.0, CMTimeGetSeconds(player.currentTime()) * 1000.0)
                     let driftMs = abs(playerCurrentMs - sourceMs)
-
-                    // Re-sync AVPlayer if rate changed OR if it jumped across a cut boundary (`driftMs > 85ms`)
-                    if abs(player.rate - desiredRate) > 0.05 || driftMs > 85.0 {
-                        player.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                    if abs(player.rate - desiredRate) > 0.05 || (!isDecoderSeeking && driftMs > 180.0) {
+                        isDecoderSeeking = true
+                        player.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                            Task { @MainActor [weak self] in
+                                self?.isDecoderSeeking = false
+                            }
+                        }
                         player.rate = desiredRate
-                    } else if let slice = activeSlice,
-                              playerCurrentMs >= slice.sourceStartMs && playerCurrentMs <= slice.sourceEndMs {
-                        // Lock cursor/camera `sourceMs` to `AVPlayer`'s exact hardware clock so video frames and cursor never drift apart!
-                        sourceMs = playerCurrentMs
-                        targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
                     }
                 } else if !session.isPlaying, let player = player, player.rate != 0 {
                     player.pause()
                 }
 
-                var displayTime = CMTime.invalid
-                if output.hasNewPixelBuffer(forItemTime: targetCMTime),
-                   let pixelBuffer = output.copyPixelBuffer(forItemTime: targetCMTime, itemTimeForDisplay: &displayTime) {
-                    lastDecodedFrame = CIImage(cvPixelBuffer: pixelBuffer)
-                    if displayTime.isValid {
-                        let exactFrameMs = CMTimeGetSeconds(displayTime) * 1000.0
-                        if abs(exactFrameMs - sourceMs) < 60.0 {
-                            sourceMs = exactFrameMs
+                // Poll `output` using `output.itemTime(forHostTime: CACurrentMediaTime)` during playback
+                // (or `targetCMTime` when paused/skimming) so `AVPlayerItemVideoOutput` never drops or stalls frames!
+                let queryTime: CMTime = {
+                    if session.isPlaying {
+                        let hostItemTime = output.itemTime(forHostTime: CACurrentMediaTime())
+                        if hostItemTime.isValid && abs(CMTimeGetSeconds(hostItemTime) * 1000.0 - sourceMs) < 150.0 {
+                            return hostItemTime
                         }
                     }
+                    return targetCMTime
+                }()
+
+                if output.hasNewPixelBuffer(forItemTime: queryTime),
+                   let pixelBuffer = output.copyPixelBuffer(forItemTime: queryTime, itemTimeForDisplay: nil) {
+                    lastDecodedFrame = CIImage(cvPixelBuffer: pixelBuffer)
                     lastSeekedSourceMs = sourceMs
                 }
             }
