@@ -18,8 +18,21 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private var isWritingSessionStarted = false
     private var firstSampleTime: CMTime = .invalid
     private var lastSampleTime: CMTime = .zero
+    private var isPausedInternal: Bool = false
+    private var pauseStartSourcePTS: CMTime = .invalid
+    private var accumulatedPausedTime: CMTime = .zero
 
     public private(set) var recordedDurationMs: Double = 0.0
+
+    public func setPaused(_ paused: Bool) {
+        videoQueue.async {
+            guard self.isPausedInternal != paused else { return }
+            self.isPausedInternal = paused
+            if paused {
+                self.pauseStartSourcePTS = .invalid
+            }
+        }
+    }
 
     public func startCapture(
         filter: SCContentFilter,
@@ -91,6 +104,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         self.isWritingSessionStarted = false
         self.firstSampleTime = .invalid
         self.lastSampleTime = .zero
+        self.isPausedInternal = false
+        self.pauseStartSourcePTS = .invalid
+        self.accumulatedPausedTime = .zero
 
         let scStream = SCStream(filter: filter, configuration: config, delegate: self)
         try scStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: videoQueue)
@@ -153,7 +169,23 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 return
             }
 
-            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let rawPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            if isPausedInternal {
+                if !pauseStartSourcePTS.isValid {
+                    pauseStartSourcePTS = rawPTS
+                }
+                return
+            } else if pauseStartSourcePTS.isValid {
+                let pauseDelta = CMTimeSubtract(rawPTS, pauseStartSourcePTS)
+                if pauseDelta.isValid && CMTimeGetSeconds(pauseDelta) > 0 {
+                    accumulatedPausedTime = CMTimeAdd(accumulatedPausedTime, pauseDelta)
+                }
+                pauseStartSourcePTS = .invalid
+            }
+
+            let adjustedBuffer = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: accumulatedPausedTime) ?? sampleBuffer
+            let pts = CMSampleBufferGetPresentationTimeStamp(adjustedBuffer)
+
             if !isWritingSessionStarted {
                 writer.startSession(atSourceTime: pts)
                 isWritingSessionStarted = true
@@ -162,16 +194,18 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             lastSampleTime = pts
 
             if let vInput = videoInput, vInput.isReadyForMoreMediaData {
-                vInput.append(sampleBuffer)
+                vInput.append(adjustedBuffer)
             }
 
         case .audio:
             guard isWritingSessionStarted,
+                  !isPausedInternal,
                   let aInput = systemAudioInput,
                   aInput.isReadyForMoreMediaData else {
                 return
             }
-            aInput.append(sampleBuffer)
+            let adjustedAudio = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: accumulatedPausedTime) ?? sampleBuffer
+            aInput.append(adjustedAudio)
 
         case .microphone:
             break
@@ -179,5 +213,39 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         @unknown default:
             break
         }
+    }
+
+    private static func adjustSampleBufferTime(_ sampleBuffer: CMSampleBuffer, bySubtracting offset: CMTime) -> CMSampleBuffer? {
+        guard offset.isValid, CMTimeGetSeconds(offset) > 0.0001 else {
+            return sampleBuffer
+        }
+        var count: CMItemCount = 0
+        CMSampleBufferGetSampleTimingInfoArray(sampleBuffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &count)
+        guard count > 0 else { return sampleBuffer }
+
+        var timingInfo = [CMSampleTimingInfo](
+            repeating: CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: .invalid, decodeTimeStamp: .invalid),
+            count: count
+        )
+        CMSampleBufferGetSampleTimingInfoArray(sampleBuffer, entryCount: count, arrayToFill: &timingInfo, entriesNeededOut: &count)
+
+        for i in 0..<count {
+            if timingInfo[i].presentationTimeStamp.isValid {
+                timingInfo[i].presentationTimeStamp = CMTimeSubtract(timingInfo[i].presentationTimeStamp, offset)
+            }
+            if timingInfo[i].decodeTimeStamp.isValid {
+                timingInfo[i].decodeTimeStamp = CMTimeSubtract(timingInfo[i].decodeTimeStamp, offset)
+            }
+        }
+
+        var adjustedBuffer: CMSampleBuffer?
+        CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sampleBuffer,
+            sampleTimingEntryCount: count,
+            sampleTimingArray: &timingInfo,
+            sampleBufferOut: &adjustedBuffer
+        )
+        return adjustedBuffer
     }
 }

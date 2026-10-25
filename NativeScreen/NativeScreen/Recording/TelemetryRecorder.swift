@@ -14,6 +14,9 @@ public final class TelemetryRecorder {
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
     private let queue = DispatchQueue(label: "com.nativescreen.telemetry", qos: .userInteractive)
+    private var isPausedInternal: Bool = false
+    private var pauseStartUptimeSec: TimeInterval?
+    private var accumulatedPausedSec: TimeInterval = 0.0
 
     public init(
         telemetryDirectoryURL: URL,
@@ -24,6 +27,20 @@ public final class TelemetryRecorder {
         self.keysAppender = JSONLinesAppender(fileURL: telemetryDirectoryURL.appendingPathComponent("keys.jsonl"))
         self.startTimeUptimeSec = ProcessInfo.processInfo.systemUptime
         self.captureLogicalBounds = captureLogicalBounds
+    }
+
+    public func setPaused(_ paused: Bool) {
+        queue.async {
+            guard self.isPausedInternal != paused else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            if paused {
+                self.pauseStartUptimeSec = now
+            } else if let pStart = self.pauseStartUptimeSec {
+                self.accumulatedPausedSec += max(0.0, now - pStart)
+                self.pauseStartUptimeSec = nil
+            }
+            self.isPausedInternal = paused
+        }
     }
 
     public func start() {
@@ -71,7 +88,9 @@ public final class TelemetryRecorder {
     }
 
     private func elapsedMs() -> Double {
-        max(0.0, (ProcessInfo.processInfo.systemUptime - startTimeUptimeSec) * 1000.0)
+        let now = ProcessInfo.processInfo.systemUptime
+        let activePause = pauseStartUptimeSec.map { max(0.0, now - $0) } ?? 0.0
+        return max(0.0, (now - startTimeUptimeSec - accumulatedPausedSec - activePause) * 1000.0)
     }
 
     private func normalizedMousePoint() -> Point01 {
@@ -86,6 +105,7 @@ public final class TelemetryRecorder {
     }
 
     private func sampleCurrentMousePosition() {
+        guard !isPausedInternal else { return }
         let t = elapsedMs()
         let pt = normalizedMousePoint()
         let sample = CursorSampleEvent(t: t, x: pt.x, y: pt.y, c: "arrow")
@@ -93,6 +113,7 @@ public final class TelemetryRecorder {
     }
 
     private func handleNSEvent(_ event: NSEvent) {
+        guard !isPausedInternal else { return }
         let t = elapsedMs()
         let pt = normalizedMousePoint()
 
