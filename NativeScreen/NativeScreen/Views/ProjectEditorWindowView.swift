@@ -20,6 +20,7 @@ public struct ProjectEditorWindowView: View {
     @FocusState private var isTitleFieldFocused: Bool
 
     @State private var isShowingExportSheet = false
+    @State private var isShowingCommandMenu = false
     @State private var exportCodec: HardwareVideoExporter.ExportCodec = .h264
     @State private var exportResolution: HardwareVideoExporter.ExportResolution = .qhd2k
     @State private var isExporting = false
@@ -35,179 +36,204 @@ public struct ProjectEditorWindowView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // 1. UNIFIED DARK WINDOW HEADER BAR (Replaces macOS default titlebar; traffic lights sit on the left)
-            ZStack {
-                // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢)
-                HStack(spacing: 6) {
-                    InstantTooltipButton(
-                        tooltip: "Reveal project in Finder",
-                        edge: .bottom,
-                        size: 28,
-                        cornerRadius: 7
-                    ) {
-                        NSWorkspace.shared.activateFileViewerSelecting([session.packageURL])
-                    } label: {
-                        Image(systemName: "folder")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.75))
-                    }
-
-                    InstantTooltipButton(
-                        tooltip: "Move project to Trash",
-                        edge: .bottom,
-                        size: 28,
-                        cornerRadius: 7
-                    ) {
-                        moveProjectToTrash()
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.65))
-                    }
-
-                    Spacer()
-                }
-                .padding(.leading, trafficLightRightEdgeX + 10)
-
-                // Center: In-Place Editable Project Title (`Name` bright + `.nativescreen` dimmed)
-                HStack(spacing: 0) {
-                    if isEditingProjectName {
-                        HStack(spacing: 2) {
-                            TextField("Project name", text: $draftProjectName)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white)
-                                .fixedSize(horizontal: true, vertical: false)
-                                .focused($isTitleFieldFocused)
-                                .onSubmit {
-                                    commitProjectRename()
-                                }
-
-                            Text(".nativescreen")
-                                .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.35))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            GeometryReader { proxy in
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(Color.white.opacity(0.10))
-                                    .onAppear {
-                                        titleBarFrameInWindow = proxy.frame(in: .global)
-                                    }
-                                    .onChange(of: proxy.frame(in: .global)) { _, newFrame in
-                                        titleBarFrameInWindow = newFrame
-                                    }
-                            }
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(Color(red: 0.48, green: 0.38, blue: 0.98), lineWidth: 1.2)
-                        )
-                    } else {
-                        Button {
-                            draftProjectName = session.document.name
-                            isEditingProjectName = true
-                            DispatchQueue.main.async {
-                                isTitleFieldFocused = true
-                            }
+        ZStack {
+            VStack(spacing: 0) {
+                // 1. UNIFIED DARK WINDOW HEADER BAR (Matches Header 1:1 & 2!)
+                ZStack {
+                    // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢 — Larger 34pt buttons & 16pt icons!)
+                    HStack(spacing: 6) {
+                        InstantTooltipButton(
+                            tooltip: "Show project in Finder",
+                            shortcutBadge: "⇧ ⌘ O",
+                            edge: .bottom,
+                            size: 34,
+                            cornerRadius: 8
+                        ) {
+                            NSWorkspace.shared.activateFileViewerSelecting([session.packageURL])
                         } label: {
-                            HStack(spacing: 1) {
-                                Text(session.document.name)
-                                    .font(.system(size: 13, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.95))
+                            Image(systemName: "folder")
+                                .font(.system(size: 15.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.82))
+                        }
+
+                        InstantTooltipButton(
+                            tooltip: "Remove project",
+                            edge: .bottom,
+                            size: 34,
+                            cornerRadius: 8
+                        ) {
+                            moveProjectToTrash()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 15.0, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.75))
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.leading, trafficLightRightEdgeX + 12)
+
+                    // Center: In-Place Editable Project Title (`Name` bright + `.nativescreen` dimmed)
+                    HStack(spacing: 0) {
+                        if isEditingProjectName {
+                            HStack(spacing: 2) {
+                                TextField("Project name", text: $draftProjectName)
+                                    .textFieldStyle(.plain)
+                                    .font(.system(size: 13.5, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .focused($isTitleFieldFocused)
+                                    .onSubmit {
+                                        commitProjectRename()
+                                    }
 
                                 Text(".nativescreen")
-                                    .font(.system(size: 13, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.35))
+                                    .font(.system(size: 13.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.38))
                             }
                             .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 5)
                             .background(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(isHoveringTitle ? Color.white.opacity(0.08) : Color.clear)
+                                GeometryReader { proxy in
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .fill(Color.white.opacity(0.10))
+                                        .onAppear {
+                                            titleBarFrameInWindow = proxy.frame(in: .global)
+                                        }
+                                        .onChange(of: proxy.frame(in: .global)) { _, newFrame in
+                                            titleBarFrameInWindow = newFrame
+                                        }
+                                }
                             )
-                        }
-                        .buttonStyle(.plain)
-                        .onHover { hovering in
-                            withAnimation(.easeOut(duration: 0.12)) {
-                                isHoveringTitle = hovering
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(Color(red: 0.48, green: 0.38, blue: 0.98), lineWidth: 1.2)
+                            )
+                        } else {
+                            Button {
+                                draftProjectName = session.document.name
+                                isEditingProjectName = true
+                                DispatchQueue.main.async {
+                                    isTitleFieldFocused = true
+                                }
+                            } label: {
+                                HStack(spacing: 2) {
+                                    Text(session.document.name)
+                                        .font(.system(size: 13.5, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.95))
+
+                                    Text(".nativescreen")
+                                        .font(.system(size: 13.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.38))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .fill(isHoveringTitle ? Color.white.opacity(0.08) : Color.clear)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in
+                                withAnimation(.easeOut(duration: 0.12)) {
+                                    isHoveringTitle = hovering
+                                }
                             }
                         }
                     }
-                }
 
-                // Right Controls: Undo, Redo & Export
-                HStack(spacing: 8) {
-                    Spacer()
+                    // Right Controls: Command Menu (`⌘`) | Undo & Redo | Export ( & 2!)
+                    HStack(spacing: 10) {
+                        Spacer()
 
-                    HStack(spacing: 4) {
+                        // 1. Command Menu Button (`command.circle` — "Show command menu... ⌘ K")
                         InstantTooltipButton(
-                            tooltip: "Undo (⌘Z)",
+                            tooltip: "Show command menu...",
+                            shortcutBadge: "⌘ K",
                             edge: .bottom,
-                            isDisabled: !session.canUndo,
-                            size: 28,
-                            cornerRadius: 7
+                            isActive: isShowingCommandMenu,
+                            size: 34,
+                            cornerRadius: 8
                         ) {
-                            session.undo()
+                            withAnimation(.easeOut(duration: 0.14)) {
+                                isShowingCommandMenu.toggle()
+                            }
                         } label: {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.system(size: 12, weight: .semibold))
+                            Image(systemName: "command.circle")
+                                .font(.system(size: 16.5, weight: .regular))
                                 .foregroundStyle(.white.opacity(0.88))
                         }
-                        .keyboardShortcut("z", modifiers: [.command])
 
-                        InstantTooltipButton(
-                            tooltip: "Redo (⇧⌘Z)",
-                            edge: .bottom,
-                            isDisabled: !session.canRedo,
-                            size: 28,
-                            cornerRadius: 7
-                        ) {
-                            session.redo()
+                        Rectangle()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 1, height: 18)
+
+                        // 2. Undo & Redo Buttons (Larger 34pt hitbox & 15.5pt icons)
+                        HStack(spacing: 4) {
+                            InstantTooltipButton(
+                                tooltip: "Undo",
+                                shortcutBadge: "⌘ Z",
+                                edge: .bottom,
+                                isDisabled: !session.canUndo,
+                                size: 34,
+                                cornerRadius: 8
+                            ) {
+                                session.undo()
+                            } label: {
+                                Image(systemName: "arrow.uturn.backward")
+                                    .font(.system(size: 15.0, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
+                            }
+                            .keyboardShortcut("z", modifiers: [.command])
+
+                            InstantTooltipButton(
+                                tooltip: "Redo",
+                                shortcutBadge: "⇧ ⌘ Z",
+                                edge: .bottom,
+                                isDisabled: !session.canRedo,
+                                size: 34,
+                                cornerRadius: 8
+                            ) {
+                                session.redo()
+                            } label: {
+                                Image(systemName: "arrow.uturn.forward")
+                                    .font(.system(size: 15.0, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
+                            }
+                            .keyboardShortcut("Z", modifiers: [.command, .shift])
+                        }
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 1, height: 18)
+
+                        // 3. Prominent Purple Export Button (`height: 34`, `#4D2FF5`)
+                        Button {
+                            isShowingExportSheet = true
                         } label: {
-                            Image(systemName: "arrow.uturn.forward")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.88))
+                            HStack(spacing: 7) {
+                                Image(systemName: "square.and.arrow.up.fill")
+                                    .font(.system(size: 13.0, weight: .semibold))
+                                Text("Export")
+                                    .font(.system(size: 13.5, weight: .semibold))
+                            }
+                            .fixedSize()
+                            .padding(.horizontal, 16)
+                            .frame(height: 34)
+                            .background(
+                                Color(red: 0.302, green: 0.184, blue: 0.961),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .foregroundStyle(.white)
                         }
-                        .keyboardShortcut("Z", modifiers: [.command, .shift])
+                        .buttonStyle(.plain)
+                        .keyboardShortcut("e", modifiers: [.command])
                     }
-
-                    Button {
-                        isShowingExportSheet = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("Export")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .fixedSize()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.44, green: 0.34, blue: 0.98),
-                                    Color(red: 0.36, green: 0.26, blue: 0.88)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        )
-                        .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut("e", modifiers: [.command])
+                    .padding(.trailing, 14)
                 }
-                .padding(.trailing, 14)
-            }
-            .frame(height: max(50, trafficLightCenterY * 2.0))
-            .background(Color(red: 0.05, green: 0.05, blue: 0.07))
-            .zIndex(80)
+                .frame(height: max(52, trafficLightCenterY * 2.0))
+                .background(Color(red: 0.05, green: 0.05, blue: 0.07))
+                .zIndex(80)
 
             Divider()
 
@@ -534,6 +560,29 @@ public struct ProjectEditorWindowView: View {
             // 3. BOTTOM MULTI-TRACK NLE TIMELINE
             MultiTrackTimelineView(session: session)
                 .frame(height: 255)
+            }
+
+            // 4. COMMAND MENU OVERLAY
+            if isShowingCommandMenu {
+                CommandMenuOverlayView(
+                    session: session,
+                    onRequestExportVideo: {
+                        isShowingCommandMenu = false
+                        isShowingExportSheet = true
+                    },
+                    onRequestDeleteProject: {
+                        isShowingCommandMenu = false
+                        moveProjectToTrash()
+                    },
+                    onClose: {
+                        withAnimation(.easeOut(duration: 0.14)) {
+                            isShowingCommandMenu = false
+                        }
+                    }
+                )
+                .zIndex(500)
+                .transition(.opacity)
+            }
         }
         .background(
             WindowTitlebarCleaner { centerY, rightX in
@@ -622,6 +671,26 @@ public struct ProjectEditorWindowView: View {
         }
 
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            // `⌘K` toggles the Command Menu from anywhere (even when the search field inside Command Menu is focused!)
+            if event.keyCode == 40 && flags == .command {
+                withAnimation(.easeOut(duration: 0.14)) {
+                    isShowingCommandMenu.toggle()
+                }
+                return nil
+            }
+
+            if isShowingCommandMenu {
+                if event.keyCode == 53 { // ESC closes Command Menu
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        isShowingCommandMenu = false
+                    }
+                    return nil
+                }
+                return event
+            }
+
             if let responder = event.window?.firstResponder, responder is NSTextView {
                 if event.keyCode == 53 { // ESC while editing title
                     isEditingProjectName = false
@@ -642,6 +711,57 @@ public struct ProjectEditorWindowView: View {
                 if session.selectedMaskId != nil || session.selectedZoomId != nil {
                     session.selectedMaskId = nil
                     session.selectedZoomId = nil
+                    return nil
+                }
+                return event
+
+            case 123: // Left Arrow (`←`, `⇧ ←`, `⌘ ←`)
+                if flags == .command {
+                    session.isPlaying = false
+                    session.seek(toTimelineMs: 0.0)
+                    return nil
+                } else if flags == .shift {
+                    session.seek(toTimelineMs: session.effectivePreviewTimelineMs - 2000.0)
+                    return nil
+                } else if flags.isEmpty {
+                    let delta = session.isPlaying ? -1000.0 : -(1000.0 / 60.0)
+                    session.seek(toTimelineMs: session.effectivePreviewTimelineMs + delta)
+                    return nil
+                }
+                return event
+
+            case 124: // Right Arrow (`→`, `⇧ →`, `⌘ →`)
+                if flags == .command {
+                    session.isPlaying = false
+                    session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
+                    return nil
+                } else if flags == .shift {
+                    session.seek(toTimelineMs: session.effectivePreviewTimelineMs + 1000.0)
+                    return nil
+                } else if flags.isEmpty {
+                    let delta = session.isPlaying ? 500.0 : (1000.0 / 60.0)
+                    session.seek(toTimelineMs: session.effectivePreviewTimelineMs + delta)
+                    return nil
+                }
+                return event
+
+            case 24: // `=` / `+` (`⌘ =` Zoom in timeline)
+                if flags.contains(.command) {
+                    session.timelineZoom = min(6.0, session.timelineZoom * 1.25)
+                    return nil
+                }
+                return event
+
+            case 27: // `-` (`⌘ -` Zoom out timeline)
+                if flags.contains(.command) {
+                    session.timelineZoom = max(1.0, session.timelineZoom / 1.25)
+                    return nil
+                }
+                return event
+
+            case 31: // `O` (`⇧ ⌘ O` Show project in Finder)
+                if flags == [.command, .shift] {
+                    NSWorkspace.shared.activateFileViewerSelecting([session.packageURL])
                     return nil
                 }
                 return event
@@ -1098,6 +1218,773 @@ private struct WindowTitlebarCleaner: NSViewRepresentable {
                     let rightX = max(68.0, min(104.0, zoomRightInWin.x))
                     self.onMetricsChanged?(centerYFromTop, rightX)
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Command Menu
+
+private struct EditorCommandItem: Identifiable {
+    let id: String
+    let group: String
+    let title: String
+    let icon: String
+    let shortcutBadge: String?
+    let isDestructive: Bool
+    let action: @MainActor () -> Void
+
+    init(
+        id: String,
+        group: String,
+        title: String,
+        icon: String,
+        shortcutBadge: String? = nil,
+        isDestructive: Bool = false,
+        action: @escaping @MainActor () -> Void
+    ) {
+        self.id = id
+        self.group = group
+        self.title = title
+        self.icon = icon
+        self.shortcutBadge = shortcutBadge
+        self.isDestructive = isDestructive
+        self.action = action
+    }
+}
+
+private struct CommandMenuOverlayView: View {
+    @Bindable var session: ProjectSession
+    let onRequestExportVideo: () -> Void
+    let onRequestDeleteProject: () -> Void
+    let onClose: () -> Void
+
+    @State private var searchText: String = ""
+    @State private var selectedIndex: Int = 0
+    @FocusState private var isSearchFocused: Bool
+
+    private var allCommands: [EditorCommandItem] {
+        var items: [EditorCommandItem] = []
+
+        // 1. Playback
+        items.append(EditorCommandItem(
+            id: "togglePlay",
+            group: "Playback",
+            title: session.isPlaying ? "Pause" : "Play",
+            icon: session.isPlaying ? "pause.circle" : "play.circle",
+            shortcutBadge: "Space"
+        ) {
+            session.togglePlayPause()
+        })
+
+        items.append(EditorCommandItem(
+            id: "goToFirstFrame",
+            group: "Playback",
+            title: "Go to first frame",
+            icon: "backward.end",
+            shortcutBadge: "⌘ ←"
+        ) {
+            session.isPlaying = false
+            session.seek(toTimelineMs: 0.0)
+        })
+
+        items.append(EditorCommandItem(
+            id: "goToLastFrame",
+            group: "Playback",
+            title: "Go to last frame",
+            icon: "forward.end",
+            shortcutBadge: "⌘ →"
+        ) {
+            session.isPlaying = false
+            session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
+        })
+
+        items.append(EditorCommandItem(
+            id: "moveBackwards",
+            group: "Playback",
+            title: "Move backwards",
+            icon: "arrow.turn.up.left",
+            shortcutBadge: "←"
+        ) {
+            let delta = session.isPlaying ? -1000.0 : -(1000.0 / 60.0)
+            session.seek(toTimelineMs: session.effectivePreviewTimelineMs + delta)
+        })
+
+        items.append(EditorCommandItem(
+            id: "moveBackwardsFast",
+            group: "Playback",
+            title: "Move backwards fast",
+            icon: "arrow.turn.up.left",
+            shortcutBadge: "⇧ ←"
+        ) {
+            session.seek(toTimelineMs: session.effectivePreviewTimelineMs - 2000.0)
+        })
+
+        items.append(EditorCommandItem(
+            id: "moveForwards",
+            group: "Playback",
+            title: "Move forwards",
+            icon: "arrow.turn.up.right",
+            shortcutBadge: "→"
+        ) {
+            let delta = session.isPlaying ? 500.0 : (1000.0 / 60.0)
+            session.seek(toTimelineMs: session.effectivePreviewTimelineMs + delta)
+        })
+
+        items.append(EditorCommandItem(
+            id: "moveForwardsFast",
+            group: "Playback",
+            title: "Move forwards fast",
+            icon: "arrow.turn.up.right",
+            shortcutBadge: "⇧ →"
+        ) {
+            session.seek(toTimelineMs: session.effectivePreviewTimelineMs + 1000.0)
+        })
+
+        items.append(EditorCommandItem(
+            id: "zoomInTimeline",
+            group: "Playback",
+            title: "Zoom in timeline",
+            icon: "plus.magnifyingglass",
+            shortcutBadge: "⌘ ="
+        ) {
+            session.timelineZoom = min(6.0, session.timelineZoom * 1.25)
+        })
+
+        items.append(EditorCommandItem(
+            id: "zoomOutTimeline",
+            group: "Playback",
+            title: "Zoom out timeline",
+            icon: "minus.magnifyingglass",
+            shortcutBadge: "⌘ -"
+        ) {
+            session.timelineZoom = max(1.0, session.timelineZoom / 1.25)
+        })
+
+        // 2. Editor
+        if session.canUndo {
+            items.append(EditorCommandItem(
+                id: "projectUndo",
+                group: "Editor",
+                title: "Undo",
+                icon: "arrow.uturn.backward",
+                shortcutBadge: "⌘ Z"
+            ) {
+                session.undo()
+            })
+        }
+
+        if session.canRedo {
+            items.append(EditorCommandItem(
+                id: "projectRedo",
+                group: "Editor",
+                title: "Redo",
+                icon: "arrow.uturn.forward",
+                shortcutBadge: "⇧ ⌘ Z"
+            ) {
+                session.redo()
+            })
+        }
+
+        items.append(EditorCommandItem(
+            id: "toggleSplit",
+            group: "Editor",
+            title: "Toggle split",
+            icon: "scissors",
+            shortcutBadge: "⌥"
+        ) {
+            session.isSplitModeActive.toggle()
+        })
+
+        items.append(EditorCommandItem(
+            id: "splitAtCurrentTime",
+            group: "Editor",
+            title: "Split at current time",
+            icon: "scissors",
+            shortcutBadge: "C"
+        ) {
+            session.splitAtCurrentTimeShortcut()
+        })
+
+        items.append(EditorCommandItem(
+            id: "openCropWindow",
+            group: "Editor",
+            title: "Crop",
+            icon: "crop"
+        ) {
+            ProjectWorkspaceStore.shared.presentCropWindow(for: session)
+        })
+
+        // 3. Zoom
+        items.append(EditorCommandItem(
+            id: "addZoom",
+            group: "Zoom",
+            title: "Add zoom at current time",
+            icon: "plus.magnifyingglass"
+        ) {
+            session.addZoomAtPlayhead()
+        })
+
+        if let zoomId = session.selectedZoomId,
+           let zoom = session.document.timeline.zooms.first(where: { $0.id == zoomId }) {
+            items.append(EditorCommandItem(
+                id: "duplicateZoom",
+                group: "Zoom",
+                title: "Duplicate zoom",
+                icon: "plus",
+                shortcutBadge: "⌘ D"
+            ) {
+                session.duplicateZoom(id: zoomId)
+            })
+
+            items.append(EditorCommandItem(
+                id: "toggleZoomLoupeMode",
+                group: "Zoom",
+                title: "Toggle zoom loupe mode",
+                icon: "sparkle.magnifyingglass",
+                shortcutBadge: "L"
+            ) {
+                session.setZoomPresentation(id: zoomId, presentation: zoom.presentation == .loupe ? .screen : .loupe)
+            })
+
+            items.append(EditorCommandItem(
+                id: "setZoomToAuto",
+                group: "Zoom",
+                title: "Set zoom type to Auto",
+                icon: "computermouse",
+                shortcutBadge: "A"
+            ) {
+                session.mutate { doc in
+                    if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                        doc.timeline.zooms[idx].mode = .followCursor
+                    }
+                }
+            })
+
+            items.append(EditorCommandItem(
+                id: "setZoomToManual",
+                group: "Zoom",
+                title: "Set zoom type to Manual",
+                icon: "hand.tap",
+                shortcutBadge: "M"
+            ) {
+                session.mutate { doc in
+                    if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                        doc.timeline.zooms[idx].mode = .manual
+                    }
+                }
+            })
+
+            items.append(EditorCommandItem(
+                id: "applyZoomToAll",
+                group: "Zoom",
+                title: "Apply zoom level to all other zooms",
+                icon: "plus.square"
+            ) {
+                session.applyZoomLevelToAllOtherZooms(fromId: zoomId)
+            })
+
+            items.append(EditorCommandItem(
+                id: "toggleDisabledZoom",
+                group: "Zoom",
+                title: zoom.disabled ? "Enable zoom" : "Disable zoom",
+                icon: "slash.circle",
+                shortcutBadge: "D"
+            ) {
+                session.toggleZoomDisabled(id: zoomId)
+            })
+
+            items.append(EditorCommandItem(
+                id: "removeZoom",
+                group: "Zoom",
+                title: "Remove zoom",
+                icon: "trash",
+                shortcutBadge: "⌫",
+                isDestructive: true
+            ) {
+                session.deleteZoom(zoomId: zoomId)
+            })
+        }
+
+        if session.document.timeline.zooms.contains(where: { !$0.disabled }) {
+            items.append(EditorCommandItem(
+                id: "disableAllZoomRanges",
+                group: "Zoom",
+                title: "Disable all zoom ranges",
+                icon: "slash.circle"
+            ) {
+                session.mutate { doc in
+                    for idx in doc.timeline.zooms.indices {
+                        doc.timeline.zooms[idx].disabled = true
+                    }
+                }
+            })
+        }
+
+        if session.document.timeline.zooms.contains(where: { $0.disabled }) {
+            items.append(EditorCommandItem(
+                id: "enableAllZoomRanges",
+                group: "Zoom",
+                title: "Enable all zoom ranges",
+                icon: "checkmark.circle"
+            ) {
+                session.mutate { doc in
+                    for idx in doc.timeline.zooms.indices {
+                        doc.timeline.zooms[idx].disabled = false
+                    }
+                }
+            })
+        }
+
+        items.append(EditorCommandItem(
+            id: "restoreDefaultZoomRanges",
+            group: "Zoom",
+            title: "Restore default zoom ranges",
+            icon: "arrow.clockwise"
+        ) {
+            session.regenerateAutoZooms()
+        })
+
+        if !session.document.timeline.zooms.isEmpty {
+            items.append(EditorCommandItem(
+                id: "removeAllZoomRanges",
+                group: "Zoom",
+                title: "Remove all zoom ranges",
+                icon: "trash",
+                isDestructive: true
+            ) {
+                session.mutate { $0.timeline.zooms.removeAll() }
+            })
+        }
+
+        // 4. Masks
+        items.append(EditorCommandItem(
+            id: "addSensitiveDataMask",
+            group: "Masks",
+            title: "Add sensitive data mask",
+            icon: "eye.slash"
+        ) {
+            session.addMaskAtPlayhead(type: .blur, style: .gaussian)
+        })
+
+        items.append(EditorCommandItem(
+            id: "addHighlightMask",
+            group: "Masks",
+            title: "Add highlight mask",
+            icon: "viewfinder.rectangular"
+        ) {
+            session.addMaskAtPlayhead(type: .spotlight, style: .dim)
+        })
+
+        if let maskId = session.selectedMaskId {
+            items.append(EditorCommandItem(
+                id: "changeMaskTypeToHighlight",
+                group: "Masks",
+                title: "Change mask type to highlight",
+                icon: "viewfinder.rectangular"
+            ) {
+                session.setMaskType(id: maskId, type: .spotlight)
+            })
+
+            items.append(EditorCommandItem(
+                id: "changeMaskTypeToSensitiveData",
+                group: "Masks",
+                title: "Change mask type to sensitive data",
+                icon: "eye.slash"
+            ) {
+                session.setMaskType(id: maskId, type: .blur)
+            })
+
+            items.append(EditorCommandItem(
+                id: "toggleMaskDisabled",
+                group: "Masks",
+                title: "Toggle disable mask",
+                icon: "slash.circle",
+                shortcutBadge: "D"
+            ) {
+                session.toggleMaskDisabled(id: maskId)
+            })
+
+            items.append(EditorCommandItem(
+                id: "removeMask",
+                group: "Masks",
+                title: "Remove mask",
+                icon: "trash",
+                shortcutBadge: "⌫",
+                isDestructive: true
+            ) {
+                session.deleteMask(maskId: maskId)
+            })
+        }
+
+        if !session.document.timeline.maskTracks.isEmpty {
+            items.append(EditorCommandItem(
+                id: "disableAllMasks",
+                group: "Masks",
+                title: "Disable all masks",
+                icon: "slash.circle"
+            ) {
+                session.mutate { doc in
+                    for tIdx in doc.timeline.maskTracks.indices {
+                        for mIdx in doc.timeline.maskTracks[tIdx].items.indices {
+                            doc.timeline.maskTracks[tIdx].items[mIdx].disabled = true
+                        }
+                    }
+                }
+            })
+
+            items.append(EditorCommandItem(
+                id: "removeAllMasks",
+                group: "Masks",
+                title: "Remove all masks",
+                icon: "trash",
+                isDestructive: true
+            ) {
+                session.mutate { $0.timeline.maskTracks.removeAll() }
+            })
+        }
+
+        // 5. Slice
+        if let slice = session.currentActiveSlice {
+            items.append(EditorCommandItem(
+                id: "toggleSliceHideCursor",
+                group: "Slice",
+                title: "Hide mouse cursor for slice",
+                icon: "eye.slash"
+            ) {
+                session.toggleSliceHideCursor(id: slice.id)
+            })
+
+            items.append(EditorCommandItem(
+                id: "toggleSliceDisableSmoothMouseMovement",
+                group: "Slice",
+                title: "Disable smooth mouse movement for slice",
+                icon: "slash.circle"
+            ) {
+                session.toggleSliceDisableSmoothCursor(id: slice.id)
+            })
+
+            items.append(EditorCommandItem(
+                id: "resetSliceTrim",
+                group: "Slice",
+                title: "Reset trim",
+                icon: "arrow.counterclockwise"
+            ) {
+                session.resetSliceTrim(id: slice.id)
+            })
+        }
+
+        if session.document.timeline.slices.count > 1 {
+            items.append(EditorCommandItem(
+                id: "resetAllSlices",
+                group: "Slice",
+                title: "Reset trims and cuts for all slices",
+                icon: "arrow.counterclockwise.circle",
+                isDestructive: true
+            ) {
+                session.resetAllSlicesTrimAndCuts()
+            })
+        }
+
+        if !session.activeTypingSuggestions.isEmpty {
+            items.append(EditorCommandItem(
+                id: "applyAllTypingSuggestions",
+                group: "Slice",
+                title: "Speed up all typing sections (3×)",
+                icon: "keyboard"
+            ) {
+                session.applyAllTypingSuggestions(speed: 3.0)
+            })
+        }
+
+        // 6. Shortcuts
+        items.append(EditorCommandItem(
+            id: "toggleShowShortcuts",
+            group: "Shortcuts",
+            title: session.document.captions.showKeystrokes ? "Hide keyboard shortcuts" : "Show keyboard shortcuts",
+            icon: "command"
+        ) {
+            session.mutate { $0.captions.showKeystrokes.toggle() }
+        })
+
+        items.append(EditorCommandItem(
+            id: "toggleShowSingleKeyShortcuts",
+            group: "Shortcuts",
+            title: session.document.captions.showSingleKeyShortcuts ? "Disable single key shortcuts" : "Enable single key shortcuts",
+            icon: "character"
+        ) {
+            session.mutate { $0.captions.showSingleKeyShortcuts.toggle() }
+        })
+
+        // 7. Export & Project
+        items.append(EditorCommandItem(
+            id: "exportVideo",
+            group: "Export",
+            title: "Export video...",
+            icon: "square.and.arrow.up",
+            shortcutBadge: "⌘ E"
+        ) {
+            onRequestExportVideo()
+        })
+
+        items.append(EditorCommandItem(
+            id: "exportCurrentFrameAsImage",
+            group: "Export",
+            title: "Export current frame as image...",
+            icon: "camera.viewfinder"
+        ) {
+            session.openStillFrameExportModal()
+        })
+
+        items.append(EditorCommandItem(
+            id: "showProjectInFinder",
+            group: "Project",
+            title: "Show project in Finder",
+            icon: "folder",
+            shortcutBadge: "⇧ ⌘ O"
+        ) {
+            NSWorkspace.shared.activateFileViewerSelecting([session.packageURL])
+        })
+
+        items.append(EditorCommandItem(
+            id: "deleteProject",
+            group: "Project",
+            title: "Remove project",
+            icon: "trash",
+            isDestructive: true
+        ) {
+            onRequestDeleteProject()
+        })
+
+        return items
+    }
+
+    private var filteredCommands: [EditorCommandItem] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return allCommands }
+        return allCommands.filter {
+            $0.title.lowercased().contains(query) || $0.group.lowercased().contains(query)
+        }
+    }
+
+    private var groupedFilteredCommands: [(group: String, items: [(globalIndex: Int, item: EditorCommandItem)])] {
+        var result: [(group: String, items: [(globalIndex: Int, item: EditorCommandItem)])] = []
+        for (idx, cmd) in filteredCommands.enumerated() {
+            if let lastIdx = result.indices.last, result[lastIdx].group == cmd.group {
+                result[lastIdx].items.append((idx, cmd))
+            } else {
+                result.append((group: cmd.group, items: [(idx, cmd)]))
+            }
+        }
+        return result
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            // Dimmed Backdrop (`#08090D` at 0.82 opacity — click outside to dismiss)
+            Color(red: 0.03, green: 0.035, blue: 0.05).opacity(0.82)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    onClose()
+                }
+
+            // Command Menu Modal Card (`max-width: 640px, max-height: 420px, background: #1E1E1EEE, border: 1px solid #FFFFFF2E`)
+            VStack(spacing: 0) {
+                // 1. Search Input Bar (`height: 60px, padding: 20px`)
+                HStack(spacing: 10) {
+                    TextField("Type to find a command", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(Color(red: 0.89, green: 0.90, blue: 0.91))
+                        .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
+                        .focused($isSearchFocused)
+                        .onKeyPress(.downArrow) {
+                            let count = filteredCommands.count
+                            if count > 0 {
+                                selectedIndex = (selectedIndex + 1) % count
+                            }
+                            return .handled
+                        }
+                        .onKeyPress(.upArrow) {
+                            let count = filteredCommands.count
+                            if count > 0 {
+                                selectedIndex = (selectedIndex - 1 + count) % count
+                            }
+                            return .handled
+                        }
+                        .onKeyPress(.return) {
+                            executeSelectedCommand()
+                            return .handled
+                        }
+                        .onKeyPress(.escape) {
+                            onClose()
+                            return .handled
+                        }
+
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white.opacity(0.42))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .frame(height: 60)
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.10))
+                    .frame(height: 1)
+
+                // 2. Scrollable Grouped Command List (`max-height: 360px`)
+                ScrollViewReader { scrollProxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        if filteredCommands.isEmpty {
+                            Text("No matching commands")
+                                .font(.system(size: 13.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.45))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 36)
+                        } else {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(Array(groupedFilteredCommands.enumerated()), id: \.element.group) { groupIdx, section in
+                                    if groupIdx > 0 {
+                                        Rectangle()
+                                            .fill(Color.white.opacity(0.08))
+                                            .frame(height: 1)
+                                            .padding(.vertical, 4)
+                                    }
+
+                                    Text(section.group)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.45))
+                                        .padding(.horizontal, 20)
+                                        .padding(.top, groupIdx == 0 ? 6 : 2)
+                                        .padding(.bottom, 2)
+
+                                    ForEach(section.items, id: \.item.id) { entry in
+                                        let isHighlighted = (entry.globalIndex == selectedIndex)
+
+                                        CommandMenuRowView(
+                                            item: entry.item,
+                                            isHighlighted: isHighlighted,
+                                            onHover: {
+                                                selectedIndex = entry.globalIndex
+                                            },
+                                            onSelect: {
+                                                selectedIndex = entry.globalIndex
+                                                executeSelectedCommand()
+                                            }
+                                        )
+                                        .id(entry.globalIndex)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 6)
+                        }
+                    }
+                    .frame(maxHeight: 360)
+                    .onChange(of: selectedIndex) { _, newIdx in
+                        withAnimation(.easeOut(duration: 0.10)) {
+                            scrollProxy.scrollTo(newIdx, anchor: .center)
+                        }
+                    }
+                }
+            }
+            .frame(width: 616)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(red: 0.118, green: 0.118, blue: 0.125).opacity(0.96))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.65), radius: 28, y: 12)
+            .padding(.top, 140)
+        }
+        .onAppear {
+            selectedIndex = 0
+            DispatchQueue.main.async {
+                isSearchFocused = true
+            }
+        }
+        .onChange(of: searchText) { _, _ in
+            selectedIndex = 0
+        }
+    }
+
+    private func executeSelectedCommand() {
+        let list = filteredCommands
+        guard selectedIndex >= 0 && selectedIndex < list.count else { return }
+        let chosen = list[selectedIndex]
+        onClose()
+        chosen.action()
+    }
+}
+
+private struct CommandMenuRowView: View {
+    let item: EditorCommandItem
+    let isHighlighted: Bool
+    let onHover: () -> Void
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 12) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(
+                        item.isDestructive
+                            ? Color(red: 1.0, green: 0.35, blue: 0.32)
+                            : .white.opacity(0.88)
+                    )
+                    .frame(width: 20, alignment: .center)
+
+                Text(item.title)
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(
+                        item.isDestructive
+                            ? Color(red: 1.0, green: 0.35, blue: 0.32)
+                            : .white.opacity(0.95)
+                    )
+                    .lineLimit(1)
+
+                Spacer(minLength: 12)
+
+                if let badge = item.shortcutBadge, !badge.isEmpty {
+                    Text(badge)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                        )
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 40)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isHighlighted ? Color.white.opacity(0.09) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                onHover()
             }
         }
     }
