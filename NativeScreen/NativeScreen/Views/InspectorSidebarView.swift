@@ -921,6 +921,31 @@ public struct InspectorSidebarView: View {
                 }
             }
 
+            // Cursor Animation Presets (`Smooth`, `Medium`, `Rapid`)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Cursor animation style")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    cursorSpringPresetButton(
+                        title: "Smooth",
+                        icon: "cursorarrow.click.2",
+                        preset: SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
+                    )
+                    cursorSpringPresetButton(
+                        title: "Medium",
+                        icon: "cursorarrow.click",
+                        preset: SpringConfig(stiffness: 340.0, damping: 60.0, mass: 3.0)
+                    )
+                    cursorSpringPresetButton(
+                        title: "Rapid",
+                        icon: "cursorarrow.motionlines",
+                        preset: SpringConfig(stiffness: 530.0, damping: 40.0, mass: 1.0)
+                    )
+                }
+            }
+
             coalescedSlider(
                 title: "Camera motion blur",
                 value: Binding(
@@ -942,7 +967,13 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private func cursorSpringPresetButton(title: String, icon: String, preset: SpringConfig) -> some View {
         let cur = session.document.cursor.spring
-        let isSelected = abs(cur.stiffness - preset.stiffness) < 5.0 && abs(cur.damping - preset.damping) < 5.0
+        let isRapid = abs(cur.stiffness - 530.0) < 10.0
+        let isMedium = abs(cur.stiffness - 340.0) < 10.0
+        let isSelected: Bool = {
+            if abs(preset.stiffness - 530.0) < 10.0 { return isRapid }
+            if abs(preset.stiffness - 340.0) < 10.0 { return isMedium }
+            return !isRapid && !isMedium // Default (`Smooth`)
+        }()
         Button {
             session.mutate { $0.cursor.spring = preset }
         } label: {
@@ -970,7 +1001,8 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private func cameraSpringPresetButton(title: String, icon: String, preset: SpringConfig) -> some View {
         let cam = session.document.motion.cameraSpring
-        let isSelected = abs(cam.stiffness - preset.stiffness) < 5.0 && abs(cam.damping - preset.damping) < 5.0
+        let isFocused = abs(cam.stiffness - SpringConfig.focusedCamera.stiffness) < 10.0
+        let isSelected = (abs(preset.stiffness - SpringConfig.focusedCamera.stiffness) < 10.0) ? isFocused : !isFocused
         Button {
             session.mutate { $0.motion.cameraSpring = preset }
         } label: {
