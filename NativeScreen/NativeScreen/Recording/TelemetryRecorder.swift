@@ -7,7 +7,7 @@ public final class TelemetryRecorder {
     private let cursorAppender: JSONLinesAppender
     private let clicksAppender: JSONLinesAppender
     private let keysAppender: JSONLinesAppender
-    private let startTimeUptimeSec: TimeInterval
+    private var startTimeUptimeSec: TimeInterval?
     private var captureLogicalBounds: CGRect // Quartz global coordinates (top-left origin)
 
     private var samplingTimer: DispatchSourceTimer?
@@ -25,8 +25,21 @@ public final class TelemetryRecorder {
         self.cursorAppender = JSONLinesAppender(fileURL: telemetryDirectoryURL.appendingPathComponent("cursor.jsonl"))
         self.clicksAppender = JSONLinesAppender(fileURL: telemetryDirectoryURL.appendingPathComponent("clicks.jsonl"))
         self.keysAppender = JSONLinesAppender(fileURL: telemetryDirectoryURL.appendingPathComponent("keys.jsonl"))
-        self.startTimeUptimeSec = ProcessInfo.processInfo.systemUptime
+        self.startTimeUptimeSec = nil
         self.captureLogicalBounds = captureLogicalBounds
+    }
+
+    /// Synchronizes the telemetry `t = 0.0ms` epoch with the exact `systemUptime` of the first captured video frame (`SCStream` `firstSampleTime`),
+    /// and immediately writes the initial `t = 0.0ms` cursor sample so telemetry and video are 100% locked in phase!
+    public func markFirstVideoFrameArrived(atUptimeSec firstFrameUptimeSec: TimeInterval) {
+        queue.async {
+            guard self.startTimeUptimeSec == nil else { return }
+            self.startTimeUptimeSec = firstFrameUptimeSec
+            let pt = self.normalizedMousePoint()
+            let kind = self.detectCurrentSystemCursorKind()
+            let sample = CursorSampleEvent(t: 0.0, x: pt.x, y: pt.y, c: kind)
+            self.cursorAppender.append(sample)
+        }
     }
 
     public func setPaused(_ paused: Bool) {
@@ -87,10 +100,11 @@ public final class TelemetryRecorder {
         }
     }
 
-    private func elapsedMs() -> Double {
+    private func elapsedMs() -> Double? {
+        guard let startSec = startTimeUptimeSec else { return nil }
         let now = ProcessInfo.processInfo.systemUptime
         let activePause = pauseStartUptimeSec.map { max(0.0, now - $0) } ?? 0.0
-        return max(0.0, (now - startTimeUptimeSec - accumulatedPausedSec - activePause) * 1000.0)
+        return max(0.0, (now - startSec - accumulatedPausedSec - activePause) * 1000.0)
     }
 
     private func normalizedMousePoint() -> Point01 {
@@ -104,17 +118,36 @@ public final class TelemetryRecorder {
         return Point01(x: normX, y: normY)
     }
 
+    private func detectCurrentSystemCursorKind() -> String {
+        let current = NSCursor.currentSystem ?? NSCursor.current
+        if current == NSCursor.iBeam {
+            return "ibeam"
+        }
+        if current == NSCursor.pointingHand {
+            return "pointer"
+        }
+        if current == NSCursor.crosshair {
+            return "crosshair"
+        }
+        if current == NSCursor.openHand {
+            return "openhand"
+        }
+        if current == NSCursor.closedHand {
+            return "closedhand"
+        }
+        return "arrow"
+    }
+
     private func sampleCurrentMousePosition() {
-        guard !isPausedInternal else { return }
-        let t = elapsedMs()
+        guard !isPausedInternal, let t = elapsedMs() else { return }
         let pt = normalizedMousePoint()
-        let sample = CursorSampleEvent(t: t, x: pt.x, y: pt.y, c: "arrow")
+        let kind = detectCurrentSystemCursorKind()
+        let sample = CursorSampleEvent(t: t, x: pt.x, y: pt.y, c: kind)
         cursorAppender.append(sample)
     }
 
     private func handleNSEvent(_ event: NSEvent) {
-        guard !isPausedInternal else { return }
-        let t = elapsedMs()
+        guard !isPausedInternal, let t = elapsedMs() else { return }
         let pt = normalizedMousePoint()
 
         switch event.type {

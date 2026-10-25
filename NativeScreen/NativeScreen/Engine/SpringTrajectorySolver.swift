@@ -125,12 +125,38 @@ public struct SpringTrajectorySolver: Sendable {
         let cursorSpring = Self.sanitizedCursorSpring(document.cursor.spring)
         let camSpring = Self.sanitizedCameraSpring(document.motion.cameraSpring)
 
-        // 1. Pre-solve Cursor Trajectory at 120 Hz (With the Overshoot Clamp `G`)
+        // 1. Pre-solve Cursor Trajectory at 120 Hz (With the Lookahead Lead Compensation `Uc` / `Fc` + Drag Sync + Overshoot Clamp `G`)
+        //    In NativeScreen, a spring with `(stiffness: k, damping: c)` has a natural steady-state phase lag:
+        //    `lagMs = (damping / stiffness) * 1000` (e.g. `70 / 470 * 1000 ≈ 149ms` for Smooth cursor).
+        //    If the spring only chases `rawPosition(t)`, the rendered cursor is ALWAYS ~150ms late behind video highlights, clicks, and text selection drags!
+        //    eliminates this lag via:
+        //    a) `getTargetAt`: feeding the spring the future target position at `t + leadMs(t)` (`lagMs`),
+        //    b) `speed` boost during active mouse-down/drag/click windows (`Kc = { click: 2, drag: 2 }`), scaling `k * speed^2` and `c * speed`
+        //       so that during text selection (`mouseDown ... mouseUp`) and clicks, the cursor stays locked 1:1 to the real action on screen!
         var builtCursor: [CursorFrameState] = []
         builtCursor.reserveCapacity(totalSteps)
 
         let dt = stepMs / 1000.0
+        let firstEventTimeMs = cursorEvents.first?.t ?? 0.0
+        // Auto-correct legacy recordings where `TelemetryRecorder` started ~150-400ms before `SCStream`'s first video frame:
+        let legacyStartupOffsetMs = (firstEventTimeMs > 60.0 && firstEventTimeMs < 900.0) ? firstEventTimeMs : 0.0
+
         let firstPos = cursorEvents.first.map { Point01(x: $0.x, y: $0.y) } ?? .center
+
+        // Build mouse-down -> mouse-up drag intervals and click sync timestamps (adjusted by `legacyStartupOffsetMs`)
+        let dragIntervals: [(startMs: Double, endMs: Double)] = Self.buildMouseDragIntervals(
+            from: clickEvents,
+            timeOffsetMs: legacyStartupOffsetMs,
+            totalDurationMs: totalDuration
+        )
+        let clickTimestampsMs: [Double] = clickEvents.map { max(0.0, $0.t - legacyStartupOffsetMs) }
+
+        // Steady-state spring phase lag
+        let baseSpringLagMs: Double = document.cursor.smoothMovementEnabled
+            ? min(240.0, max(0.0, (cursorSpring.damping / max(10.0, cursorSpring.stiffness)) * 1000.0))
+            : 0.0
+        let leadFactor: Double = document.cursor.keepInSyncWithHovers ? 1.0 : 0.72
+        let effectiveLeadMs: Double = baseSpringLagMs * leadFactor
 
         var curX = firstPos.x
         var curY = firstPos.y
@@ -149,35 +175,98 @@ public struct SpringTrajectorySolver: Sendable {
             ? max(0.0, totalDuration - document.cursor.stopMovementInLastPartMs)
             : nil
 
-        var eventIdx = 0
         let eventCount = cursorEvents.count
+
+        // Helper to sample recorded cursor position & kind at any `queryMs`
+        func sampleRecordedCursor(at queryMs: Double) -> (x: Double, y: Double, kind: String) {
+            guard eventCount > 0 else {
+                return (firstPos.x, firstPos.y, "arrow")
+            }
+            let shiftedMs = queryMs + legacyStartupOffsetMs
+            if shiftedMs <= cursorEvents[0].t {
+                return (cursorEvents[0].x, cursorEvents[0].y, cursorEvents[0].c)
+            }
+            if shiftedMs >= cursorEvents[eventCount - 1].t {
+                let last = cursorEvents[eventCount - 1]
+                return (last.x, last.y, last.c)
+            }
+            // Binary search for `cursorEvents[lo].t <= shiftedMs < cursorEvents[lo + 1].t`
+            var lo = 0
+            var hi = eventCount - 1
+            while hi - lo > 1 {
+                let mid = (lo + hi) >> 1
+                if cursorEvents[mid].t <= shiftedMs {
+                    lo = mid
+                } else {
+                    hi = mid
+                }
+            }
+            let e0 = cursorEvents[lo]
+            let e1 = cursorEvents[lo + 1]
+            let span = max(0.001, e1.t - e0.t)
+            // In (`Sc.writePositionAt`, `xc = 40ms`), if two recorded points are >40ms apart (cursor was stationary),
+            // hold `e0` until `e1.t - 16ms` so the cursor doesn't drift early across long stationary pauses!
+            if span > 48.0 {
+                let moveWindowStart = e1.t - 16.0
+                if shiftedMs <= moveWindowStart {
+                    return (e0.x, e0.y, e0.c)
+                }
+                let moveFrac = max(0.0, min(1.0, (shiftedMs - moveWindowStart) / max(1.0, e1.t - moveWindowStart)))
+                return (
+                    e0.x + (e1.x - e0.x) * moveFrac,
+                    e0.y + (e1.y - e0.y) * moveFrac,
+                    e0.c
+                )
+            }
+            let frac = max(0.0, min(1.0, (shiftedMs - e0.t) / span))
+            return (
+                e0.x + (e1.x - e0.x) * frac,
+                e0.y + (e1.y - e0.y) * frac,
+                e0.c
+            )
+        }
 
         for step in 0..<totalSteps {
             let tMs = Double(step) * stepMs
-            let sampleLookupMs = stopMoveCutoffMs.map { min(tMs, $0) } ?? tMs
+            let baseLookupMs = stopMoveCutoffMs.map { min(tMs, $0) } ?? tMs
 
-            while eventIdx + 1 < eventCount && cursorEvents[eventIdx + 1].t <= sampleLookupMs {
-                eventIdx += 1
-            }
-
-            var rawTargetX = firstPos.x
-            var rawTargetY = firstPos.y
-            var cursorKind = "arrow"
-
-            if eventCount > 0 {
-                let e0 = cursorEvents[eventIdx]
-                cursorKind = e0.c
-                if eventIdx + 1 < eventCount {
-                    let e1 = cursorEvents[eventIdx + 1]
-                    let span = max(0.001, e1.t - e0.t)
-                    let frac = max(0.0, min(1.0, (sampleLookupMs - e0.t) / span))
-                    rawTargetX = e0.x + (e1.x - e0.x) * frac
-                    rawTargetY = e0.y + (e1.y - e0.y) * frac
-                } else {
-                    rawTargetX = e0.x
-                    rawTargetY = e0.y
+            // Determine if we are inside or approaching a mouse-down drag (e.g., selecting text!) or click event:
+            // (`Vc` / `gc` / `Uc.run`) boosts spring speed (`speed = 1.0 ... 6.4`) during clicks and drags
+            // (`rampInStartMs = startMs - 250ms`, `rampOutEndMs = endMs + 300ms`), and scales `stiffness * speed^2`, `damping * speed`!
+            var syncSpeedMultiplier = 1.0
+            for drag in dragIntervals {
+                if tMs >= drag.startMs - 220.0 && tMs <= drag.endMs + 260.0 {
+                    if tMs < drag.startMs {
+                        let ramp = (tMs - (drag.startMs - 220.0)) / 220.0
+                        syncSpeedMultiplier = max(syncSpeedMultiplier, 1.0 + 3.2 * max(0.0, min(1.0, ramp)))
+                    } else if tMs <= drag.endMs {
+                        // During active drag / text highlight, keep spring super-tight (`speed = 4.2x`) so cursor finishes selecting at the exact millisecond the user releases the mouse!
+                        syncSpeedMultiplier = max(syncSpeedMultiplier, 4.2)
+                    } else {
+                        let rampOut = 1.0 - (tMs - drag.endMs) / 260.0
+                        syncSpeedMultiplier = max(syncSpeedMultiplier, 1.0 + 3.2 * max(0.0, min(1.0, rampOut)))
+                    }
                 }
             }
+            for clickT in clickTimestampsMs {
+                let delta = abs(tMs - clickT)
+                if delta <= 180.0 {
+                    let boost = 1.0 + 2.4 * (1.0 - delta / 180.0)
+                    syncSpeedMultiplier = max(syncSpeedMultiplier, boost)
+                }
+            }
+
+            // Lookahead lead time (`Uc.getTargetAt`: `t + leadAt(t)`):
+            // Reduced proportionally when `syncSpeedMultiplier > 1` because a faster spring has proportionally smaller lag (`lagMs / speed`)!
+            let currentLeadMs = effectiveLeadMs / syncSpeedMultiplier
+            let lookaheadLookupMs = min(totalDuration, stopMoveCutoffMs.map { min(tMs + currentLeadMs, $0) } ?? (tMs + currentLeadMs))
+
+            let sampledTarget = sampleRecordedCursor(at: lookaheadLookupMs)
+            let sampledNow = sampleRecordedCursor(at: baseLookupMs)
+
+            var rawTargetX = sampledTarget.x
+            var rawTargetY = sampledTarget.y
+            var cursorKind = sampledNow.kind
 
             if document.cursor.alwaysUsePointer {
                 cursorKind = "arrow"
@@ -199,25 +288,33 @@ public struct SpringTrajectorySolver: Sendable {
             }
 
             let dist = hypot(rawTargetX - filteredTargetX, rawTargetY - filteredTargetY)
-            if dist > shakeThreshold01 {
+            // During an active drag (selecting text), bypass shake filtering so every character selection step is tracked accurately
+            let effectiveShakeThreshold = (syncSpeedMultiplier > 1.5) ? 0.0 : shakeThreshold01
+            if dist > effectiveShakeThreshold {
                 filteredTargetX = rawTargetX
                 filteredTargetY = rawTargetY
                 lastMoveTimeMs = tMs
             }
 
             if document.cursor.smoothMovementEnabled {
+                // `Uc.run`: `k_eff = stiffness * speed^2`, `c_eff = damping * speed`
+                let effectiveSpring = SpringConfig(
+                    stiffness: cursorSpring.stiffness * syncSpeedMultiplier * syncSpeedMultiplier,
+                    damping: cursorSpring.damping * syncSpeedMultiplier,
+                    mass: cursorSpring.mass
+                )
                 (curX, velX) = Self.stepClampedSpring(
                     current: curX,
                     velocity: velX,
                     target: filteredTargetX,
-                    spring: cursorSpring,
+                    spring: effectiveSpring,
                     dt: dt
                 )
                 (curY, velY) = Self.stepClampedSpring(
                     current: curY,
                     velocity: velY,
                     target: filteredTargetY,
-                    spring: cursorSpring,
+                    spring: effectiveSpring,
                     dt: dt
                 )
             } else {
@@ -260,7 +357,8 @@ public struct SpringTrajectorySolver: Sendable {
             var activeRipple: Double? = nil
             let rippleDurationMs = 450.0
             for click in clickEvents where click.type == "down" {
-                let elapsed = tMs - click.t
+                let adjClickT = max(0.0, click.t - legacyStartupOffsetMs)
+                let elapsed = tMs - adjClickT
                 if elapsed >= 0.0 && elapsed <= rippleDurationMs {
                     activeRipple = elapsed / rippleDurationMs
                 }
@@ -380,28 +478,37 @@ public struct SpringTrajectorySolver: Sendable {
                 targetRectY = min(0.0, max(minOrigin, targetRectY))
             }
 
-            // Step the 3 screen-rect components `(rectX, rectY, rectW)` with the overshoot-clamped spring!
-            (rectX, rectVelX) = Self.stepClampedSpring(
-                current: rectX,
-                velocity: rectVelX,
-                target: targetRectX,
-                spring: camSpring,
-                dt: dt
-            )
-            (rectY, rectVelY) = Self.stepClampedSpring(
-                current: rectY,
-                velocity: rectVelY,
-                target: targetRectY,
-                spring: camSpring,
-                dt: dt
-            )
-            (rectW, rectVelW) = Self.stepClampedSpring(
-                current: rectW,
-                velocity: rectVelW,
-                target: targetRectW,
-                spring: camSpring,
-                dt: dt
-            )
+            // Step the 3 screen-rect components `(rectX, rectY, rectW)` with the overshoot-clamped spring (or instantly if `zoom.instantAnimation == true`)!
+            if activeZoom?.instantAnimation == true {
+                rectX = targetRectX
+                rectY = targetRectY
+                rectW = targetRectW
+                rectVelX = 0.0
+                rectVelY = 0.0
+                rectVelW = 0.0
+            } else {
+                (rectX, rectVelX) = Self.stepClampedSpring(
+                    current: rectX,
+                    velocity: rectVelX,
+                    target: targetRectX,
+                    spring: camSpring,
+                    dt: dt
+                )
+                (rectY, rectVelY) = Self.stepClampedSpring(
+                    current: rectY,
+                    velocity: rectVelY,
+                    target: targetRectY,
+                    spring: camSpring,
+                    dt: dt
+                )
+                (rectW, rectVelW) = Self.stepClampedSpring(
+                    current: rectW,
+                    velocity: rectVelW,
+                    target: targetRectW,
+                    spring: camSpring,
+                    dt: dt
+                )
+            }
 
             // Also step Loupe center with a 1.5x stiffer spring
             let loupeSpring = SpringConfig(
@@ -466,6 +573,37 @@ public struct SpringTrajectorySolver: Sendable {
     }
 
     // MARK: - Spring Sanitization & the Exact Overshoot-Clamped Spring Integrator
+
+    /// Builds `[mouseDown ... mouseUp]` intervals so that during active drags (such as text selection / slider dragging),
+    /// the cursor spring is boosted to stay 100% locked with the screen highlight.
+    private static func buildMouseDragIntervals(
+        from clickEvents: [ClickEvent],
+        timeOffsetMs: Double,
+        totalDurationMs: Double
+    ) -> [(startMs: Double, endMs: Double)] {
+        var intervals: [(startMs: Double, endMs: Double)] = []
+        var activeDownMs: Double? = nil
+
+        for ev in clickEvents.sorted(by: { $0.t < $1.t }) {
+            let t = max(0.0, ev.t - timeOffsetMs)
+            if ev.type == "down" {
+                if activeDownMs == nil {
+                    activeDownMs = t
+                }
+            } else if ev.type == "up" {
+                if let start = activeDownMs {
+                    if t > start + 25.0 {
+                        intervals.append((startMs: start, endMs: t))
+                    }
+                    activeDownMs = nil
+                }
+            }
+        }
+        if let unclosedStart = activeDownMs, totalDurationMs > unclosedStart + 25.0 {
+            intervals.append((startMs: unclosedStart, endMs: totalDurationMs))
+        }
+        return intervals
+    }
 
     /// Upgrades any legacy underdamped camera spring (`zeta < 0.80` or `damping < 30`) to the overdamped `Smooth` preset (`stiffness: 170, damping: 50, mass: 3.0`, $\zeta \approx 1.11$).
     private static func sanitizedCameraSpring(_ raw: SpringConfig) -> SpringConfig {

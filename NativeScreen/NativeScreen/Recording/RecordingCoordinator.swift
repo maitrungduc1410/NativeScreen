@@ -849,6 +849,10 @@ public final class RecordingCoordinator {
                 telemetryDirectoryURL: telemetryDir,
                 captureLogicalBounds: logicalBounds
             )
+            engine.onFirstVideoFrameArrived = { firstFrameUptimeSec in
+                telemetry.markFirstVideoFrameArrived(atUptimeSec: firstFrameUptimeSec)
+            }
+            telemetry.start()
 
             try await engine.startCapture(
                 filter: filter,
@@ -858,7 +862,8 @@ public final class RecordingCoordinator {
                 captureSystemAudio: isSystemAudioEffectivelyActive,
                 outputVideoURL: outputVideoURL
             )
-            telemetry.start()
+            // Fallback in case the first frame arrived before or shortly after `startCapture` returns
+            telemetry.markFirstVideoFrameArrived(atUptimeSec: ProcessInfo.processInfo.systemUptime)
 
             self.captureEngine = engine
             self.telemetryRecorder = telemetry

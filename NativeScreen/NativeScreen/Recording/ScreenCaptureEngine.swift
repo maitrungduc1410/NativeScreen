@@ -23,6 +23,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private var accumulatedPausedTime: CMTime = .zero
 
     public private(set) var recordedDurationMs: Double = 0.0
+    public var onFirstVideoFrameArrived: ((TimeInterval) -> Void)?
 
     public func setPaused(_ paused: Bool) {
         videoQueue.async {
@@ -190,6 +191,11 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 writer.startSession(atSourceTime: pts)
                 isWritingSessionStarted = true
                 firstSampleTime = pts
+                // Anchor telemetry `t = 0.0ms` to the exact presentation timestamp of the first captured video frame!
+                let frameUptimeSec = CMTimeGetSeconds(rawPTS)
+                let nowUptime = ProcessInfo.processInfo.systemUptime
+                let resolvedOriginSec = (frameUptimeSec > 1.0 && abs(nowUptime - frameUptimeSec) < 10.0) ? frameUptimeSec : nowUptime
+                onFirstVideoFrameArrived?(resolvedOriginSec)
             }
             lastSampleTime = pts
 

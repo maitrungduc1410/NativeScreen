@@ -264,8 +264,8 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 }
             }
 
-            let sourceMs = session.currentSourceTimeMs
-            let targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
+            var sourceMs = session.currentSourceTimeMs
+            var targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
 
             if let output = videoOutput {
                 let activeSlice = session.currentActiveSlice
@@ -276,17 +276,34 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 if session.isPlaying, let player = player {
                     player.isMuted = (effectiveVolume <= 0.001)
                     player.volume = effectiveVolume
-                    if abs(player.rate - desiredRate) > 0.05 {
+
+                    let playerCurrentMs = max(0.0, CMTimeGetSeconds(player.currentTime()) * 1000.0)
+                    let driftMs = abs(playerCurrentMs - sourceMs)
+
+                    // Re-sync AVPlayer if rate changed OR if it jumped across a cut boundary (`driftMs > 85ms`)
+                    if abs(player.rate - desiredRate) > 0.05 || driftMs > 85.0 {
                         player.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
                         player.rate = desiredRate
+                    } else if let slice = activeSlice,
+                              playerCurrentMs >= slice.sourceStartMs && playerCurrentMs <= slice.sourceEndMs {
+                        // Lock cursor/camera `sourceMs` to `AVPlayer`'s exact hardware clock so video frames and cursor never drift apart!
+                        sourceMs = playerCurrentMs
+                        targetCMTime = CMTime(seconds: sourceMs / 1000.0, preferredTimescale: 600)
                     }
                 } else if !session.isPlaying, let player = player, player.rate != 0 {
                     player.pause()
                 }
 
+                var displayTime = CMTime.invalid
                 if output.hasNewPixelBuffer(forItemTime: targetCMTime),
-                   let pixelBuffer = output.copyPixelBuffer(forItemTime: targetCMTime, itemTimeForDisplay: nil) {
+                   let pixelBuffer = output.copyPixelBuffer(forItemTime: targetCMTime, itemTimeForDisplay: &displayTime) {
                     lastDecodedFrame = CIImage(cvPixelBuffer: pixelBuffer)
+                    if displayTime.isValid {
+                        let exactFrameMs = CMTimeGetSeconds(displayTime) * 1000.0
+                        if abs(exactFrameMs - sourceMs) < 60.0 {
+                            sourceMs = exactFrameMs
+                        }
+                    }
                     lastSeekedSourceMs = sourceMs
                 }
             }
