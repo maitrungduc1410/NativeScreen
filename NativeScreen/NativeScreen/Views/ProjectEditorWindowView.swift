@@ -889,6 +889,7 @@ public struct ProjectEditorWindowView: View {
         isExporting = true
         exportProgress = 0.0
         exportError = nil
+        DockProgressIndicatingController.shared.setProgress(0.0)
 
         Task {
             do {
@@ -900,11 +901,14 @@ public struct ProjectEditorWindowView: View {
                     fps: 60
                 ) { progress in
                     self.exportProgress = progress
+                    DockProgressIndicatingController.shared.setProgress(progress)
                 }
+                DockProgressIndicatingController.shared.setProgress(nil)
                 isExporting = false
                 isShowingExportSheet = false
                 NSWorkspace.shared.activateFileViewerSelecting([outURL])
             } catch {
+                DockProgressIndicatingController.shared.setProgress(nil)
                 isExporting = false
                 exportError = error.localizedDescription
             }
