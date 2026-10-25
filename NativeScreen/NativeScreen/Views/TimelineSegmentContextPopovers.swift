@@ -140,7 +140,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         menu.addItem(resetAllItem)
 
         activeMenu = menu
-        menu.popUp(positioning: nil, at: pointInView, in: parentView)
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
     }
 
     // MARK: - 2. Present Zoom Block Native Context Menu
@@ -230,7 +230,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         })
 
         activeMenu = menu
-        menu.popUp(positioning: nil, at: pointInView, in: parentView)
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
     }
 
     // MARK: - 3. Present Mask Block Native Context Menu
@@ -296,7 +296,57 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         })
 
         activeMenu = menu
-        menu.popUp(positioning: nil, at: pointInView, in: parentView)
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
+    }
+
+    /// Pops up a timeline context menu so it ALWAYS extends **upward** above the clicked point (`top + right` by default),
+    /// flips to `top + left` when clicking near the right edge of the timeline/window/screen, and stays 100% fully visible!
+    private func popUpTimelineMenuAboveCursor(
+        menu: NSMenu,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        let menuSize = menu.size
+        let menuW = max(248.0, menuSize.width)
+        let menuH = max(200.0, menuSize.height)
+
+        guard let win = parentView.window, let contentView = win.contentView else {
+            menu.popUp(positioning: nil, at: pointInView, in: parentView)
+            return
+        }
+
+        // Convert the clicked point into global screen coordinates (unflipped: Y increases upward!)
+        let clickInWin = parentView.convert(pointInView, to: nil)
+        let clickOnScreen = win.convertPoint(toScreen: clickInWin)
+
+        let screenFrame = (win.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        // Compute the right edge of the timeline area in screen coordinates (before the 292pt Inspector Sidebar on the right)
+        let winScreenRect = win.frame
+        let inspectorWidth: CGFloat = 292.0
+        let timelineMaxScreenX = min(screenFrame.maxX - 10.0, winScreenRect.maxX - inspectorWidth - 8.0)
+        let minScreenX = max(screenFrame.minX + 10.0, winScreenRect.minX + 10.0)
+
+        // 1. Horizontal placement:
+        // Default = Top + Right of click (`clickOnScreen.x`).
+        // If `clickOnScreen.x + menuW` exceeds the right edge of the timeline or screen, flip to Top + Left (`clickOnScreen.x - menuW`)!
+        var topLeftScreenX = clickOnScreen.x
+        if topLeftScreenX + menuW > timelineMaxScreenX {
+            topLeftScreenX = clickOnScreen.x - menuW
+        }
+        topLeftScreenX = min(max(topLeftScreenX, minScreenX), screenFrame.maxX - menuW - 10.0)
+
+        // 2. Vertical placement:
+        // In AppKit `menu.popUp(positioning: nil, at: loc, in: view)`, `loc` is the **TOP-LEFT corner** of the menu,
+        // and the menu extends **DOWNWARD** by `menuH`!
+        // Therefore, to make the menu appear **ABOVE** the cursor (`bottom of menu == clickOnScreen.y + 8`),
+        // we place the menu's top-left corner at `clickOnScreen.y + menuH + 8`!
+        var topLeftScreenY = clickOnScreen.y + menuH + 8.0
+        topLeftScreenY = min(max(topLeftScreenY, screenFrame.minY + menuH + 10.0), screenFrame.maxY - 10.0)
+
+        let targetWinPt = win.convertPoint(fromScreen: NSPoint(x: topLeftScreenX, y: topLeftScreenY))
+        let targetContentPt = contentView.convert(targetWinPt, from: nil)
+
+        menu.popUp(positioning: nil, at: targetContentPt, in: contentView)
     }
 
     // MARK: - NSMenuItem Builders
@@ -652,9 +702,11 @@ extension NativeSegmentContextMenuPresenter {
         activeMenu = menu
         let mouseLoc = NSEvent.mouseLocation
         if let win = NSApp.keyWindow, let contentView = win.contentView {
-            let ptInWin = win.convertPoint(fromScreen: mouseLoc)
+            let menuH = max(192.0, menu.size.height)
+            let topLeftScreenPt = NSPoint(x: mouseLoc.x - 28, y: mouseLoc.y + menuH + 10)
+            let ptInWin = win.convertPoint(fromScreen: topLeftScreenPt)
             let ptInView = contentView.convert(ptInWin, from: nil)
-            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 24, y: ptInView.y + 12), in: contentView)
+            menu.popUp(positioning: nil, at: ptInView, in: contentView)
         } else {
             menu.popUp(positioning: nil, at: mouseLoc, in: nil)
         }

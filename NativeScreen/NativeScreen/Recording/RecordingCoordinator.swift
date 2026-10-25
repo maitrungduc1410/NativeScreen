@@ -1132,10 +1132,26 @@ public final class HUDNativeMenuPresenter: NSObject {
 
     private func popUpMenuAboveCursor(menu: NSMenu, in panel: NSWindow?) {
         let mouseLoc = NSEvent.mouseLocation
+        let menuSize = menu.size
+        let menuW = max(260.0, menuSize.width)
+        let menuH = max(180.0, menuSize.height)
+
         if let win = panel, let contentView = win.contentView {
-            let ptInWin = win.convertPoint(fromScreen: mouseLoc)
+            let screenFrame = (win.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+            let barTopScreenY = win.frame.minY + RecordingCoordinator.barHeight
+
+            var topLeftScreenX = mouseLoc.x - 40.0
+            if topLeftScreenX + menuW > screenFrame.maxX - 10.0 {
+                topLeftScreenX = mouseLoc.x - menuW + 20.0
+            }
+            topLeftScreenX = min(max(topLeftScreenX, screenFrame.minX + 10.0), screenFrame.maxX - menuW - 10.0)
+
+            var topLeftScreenY = barTopScreenY + menuH + 8.0
+            topLeftScreenY = min(max(topLeftScreenY, screenFrame.minY + menuH + 10.0), screenFrame.maxY - 10.0)
+
+            let ptInWin = win.convertPoint(fromScreen: NSPoint(x: topLeftScreenX, y: topLeftScreenY))
             let ptInView = contentView.convert(ptInWin, from: nil)
-            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 40, y: RecordingCoordinator.barHeight + 6), in: contentView)
+            menu.popUp(positioning: nil, at: ptInView, in: contentView)
         } else {
             menu.popUp(positioning: nil, at: mouseLoc, in: nil)
         }
