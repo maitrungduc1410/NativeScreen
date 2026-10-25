@@ -1,380 +1,668 @@
 import SwiftUI
 import AppKit
 
-// MARK: - 1. Clip Slice Liquid Glass Context Popover
+/// Native macOS `NSMenu` Context Menu Presenter.
+/// - Uses a real macOS `NSMenu` popped up at the exact mouse cursor position (`menu.popUp(positioning: nil, at: mouseLocation, in: view)`).
+/// - Automatically receives macOS's genuine system Liquid Glass / Vibrancy material with ZERO popover arrow!
+/// - Embeds custom interactive rows (`PaletteRow`, `SliderRow`) via `NSMenuItem.view` alongside native `NSMenuItem` command rows.
+@MainActor
+public final class NativeSegmentContextMenuPresenter: NSObject {
+    public static let shared = NativeSegmentContextMenuPresenter()
 
-public struct ClipSliceContextPopoverView: View {
-    @Bindable var session: ProjectSession
-    let sliceId: String
-    let onDismiss: () -> Void
+    private var activeMenu: NSMenu?
+    private var retainedTargets: [AnyObject] = []
 
-    @State private var showSpeedOptions = false
-
-    private var slice: ClipSlice? {
-        session.document.timeline.slices.first(where: { $0.id == sliceId })
+    private override init() {
+        super.init()
     }
 
-    private var canMergeWithNext: Bool {
-        guard let idx = session.document.timeline.slices.firstIndex(where: { $0.id == sliceId }) else { return false }
-        return idx + 1 < session.document.timeline.slices.count
+    // MARK: - 1. Present Clip Slice Native Context Menu
+
+    public func presentClipContextMenu(
+        session: ProjectSession,
+        sliceId: String,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        guard let slice = session.document.timeline.slices.first(where: { $0.id == sliceId }) else { return }
+        let sliceIdx = session.document.timeline.slices.firstIndex(where: { $0.id == sliceId }) ?? 0
+        let canMergeWithNext = (sliceIdx + 1 < session.document.timeline.slices.count)
+
+        let menu = NSMenu(title: "Clip Context Menu")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        // 1. Split at current time (C)
+        menu.addItem(makeCommandItem(title: "Split at current time", keyEquivalent: "c", modifiers: []) {
+            session.splitSlice(id: sliceId, atTimelineMs: session.effectivePreviewTimelineMs)
+        })
+
+        // 2. Merge with next
+        let mergeItem = makeCommandItem(title: "Merge with next", keyEquivalent: "", modifiers: []) {
+            session.mergeSliceWithNext(id: sliceId)
+        }
+        mergeItem.isEnabled = canMergeWithNext
+        menu.addItem(mergeItem)
+
+        // 3. Reset trim
+        menu.addItem(makeCommandItem(title: "Reset trim", keyEquivalent: "", modifiers: []) {
+            session.resetSliceTrim(id: sliceId)
+        })
+
+        menu.addItem(.separator())
+
+        // 4. Set speed submenu
+        let speedSubmenu = NSMenu(title: "Set speed")
+        for spd in [0.5, 1.0, 1.25, 1.5, 2.0, 4.0] {
+            let subItem = makeCommandItem(title: String(format: "%gx", spd), keyEquivalent: "", modifiers: []) {
+                session.setSliceSpeed(id: sliceId, speed: spd)
+            }
+            subItem.state = abs(slice.speed - spd) < 0.03 ? .on : .off
+            speedSubmenu.addItem(subItem)
+        }
+        let speedParentItem = NSMenuItem(title: "Set speed", action: nil, keyEquivalent: "")
+        speedParentItem.submenu = speedSubmenu
+        menu.addItem(speedParentItem)
+
+        menu.addItem(.separator())
+
+        // 5. System audio volume SliderRow inside NSMenuItem.view
+        let volumeItem = NSMenuItem()
+        let volumeView = NSHostingView(
+            rootView: MenuEmbeddedSliderRowView(
+                title: "System audio volume",
+                initialValue: session.document.audio.systemAudioVolume,
+                range: 0.0...1.5,
+                formatValue: { "\(Int(round($0 * 100)))%" },
+                onEditingChanged: { editing in
+                    if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
+                },
+                onValueChanged: { newVal in
+                    session.mutate { $0.audio.systemAudioVolume = newVal }
+                }
+            )
+        )
+        volumeView.frame = NSRect(x: 0, y: 0, width: 256, height: 54)
+        volumeItem.view = volumeView
+        menu.addItem(volumeItem)
+
+        menu.addItem(.separator())
+
+        // 6. Hide mouse cursor & Disable smooth mouse movement
+        let hideCursorItem = makeCommandItem(
+            title: "Hide mouse cursor",
+            keyEquivalent: "",
+            modifiers: []
+        ) {
+            session.toggleSliceHideCursor(id: sliceId)
+        }
+        hideCursorItem.state = slice.hideCursor ? .on : .off
+        menu.addItem(hideCursorItem)
+
+        let disableSmoothItem = makeCommandItem(
+            title: "Disable smooth mouse movement",
+            keyEquivalent: "",
+            modifiers: []
+        ) {
+            session.toggleSliceDisableSmoothCursor(id: sliceId)
+        }
+        disableSmoothItem.state = slice.disableSmoothCursor ? .on : .off
+        menu.addItem(disableSmoothItem)
+
+        menu.addItem(.separator())
+
+        // 7. Remove & Reset trims and cuts for all slices (Destructive Red)
+        let removeItem = makeDestructiveCommandItem(
+            title: "Remove",
+            symbolName: "delete.left"
+        ) {
+            session.selectSlice(sliceId)
+            session.deleteSelectedSlice()
+        }
+        removeItem.isEnabled = session.document.timeline.slices.count > 1
+        menu.addItem(removeItem)
+
+        let resetAllItem = makeDestructiveCommandItem(
+            title: "Reset trims and cuts for all slices",
+            symbolName: nil
+        ) {
+            session.resetAllSlicesTrimAndCuts()
+        }
+        menu.addItem(resetAllItem)
+
+        activeMenu = menu
+        menu.popUp(positioning: nil, at: pointInView, in: parentView)
     }
 
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let currentSlice = slice {
-                PopoverMenuRow(title: "Split at current time", shortcut: "C") {
-                    session.splitSlice(id: sliceId, atTimelineMs: session.effectivePreviewTimelineMs)
-                    onDismiss()
+    // MARK: - 2. Present Zoom Block Native Context Menu
+
+    public func presentZoomContextMenu(
+        session: ProjectSession,
+        zoomId: String,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        guard let zoom = session.document.timeline.zooms.first(where: { $0.id == zoomId }) else { return }
+
+        let menu = NSMenu(title: "Zoom Context Menu")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        // 1. Top 2-Card PaletteRow: Classic vs Loupe (embedded via NSMenuItem.view)
+        let paletteItem = NSMenuItem()
+        let paletteView = NSHostingView(
+            rootView: ZoomPaletteHeaderRowView(
+                session: session,
+                zoomId: zoomId
+            )
+        )
+        paletteView.frame = NSRect(x: 0, y: 0, width: 258, height: 64)
+        paletteItem.view = paletteView
+        menu.addItem(paletteItem)
+
+        menu.addItem(.separator())
+
+        // 2. Zoom level SliderRow (`100%` - `350%`)
+        let sliderItem = NSMenuItem()
+        let sliderView = NSHostingView(
+            rootView: MenuEmbeddedSliderRowView(
+                title: "Zoom level",
+                initialValue: zoom.scale,
+                range: 1.1...3.5,
+                formatValue: { "\(Int(round($0 * 100)))%" },
+                onEditingChanged: { editing in
+                    if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
+                },
+                onValueChanged: { newVal in
+                    session.setZoomScale(id: zoomId, scale: newVal)
                 }
+            )
+        )
+        sliderView.frame = NSRect(x: 0, y: 0, width: 258, height: 54)
+        sliderItem.view = sliderView
+        menu.addItem(sliderItem)
 
-                PopoverMenuRow(title: "Merge with next", isDisabled: !canMergeWithNext) {
-                    session.mergeSliceWithNext(id: sliceId)
-                    onDismiss()
-                }
+        // 3. Apply zoom level to all other zooms
+        menu.addItem(makeCommandItem(title: "Apply zoom level to all other zooms", keyEquivalent: "", modifiers: []) {
+            session.applyZoomLevelToAllOtherZooms(fromId: zoomId)
+        })
 
-                PopoverMenuRow(title: "Reset trim") {
-                    session.resetSliceTrim(id: sliceId)
-                    onDismiss()
-                }
+        menu.addItem(.separator())
 
-                Divider()
-                    .padding(.vertical, 3)
+        // 4. Split zoom at current time (C), Duplicate (⌘D), Disable (D)
+        menu.addItem(makeCommandItem(title: "Split zoom at current time", keyEquivalent: "c", modifiers: []) {
+            session.splitZoom(id: zoomId, atSourceMs: session.currentSourceTimeMs)
+        })
 
-                // Set speed expandable row
-                PopoverMenuRow(
-                    title: "Set speed",
-                    shortcut: String(format: "%.2gx ›", currentSlice.speed)
-                ) {
-                    withAnimation(.easeOut(duration: 0.14)) {
-                        showSpeedOptions.toggle()
-                    }
-                }
+        menu.addItem(makeCommandItem(title: "Duplicate", keyEquivalent: "d", modifiers: [.command]) {
+            session.duplicateZoom(id: zoomId)
+        })
 
-                if showSpeedOptions {
-                    HStack(spacing: 4) {
-                        ForEach([0.5, 1.0, 1.25, 1.5, 2.0, 4.0], id: \.self) { spd in
-                            let isSelected = abs(currentSlice.speed - spd) < 0.03
-                            Button {
-                                session.setSliceSpeed(id: sliceId, speed: spd)
-                                onDismiss()
-                            } label: {
-                                Text(String(format: "%.2gx", spd))
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(isSelected ? .white : .secondary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 5)
-                                    .background(
-                                        isSelected ? Color.blue : Color.white.opacity(0.06),
-                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 4)
-                }
+        menu.addItem(makeCommandItem(title: zoom.disabled ? "Enable" : "Disable", keyEquivalent: "d", modifiers: []) {
+            session.toggleZoomDisabled(id: zoomId)
+        })
 
-                Divider()
-                    .padding(.vertical, 3)
+        menu.addItem(.separator())
 
-                // System audio volume slider right inside the popover
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("System audio volume")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.92))
-                        Spacer()
-                        Text("\(Int(round(session.document.audio.systemAudioVolume * 100)))%")
-                            .font(.system(size: 13, weight: .medium).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
+        // 5. Copy zoom range (⌘C), Cut to clipboard (⌘X)
+        menu.addItem(makeCommandItem(title: "Copy zoom range", keyEquivalent: "c", modifiers: [.command]) {
+            session.copyZoomToClipboard(id: zoomId)
+        })
 
-                    Slider(
-                        value: Binding(
-                            get: { session.document.audio.systemAudioVolume },
-                            set: { v in session.mutate { $0.audio.systemAudioVolume = v } }
-                        ),
-                        in: 0.0...1.5
-                    ) { editing in
-                        if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
-                    }
-                    .tint(.blue)
-                    .controlSize(.small)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+        menu.addItem(makeCommandItem(title: "Cut to clipboard", keyEquivalent: "x", modifiers: [.command]) {
+            session.cutZoomToClipboard(id: zoomId)
+        })
 
-                Divider()
-                    .padding(.vertical, 3)
+        menu.addItem(.separator())
 
-                PopoverMenuRow(
-                    title: currentSlice.hideCursor ? "Show mouse cursor" : "Hide mouse cursor",
-                    shortcut: currentSlice.hideCursor ? "✓" : nil
-                ) {
-                    session.toggleSliceHideCursor(id: sliceId)
-                    onDismiss()
-                }
+        // 6. Remove (Destructive Red)
+        menu.addItem(makeDestructiveCommandItem(title: "Remove", symbolName: "delete.left") {
+            session.deleteZoom(zoomId: zoomId)
+        })
 
-                PopoverMenuRow(
-                    title: currentSlice.disableSmoothCursor ? "Enable smooth mouse movement" : "Disable smooth mouse movement",
-                    shortcut: currentSlice.disableSmoothCursor ? "✓" : nil
-                ) {
-                    session.toggleSliceDisableSmoothCursor(id: sliceId)
-                    onDismiss()
-                }
+        activeMenu = menu
+        menu.popUp(positioning: nil, at: pointInView, in: parentView)
+    }
 
-                Divider()
-                    .padding(.vertical, 3)
+    // MARK: - 3. Present Mask Block Native Context Menu
 
-                PopoverMenuRow(
-                    title: "Remove",
-                    trailingSymbol: "delete.left",
-                    isDestructive: true,
-                    isDisabled: session.document.timeline.slices.count <= 1
-                ) {
-                    session.selectSlice(sliceId)
-                    session.deleteSelectedSlice()
-                    onDismiss()
-                }
-
-                PopoverMenuRow(
-                    title: "Reset trims and cuts for all slices",
-                    isDestructive: true
-                ) {
-                    session.resetAllSlicesTrimAndCuts()
-                    onDismiss()
-                }
+    public func presentMaskContextMenu(
+        session: ProjectSession,
+        maskId: String,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        var foundMask: MaskItem?
+        for track in session.document.timeline.maskTracks {
+            if let m = track.items.first(where: { $0.id == maskId }) {
+                foundMask = m
+                break
             }
         }
-        .padding(8)
-        .frame(width: 268)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        guard let mask = foundMask else { return }
+
+        let menu = NSMenu(title: "Mask Context Menu")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        // 1. Top 2-Card PaletteRow: Highlight vs Sensitive data (embedded via NSMenuItem.view)
+        let paletteItem = NSMenuItem()
+        let paletteView = NSHostingView(
+            rootView: MaskPaletteHeaderRowView(
+                session: session,
+                maskId: maskId
+            )
+        )
+        paletteView.frame = NSRect(x: 0, y: 0, width: 252, height: 64)
+        paletteItem.view = paletteView
+        menu.addItem(paletteItem)
+
+        menu.addItem(.separator())
+
+        // 2. Split mask at current time (C), Disable (D)
+        menu.addItem(makeCommandItem(title: "Split mask at current time", keyEquivalent: "c", modifiers: []) {
+            session.splitMask(id: maskId, atSourceMs: session.currentSourceTimeMs)
+        })
+
+        menu.addItem(makeCommandItem(title: mask.disabled ? "Enable" : "Disable", keyEquivalent: "d", modifiers: []) {
+            session.toggleMaskDisabled(id: maskId)
+        })
+
+        menu.addItem(.separator())
+
+        // 3. Copy mask (⌘C), Cut to clipboard (⌘X)
+        menu.addItem(makeCommandItem(title: "Copy mask", keyEquivalent: "c", modifiers: [.command]) {
+            session.copyMaskToClipboard(id: maskId)
+        })
+
+        menu.addItem(makeCommandItem(title: "Cut to clipboard", keyEquivalent: "x", modifiers: [.command]) {
+            session.cutMaskToClipboard(id: maskId)
+        })
+
+        menu.addItem(.separator())
+
+        // 4. Remove (Destructive Red)
+        menu.addItem(makeDestructiveCommandItem(title: "Remove", symbolName: "delete.left") {
+            session.deleteMask(maskId: maskId)
+        })
+
+        activeMenu = menu
+        menu.popUp(positioning: nil, at: pointInView, in: parentView)
+    }
+
+    // MARK: - NSMenuItem Builders
+
+    private func makeCommandItem(
+        title: String,
+        keyEquivalent: String,
+        modifiers: NSEvent.ModifierFlags,
+        action: @escaping @MainActor () -> Void
+    ) -> NSMenuItem {
+        let handler = ClosureMenuTarget(action: action)
+        retainedTargets.append(handler)
+        let item = NSMenuItem(title: title, action: #selector(ClosureMenuTarget.invoke(_:)), keyEquivalent: keyEquivalent)
+        item.keyEquivalentModifierMask = modifiers
+        item.target = handler
+        return item
+    }
+
+    private func makeDestructiveCommandItem(
+        title: String,
+        symbolName: String?,
+        action: @escaping @MainActor () -> Void
+    ) -> NSMenuItem {
+        let handler = ClosureMenuTarget(action: action)
+        retainedTargets.append(handler)
+        let item = NSMenuItem(title: title, action: #selector(ClosureMenuTarget.invoke(_:)), keyEquivalent: "")
+        item.target = handler
+        let redColor = NSColor(red: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
+        item.attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .foregroundColor: redColor,
+                .font: NSFont.menuFont(ofSize: 13)
+            ]
+        )
+        if let sym = symbolName {
+            item.keyEquivalent = "\u{8}" // Shows `⌫` delete symbol on the right side!
+            item.keyEquivalentModifierMask = []
+            _ = sym
+        }
+        return item
     }
 }
 
-// MARK: - 4. Output Aspect Ratio Liquid Glass Dropdown Popover ( & 4!)
+@MainActor
+private final class ClosureMenuTarget: NSObject {
+    let action: @MainActor () -> Void
 
-public struct AspectRatioLiquidGlassPopoverView: View {
-    @Bindable var session: ProjectSession
-    let onDismiss: () -> Void
-
-    private let presets: [AspectRatioPreset] = [
-        .widescreen16x9,
-        .square1x1,
-        .classic4x3,
-        .vertical9x16,
-        .tall3x4,
-        .portrait4x5
-    ]
-
-    public init(session: ProjectSession, onDismiss: @escaping () -> Void) {
-        self.session = session
-        self.onDismiss = onDismiss
+    init(action: @escaping @MainActor () -> Void) {
+        self.action = action
     }
 
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            // 1. "Auto" Option
-            let isAuto = (session.document.canvas.aspectRatioMode == .auto)
-            AspectRatioOptionRow(
-                title: "Auto",
-                ratioText: nil,
-                iconSize: nil,
-                isSelected: isAuto
-            ) {
-                session.mutate { $0.canvas.aspectRatioMode = .auto }
-                onDismiss()
-            }
-
-            Divider()
-                .padding(.vertical, 3)
-
-            // 2. Preset Options with Custom Proportional Aspect Ratio Icons
-            ForEach(presets) { preset in
-                let isSelected = (session.document.canvas.aspectRatioMode == .preset && session.document.canvas.aspectRatioPreset == preset)
-                AspectRatioOptionRow(
-                    title: preset.titleName,
-                    ratioText: preset.ratioString,
-                    iconSize: preset.iconSize,
-                    isSelected: isSelected
-                ) {
-                    session.mutate {
-                        $0.canvas.aspectRatioMode = .preset
-                        $0.canvas.aspectRatioPreset = preset
-                    }
-                    onDismiss()
-                }
-            }
-        }
-        .padding(8)
-        .frame(width: 196)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    @objc func invoke(_ sender: Any?) {
+        action()
     }
 }
 
-private struct AspectRatioOptionRow: View {
-    let title: String
-    let ratioText: String?
-    let iconSize: CGSize?
-    let isSelected: Bool
-    let action: () -> Void
+// MARK: - Embedded `NSMenuItem.view` Custom Rows (PaletteRow & SliderRow)
 
-    @State private var isHovered = false
+private struct ZoomPaletteHeaderRowView: View {
+    @Bindable var session: ProjectSession
+    let zoomId: String
+
+    private var currentPresentation: ZoomPresentation {
+        session.document.timeline.zooms.first(where: { $0.id == zoomId })?.presentation ?? .screen
+    }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                if let size = iconSize {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 2.2, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.88), lineWidth: 1.4)
-                            .frame(width: size.width, height: size.height)
-                    }
-                    .frame(width: 18, height: 16)
-                }
-
-                HStack(spacing: 5) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.95))
-
-                    if let ratioText = ratioText {
-                        Text(ratioText)
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.45))
-                    }
-                }
-
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
+        HStack(spacing: 6) {
+            paletteCardButton(
+                title: "Classic",
+                systemImage: "plus.magnifyingglass",
+                isSelected: currentPresentation == .screen
+            ) {
+                session.setZoomPresentation(id: zoomId, presentation: .screen)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            paletteCardButton(
+                title: "Loupe",
+                systemImage: "sparkle.magnifyingglass",
+                isSelected: currentPresentation == .loupe
+            ) {
+                session.setZoomPresentation(id: zoomId, presentation: .loupe)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func paletteCardButton(
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(isSelected ? Color(red: 0.35, green: 0.65, blue: 1.0) : .white.opacity(0.88))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+                isSelected
+                    ? Color.blue.opacity(0.24)
+                    : Color.white.opacity(0.05),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            isHovered = hovering
-        }
     }
 }
 
-// MARK: - 5. Reel Mode Liquid Glass Dropdown Popover ( from previous turn!)
-
-public struct ReelModeLiquidGlassPopoverView: View {
+private struct MaskPaletteHeaderRowView: View {
     @Bindable var session: ProjectSession
-    let onDismiss: () -> Void
+    let maskId: String
 
-    public init(session: ProjectSession, onDismiss: @escaping () -> Void) {
-        self.session = session
-        self.onDismiss = onDismiss
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            ReelOptionRow(
-                title: "Disable",
-                isSelected: !session.isReelModeActive
-            ) {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    session.isReelModeActive = false
-                }
-                onDismiss()
-            }
-
-            Divider()
-                .padding(.vertical, 3)
-
-            ReelOptionRow(
-                title: "Instagram",
-                isSelected: session.isReelModeActive && session.reelPlatformStyle == .instagramReels
-            ) {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    session.reelPlatformStyle = .instagramReels
-                    session.isReelModeActive = true
-                    session.mutate {
-                        $0.canvas.aspectRatioMode = .preset
-                        $0.canvas.aspectRatioPreset = .vertical9x16
-                    }
-                }
-                onDismiss()
-            }
-
-            ReelOptionRow(
-                title: "TikTok",
-                isSelected: session.isReelModeActive && session.reelPlatformStyle == .tiktok
-            ) {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    session.reelPlatformStyle = .tiktok
-                    session.isReelModeActive = true
-                    session.mutate {
-                        $0.canvas.aspectRatioMode = .preset
-                        $0.canvas.aspectRatioPreset = .vertical9x16
-                    }
-                }
-                onDismiss()
+    private var currentType: MaskType {
+        for track in session.document.timeline.maskTracks {
+            if let found = track.items.first(where: { $0.id == maskId }) {
+                return found.type
             }
         }
-        .padding(8)
-        .frame(width: 156)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        return .blur
     }
-}
-
-private struct ReelOptionRow: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    @State private var isHovered = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 14)
-                } else {
-                    Color.clear
-                        .frame(width: 14, height: 12)
-                }
+        HStack(spacing: 6) {
+            paletteCardButton(
+                title: "Highlight",
+                systemImage: "viewfinder.rectangular",
+                isSelected: currentType == .spotlight
+            ) {
+                session.setMaskType(id: maskId, type: .spotlight)
+            }
 
+            paletteCardButton(
+                title: "Sensitive data",
+                systemImage: "eye.slash",
+                isSelected: currentType == .blur
+            ) {
+                session.setMaskType(id: maskId, type: .blur)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func paletteCardButton(
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(isSelected ? Color(red: 0.35, green: 0.65, blue: 1.0) : .white.opacity(0.88))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                isSelected
+                    ? Color.blue.opacity(0.24)
+                    : Color.white.opacity(0.05),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct MenuEmbeddedSliderRowView: View {
+    let title: String
+    @State var currentValue: Double
+    let range: ClosedRange<Double>
+    let formatValue: (Double) -> String
+    let onEditingChanged: (Bool) -> Void
+    let onValueChanged: (Double) -> Void
+
+    init(
+        title: String,
+        initialValue: Double,
+        range: ClosedRange<Double>,
+        formatValue: @escaping (Double) -> String,
+        onEditingChanged: @escaping (Bool) -> Void,
+        onValueChanged: @escaping (Double) -> Void
+    ) {
+        self.title = title
+        self._currentValue = State(initialValue: initialValue)
+        self.range = range
+        self.formatValue = formatValue
+        self.onEditingChanged = onEditingChanged
+        self.onValueChanged = onValueChanged
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
                 Text(title)
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.95))
-
+                    .foregroundStyle(.white.opacity(0.92))
                 Spacer()
+                Text(formatValue(currentValue))
+                    .font(.system(size: 13, weight: .regular).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.50))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.14) : Color.clear)
+
+            Slider(
+                value: Binding(
+                    get: { currentValue },
+                    set: { newVal in
+                        currentValue = newVal
+                        onValueChanged(newVal)
+                    }
+                ),
+                in: range,
+                onEditingChanged: onEditingChanged
             )
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .tint(.blue)
+            .controlSize(.small)
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
     }
 }
 
-// MARK: - 6. Custom Aspect Ratio Icon & Reel Mode Phone Icon
+// MARK: - 4. Output Aspect Ratio & Reel Mode Native `NSMenu` Presenters (Zero Arrow, Genuine macOS Liquid Glass!)
+
+extension NativeSegmentContextMenuPresenter {
+    public func presentAspectRatioMenu(session: ProjectSession, below buttonView: NSView?) {
+        let menu = NSMenu(title: "Output Aspect Ratio")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let autoItem = makeCommandItem(title: "Auto", keyEquivalent: "", modifiers: []) {
+            session.mutate { $0.canvas.aspectRatioMode = .auto }
+        }
+        autoItem.state = (session.document.canvas.aspectRatioMode == .auto) ? .on : .off
+        menu.addItem(autoItem)
+
+        menu.addItem(.separator())
+
+        let presets: [AspectRatioPreset] = [
+            .widescreen16x9,
+            .square1x1,
+            .classic4x3,
+            .vertical9x16,
+            .tall3x4,
+            .portrait4x5
+        ]
+
+        for preset in presets {
+            let item = makeCommandItem(title: preset.label, keyEquivalent: "", modifiers: []) {
+                session.mutate {
+                    $0.canvas.aspectRatioMode = .preset
+                    $0.canvas.aspectRatioPreset = preset
+                }
+            }
+            let isSelected = (session.document.canvas.aspectRatioMode == .preset && session.document.canvas.aspectRatioPreset == preset)
+            item.state = isSelected ? .on : .off
+            item.image = renderAspectRatioIconNSImage(size: preset.iconSize)
+
+            let attr = NSMutableAttributedString(
+                string: "\(preset.titleName) ",
+                attributes: [
+                    .foregroundColor: NSColor.white,
+                    .font: NSFont.menuFont(ofSize: 13)
+                ]
+            )
+            attr.append(
+                NSAttributedString(
+                    string: preset.ratioString,
+                    attributes: [
+                        .foregroundColor: NSColor.white.withAlphaComponent(0.45),
+                        .font: NSFont.menuFont(ofSize: 13)
+                    ]
+                )
+            )
+            item.attributedTitle = attr
+            menu.addItem(item)
+        }
+
+        activeMenu = menu
+        let mouseLoc = NSEvent.mouseLocation
+        if let win = NSApp.keyWindow, let contentView = win.contentView {
+            let ptInWin = win.convertPoint(fromScreen: mouseLoc)
+            let ptInView = contentView.convert(ptInWin, from: nil)
+            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 24, y: ptInView.y - 12), in: contentView)
+        } else {
+            menu.popUp(positioning: nil, at: mouseLoc, in: nil)
+        }
+    }
+
+    public func presentReelModeMenu(session: ProjectSession) {
+        let menu = NSMenu(title: "Reel Mode")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let disableItem = makeCommandItem(title: "Disable", keyEquivalent: "", modifiers: []) {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                session.isReelModeActive = false
+            }
+        }
+        disableItem.state = !session.isReelModeActive ? .on : .off
+        menu.addItem(disableItem)
+
+        menu.addItem(.separator())
+
+        let igItem = makeCommandItem(title: "Instagram", keyEquivalent: "", modifiers: []) {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                session.reelPlatformStyle = .instagramReels
+                session.isReelModeActive = true
+                session.mutate {
+                    $0.canvas.aspectRatioMode = .preset
+                    $0.canvas.aspectRatioPreset = .vertical9x16
+                }
+            }
+        }
+        igItem.state = (session.isReelModeActive && session.reelPlatformStyle == .instagramReels) ? .on : .off
+        menu.addItem(igItem)
+
+        let ttItem = makeCommandItem(title: "TikTok", keyEquivalent: "", modifiers: []) {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                session.reelPlatformStyle = .tiktok
+                session.isReelModeActive = true
+                session.mutate {
+                    $0.canvas.aspectRatioMode = .preset
+                    $0.canvas.aspectRatioPreset = .vertical9x16
+                }
+            }
+        }
+        ttItem.state = (session.isReelModeActive && session.reelPlatformStyle == .tiktok) ? .on : .off
+        menu.addItem(ttItem)
+
+        activeMenu = menu
+        let mouseLoc = NSEvent.mouseLocation
+        if let win = NSApp.keyWindow, let contentView = win.contentView {
+            let ptInWin = win.convertPoint(fromScreen: mouseLoc)
+            let ptInView = contentView.convert(ptInWin, from: nil)
+            menu.popUp(positioning: nil, at: NSPoint(x: ptInView.x - 24, y: ptInView.y - 12), in: contentView)
+        } else {
+            menu.popUp(positioning: nil, at: mouseLoc, in: nil)
+        }
+    }
+
+    private func renderAspectRatioIconNSImage(size: CGSize) -> NSImage {
+        let canvasSize = NSSize(width: 18, height: 16)
+        let img = NSImage(size: canvasSize, flipped: false) { _ in
+            let rect = NSRect(
+                x: (18.0 - size.width) * 0.5,
+                y: (16.0 - size.height) * 0.5,
+                width: size.width,
+                height: size.height
+            )
+            let path = NSBezierPath(roundedRect: rect, xRadius: 2.2, yRadius: 2.2)
+            path.lineWidth = 1.4
+            NSColor.white.withAlphaComponent(0.9).setStroke()
+            path.stroke()
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }
+}
+
+// MARK: - 5. Custom Aspect Ratio Icon & Reel Mode Phone Icon
 
 public struct AspectIconView: View {
     public init() {}
@@ -385,7 +673,6 @@ public struct AspectIconView: View {
             let outerPath = Path(roundedRect: outerRect, cornerRadius: 2.2)
             context.stroke(outerPath, with: .color(.white.opacity(0.92)), lineWidth: 1.4)
 
-            // Inner nested ratio lines in bottom-left corner Aspect Ratio icon!)
             var inner1 = Path()
             inner1.move(to: CGPoint(x: outerRect.minX, y: outerRect.minY + outerRect.height * 0.42))
             inner1.addLine(to: CGPoint(x: outerRect.minX + outerRect.width * 0.68, y: outerRect.minY + outerRect.height * 0.42))
@@ -421,324 +708,5 @@ public struct ReelPhoneIconView: View {
                 .padding(.bottom, 2.2)
         }
         .frame(width: 14, height: 15)
-    }
-}
-
-// MARK: - 2. Zoom Block Liquid Glass Context Popover
-
-public struct ZoomBlockContextPopoverView: View {
-    @Bindable var session: ProjectSession
-    let zoomId: String
-    let onDismiss: () -> Void
-
-    private var zoom: ZoomBlock? {
-        session.document.timeline.zooms.first(where: { $0.id == zoomId })
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let currentZoom = zoom {
-                // Top 2-Card Presentation Selector: Classic vs Loupe
-                HStack(spacing: 6) {
-                    modeCardButton(
-                        title: "Classic",
-                        systemImage: "plus.magnifyingglass",
-                        isSelected: currentZoom.presentation == .screen
-                    ) {
-                        session.setZoomPresentation(id: zoomId, presentation: .screen)
-                    }
-
-                    modeCardButton(
-                        title: "Loupe",
-                        systemImage: "sparkle.magnifyingglass",
-                        isSelected: currentZoom.presentation == .loupe
-                    ) {
-                        session.setZoomPresentation(id: zoomId, presentation: .loupe)
-                    }
-                }
-                .padding(.horizontal, 4)
-                .padding(.top, 4)
-                .padding(.bottom, 2)
-
-                Divider()
-                    .padding(.vertical, 3)
-
-                // Interactive Zoom Level Slider (`100%` - `350%`)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Zoom level")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.92))
-                        Spacer()
-                        Text("\(Int(round(currentZoom.scale * 100)))%")
-                            .font(.system(size: 13, weight: .medium).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Slider(
-                        value: Binding(
-                            get: { currentZoom.scale },
-                            set: { v in session.setZoomScale(id: zoomId, scale: v) }
-                        ),
-                        in: 1.1...3.5
-                    ) { editing in
-                        if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
-                    }
-                    .tint(.blue)
-                    .controlSize(.small)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-
-                PopoverMenuRow(title: "Apply zoom level to all other zooms") {
-                    session.applyZoomLevelToAllOtherZooms(fromId: zoomId)
-                    onDismiss()
-                }
-
-                Divider()
-                    .padding(.vertical, 3)
-
-                PopoverMenuRow(title: "Split zoom at current time", shortcut: "C") {
-                    session.splitZoom(id: zoomId, atSourceMs: session.currentSourceTimeMs)
-                    onDismiss()
-                }
-
-                PopoverMenuRow(title: "Duplicate", shortcut: "⌘ D") {
-                    session.duplicateZoom(id: zoomId)
-                    onDismiss()
-                }
-
-                PopoverMenuRow(title: currentZoom.disabled ? "Enable" : "Disable", shortcut: "D") {
-                    session.toggleZoomDisabled(id: zoomId)
-                    onDismiss()
-                }
-
-                Divider()
-                    .padding(.vertical, 3)
-
-                PopoverMenuRow(title: "Copy zoom range", shortcut: "⌘ C") {
-                    session.copyZoomToClipboard(id: zoomId)
-                    onDismiss()
-                }
-
-                PopoverMenuRow(title: "Cut to clipboard", shortcut: "⌘ X") {
-                    session.cutZoomToClipboard(id: zoomId)
-                    onDismiss()
-                }
-
-                Divider()
-                    .padding(.vertical, 3)
-
-                PopoverMenuRow(
-                    title: "Remove",
-                    trailingSymbol: "delete.left",
-                    isDestructive: true
-                ) {
-                    session.deleteZoom(zoomId: zoomId)
-                    onDismiss()
-                }
-            }
-        }
-        .padding(8)
-        .frame(width: 268)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    @ViewBuilder
-    private func modeCardButton(
-        title: String,
-        systemImage: String,
-        isSelected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            VStack(spacing: 5) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .foregroundStyle(isSelected ? Color(red: 0.35, green: 0.65, blue: 1.0) : .white.opacity(0.85))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(
-                isSelected
-                    ? Color.blue.opacity(0.24)
-                    : Color.white.opacity(0.05),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - 3. Mask Block Liquid Glass Context Popover
-
-public struct MaskBlockContextPopoverView: View {
-    @Bindable var session: ProjectSession
-    let maskId: String
-    let onDismiss: () -> Void
-
-    private var mask: MaskItem? {
-        for track in session.document.timeline.maskTracks {
-            if let found = track.items.first(where: { $0.id == maskId }) {
-                return found
-            }
-        }
-        return nil
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let currentMask = mask {
-                // Top 2-Card Mask Type Selector: Highlight vs Sensitive data
-                HStack(spacing: 6) {
-                    maskTypeCardButton(
-                        title: "Highlight",
-                        systemImage: "viewfinder.rectangular",
-                        isSelected: currentMask.type == .spotlight
-                    ) {
-                        session.setMaskType(id: maskId, type: .spotlight)
-                    }
-
-                    maskTypeCardButton(
-                        title: "Sensitive data",
-                        systemImage: "eye.slash",
-                        isSelected: currentMask.type == .blur
-                    ) {
-                        session.setMaskType(id: maskId, type: .blur)
-                    }
-                }
-                .padding(.horizontal, 4)
-                .padding(.top, 4)
-                .padding(.bottom, 2)
-
-                Divider()
-                    .padding(.vertical, 3)
-
-                PopoverMenuRow(title: "Split mask at current time", shortcut: "C") {
-                    session.splitMask(id: maskId, atSourceMs: session.currentSourceTimeMs)
-                    onDismiss()
-                }
-
-                PopoverMenuRow(title: currentMask.disabled ? "Enable" : "Disable", shortcut: "D") {
-                    session.toggleMaskDisabled(id: maskId)
-                    onDismiss()
-                }
-
-                Divider()
-                    .padding(.vertical, 3)
-
-                PopoverMenuRow(title: "Copy mask", shortcut: "⌘ C") {
-                    session.copyMaskToClipboard(id: maskId)
-                    onDismiss()
-                }
-
-                PopoverMenuRow(title: "Cut to clipboard", shortcut: "⌘ X") {
-                    session.cutMaskToClipboard(id: maskId)
-                    onDismiss()
-                }
-
-                Divider()
-                    .padding(.vertical, 3)
-
-                PopoverMenuRow(
-                    title: "Remove",
-                    trailingSymbol: "delete.left",
-                    isDestructive: true
-                ) {
-                    session.deleteMask(maskId: maskId)
-                    onDismiss()
-                }
-            }
-        }
-        .padding(8)
-        .frame(width: 256)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    @ViewBuilder
-    private func maskTypeCardButton(
-        title: String,
-        systemImage: String,
-        isSelected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            VStack(spacing: 5) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .foregroundStyle(isSelected ? Color(red: 0.35, green: 0.65, blue: 1.0) : .white.opacity(0.85))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(
-                isSelected
-                    ? Color.blue.opacity(0.24)
-                    : Color.white.opacity(0.05),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Shared Hover-Highlighting Menu Row
-
-private struct PopoverMenuRow: View {
-    let title: String
-    var shortcut: String? = nil
-    var trailingSymbol: String? = nil
-    var isDestructive: Bool = false
-    var isDisabled: Bool = false
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(textColor)
-
-                Spacer()
-
-                if let shortcut = shortcut {
-                    Text(shortcut)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isHovered && !isDisabled ? .white.opacity(0.9) : .secondary)
-                }
-
-                if let symbol = trailingSymbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isHovered && !isDisabled ? .white : .secondary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isHovered && !isDisabled ? (isDestructive ? Color.red.opacity(0.85) : Color.blue) : Color.clear)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .opacity(isDisabled ? 0.40 : 1.0)
-        .onHover { hovering in
-            isHovered = hovering
-        }
-    }
-
-    private var textColor: Color {
-        if isHovered && !isDisabled {
-            return .white
-        }
-        return isDestructive ? Color(red: 1.0, green: 0.36, blue: 0.36) : .white.opacity(0.92)
     }
 }

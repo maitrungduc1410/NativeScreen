@@ -216,13 +216,13 @@ public struct ProjectEditorWindowView: View {
                 VStack(spacing: 0) {
                     // Top Sub-Toolbar Right Above Preview Canvas (Consistent Liquid Glass Popovers + Generous Hover Hitboxes)
                     HStack(spacing: 10) {
-                        // 1. Output Aspect Ratio Pill Button (With Icon + Bright Name + Dimmed Ratio + Liquid Glass Popover)
+                        // 1. Output Aspect Ratio Pill Button (With Icon + Bright Name + Dimmed Ratio + Native NSMenu Liquid Glass Menu)
                         SubToolbarPillButton(
-                            tooltip: isShowingAspectRatioPopover ? nil : "Output aspect ratio",
+                            tooltip: "Output aspect ratio",
                             edge: .top,
                             isActive: false
                         ) {
-                            isShowingAspectRatioPopover.toggle()
+                            NativeSegmentContextMenuPresenter.shared.presentAspectRatioMenu(session: session, below: nil)
                         } label: {
                             HStack(spacing: 7) {
                                 AspectIconView()
@@ -249,11 +249,6 @@ public struct ProjectEditorWindowView: View {
                             }
                             .fixedSize()
                         }
-                        .popover(isPresented: $isShowingAspectRatioPopover, arrowEdge: .bottom) {
-                            AspectRatioLiquidGlassPopoverView(session: session) {
-                                isShowingAspectRatioPopover = false
-                            }
-                        }
 
                         // 2. Crop Pill Button (Opens Standalone Movable Crop Window tied to this Project Session)
                         let hasCustomCrop = (session.document.canvas.cropRect01 != .full)
@@ -276,13 +271,13 @@ public struct ProjectEditorWindowView: View {
                             .fixedSize()
                         }
 
-                        // 3. Reel Mode Pill Button (Glowing Purple Highlight when active + Liquid Glass Popover)
+                        // 3. Reel Mode Pill Button (Glowing Purple Highlight when active + Native NSMenu Liquid Glass Menu)
                         SubToolbarPillButton(
-                            tooltip: isShowingReelModePopover ? nil : "Reel mode overlay",
+                            tooltip: "Reel mode overlay",
                             edge: .top,
                             isActive: session.isReelModeActive
                         ) {
-                            isShowingReelModePopover.toggle()
+                            NativeSegmentContextMenuPresenter.shared.presentReelModeMenu(session: session)
                         } label: {
                             HStack(spacing: 6) {
                                 ReelPhoneIconView(isActive: session.isReelModeActive)
@@ -296,11 +291,6 @@ public struct ProjectEditorWindowView: View {
                                     )
                             }
                             .fixedSize()
-                        }
-                        .popover(isPresented: $isShowingReelModePopover, arrowEdge: .bottom) {
-                            ReelModeLiquidGlassPopoverView(session: session) {
-                                isShowingReelModePopover = false
-                            }
                         }
 
                         // 4. Export Still Frame Pill Button (Opens CapCut-style "Export still frames" modal)

@@ -20,11 +20,6 @@ public struct MultiTrackTimelineView: View {
     @State private var horizontalScrollView: NSScrollView?
     @State private var lastZoomForAnchor: Double = 1.0
 
-    // Right-Click Liquid Glass Context Popover State
-    @State private var contextPopoverSliceId: String?
-    @State private var contextPopoverZoomId: String?
-    @State private var contextPopoverMaskId: String?
-
     private let labelColumnWidth: CGFloat = 104
     private let trackHorizontalInset: CGFloat = 20
     private let rulerHeight: CGFloat = 30
@@ -447,9 +442,14 @@ public struct MultiTrackTimelineView: View {
                             session.selectSlice(mapped.slice.id)
                         }
                     },
-                    onRightClick: {
+                    onRightClick: { pointInView, parentView in
                         session.selectSlice(mapped.slice.id)
-                        contextPopoverSliceId = mapped.slice.id
+                        NativeSegmentContextMenuPresenter.shared.presentClipContextMenu(
+                            session: session,
+                            sliceId: mapped.slice.id,
+                            at: pointInView,
+                            in: parentView
+                        )
                     },
                     onBeginInteractive: {
                         session.beginInteractiveEdit()
@@ -467,23 +467,12 @@ public struct MultiTrackTimelineView: View {
                         session.endInteractiveEdit()
                     }
                 )
-                .popover(
-                    isPresented: Binding(
-                        get: { contextPopoverSliceId == mapped.slice.id },
-                        set: { if !$0 { contextPopoverSliceId = nil } }
-                    ),
-                    arrowEdge: .top
-                ) {
-                    ClipSliceContextPopoverView(session: session, sliceId: mapped.slice.id) {
-                        contextPopoverSliceId = nil
-                    }
-                }
             }
         }
         .frame(width: contentWidth, height: clipRowHeight)
     }
 
-    // MARK: - 2. Zoom Lane (`46pt` height, Touching Edge-to-Edge + Liquid Glass Popover)
+    // MARK: - 2. Zoom Lane (`46pt` height, Touching Edge-to-Edge + Native NSMenu Liquid Glass Context Menu)
 
     @ViewBuilder
     private func zoomLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
@@ -532,9 +521,14 @@ public struct MultiTrackTimelineView: View {
                                 session.selectZoom(zoom.id)
                             }
                         },
-                        onRightClick: {
+                        onRightClick: { pointInView, parentView in
                             session.selectZoom(zoom.id)
-                            contextPopoverZoomId = zoom.id
+                            NativeSegmentContextMenuPresenter.shared.presentZoomContextMenu(
+                                session: session,
+                                zoomId: zoom.id,
+                                at: pointInView,
+                                in: parentView
+                            )
                         },
                         onBeginInteractive: {
                             session.selectZoom(zoom.id)
@@ -551,24 +545,13 @@ public struct MultiTrackTimelineView: View {
                             session.endInteractiveEdit()
                         }
                     )
-                    .popover(
-                        isPresented: Binding(
-                            get: { contextPopoverZoomId == zoom.id },
-                            set: { if !$0 { contextPopoverZoomId = nil } }
-                        ),
-                        arrowEdge: .top
-                    ) {
-                        ZoomBlockContextPopoverView(session: session, zoomId: zoom.id) {
-                            contextPopoverZoomId = nil
-                        }
-                    }
                 }
             }
         }
         .frame(width: contentWidth, height: zoomRowHeight)
     }
 
-    // MARK: - 3. Mask Lane (`34pt` height, Touching Edge-to-Edge + Liquid Glass Popover)
+    // MARK: - 3. Mask Lane (`34pt` height, Touching Edge-to-Edge + Native NSMenu Liquid Glass Context Menu)
 
     @ViewBuilder
     private func maskLaneView(
@@ -628,9 +611,14 @@ public struct MultiTrackTimelineView: View {
                                 session.selectMask(item.id)
                             }
                         },
-                        onRightClick: {
+                        onRightClick: { pointInView, parentView in
                             session.selectMask(item.id)
-                            contextPopoverMaskId = item.id
+                            NativeSegmentContextMenuPresenter.shared.presentMaskContextMenu(
+                                session: session,
+                                maskId: item.id,
+                                at: pointInView,
+                                in: parentView
+                            )
                         },
                         onBeginInteractive: {
                             session.selectMask(item.id)
@@ -650,17 +638,6 @@ public struct MultiTrackTimelineView: View {
                             session.endInteractiveEdit()
                         }
                     )
-                    .popover(
-                        isPresented: Binding(
-                            get: { contextPopoverMaskId == item.id },
-                            set: { if !$0 { contextPopoverMaskId = nil } }
-                        ),
-                        arrowEdge: .top
-                    ) {
-                        MaskBlockContextPopoverView(session: session, maskId: item.id) {
-                            contextPopoverMaskId = nil
-                        }
-                    }
                 }
             }
         }
@@ -902,7 +879,7 @@ private struct TimelineInteractiveSegmentView: View {
     let allowVerticalTrackDrag: Bool
     let clipDecoration: ClipSegmentDecoration?
     let onClickAtLocalX: (CGFloat) -> Void
-    let onRightClick: () -> Void
+    let onRightClick: (NSPoint, NSView) -> Void
     let onBeginInteractive: () -> Void
     let onMoveBody: (Double, Double) -> Void
     let onResizeRange: (Double, Double) -> Void
@@ -1033,8 +1010,8 @@ private struct TimelineInteractiveSegmentView: View {
         .opacity(isDimmed ? 0.35 : 1.0)
         .frame(width: segWidth, height: height)
         .overlay(
-            RightClickDetectorView {
-                onRightClick()
+            RightClickDetectorView { pointInView, parentView in
+                onRightClick(pointInView, parentView)
             }
         )
         .contentShape(Rectangle())
@@ -1159,7 +1136,7 @@ private struct TimelineInteractiveSegmentView: View {
 // MARK: - AppKit Helpers for Right-Click Popover Trigger & NSScrollView Introspection
 
 private struct RightClickDetectorView: NSViewRepresentable {
-    let onRightClick: () -> Void
+    let onRightClick: (NSPoint, NSView) -> Void
 
     func makeNSView(context: Context) -> RightClickCatcherNSView {
         let v = RightClickCatcherNSView()
@@ -1172,7 +1149,7 @@ private struct RightClickDetectorView: NSViewRepresentable {
     }
 
     final class RightClickCatcherNSView: NSView {
-        var onRightClick: (() -> Void)?
+        var onRightClick: ((NSPoint, NSView) -> Void)?
 
         // Crucial: return `nil` from `hitTest` for normal left-clicks/drags/hovers so SwiftUI gestures work 100% normally,
         // and ONLY intercept right-clicks (or Control + Left Click)!
@@ -1187,12 +1164,14 @@ private struct RightClickDetectorView: NSViewRepresentable {
         }
 
         override func rightMouseDown(with event: NSEvent) {
-            onRightClick?()
+            let localPt = convert(event.locationInWindow, from: nil)
+            onRightClick?(localPt, self)
         }
 
         override func mouseDown(with event: NSEvent) {
             if event.modifierFlags.contains(.control) {
-                onRightClick?()
+                let localPt = convert(event.locationInWindow, from: nil)
+                onRightClick?(localPt, self)
             } else {
                 super.mouseDown(with: event)
             }
