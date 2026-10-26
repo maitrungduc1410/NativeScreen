@@ -930,13 +930,25 @@ public struct ExportStillFrameModalView: View {
     }
 
     private func performExportStillFrame() {
-        isExporting = true
         let cleanName = frameName
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let finalBaseName = cleanName.isEmpty ? "\(session.document.name)-frame" : cleanName
         let outURL = exportDirectoryURL.appendingPathComponent("\(finalBaseName).\(selectedFormat.fileExtension)")
+
+        // Prompt user before overwriting an existing file in the destination folder!
+        if FileManager.default.fileExists(atPath: outURL.path) {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "“\(outURL.lastPathComponent)” already exists. Do you want to replace it?"
+            alert.informativeText = "A file or folder with the same name already exists in the folder \(exportDirectoryURL.lastPathComponent). Replacing it will overwrite its current contents."
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+
+        isExporting = true
         let targetH = selectedResolution.pixelHeight
         let format = selectedFormat
 

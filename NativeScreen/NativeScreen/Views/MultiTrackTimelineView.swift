@@ -2000,6 +2000,7 @@ private struct SpeedUpTypingSuggestionChipView: View {
     let suggestion: ProjectSession.TypingSuggestionRange
     let width: CGFloat
 
+    @Environment(\.isTooltipAndHoverBlocked) private var isTooltipAndHoverBlocked
     @State private var isHovered = false
     @State private var isShowingPopover = false
     @State private var anchorNSView: NSView?
@@ -2048,7 +2049,7 @@ private struct SpeedUpTypingSuggestionChipView: View {
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
             }
-            if hovering && !isShowingPopover, let v = anchorNSView, let win = v.window {
+            if hovering && !isShowingPopover && !isTooltipAndHoverBlocked, let v = anchorNSView, let win = v.window {
                 let rectInWin = v.convert(v.bounds, to: nil)
                 let screenRect = win.convertToScreen(rectInWin)
                 SharedFloatingTooltipWindowController.shared.showTooltip(

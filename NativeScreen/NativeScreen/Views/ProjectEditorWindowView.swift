@@ -40,6 +40,10 @@ public struct ProjectEditorWindowView: View {
         self.session = session
     }
 
+    private var isModalOverlayActive: Bool {
+        isShowingCommandMenu || isShowingExportSheet || isExporting || session.isShowingStillFrameExportModal
+    }
+
     public var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -580,6 +584,8 @@ public struct ProjectEditorWindowView: View {
             MultiTrackTimelineView(session: session)
                 .frame(height: 255)
             }
+            .allowsHitTesting(!isModalOverlayActive)
+            .environment(\.isTooltipAndHoverBlocked, isModalOverlayActive)
 
             // 4. COMMAND MENU OVERLAY
             if isShowingCommandMenu {
@@ -654,6 +660,11 @@ public struct ProjectEditorWindowView: View {
         .sheet(isPresented: $session.isShowingStillFrameExportModal) {
             ExportStillFrameModalView(session: session) {
                 session.isShowingStillFrameExportModal = false
+            }
+        }
+        .onChange(of: isModalOverlayActive) { _, active in
+            if active {
+                SharedFloatingTooltipWindowController.shared.hideTooltip()
             }
         }
         .onChange(of: isTitleFieldFocused) { _, focused in
@@ -956,6 +967,8 @@ public struct ProjectEditorWindowView: View {
             activeExportDestinationLabel = "Clipboard (\(cleanName).\(ext))"
         } else {
             let savePanel = NSSavePanel()
+            savePanel.canCreateDirectories = true
+            savePanel.isExtensionHidden = false
             switch exportConfig.format {
             case .mp4:
                 savePanel.allowedContentTypes = [.mpeg4Movie]
@@ -967,6 +980,23 @@ public struct ProjectEditorWindowView: View {
             savePanel.nameFieldStringValue = "\(session.document.name).\(exportConfig.format.fileExtension)"
 
             guard savePanel.runModal() == .OK, let chosenURL = savePanel.url else { return }
+
+            // When exporting MP4 with `Both` codec, a companion `<name>-hevc.mp4` file is also written.
+            // If `<name>-hevc.mp4` already exists on disk (and wasn't already covered by NSSavePanel's primary file check), confirm replacement!
+            if exportConfig.format == .mp4 && exportConfig.mp4Codec == .both {
+                let baseName = chosenURL.deletingPathExtension().lastPathComponent
+                let hevcURL = chosenURL.deletingLastPathComponent().appendingPathComponent("\(baseName)-hevc.mp4")
+                if !FileManager.default.fileExists(atPath: chosenURL.path) && FileManager.default.fileExists(atPath: hevcURL.path) {
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "“\(hevcURL.lastPathComponent)” already exists. Do you want to replace it?"
+                    alert.informativeText = "A file or folder with the same name already exists in the folder \(hevcURL.deletingLastPathComponent().lastPathComponent). Replacing it will overwrite its current contents."
+                    alert.addButton(withTitle: "Replace")
+                    alert.addButton(withTitle: "Cancel")
+                    guard alert.runModal() == .alertFirstButtonReturn else { return }
+                }
+            }
+
             outURL = chosenURL
             activeExportDestinationLabel = chosenURL.path
         }

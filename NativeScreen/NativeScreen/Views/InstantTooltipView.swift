@@ -680,6 +680,17 @@ public struct InstantTooltipBubble: View {
 
 // MARK: - 4. Exact 120Hz Directional `.hover-magnet` AppKit Layer Engine
 
+private struct TooltipHoverBlockedEnvironmentKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+
+public extension EnvironmentValues {
+    var isTooltipAndHoverBlocked: Bool {
+        get { self[TooltipHoverBlockedEnvironmentKey.self] }
+        set { self[TooltipHoverBlockedEnvironmentKey.self] = newValue }
+    }
+}
+
 private struct ScalarSpring1D {
     var value: Double = 0.0
     var velocity: Double = 0.0
@@ -747,6 +758,25 @@ public final class HoverMagnetTrackingNSView: NSView {
             }
         }
     }
+    var isHoverBlocked: Bool = false {
+        didSet {
+            guard oldValue != isHoverBlocked else { return }
+            if isHoverBlocked {
+                if let existing = trackingAreaRef {
+                    removeTrackingArea(existing)
+                    trackingAreaRef = nil
+                }
+                isHoveredSpring.target = 0.0
+                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: self)
+                startSpringTimerIfNeeded()
+            } else {
+                updateTrackingAreas()
+            }
+        }
+    }
+    var isCurrentlyHovered: Bool {
+        isHoveredSpring.target > 0.5 && !isButtonDisabled && !isHoverBlocked
+    }
     var isRailTab: Bool = false {
         didSet {
             if oldValue != isRailTab {
@@ -808,7 +838,9 @@ public final class HoverMagnetTrackingNSView: NSView {
         super.updateTrackingAreas()
         if let existing = trackingAreaRef {
             removeTrackingArea(existing)
+            trackingAreaRef = nil
         }
+        guard !isHoverBlocked else { return }
         let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
@@ -837,7 +869,7 @@ public final class HoverMagnetTrackingNSView: NSView {
     }
 
     public override func mouseEntered(with event: NSEvent) {
-        guard !isButtonDisabled else { return }
+        guard !isButtonDisabled, !isHoverBlocked, window?.attachedSheet == nil else { return }
         let targetOff = computeMagnetTargetOffset(for: event)
 
         // Exact (`if (type === "enter") offsetSpring.snapToTarget(targetOff)`):
@@ -855,7 +887,7 @@ public final class HoverMagnetTrackingNSView: NSView {
     }
 
     public override func mouseMoved(with event: NSEvent) {
-        guard !isButtonDisabled else { return }
+        guard !isButtonDisabled, !isHoverBlocked, window?.attachedSheet == nil else { return }
         let targetOff = computeMagnetTargetOffset(for: event)
         offsetXSpring.target = Double(targetOff.x)
         offsetYSpring.target = Double(targetOff.y)
@@ -884,7 +916,7 @@ public final class HoverMagnetTrackingNSView: NSView {
     }
 
     func presentTooltipIfNeeded() {
-        guard !isButtonDisabled, !tooltip.isEmpty, let win = window else { return }
+        guard !isButtonDisabled, !isHoverBlocked, !tooltip.isEmpty, let win = window, win.attachedSheet == nil else { return }
         let rectInWin = convert(bounds, to: nil)
         let screenRect = win.convertToScreen(rectInWin)
         SharedFloatingTooltipWindowController.shared.showTooltip(
@@ -1020,6 +1052,7 @@ public struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
     public let cornerRadius: CGFloat
     public let isActive: Bool
     public let isDisabled: Bool
+    public let isHoverBlocked: Bool
     public let isRailTab: Bool
     public let hasActiveBorder: Bool
     public let activeRGB: (CGFloat, CGFloat, CGFloat)
@@ -1032,6 +1065,7 @@ public struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
         cornerRadius: CGFloat,
         isActive: Bool,
         isDisabled: Bool = false,
+        isHoverBlocked: Bool = false,
         isRailTab: Bool = false,
         hasActiveBorder: Bool = false,
         activeRGB: (CGFloat, CGFloat, CGFloat) = (0.45, 0.36, 0.96),
@@ -1043,6 +1077,7 @@ public struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
         self.cornerRadius = cornerRadius
         self.isActive = isActive
         self.isDisabled = isDisabled
+        self.isHoverBlocked = isHoverBlocked
         self.isRailTab = isRailTab
         self.hasActiveBorder = hasActiveBorder
         self.activeRGB = activeRGB
@@ -1057,6 +1092,7 @@ public struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
         v.cornerRadius = cornerRadius
         v.isButtonActive = isActive
         v.isButtonDisabled = isDisabled
+        v.isHoverBlocked = isHoverBlocked
         v.isRailTab = isRailTab
         v.hasActiveBorder = hasActiveBorder
         v.activeRGB = activeRGB
@@ -1074,10 +1110,11 @@ public struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
         nsView.cornerRadius = cornerRadius
         nsView.isButtonActive = isActive
         nsView.isButtonDisabled = isDisabled
+        nsView.isHoverBlocked = isHoverBlocked
         nsView.isRailTab = isRailTab
         nsView.hasActiveBorder = hasActiveBorder
         nsView.activeRGB = activeRGB
-        if tooltipChanged {
+        if tooltipChanged && nsView.isCurrentlyHovered {
             nsView.presentTooltipIfNeeded()
         }
     }
@@ -1097,6 +1134,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     let action: () -> Void
     @ViewBuilder let label: () -> LabelContent
 
+    @Environment(\.isTooltipAndHoverBlocked) private var isTooltipAndHoverBlocked
     @State private var magnetNSView: HoverMagnetTrackingNSView?
 
     public init(
@@ -1125,7 +1163,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
 
     public var body: some View {
         Button {
-            guard !isDisabled else { return }
+            guard !isDisabled, !isTooltipAndHoverBlocked else { return }
             SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: magnetNSView)
             action()
         } label: {
@@ -1153,6 +1191,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
                     cornerRadius: cornerRadius,
                     isActive: isActive,
                     isDisabled: isDisabled,
+                    isHoverBlocked: isTooltipAndHoverBlocked,
                     isRailTab: edge == .leading,
                     hasActiveBorder: false,
                     activeRGB: (0.45, 0.36, 0.96)
@@ -1176,6 +1215,7 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
     let onActionWithAnchorView: ((NSView?) -> Void)?
     @ViewBuilder let label: () -> LabelContent
 
+    @Environment(\.isTooltipAndHoverBlocked) private var isTooltipAndHoverBlocked
     @State private var magnetNSView: HoverMagnetTrackingNSView?
 
     public init(
@@ -1196,6 +1236,7 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
 
     public var body: some View {
         Button {
+            guard !isTooltipAndHoverBlocked else { return }
             SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: magnetNSView)
             if let onActionWithAnchorView {
                 onActionWithAnchorView(magnetNSView)
@@ -1214,6 +1255,7 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
                         cornerRadius: 6,
                         isActive: isActive,
                         isDisabled: false,
+                        isHoverBlocked: isTooltipAndHoverBlocked,
                         isRailTab: false,
                         hasActiveBorder: isActive,
                         activeRGB: (0.35, 0.28, 0.72)
