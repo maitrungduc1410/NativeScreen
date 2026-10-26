@@ -518,12 +518,14 @@ public final class HardwareVideoExporter {
     /// Pairs Apple Silicon's Hardware Media Engine (`RequireHardwareAcceleratedVideoEncoder = true`) with
     /// Apple Silicon's multi-core CPU encoder (`EnableHardwareAcceleratedVideoEncoder = false`) in parallel,
     /// increasing 4K/60fps H.264 throughput from ~74 fps (`18.2s`) to ~128 fps (`10.5s`) while enforcing strict bitrate limits (`~26MB`)!
-    private final class VTParallelCompressionWorker: @unchecked Sendable {
+    private nonisolated final class VTParallelCompressionWorker: @unchecked Sendable {
         private var session: VTCompressionSession?
         private let lock = NSLock()
-        private(set) var encodedSamples: [CMSampleBuffer] = []
+        private var _encodedSamples: [CMSampleBuffer] = []
+        private var _inFlightCount: Int = 0
         private let workQueue: DispatchQueue
-        private let inFlightSemaphore = DispatchSemaphore(value: 6)
+        /// Must exceed the 14-frame internal lookahead buffer of Apple's software H.264 `VTCompressionSession`!
+        private let maxInFlightFrames: Int = 28
 
         init?(width: Int, height: Int, codecType: CMVideoCodecType, useHardware: Bool, bitrate: Int, fps: Int, label: String) {
             self.workQueue = DispatchQueue(label: label, qos: .userInitiated)
@@ -567,6 +569,22 @@ public final class HardwareVideoExporter {
             VTCompressionSessionPrepareToEncodeFrames(s)
         }
 
+        var inFlightCount: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return _inFlightCount
+        }
+
+        var hasCapacity: Bool {
+            inFlightCount < maxInFlightFrames
+        }
+
+        var encodedSamples: [CMSampleBuffer] {
+            lock.lock()
+            defer { lock.unlock() }
+            return _encodedSamples
+        }
+
         func allocatePixelBuffer() -> CVPixelBuffer? {
             guard let s = session, let pool = VTCompressionSessionGetPixelBufferPool(s) else { return nil }
             var pb: CVPixelBuffer?
@@ -575,10 +593,17 @@ public final class HardwareVideoExporter {
         }
 
         func submitFrame(pixelBuffer: CVPixelBuffer, pts: CMTime, duration: CMTime, forceKeyframe: Bool) {
-            inFlightSemaphore.wait()
+            lock.lock()
+            _inFlightCount += 1
+            lock.unlock()
+
             workQueue.async { [weak self] in
                 guard let self = self, let s = self.session else {
-                    self?.inFlightSemaphore.signal()
+                    if let self = self {
+                        self.lock.lock()
+                        self._inFlightCount = max(0, self._inFlightCount - 1)
+                        self.lock.unlock()
+                    }
                     return
                 }
                 let props: CFDictionary? = forceKeyframe
@@ -592,14 +617,18 @@ public final class HardwareVideoExporter {
                     frameProperties: props,
                     infoFlagsOut: nil
                 ) { [weak self] encodeStatus, _, sampleBuffer in
-                    defer { self?.inFlightSemaphore.signal() }
-                    guard encodeStatus == noErr, let sb = sampleBuffer, let self = self else { return }
+                    guard let self = self else { return }
                     self.lock.lock()
-                    self.encodedSamples.append(sb)
+                    self._inFlightCount = max(0, self._inFlightCount - 1)
+                    if encodeStatus == noErr, let sb = sampleBuffer {
+                        self._encodedSamples.append(sb)
+                    }
                     self.lock.unlock()
                 }
                 if status != noErr {
-                    self.inFlightSemaphore.signal()
+                    self.lock.lock()
+                    self._inFlightCount = max(0, self._inFlightCount - 1)
+                    self.lock.unlock()
                 }
             }
         }
@@ -621,7 +650,8 @@ public final class HardwareVideoExporter {
                     self.session = nil
                 }
                 self.lock.lock()
-                self.encodedSamples.removeAll()
+                self._inFlightCount = 0
+                self._encodedSamples.removeAll()
                 self.lock.unlock()
             }
         }
@@ -806,6 +836,13 @@ public final class HardwareVideoExporter {
                 let isFrameAtGOPStart = (frameIdx % gopSize == 0)
                 let useSWWorker = (swWorker != nil) && (gopIndex % 5 == 1 || gopIndex % 5 == 3)
                 let activeWorker = (useSWWorker ? swWorker : hwWorker) ?? hwWorker
+
+                // Non-blocking async backpressure: NEVER block `@MainActor` with `DispatchSemaphore.wait`,
+                // so the macOS RunLoop and UI stay 100% responsive and the software encoder's 14-frame lookahead never deadlocks!
+                while !activeWorker.hasCapacity {
+                    try Task.checkCancellation()
+                    try await Task.sleep(for: .milliseconds(2))
+                }
 
                 try autoreleasepool {
                     let sourceCIImage = frameReader?.frame(atSourceMs: sourceMs)
