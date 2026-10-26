@@ -14,10 +14,10 @@
    - **Memory Footprint:** **`< 120 MB RAM`** per open project (compared to ~950 MB+ in Electron-based alternatives).
    - **Zero-Copy GPU Pipeline:** Screen frames (`CVPixelBuffer` / `IOSurface` on macOS, `ID3D11Texture2D` on Windows) stay in GPU memory from capture/decode through shader compositing to hardware encoding.
    - **Zero FFmpeg Bloat:** All core recording, demuxing, decoding, compositing, and hardware encoding (H.264, HEVC, ProRes) use native OS media engines (`ScreenCaptureKit` + `AVFoundation` + `VideoToolbox` on macOS; `Windows.Graphics.Capture` + `Media Foundation` on Windows).
-3. **Cinematic Visual Quality (Better than NativeScreen):**
+3. **Cinematic Visual Quality:**
    - Physically based spring animations (cursor glide + virtual camera dolly/zoom).
    - Real-time GPU camera & cursor motion blur.
-   - Unlimited **Multi-Track Blur & Spotlight Masks** (solving the single-track limitation).
+   - Unlimited **Multi-Track Blur & Spotlight Masks**.
    - High-DPI vector/high-res cursor re-rendering (real cursor is excluded from raw screen capture and synthesized in post-processing).
 4. **Multi-Project Document Architecture:**
    - On macOS (and Windows), users can open, edit, and export **multiple `.nativescreen` projects simultaneously** in independent native windows or tabs (`NSDocument` / SwiftUI multi-window architecture).

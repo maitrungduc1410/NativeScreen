@@ -29,7 +29,7 @@ MyDemo.nativescreen/
         └── window.jsonl          # Target window resize/move bounds changes during capture
 ```
 
-> **Backward/Direct MP4 Compatibility:** Just like our findings in the reference analysis, the NativeScreen video reader checks the extension of `outputFilename` in `recording/metadata.json`. If it ends in `.m3u8`, it loads the segmented fMP4 stream; if it ends in `.mp4` or `.mov`, it reads the standalone video file directly.
+> **Backward/Direct MP4 Compatibility:** The NativeScreen video reader checks the extension of `outputFilename` in `recording/metadata.json`. If it ends in `.m3u8`, it loads the segmented fMP4 stream; if it ends in `.mp4` or `.mov`, it reads the standalone video file directly.
 
 ---
 
@@ -355,6 +355,6 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
 }
 ```
 
-### Key Improvements over the Format:
+### Key Architectural Advantages:
 1. **`timeline.maskTracks` (Multi-Track Masks with Keyframes):** Instead of a flat single-track array where masks cannot overlap comfortably, `maskTracks` allows **unlimited parallel tracks of Blur / Pixelate / Spotlight regions**, and each mask item supports `keyframes` so a blur box can smoothly move when the user scrolls the page!
 2. **Self-Contained `assets/` Directory:** Copying the active wallpaper (`assets/background.jpg`) into the `.nativescreen` bundle ensures 100% cross-platform visual parity when opening a Mac project on Windows.

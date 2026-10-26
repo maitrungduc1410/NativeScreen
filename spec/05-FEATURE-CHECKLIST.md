@@ -7,7 +7,7 @@
 ---
 
 ## Phase 1: MVP Core (macOS — Record, Auto-Zoom, Multi-Blur, Edit & Export)
-*Goal: Replace the need for external editors (like CapCut) by delivering a super-fast, 100% native macOS recorder & editor with auto-zoom, backgrounds, and unlimited blur tracks.*
+*Goal: Deliver a super-fast, 100% native macOS recorder & editor with auto-zoom, backgrounds, and unlimited blur tracks.*
 
 ### 1.1. Project Package (`.nativescreen`) & State Engine
 - [x] Define `ProjectDocument`, `RecordingMetadata`, and telemetry `Codable` models matching `spec/02-FILE-FORMAT-AND-SCHEMA.md`.
@@ -72,7 +72,7 @@
 ---
 
 ## Phase 2: Cinematic Polish (Motion Blur, Cursor Magic, Audio & UX Refinements)
-*Goal: Match 100% of the signature motion polish and workflow speed.*
+*Goal: Deliver studio-grade motion polish and workflow speed.*
 
 - [x] **GPU Camera & Cursor Motion Blur:** True 1-frame shutter window (`t` vs `t - 16.67ms`) directional translational blur (`CIMotionBlur`) and fast 3-tap radial zoom shutter blend during fast zooms and pans, plus live Newtonian `SpringPhysicsDemoDotView` preview in the Animations Inspector.
 - [x] **Advanced Cursor Polish:**
@@ -90,7 +90,7 @@
   - [ ] Post-recording Voiceover recording directly onto the timeline.
 - [x] **Canvas Crop Tool:** Interactive crop modal & overlay to trim unwanted margins of the recorded screen/window.
 - [x] **Reel Mode Safe-Zone Overlay:** Interactive TikTok, Instagram Reels & YouTube Shorts safe-zone preview overlay.
-- [x] **Extract Current Frame:** CapCut/`Export still frames` modal (`PNG` / `JPEG` squircle toggles, resolution up to `4K`, live preview) and instant `Copy current frame to clipboard`.
+- [x] **Extract Current Frame:** Dedicated `Export still frames` modal (`PNG` / `JPEG` squircle toggles, resolution up to `4K`, live preview) and instant `Copy current frame to clipboard`.
 - [x] **Command Menu (`⌘K`):** Global searchable command palette (`CommandMenuOverlayView`) with keyboard navigation across all editor actions.
 - [x] **Pure AppKit Zero-Lag Tooltips:** Borderless floating `NSPanel` rendered via `PureAppKitTooltipCalloutView` (`< 0.02ms` draw time, zero `NSHostingView` overhead during 120Hz playback).
 - [ ] **Presets System:** Save and apply reusable style presets (Background + Padding + Shadow + Cursor + Zoom settings).
@@ -101,7 +101,7 @@
 ---
 
 ## Phase 3: Pro Visual Features (Webcam, Loupe, Device Mockups & Shortcuts)
-*Goal: Complete visual feature parity with 4.x.*
+*Goal: Complete pro visual feature suite.*
 
 - [ ] **Webcam Overlay & Layouts:**
   - [ ] Simultaneous webcam recording (`AVCaptureSession`) saved to `recording/webcam.mp4`.
