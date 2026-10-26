@@ -52,6 +52,23 @@ public final class MetalFrameCompositor {
     private var lastMaskedScreenKey: MaskedScreenCacheKey?
     private var cachedMaskedScreenImage: CIImage?
 
+    // Pass 3 (Screen Rounded Corners & Drop Shadow Stencil) Cache — avoids running 4K Gaussian blur & rounded-rect generators on every frame!
+    private struct ShadowCacheKey: Equatable {
+        let screenRect: CGRect
+        let canvasRect: CGRect
+        let scaledRadius: CGFloat
+        let shadowConfig: FrameShadowConfig
+    }
+    private var lastShadowCacheKey: ShadowCacheKey?
+    private var cachedBlurredShadowImage: CIImage?
+
+    private struct RoundedMaskCacheKey: Equatable {
+        let rect: CGRect
+        let radius: CGFloat
+    }
+    private var lastRoundedMaskCacheKey: RoundedMaskCacheKey?
+    private var cachedRoundedMaskImage: CIImage?
+
     // Pass 6 (3D Shortcut Keycap Sprite Cache) — avoids re-rasterizing keycap graphics on every frame!
     private var keycapSpriteCache: [String: CIImage] = [:]
 
@@ -173,23 +190,42 @@ public final class MetalFrameCompositor {
         }
 
         // Fast GPU Rounded-Rectangle Drop Shadow (`Classic` vs `Directional` + `Distance`, `Angle`, `Blur`)
+        // Cached across frames so the 4K Gaussian shadow blur is evaluated only once when parameters change, not on every video frame!
         if doc.frameStyle.shadow.enabled && doc.frameStyle.shadow.intensity > 0.01 {
-            let shadowDist = CGFloat(doc.frameStyle.shadow.distance) * (outputSize.height / 900.0)
-            let shadowBlur = CGFloat(doc.frameStyle.shadow.blur) * (outputSize.height / 900.0)
-            let shadowAlpha = CGFloat(doc.frameStyle.shadow.intensity)
-            let angleRad = CGFloat(doc.frameStyle.shadow.angleDegrees) * .pi / 180.0
-            let dx = doc.frameStyle.shadow.isDirectional ? (cos(angleRad) * shadowDist * 0.55) : 0.0
-            let dy = doc.frameStyle.shadow.isDirectional ? (-sin(angleRad) * shadowDist * 0.55) : (-shadowDist * 0.20)
-            let shadowRect = screenFrameRect.offsetBy(dx: dx, dy: dy)
+            let shadowKey = ShadowCacheKey(
+                screenRect: screenFrameRect,
+                canvasRect: canvasRect,
+                scaledRadius: scaledRadius,
+                shadowConfig: doc.frameStyle.shadow
+            )
+            let blurredShadow: CIImage?
+            if shadowKey == lastShadowCacheKey, let cached = cachedBlurredShadowImage {
+                blurredShadow = cached
+            } else {
+                let shadowDist = CGFloat(doc.frameStyle.shadow.distance) * (outputSize.height / 900.0)
+                let shadowBlur = CGFloat(doc.frameStyle.shadow.blur) * (outputSize.height / 900.0)
+                let shadowAlpha = CGFloat(doc.frameStyle.shadow.intensity)
+                let angleRad = CGFloat(doc.frameStyle.shadow.angleDegrees) * .pi / 180.0
+                let dx = doc.frameStyle.shadow.isDirectional ? (cos(angleRad) * shadowDist * 0.55) : 0.0
+                let dy = doc.frameStyle.shadow.isDirectional ? (-sin(angleRad) * shadowDist * 0.55) : (-shadowDist * 0.20)
+                let shadowRect = screenFrameRect.offsetBy(dx: dx, dy: dy)
 
-            if let shadowBox = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                "inputExtent": CIVector(cgRect: shadowRect),
-                "inputRadius": scaledRadius,
-                "inputColor": CIColor(red: 0, green: 0, blue: 0, alpha: shadowAlpha)
-            ])?.outputImage {
-                let blurredShadow = shadowBox
-                    .applyingGaussianBlur(sigma: Double(max(1.0, shadowBlur * 0.45)))
-                    .cropped(to: canvasRect)
+                if let shadowBox = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                    "inputExtent": CIVector(cgRect: shadowRect),
+                    "inputRadius": scaledRadius,
+                    "inputColor": CIColor(red: 0, green: 0, blue: 0, alpha: shadowAlpha)
+                ])?.outputImage {
+                    let computedShadow = shadowBox
+                        .applyingGaussianBlur(sigma: Double(max(1.0, shadowBlur * 0.45)))
+                        .cropped(to: canvasRect)
+                    lastShadowCacheKey = shadowKey
+                    cachedBlurredShadowImage = computedShadow
+                    blurredShadow = computedShadow
+                } else {
+                    blurredShadow = nil
+                }
+            }
+            if let blurredShadow {
                 positionedScreen = positionedScreen.composited(over: blurredShadow)
             }
         }
@@ -629,13 +665,22 @@ public final class MetalFrameCompositor {
     }
 
     private func applyRoundedCorners(to image: CIImage, rect: CGRect, radius: CGFloat) -> CIImage {
-        guard radius > 0.5,
-              let roundedMask = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                  "inputExtent": CIVector(cgRect: rect),
-                  "inputRadius": radius,
-                  "inputColor": CIColor.white
-              ])?.outputImage else {
-            return image
+        guard radius > 0.5 else { return image }
+        let maskKey = RoundedMaskCacheKey(rect: rect, radius: radius)
+        let roundedMask: CIImage
+        if maskKey == lastRoundedMaskCacheKey, let cached = cachedRoundedMaskImage {
+            roundedMask = cached
+        } else {
+            guard let generated = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                "inputExtent": CIVector(cgRect: rect),
+                "inputRadius": radius,
+                "inputColor": CIColor.white
+            ])?.outputImage else {
+                return image
+            }
+            lastRoundedMaskCacheKey = maskKey
+            cachedRoundedMaskImage = generated
+            roundedMask = generated
         }
         let clearBG = CIImage.empty().cropped(to: rect)
         return image.applyingFilter("CIBlendWithMask", parameters: [
