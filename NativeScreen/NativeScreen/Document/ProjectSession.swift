@@ -1706,7 +1706,44 @@ public final class ProjectSession: Identifiable {
             )
         }
 
-        return (telemetryClusters + customClusters).sorted { $0.displayStartMs < $1.displayStartMs }
+        let allCombined = (telemetryClusters + customClusters).sorted {
+            if abs($0.displayStartMs - $1.displayStartMs) > 0.01 {
+                return $0.displayStartMs < $1.displayStartMs
+            }
+            return $0.id < $1.id
+        }
+
+        // Enforce strict non-overlapping spans within each shortcut track!
+        let primaryId = document.captions.shortcutTracks.first?.id ?? "default-shortcuts-track"
+        var byTrack: [String: [ShortcutPressCluster]] = [:]
+        for c in allCombined {
+            let effectiveTrackId = (c.trackId == "default-shortcuts-track") ? primaryId : c.trackId
+            byTrack[effectiveTrackId, default: []].append(c)
+        }
+
+        var sanitized: [ShortcutPressCluster] = []
+        let maxSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
+        for (_, var list) in byTrack {
+            list.sort { $0.displayStartMs < $1.displayStartMs }
+            var currentMinStart = 0.0
+            for i in 0..<list.count {
+                if list[i].displayStartMs < currentMinStart {
+                    let dur = max(220.0, list[i].displayEndMs - list[i].displayStartMs)
+                    list[i].displayStartMs = currentMinStart
+                    list[i].displayEndMs = min(maxSourceMs, currentMinStart + dur)
+                }
+                if i + 1 < list.count && list[i].displayEndMs > list[i + 1].displayStartMs {
+                    let mid = max(list[i].displayStartMs + 220.0, list[i + 1].displayStartMs)
+                    list[i].displayEndMs = mid
+                }
+                if list[i].displayEndMs - list[i].displayStartMs >= 150.0 {
+                    currentMinStart = list[i].displayEndMs
+                    sanitized.append(list[i])
+                }
+            }
+        }
+
+        return sanitized.sorted { $0.displayStartMs < $1.displayStartMs }
     }
 
     public func shortcutClusters(forTrackId trackId: String) -> [ShortcutPressCluster] {
@@ -1816,7 +1853,7 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Inserts a new custom shortcut segment on the given track (or at the playhead) and selects it immediately.
+    /// Inserts a new custom shortcut segment on the given track (or at the playhead) into the available non-overlapping gap and selects it immediately.
     @discardableResult
     public func addCustomShortcut(
         trackId: String? = nil,
@@ -1825,10 +1862,40 @@ public final class ProjectSession: Identifiable {
         modifiers: [String] = ["Meta"],
         primaryKey: String = "K"
     ) -> String {
-        let maxDur = max(1000.0, metadata.durationMs)
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? max(1000.0, metadata.durationMs)
         let targetTrackId = trackId ?? document.captions.shortcutTracks.first?.id ?? "default-shortcuts-track"
-        let start = max(0.0, min(maxDur - 400.0, sourceStartMs ?? currentSourceTimeMs))
-        let end = max(start + 350.0, min(maxDur, sourceEndMs ?? (start + 1600.0)))
+        let existing = shortcutClusters(forTrackId: targetTrackId).sorted { $0.displayStartMs < $1.displayStartMs }
+
+        let anchorMs = sourceStartMs ?? currentSourceTimeMs
+
+        // If `anchorMs` is already inside an existing shortcut on this track (when no explicit range was passed),
+        // either select it or place the new shortcut in the next available gap after it!
+        let prevEnd = existing.last(where: { $0.displayEndMs <= anchorMs + 1.0 })?.displayEndMs ?? earliestSourceMs
+        let nextStart = existing.first(where: { $0.displayStartMs >= anchorMs - 1.0 && $0.displayEndMs > anchorMs + 1.0 })?.displayStartMs ?? latestSourceMs
+
+        var start: Double
+        var end: Double
+
+        if nextStart - prevEnd >= 300.0 {
+            let desiredDur = min(sourceEndMs.map { max(300.0, $0 - (sourceStartMs ?? anchorMs)) } ?? 1600.0, nextStart - prevEnd)
+            start = max(prevEnd, min(nextStart - desiredDur, anchorMs))
+            end = min(nextStart, start + desiredDur)
+        } else if let containingIdx = existing.firstIndex(where: { anchorMs >= $0.displayStartMs && anchorMs <= $0.displayEndMs }) {
+            // Find the gap right after `containing`
+            let cont = existing[containingIdx]
+            let gapStart = cont.displayEndMs
+            let gapEnd = (containingIdx + 1 < existing.count) ? existing[containingIdx + 1].displayStartMs : latestSourceMs
+            if gapEnd - gapStart >= 300.0 {
+                start = gapStart
+                end = min(gapEnd, gapStart + 1500.0)
+            } else {
+                selectShortcut(cont.id)
+                return cont.id
+            }
+        } else {
+            return ""
+        }
 
         let newSeg = CustomShortcutSegment(
             id: UUID().uuidString,
@@ -1848,29 +1915,61 @@ public final class ProjectSession: Identifiable {
         return newSeg.id
     }
 
-    /// Duplicates an existing shortcut segment right after it on the same track.
+    /// Duplicates an existing shortcut segment right after it on the same track (or splits it in half if touching the next segment, matching `duplicateZoom`!).
     public func duplicateShortcut(_ cluster: ShortcutPressCluster) {
-        let maxDur = max(1000.0, metadata.durationMs)
-        let dur = max(400.0, cluster.displayEndMs - cluster.displayStartMs)
-        let start = min(maxDur - 350.0, cluster.displayEndMs + 60.0)
-        let end = min(maxDur, start + dur)
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? max(1000.0, metadata.durationMs)
+        let sorted = shortcutClusters(forTrackId: cluster.trackId).sorted { $0.displayStartMs < $1.displayStartMs }
+        guard let sortedIdx = sorted.firstIndex(where: { $0.id == cluster.id }) else { return }
+
+        let orig = sorted[sortedIdx]
+        let nextStart = (sortedIdx + 1 < sorted.count) ? sorted[sortedIdx + 1].displayStartMs : latestSourceMs
+        let availAfter = nextStart - orig.displayEndMs
+        let origDur = max(300.0, orig.displayEndMs - orig.displayStartMs)
         let customStyle = document.captions.shortcutStyleOverrides[cluster.id]
             ?? (cluster.isCustomSegment ? document.captions.customShortcuts.first(where: { $0.id == cluster.id })?.customStyle : nil)
 
-        let copy = CustomShortcutSegment(
-            id: UUID().uuidString,
-            trackId: cluster.trackId,
-            sourceStartMs: start,
-            sourceEndMs: end,
-            modifiers: cluster.modifiers,
-            primaryKey: cluster.primaryKey,
-            isHidden: false,
-            customStyle: customStyle
-        )
-        mutate { doc in
-            doc.captions.customShortcuts.append(copy)
+        if availAfter >= 300.0 {
+            let start = orig.displayEndMs
+            let end = min(nextStart, start + origDur)
+            let copy = CustomShortcutSegment(
+                id: UUID().uuidString,
+                trackId: cluster.trackId,
+                sourceStartMs: start,
+                sourceEndMs: end,
+                modifiers: cluster.modifiers,
+                primaryKey: cluster.primaryKey,
+                isHidden: false,
+                customStyle: customStyle
+            )
+            mutate { doc in
+                doc.captions.customShortcuts.append(copy)
+            }
+            selectShortcut(copy.id)
+        } else if origDur >= 500.0 {
+            // Split the original segment in half at `mid` so the duplicate sits cleanly beside it with zero overlap!
+            let mid = (orig.displayStartMs + orig.displayEndMs) * 0.5
+            let copy = CustomShortcutSegment(
+                id: UUID().uuidString,
+                trackId: cluster.trackId,
+                sourceStartMs: mid,
+                sourceEndMs: orig.displayEndMs,
+                modifiers: cluster.modifiers,
+                primaryKey: cluster.primaryKey,
+                isHidden: false,
+                customStyle: customStyle
+            )
+            mutate { doc in
+                if orig.isCustomSegment {
+                    if let idx = doc.captions.customShortcuts.firstIndex(where: { $0.id == orig.id }) {
+                        doc.captions.customShortcuts[idx].sourceEndMs = mid
+                    }
+                } else {
+                    doc.captions.shortcutTimingOverrides[orig.firstKeyDownMsInt] = Point01(x: orig.displayStartMs, y: mid)
+                }
+                doc.captions.customShortcuts.append(copy)
+            }
+            selectShortcut(copy.id)
         }
-        selectShortcut(copy.id)
     }
 
     /// Adds a new Shortcut Track (with a distinct default position like Top / Left / Right) and optionally inserts a sample shortcut on it.
@@ -1900,11 +1999,25 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    /// Moves a Shortcut segment horizontally while strictly preserving its exact `durationMs` and clamping against adjacent neighbors on the same track (0ms overlap!).
     public func moveShortcut(_ cluster: ShortcutPressCluster, desiredStartMs: Double, durationMs: Double) {
-        let maxDur = max(500.0, metadata.durationMs)
-        let dur = max(220.0, durationMs)
-        let clampedStart = max(0.0, min(maxDur - dur, desiredStartMs))
-        let clampedEnd = clampedStart + dur
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? max(500.0, metadata.durationMs)
+        let span = max(220.0, durationMs)
+
+        let sorted = shortcutClusters(forTrackId: cluster.trackId).sorted { $0.displayStartMs < $1.displayStartMs }
+        guard let sortedIdx = sorted.firstIndex(where: { $0.id == cluster.id }) else { return }
+
+        let lowerBound = sortedIdx > 0
+            ? max(earliestSourceMs, sorted[sortedIdx - 1].displayEndMs)
+            : earliestSourceMs
+        let upperBound = sortedIdx + 1 < sorted.count
+            ? min(latestSourceMs, sorted[sortedIdx + 1].displayStartMs)
+            : latestSourceMs
+        guard upperBound - lowerBound >= span else { return }
+
+        let clampedStart = max(lowerBound, min(upperBound - span, desiredStartMs))
+        let clampedEnd = clampedStart + span
 
         if cluster.isCustomSegment {
             if let idx = document.captions.customShortcuts.firstIndex(where: { $0.id == cluster.id }) {
@@ -1917,10 +2030,35 @@ public final class ProjectSession: Identifiable {
         renderRevision &+= 1
     }
 
+    /// Resizes ONLY the left/start or right/end edge of a Shortcut segment while clamping against adjacent neighbors on the same track (0ms overlap!).
     public func resizeShortcut(_ cluster: ShortcutPressCluster, newStartMs: Double, newEndMs: Double) {
-        let maxDur = max(500.0, metadata.durationMs)
-        let s = max(0.0, min(newEndMs - 220.0, newStartMs))
-        let e = min(maxDur, max(s + 220.0, newEndMs))
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? max(500.0, metadata.durationMs)
+        let minDuration = 220.0
+
+        let sorted = shortcutClusters(forTrackId: cluster.trackId).sorted { $0.displayStartMs < $1.displayStartMs }
+        guard let sortedIdx = sorted.firstIndex(where: { $0.id == cluster.id }) else { return }
+
+        let lowerBound = sortedIdx > 0
+            ? max(earliestSourceMs, sorted[sortedIdx - 1].displayEndMs)
+            : earliestSourceMs
+        let upperBound = sortedIdx + 1 < sorted.count
+            ? min(latestSourceMs, sorted[sortedIdx + 1].displayStartMs)
+            : latestSourceMs
+        guard upperBound - lowerBound >= minDuration else { return }
+
+        let current = sorted[sortedIdx]
+        let isResizingLeft = abs(newEndMs - current.displayEndMs) < 0.5
+
+        let s: Double
+        let e: Double
+        if isResizingLeft {
+            e = current.displayEndMs
+            s = max(lowerBound, min(e - minDuration, newStartMs))
+        } else {
+            s = current.displayStartMs
+            e = max(s + minDuration, min(upperBound, newEndMs))
+        }
 
         if cluster.isCustomSegment {
             if let idx = document.captions.customShortcuts.firstIndex(where: { $0.id == cluster.id }) {

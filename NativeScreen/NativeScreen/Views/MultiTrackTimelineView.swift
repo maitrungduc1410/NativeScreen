@@ -936,7 +936,7 @@ public struct MultiTrackTimelineView: View {
             ForEach(clusters) { cluster in
                 if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: cluster.displayStartMs, sourceEndMs: cluster.displayEndMs) {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
-                    let blockW = max(22.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth - 1.0)
+                    let blockW = max(2.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isItemHidden = trackHidden || session.isShortcutHidden(cluster)
                     let isSelected = (session.selectedShortcutId == cluster.id)
 
@@ -2161,7 +2161,7 @@ private struct ShortcutTimelineSegmentView: View {
     }
 
     var body: some View {
-        let segWidth = max(14.0, width)
+        let segWidth = max(4.0, width)
         let showHandles = (isHovered || isSelected || activeDragMode != nil) && segWidth >= 32
 
         ZStack {
