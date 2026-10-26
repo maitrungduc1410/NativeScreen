@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 public struct InspectorSidebarView: View {
     @Bindable var session: ProjectSession
     @State private var systemWallpapers: [SystemWallpaperItem] = []
+    @State private var wallpaperThumbnailRevision: Int = 0
     @State private var isRotationSectionExpanded: Bool = false
     @State private var isAdvancedCursorSectionExpanded: Bool = false
     @State private var isAdvancedShadowSectionExpanded: Bool = false
@@ -113,7 +114,11 @@ public struct InspectorSidebarView: View {
         }
         .onAppear {
             if systemWallpapers.isEmpty {
-                systemWallpapers = SystemWallpaperCatalog.discoverSystemWallpapers()
+                let items = SystemWallpaperCatalog.discoverSystemWallpapers()
+                systemWallpapers = items
+                SystemWallpaperCatalog.preloadThumbnailsInBackground(for: items) {
+                    wallpaperThumbnailRevision &+= 1
+                }
             }
         }
     }
@@ -301,6 +306,7 @@ public struct InspectorSidebarView: View {
                         }
 
                         if showSystemItems {
+                            let _ = wallpaperThumbnailRevision
                             ForEach(systemWallpapers) { item in
                                 let isSelected = (session.document.background.type == .wallpaper && session.document.background.systemWallpaperName == item.name)
                                 Button {

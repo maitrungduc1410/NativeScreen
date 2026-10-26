@@ -195,7 +195,9 @@ public final class MetalFrameCompositor {
         }
 
         // --- PASS 4: Cursor Sprite & Click Ripple in Screen Space ---
-        let activeSlice = session.currentActiveSlice
+        let activeSlice = session.document.timeline.slices.first {
+            sourceTimeMs >= $0.sourceStartMs && sourceTimeMs <= $0.sourceEndMs
+        } ?? session.currentActiveSlice
         let hideCursorInSlice = activeSlice?.hideCursor ?? false
         if !hideCursorInSlice && cursorState.opacity > 0.01 {
             positionedScreen = renderCursorAndRipple(
@@ -340,6 +342,7 @@ public final class MetalFrameCompositor {
                 composite = renderShortcutKeycapsOverlay(
                     over: composite,
                     activeItems: activeShortcuts,
+                    sourceTimeMs: sourceTimeMs,
                     shortcutsSizeRatio: doc.captions.shortcutsSizeRatio,
                     canvasRect: canvasRect
                 )
@@ -748,9 +751,31 @@ public final class MetalFrameCompositor {
 
     // MARK: - Pass 6: 3D Keyboard Shortcut Keycaps Renderer (`renderShortcutKeycapsOverlay`)
 
+    /// Computes the deterministic WYSIWYG fade-in & fade-out envelope (`opacity`, `scale`, `slideProgress`) for a shortcut cluster at `sourceTimeMs`,
+    /// used identically by both `PreviewShortcutKeycapsOverlayView` (Preview) and `MetalFrameCompositor` (Export)!
+    public static func shortcutTransitionEnvelope(
+        for cluster: ProjectSession.ShortcutPressCluster,
+        atSourceMs sourceTimeMs: Double
+    ) -> (opacity: Double, scale: CGFloat, slideOffsetMultiplier: CGFloat) {
+        let fadeInMs = 150.0
+        let fadeOutMs = 180.0
+        let elapsedIn = max(0.0, sourceTimeMs - cluster.displayStartMs)
+        let remainingOut = max(0.0, cluster.displayEndMs - sourceTimeMs)
+
+        let rawIn = min(1.0, max(0.0, elapsedIn / fadeInMs))
+        let rawOut = min(1.0, max(0.0, remainingOut / fadeOutMs))
+        let t = min(rawIn, rawOut)
+        // Cubic smoothstep (`3t^2 - 2t^3`) for buttery-smooth fade in & out
+        let smooth = t * t * (3.0 - 2.0 * t)
+        let scale = CGFloat(0.95 + 0.05 * smooth)
+        let slideMult = CGFloat(1.0 - smooth)
+        return (opacity: smooth, scale: scale, slideOffsetMultiplier: slideMult)
+    }
+
     private func renderShortcutKeycapsOverlay(
         over baseImage: CIImage,
         activeItems: [(cluster: ProjectSession.ShortcutPressCluster, style: ShortcutStyleConfig)],
+        sourceTimeMs: Double,
         shortcutsSizeRatio: Double,
         canvasRect: CGRect
     ) -> CIImage {
@@ -764,6 +789,9 @@ public final class MetalFrameCompositor {
             let cluster = entry.cluster
             let style = entry.style
             guard !cluster.keyCaps.isEmpty else { continue }
+
+            let env = Self.shortcutTransitionEnvelope(for: cluster, atSourceMs: sourceTimeMs)
+            guard env.opacity > 0.005 else { continue }
 
             let cacheKey = "\(cluster.id)_\(cluster.compactTimelineLabel)_\(Int(keyHeight))_\(style.dockPosition.rawValue)_\(style.colorMode.rawValue)_\(style.solidColorHex)_\(style.gradientStartHex)_\(style.gradientEndHex)_\(style.textColorHex)"
 
@@ -785,6 +813,7 @@ public final class MetalFrameCompositor {
 
             let contentW = groupSprite.extent.width - shadowPad * 2.0
             let contentH = groupSprite.extent.height - shadowPad * 2.0
+            let slideDistance = keyHeight * 0.10 * env.slideOffsetMultiplier
 
             // Base position in CoreImage bottom-left coordinates (`y = 0` at bottom, `y = canvasRect.height` at top)
             var contentOriginX: CGFloat
@@ -793,15 +822,15 @@ public final class MetalFrameCompositor {
             switch style.dockPosition {
             case .bottom:
                 contentOriginX = (canvasRect.width - contentW) * 0.5
-                contentOriginY = edgeMargin
+                contentOriginY = edgeMargin - slideDistance
             case .top:
                 contentOriginX = (canvasRect.width - contentW) * 0.5
-                contentOriginY = canvasRect.height - edgeMargin - contentH
+                contentOriginY = canvasRect.height - edgeMargin - contentH + slideDistance
             case .left:
-                contentOriginX = edgeMargin
+                contentOriginX = edgeMargin - slideDistance
                 contentOriginY = (canvasRect.height - contentH) * 0.5
             case .right:
-                contentOriginX = canvasRect.width - edgeMargin - contentW
+                contentOriginX = canvasRect.width - edgeMargin - contentW + slideDistance
                 contentOriginY = (canvasRect.height - contentH) * 0.5
             }
 
@@ -809,12 +838,25 @@ public final class MetalFrameCompositor {
             contentOriginX += CGFloat(style.offsetX) * canvasRect.width
             contentOriginY -= CGFloat(style.offsetY) * canvasRect.height
 
-            let spriteOriginX = round(contentOriginX - shadowPad)
-            let spriteOriginY = round(contentOriginY - shadowPad)
+            let spriteOriginX = contentOriginX - shadowPad
+            let spriteOriginY = contentOriginY - shadowPad
+            let spriteCenterX = groupSprite.extent.width * 0.5
+            let spriteCenterY = groupSprite.extent.height * 0.5
 
-            let positioned = groupSprite
-                .transformed(by: CGAffineTransform(translationX: spriteOriginX, y: spriteOriginY))
-                .cropped(to: canvasRect)
+            var transform = CGAffineTransform.identity
+            transform = transform.translatedBy(x: spriteOriginX + spriteCenterX, y: spriteOriginY + spriteCenterY)
+            if abs(env.scale - 1.0) > 0.001 {
+                transform = transform.scaledBy(x: env.scale, y: env.scale)
+            }
+            transform = transform.translatedBy(x: -spriteCenterX, y: -spriteCenterY)
+
+            var positioned = groupSprite.transformed(by: transform)
+            if env.opacity < 0.995 {
+                positioned = positioned.applyingFilter("CIColorMatrix", parameters: [
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(env.opacity))
+                ])
+            }
+            positioned = positioned.cropped(to: canvasRect)
             output = positioned.composited(over: output)
         }
 

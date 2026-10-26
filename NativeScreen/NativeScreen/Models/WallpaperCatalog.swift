@@ -146,29 +146,46 @@ public enum SystemWallpaperCatalog {
         return items
     }
 
-    /// Returns a fast in-memory cached `NSImage` thumbnail (200px max dimension) so SwiftUI `body` evaluation
-    /// never touches the disk or decodes multi-megabyte `.heic` files when dragging sliders!
-    public static func cachedThumbnailImage(for item: SystemWallpaperItem) -> NSImage? {
-        lock.lock()
-        if let hit = thumbnailCache[item.id] {
-            lock.unlock()
-            return hit
-        }
-        lock.unlock()
+    /// Preloads all system wallpaper thumbnails asynchronously on a background `.utility` queue so that SwiftUI
+    /// on the `.userInteractive` MainActor thread NEVER blocks on synchronous `CGImageSourceCreateThumbnailAtIndex`
+    /// (eliminating the ImageIO `.default` QoS priority inversion warning!).
+    public static func preloadThumbnailsInBackground(for items: [SystemWallpaperItem], onComplete: (@Sendable @MainActor () -> Void)? = nil) {
+        DispatchQueue.global(qos: .utility).async {
+            var didLoadNew = false
+            for item in items {
+                lock.lock()
+                let alreadyCached = (thumbnailCache[item.id] != nil)
+                lock.unlock()
+                if alreadyCached { continue }
 
-        guard let cgImg = downsampleCGImage(at: item.thumbnailURL, maxPixelSize: 200)
-                ?? downsampleCGImage(at: item.fullImageURL, maxPixelSize: 200) else {
-            return nil
+                if let cgImg = downsampleCGImage(at: item.thumbnailURL, maxPixelSize: 200)
+                    ?? downsampleCGImage(at: item.fullImageURL, maxPixelSize: 200) {
+                    let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
+                    lock.lock()
+                    thumbnailCache[item.id] = nsImg
+                    lock.unlock()
+                    didLoadNew = true
+                }
+            }
+            if didLoadNew, let onComplete {
+                Task { @MainActor in
+                    onComplete()
+                }
+            }
         }
-        let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
-
-        lock.lock()
-        thumbnailCache[item.id] = nsImg
-        lock.unlock()
-        return nsImg
     }
 
-    /// Uses `ImageIO` hardware thumbnailing to decode & downsample any `.heic`/`.jpg` into an immediately-cached `CGImage`.
+    /// Returns a fast in-memory cached `NSImage` thumbnail (200px max dimension) without ever blocking the Main Thread.
+    public static func cachedThumbnailImage(for item: SystemWallpaperItem) -> NSImage? {
+        lock.lock()
+        let hit = thumbnailCache[item.id]
+        lock.unlock()
+        return hit
+    }
+
+    /// Uses `ImageIO` thumbnailing to decode & downsample any `.heic`/`.jpg` into a `CGImage`.
+    /// Note: `kCGImageSourceShouldCacheImmediately` is intentionally omitted when called from interactive threads
+    /// because ImageIO's internal `.default`-QoS AppleJPEG worker pool triggers a priority inversion if waited on by `.userInteractive`.
     public static func downsampleCGImage(at url: URL, maxPixelSize: Int) -> CGImage? {
         let sourceOptions: [CFString: Any] = [
             kCGImageSourceShouldCache: false
@@ -178,7 +195,6 @@ public enum SystemWallpaperCatalog {
         }
         let thumbOptions: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
         ]

@@ -1152,10 +1152,26 @@ private struct PreviewShortcutKeycapsOverlayView: View {
             ForEach(activeItems, id: \.cluster.id) { entry in
                 let cluster = entry.cluster
                 let style = entry.style
+                let env = MetalFrameCompositor.shortcutTransitionEnvelope(for: cluster, atSourceMs: sourceMs)
                 let isHovered = (hoveredClusterId == cluster.id)
                 let isSelected = (session.selectedShortcutId == cluster.id)
-                let offsetXPt = CGFloat(style.offsetX) * canvasSize.width
-                let offsetYPt = CGFloat(style.offsetY) * canvasSize.height
+                let slideDistance = keyHeight * 0.10 * env.slideOffsetMultiplier
+                let slideX: CGFloat = {
+                    switch style.dockPosition {
+                    case .left: return -slideDistance
+                    case .right: return slideDistance
+                    default: return 0
+                    }
+                }()
+                let slideY: CGFloat = {
+                    switch style.dockPosition {
+                    case .bottom: return slideDistance
+                    case .top: return -slideDistance
+                    default: return 0
+                    }
+                }()
+                let offsetXPt = CGFloat(style.offsetX) * canvasSize.width + slideX
+                let offsetYPt = CGFloat(style.offsetY) * canvasSize.height + slideY
 
                 ZStack(alignment: dockAlignment(for: style.dockPosition)) {
                     Color.clear
@@ -1189,10 +1205,11 @@ private struct PreviewShortcutKeycapsOverlayView: View {
                     .padding(.top, style.dockPosition == .top ? edgeMargin : 0)
                     .padding(.leading, style.dockPosition == .left ? edgeMargin : 0)
                     .padding(.trailing, style.dockPosition == .right ? edgeMargin : 0)
+                    .scaleEffect(env.scale * (isHovered ? 1.02 : 1.0))
+                    .opacity(env.opacity)
                     .offset(x: offsetXPt, y: offsetYPt)
-                    .scaleEffect(isHovered ? 1.02 : 1.0)
                     .brightness(isHovered ? 0.08 : 0.0)
-                    .shadow(color: .black.opacity(0.42), radius: keyHeight * 0.22, y: keyHeight * 0.10)
+                    .shadow(color: .black.opacity(0.42 * env.opacity), radius: keyHeight * 0.22, y: keyHeight * 0.10)
                     .contentShape(Rectangle())
                     .onHover { hovering in
                         withAnimation(.easeOut(duration: 0.14)) {
@@ -1208,17 +1225,10 @@ private struct PreviewShortcutKeycapsOverlayView: View {
                             session.selectShortcut(cluster.id)
                         }
                     }
-                    .transition(
-                        .asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.96)),
-                            removal: .opacity.combined(with: .scale(scale: 0.96))
-                        )
-                    )
                 }
             }
         }
         .frame(width: canvasSize.width, height: canvasSize.height)
-        .animation(.spring(response: 0.24, dampingFraction: 0.84), value: activeItems.map(\.cluster.id))
     }
 
     private func dockAlignment(for pos: ShortcutDockPosition) -> Alignment {

@@ -887,21 +887,34 @@ public final class ProjectSession: Identifiable {
         let destFileName = "background-\(item.id).jpg"
         let destURL = assetsDir.appendingPathComponent(destFileName)
 
-        if !FileManager.default.fileExists(atPath: destURL.path) {
-            if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: item.fullImageURL, maxPixelSize: 2560) {
+        if FileManager.default.fileExists(atPath: destURL.path) {
+            mutate { doc in
+                doc.background.type = .wallpaper
+                doc.background.systemWallpaperName = item.name
+                doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+            }
+            return
+        }
+
+        let sourceURL = item.fullImageURL
+        let itemName = item.name
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: sourceURL, maxPixelSize: 2560) {
                 let bitmap = NSBitmapImageRep(cgImage: cgImage)
                 if let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.88]) {
                     try? jpgData.write(to: destURL, options: .atomic)
                 }
             } else {
-                try? FileManager.default.copyItem(at: item.fullImageURL, to: destURL)
+                try? FileManager.default.copyItem(at: sourceURL, to: destURL)
             }
-        }
-
-        mutate { doc in
-            doc.background.type = .wallpaper
-            doc.background.systemWallpaperName = item.name
-            doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.mutate { doc in
+                    doc.background.type = .wallpaper
+                    doc.background.systemWallpaperName = itemName
+                    doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+                }
+            }
         }
     }
 
@@ -911,18 +924,22 @@ public final class ProjectSession: Identifiable {
         let destFileName = "custom-bg-\(Int(Date().timeIntervalSince1970)).jpg"
         let destURL = assetsDir.appendingPathComponent(destFileName)
 
-        if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: url, maxPixelSize: 2560) {
-            let bitmap = NSBitmapImageRep(cgImage: cgImage)
-            if let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.90]) {
-                try? jpgData.write(to: destURL, options: .atomic)
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: url, maxPixelSize: 2560) {
+                let bitmap = NSBitmapImageRep(cgImage: cgImage)
+                if let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.90]) {
+                    try? jpgData.write(to: destURL, options: .atomic)
+                }
+            } else {
+                try? FileManager.default.copyItem(at: url, to: destURL)
             }
-        } else {
-            try? FileManager.default.copyItem(at: url, to: destURL)
-        }
-
-        mutate { doc in
-            doc.background.type = .image
-            doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.mutate { doc in
+                    doc.background.type = .image
+                    doc.background.wallpaperRelativePath = "assets/\(destFileName)"
+                }
+            }
         }
     }
 
