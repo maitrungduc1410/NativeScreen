@@ -2279,24 +2279,19 @@ private struct ExportSettingsModalView: View {
                                     Button {
                                         config.fps = fpsOption
                                     } label: {
-                                        HStack {
-                                            Text("\(fpsOption) FPS")
-                                            if config.fps == fpsOption {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
+                                        Text("\(fpsOption) FPS")
                                     }
                                 }
                             } label: {
                                 HStack(spacing: 5) {
                                     Text("\(config.fps)")
-                                        .font(.system(size: 13.5, weight: .medium).monospacedDigit())
+                                        .font(.system(size: 13.5, weight: .regular).monospacedDigit())
                                         .foregroundStyle(.white.opacity(0.95))
                                     Text("FPS")
                                         .font(.system(size: 13.5, weight: .regular))
                                         .foregroundStyle(.white.opacity(0.42))
                                     Image(systemName: "chevron.down")
-                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .font(.system(size: 10.5, weight: .regular))
                                         .foregroundStyle(.white.opacity(0.65))
                                         .padding(.leading, 4)
                                 }
@@ -2311,7 +2306,7 @@ private struct ExportSettingsModalView: View {
                                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                                 )
                             }
-                            .menuStyle(.borderlessButton)
+                            .buttonStyle(.plain)
                             .fixedSize()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2396,13 +2391,13 @@ private struct ExportSettingsModalView: View {
                                     } label: {
                                         HStack {
                                             Text("Advanced")
-                                                .font(.system(size: 13.5, weight: .medium))
+                                                .font(.system(size: 13.5, weight: .regular))
                                                 .foregroundStyle(.white.opacity(0.90))
 
                                             Spacer()
 
                                             Image(systemName: isAdvancedExpanded ? "chevron.up" : "chevron.down")
-                                                .font(.system(size: 11, weight: .semibold))
+                                                .font(.system(size: 11, weight: .regular))
                                                 .foregroundStyle(.white.opacity(0.75))
                                                 .frame(width: 26, height: 26)
                                                 .background(
@@ -2476,7 +2471,7 @@ private struct ExportSettingsModalView: View {
                                     Toggle(isOn: $config.gifHighQuality) {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text("High quality")
-                                                .font(.system(size: 13.5, weight: .medium))
+                                                .font(.system(size: 13.5, weight: .regular))
                                                 .foregroundStyle(.white.opacity(0.92))
                                             Text("Keeps more detail and fewer compression artifacts, for a larger file. Turn off for the best balance of file size and quality.")
                                                 .font(.system(size: 12.5, weight: .regular))
@@ -2490,7 +2485,7 @@ private struct ExportSettingsModalView: View {
                                     Toggle(isOn: $config.gifDisableLoop) {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text("Disable loop")
-                                                .font(.system(size: 13.5, weight: .medium))
+                                                .font(.system(size: 13.5, weight: .regular))
                                                 .foregroundStyle(.white.opacity(0.92))
                                             Text("Exported GIF will only play once and then stop.")
                                                 .font(.system(size: 12.5, weight: .regular))
@@ -2509,7 +2504,7 @@ private struct ExportSettingsModalView: View {
                 // Error Banner (if any)
                 if let err = errorMessage, !err.isEmpty {
                     Text(err)
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(.system(size: 12.5, weight: .regular))
                         .foregroundStyle(Color(red: 1.0, green: 0.42, blue: 0.42))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
@@ -2523,7 +2518,7 @@ private struct ExportSettingsModalView: View {
                 // BOTTOM SECTION: `Export to` + Action Buttons + Live Estimation Line
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Export to")
-                        .font(.system(size: 13.5, weight: .medium))
+                        .font(.system(size: 13.5, weight: .regular))
                         .foregroundStyle(.white.opacity(0.90))
 
                     HStack(spacing: 10) {
@@ -2549,11 +2544,11 @@ private struct ExportSettingsModalView: View {
                             Button(action: onStartExport) {
                                 HStack(spacing: 8) {
                                     Image(systemName: config.target.iconName)
-                                        .font(.system(size: 13, weight: .semibold))
+                                        .font(.system(size: 13, weight: .regular))
                                     Text(config.target.primaryButtonTitle)
-                                        .font(.system(size: 13.5, weight: .semibold))
+                                        .font(.system(size: 13.5, weight: .regular))
                                     Image(systemName: "return")
-                                        .font(.system(size: 11, weight: .semibold))
+                                        .font(.system(size: 11, weight: .regular))
                                         .foregroundStyle(.white.opacity(0.75))
                                         .padding(.leading, 2)
                                 }
@@ -2570,7 +2565,7 @@ private struct ExportSettingsModalView: View {
 
                             Button(action: onCancel) {
                                 Text("Cancel")
-                                    .font(.system(size: 13.5, weight: .medium))
+                                    .font(.system(size: 13.5, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.90))
                                     .padding(.horizontal, 18)
                                     .frame(height: 38)
@@ -2635,7 +2630,7 @@ private struct ExportSettingsModalView: View {
         HStack(spacing: 8) {
             if badgeIcon {
                 Image(systemName: icon)
-                    .font(.system(size: 9.5, weight: .bold))
+                    .font(.system(size: 9.5, weight: .medium))
                     .foregroundStyle(.black.opacity(0.9))
                     .frame(width: 17, height: 15)
                     .background(
@@ -2644,12 +2639,12 @@ private struct ExportSettingsModalView: View {
                     )
             } else {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.white.opacity(0.92))
             }
 
             Text(title)
-                .font(.system(size: 13.5, weight: .medium))
+                .font(.system(size: 13.5, weight: .regular))
                 .foregroundStyle(.white.opacity(0.92))
         }
     }
@@ -2667,10 +2662,10 @@ private struct ExportSettingsModalView: View {
             HStack(spacing: 6) {
                 if let icon {
                     Image(systemName: icon)
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.system(size: 12.5, weight: .regular))
                 }
                 Text(label)
-                    .font(.system(size: 13.5, weight: .medium))
+                    .font(.system(size: 13.5, weight: .regular))
             }
             .foregroundStyle(
                 isDisabled
@@ -2833,7 +2828,7 @@ private struct ExportingFullOverlayView: View {
                 // `Stop export` Button
                 Button(action: onStopExport) {
                     Text("Stop export")
-                        .font(.system(size: 13.5, weight: .medium))
+                        .font(.system(size: 13.5, weight: .regular))
                         .foregroundStyle(.white.opacity(0.92))
                         .padding(.horizontal, 18)
                         .frame(height: 38)
