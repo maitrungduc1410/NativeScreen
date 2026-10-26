@@ -183,24 +183,31 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
   },
   "cursor": {
     "hidden": false,
-    "scale": 1.5,
-    "themeId": "macos-default",
+    "scale": 1.6,
+    "themeId": "macos-tahoe",
+    "variantId": "default",
+    "alwaysUsePointer": false,
     "smoothMovementEnabled": true,
     "spring": {
-      "stiffness": 125.0,
-      "damping": 12.0,
-      "mass": 1.5
+      "stiffness": 470.0,
+      "damping": 70.0,
+      "mass": 3.0
     },
-    "removeShakeThresholdPx": 4.0,
+    "baseRotationDegrees": 0.0,
+    "rotationMode": "velocity",
     "velocityRotationEnabled": true,
     "velocityRotationIntensity": 0.5,
-    "hideWhenIdleAfterMs": 3000,
+    "hideWhenIdleAfterMs": null,
     "loopBackToStartMs": null,
+    "stopMovementInLastPartMs": 0.0,
+    "removeShakeThresholdPx": 4.0,
+    "optimizeCursorChanges": true,
+    "keepInSyncWithHovers": true,
     "clickEffect": {
       "visualStyle": "ripple",
       "color": "#FFFFFF",
-      "soundSet": "magic-mouse",
-      "soundVolume": 0.25
+      "soundSet": "apple-magic-mouse",
+      "soundVolume": 0.50
     }
   },
   "camera": {
@@ -218,11 +225,11 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
   },
   "motion": {
     "cameraSpring": {
-      "stiffness": 125.0,
-      "damping": 14.0,
-      "mass": 1.5
+      "stiffness": 170.0,
+      "damping": 50.0,
+      "mass": 3.0
     },
-    "motionBlurIntensity": 0.6,
+    "motionBlurIntensity": 1.0,
     "avoidEmptyBoundsWhenZooming": true
   },
   "audio": {
@@ -230,7 +237,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
     "microphoneVolume": 1.0,
     "muteMicrophone": false,
     "voiceEnhancement": true,
-    "systemAudioVolume": 0.8,
+    "systemAudioVolume": 1.0,
     "muteSystemAudio": false,
     "backgroundMusic": {
       "relativePath": null,
@@ -241,6 +248,41 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
   "captions": {
     "enabled": false,
     "showKeystrokes": true,
+    "shortcutsSizeRatio": 0.11,
+    "showSingleKeyShortcuts": false,
+    "hiddenShortcutStartMs": [],
+    "deletedShortcutStartMs": [],
+    "defaultShortcutStyle": {
+      "dockPosition": "bottom",
+      "offsetX": 0.0,
+      "offsetY": 0.0,
+      "colorMode": "default",
+      "solidColorHex": "#4D2FF5",
+      "gradientStartHex": "#4776E6",
+      "gradientEndHex": "#8E54E9",
+      "textColorHex": "#FFFFFF"
+    },
+    "shortcutTracks": [
+      {
+        "id": "default-shortcuts-track",
+        "name": "Shortcuts",
+        "isHidden": false,
+        "style": {
+          "dockPosition": "bottom",
+          "offsetX": 0.0,
+          "offsetY": 0.0,
+          "colorMode": "default",
+          "solidColorHex": "#4D2FF5",
+          "gradientStartHex": "#4776E6",
+          "gradientEndHex": "#8E54E9",
+          "textColorHex": "#FFFFFF"
+        }
+      }
+    ],
+    "customShortcuts": [],
+    "shortcutStyleOverrides": {},
+    "shortcutTimingOverrides": {},
+    "shortcutKeyOverrides": {},
     "keystrokesPosition01": { "x": 0.5, "y": 0.90 },
     "fontFamily": "SF Pro Rounded",
     "fontSizeRatio": 0.045,
@@ -257,6 +299,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
         "sourceStartMs": 0.0,
         "sourceEndMs": 64754.38,
         "speed": 1.0,
+        "systemAudioVolume": 1.0,
         "muted": false,
         "hideCursor": false,
         "disableSmoothCursor": false
@@ -276,13 +319,16 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
           "bevelRatio": 0.2,
           "chromaticAberration": 0.5
         },
+        "instantAnimation": false,
         "disabled": false
       }
     ],
+    "isZoomTrackHidden": false,
     "maskTracks": [
       {
         "id": "mask-track-1",
         "name": "Blur Track 1",
+        "isHidden": false,
         "items": [
           {
             "id": "mask-1",
@@ -290,8 +336,8 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
             "sourceEndMs": 15000.0,
             "type": "blur",
             "style": "gaussian",
-            "intensity": 32.0,
-            "cornerRadius": 8.0,
+            "intensity": 36.0,
+            "cornerRadius": 10.0,
             "keyframes": [
               {
                 "sourceMs": 5000.0,
@@ -301,13 +347,10 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
             "disabled": false
           }
         ]
-      },
-      {
-        "id": "mask-track-2",
-        "name": "Blur Track 2",
-        "items": []
       }
-    ]
+    ],
+    "isShortcutsTrackHidden": false,
+    "dismissedTypingSuggestionStarts": []
   }
 }
 ```

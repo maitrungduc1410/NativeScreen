@@ -30,9 +30,9 @@
 
 ### 1.3. Multi-Channel Capture & Telemetry Writer
 - [x] Crash-safe video recording via `AVAssetWriter` (support direct `.mp4` and segmented `.m3u8` + `.m4s` fMP4 output).
-- [x] High-frequency mouse telemetry logger (`telemetry/cursor.jsonl` at 60–120Hz with normalized `0..1` coordinates and cursor type).
+- [x] High-frequency mouse telemetry logger (`telemetry/cursor.jsonl` at 60–120Hz with normalized `0..1` coordinates and cursor type, synchronized `t = 0.0ms` to the first captured `SCStream` video frame).
 - [x] Mouse clicks & scroll logger (`telemetry/clicks.jsonl`).
-- [x] Keystroke timestamp logger (`telemetry/keys.jsonl`) for typing-aware auto-zoom hold.
+- [x] Keystroke timestamp logger (`telemetry/keys.jsonl`) for typing-aware auto-zoom hold, typing speed-up suggestions, and 3D shortcut keycaps.
 - [x] System/App Audio capture (via `ScreenCaptureKit` audio stream) & Microphone capture (`AVCaptureSession`) to separate `.m4a` tracks.
 
 ### 1.4. GPU Metal Compositor & Preview Canvas (0% Idle CPU)
@@ -40,58 +40,63 @@
 - [x] Playback controller (`AVAssetReader` / `AVPlayerItemVideoOutput` synchronized with telemetry clock at 60/120fps).
 - [x] **Background Pass:**
   - [x] Load macOS system wallpapers directly from `/System/Library/Desktop Pictures/` (and copy chosen image to `.nativescreen/assets/`).
-  - [x] Built-in procedural Mesh Gradients, Linear Gradients, Solid Colors, and custom image drop.
+  - [x] Built-in procedural Mesh Gradients, Linear Gradients (with interactive 2D HSB Color Picker, Eyedropper, Hue rotation slider, and 30 curated gradient presets), Solid Colors, and custom image drop/paste (`⌘V`).
   - [x] Background blur slider, padding slider, and subtle anti-banding noise.
 - [x] **Screen Frame Pass:**
-  - [x] SDF anti-aliased rounded corners (`borderRadius`), inner border (`inset`), and directional soft drop shadow (`shadow`).
-  - [x] Aspect ratio presets (`Auto`, `16:9`, `9:16` Vertical/Reels, `1:1`, `4:3`).
+  - [x] SDF anti-aliased rounded corners (`borderRadius`), inner border (`inset`), and directional/classic soft drop shadow (`shadow`).
+  - [x] Aspect ratio presets (`Auto`, `Wide 16:9`, `Vertical 9:16`, `Square 1:1`, `Classic 4:3`, `Tall 3:4`, `Portrait 4:5`, `Display 16:10`).
 - [x] **Cursor & Auto-Zoom Pass:**
-  - [x] 120Hz Spring Physics Solver for smooth cursor glide (`stiffness`, `damping`, `mass`) + cursor size slider.
-  - [x] Automatic click-clustering zoom generator (`follow-click-groups`) + manual zoom target point override.
-  - [x] Smooth spring-driven virtual camera pan & zoom with boundary clamping (`avoidEmptyBoundsWhenZooming`).
+  - [x] 120Hz Spring Physics Solver for smooth cursor glide (`stiffness`, `damping`, `mass`) + lookahead phase-lag compensation (`lagMs = damping / stiffness * 1000`) + drag/click speed boost (`k * speed^2`, `c * speed`) + cursor size slider.
+  - [x] Automatic click-clustering zoom generator (`follow-click-groups` + stationary `MovesGroup` dead-zone clusters) + manual zoom target point override + dedicated `Close Zoom editor` Inspector view.
+  - [x] Smooth spring-driven virtual camera pan & zoom in Screen-Rect space (`rects.screen`) with boundary clamping (`avoidEmptyBoundsWhenZooming`) and optional `Instant animation`.
 - [x] **Multi-Track Blur & Spotlight Masks (Killer MVP Feature):**
   - [x] Support **unlimited parallel Blur / Pixelate / Spotlight mask tracks** on the timeline.
-  - [x] Direct on-canvas interactive rectangle handles (drag to move, resize corners, adjust Gaussian blur intensity & corner radius).
+  - [x] Direct on-canvas interactive rectangle handles (drag to move, resize corners, adjust Gaussian blur / Highlight intensity & corner radius).
   - [x] Keyframe support for masks (smoothly move/resize a blur box over time when content scrolls).
 
 ### 1.5. Multi-Track NLE Timeline UI
-- [x] Custom high-performance SwiftUI `Canvas` + gesture timeline at bottom of Editor.
-- [x] **Video Slice Track:** Split at playhead (`⌘B`), trim start/end handles, delete segment (ripple delete), per-slice speed control (`0.5x` – `4x`).
-- [x] **Zoom Track:** Add, move, resize, disable, or delete zoom blocks; click block to edit zoom scale (`1.2x` – `3.0x`) and target center.
+- [x] Custom high-performance SwiftUI `Canvas` + gesture timeline at bottom of Editor with isolated 120Hz Playhead overlay (`TimelinePlayheadsOverlayView`).
+- [x] **Video Slice Track:** Split at playhead (`C` or `⌥` Split Mode), golden teardrop merge badges at cut boundaries, trim start/end handles, delete segment (ripple delete), per-slice speed control (`0.25x` – `8x`), and Catmull-Rom cubic spline + mip-pyramid audio waveform.
+- [x] **Speed Up Typing Suggestions:** Automatic detection of continuous typing bursts rendered as golden keyboard bars right above the Clip track (`Speed up typing` popover with `Apply suggestion ↵`, `Apply all suggestions ⌘ ↵`, `Remove suggestion`).
+- [x] **Zoom Track:** Hover `+` preview block on empty areas to insert zoom, move, resize, disable, or delete zoom blocks; click block to open dedicated Zoom Editor (`Classic` / `Glass Loupe`, `Instant animation`, `Auto` / `Manual`, `Zoom level`).
 - [x] **Multi-Row Mask Tracks:** Add multiple overlapping blur/spotlight blocks across independent rows so multiple screen areas can be blurred at the same time.
-- [x] Playhead scrubbing, timecode display, and timeline zoom in/out (`⌘+` / `⌘-`).
+- [x] **Multi-Track Keyboard Shortcuts Lanes:** Select, move, resize, duplicate, or permanently delete (`Remove shortcut`) shortcut segments; add custom shortcuts on empty track hover or via `+`; create multiple shortcut tracks with independent positions and colors.
+- [x] Dynamic time ruler (`Bf` / `Jp` whole-second label algorithm), playhead scrubbing, timecode display, and playhead-anchored timeline zoom in/out (`⌘+` / `⌘-`).
 
 ### 1.6. Native Hardware Export Pipeline (Zero FFmpeg)
-- [x] Hardware-accelerated exporter using `AVAssetReader` -> `Metal Offscreen Compositor` -> `AVAssetWriter` (`VideoToolbox` H.264 & HEVC).
-- [x] Resolution presets (`1080p`, `2K`, `4K`, `Original Retina`), frame rate (`30fps`, `60fps`), and bitrate/quality controls.
+- [x] Hardware-accelerated exporter using `AVAssetImageGenerator` -> `MetalFrameCompositor` (all 6 passes including 3D Shortcut Keycaps) -> `AVAssetWriter` (`VideoToolbox` H.264, HEVC, Both, and Apple ProRes `422 LT`, `422`, `422 HQ`, `4444`) & `ImageIO` animated `GIF`.
+- [x] 2-column Export Settings modal (`Format: MP4 | ProRes | GIF`, `Frame rate`, `Resolution: 720p | 1080p | 4K` with dynamic pixel dimensions, `Compression: Studio | Social Media | Web | Web (Low)`, collapsible `Advanced` Codec picker, and non-linear bits-per-pixel file size range & duration estimation).
 - [ ] Multi-track audio mixdown (Recorded System Audio + Microphone + Slice speed mapping) via `AVAudioEngine` / `AVMutableComposition`.
-- [x] Export progress modal with real-time FPS/ETA and "Copy to Clipboard" / "Reveal in Finder".
+- [x] Full-window dark Export Progress overlay (`Exporting video • 33% ⓘ`, purple progress bar, live elapsed & ETA countdown `00:04 • 00:06 left`, macOS Dock progress bar, and instant `Stop export` cancellation with partial file cleanup) + `Export to File` or `Export to Clipboard`.
 
 ---
 
 ## Phase 2: Cinematic Polish (Motion Blur, Cursor Magic, Audio & UX Refinements)
 *Goal: Match 100% of the signature motion polish and workflow speed.*
 
-- [x] **GPU Camera & Cursor Motion Blur:** Velocity-driven directional shutter blur shader during fast zooms, pans, and cursor swipes.
-- [ ] **Advanced Cursor Polish:**
-  - [x] Velocity-based cursor tilt/rotation (`velocityRotationIntensity`).
-  - [x] Micro-shake removal filter (`removeShakeThresholdPx`).
+- [x] **GPU Camera & Cursor Motion Blur:** True 1-frame shutter window (`t` vs `t - 16.67ms`) directional translational blur (`CIMotionBlur`) and fast 3-tap radial zoom shutter blend during fast zooms and pans, plus live Newtonian `SpringPhysicsDemoDotView` preview in the Animations Inspector.
+- [x] **Advanced Cursor Polish:**
+  - [x] All 24 vector cursor sets (`147` SVGs in `CursorAssets.bundle`: `macOS`, `Tahoe`, `Touch`, `Custom 1–20`, `Halloween`) with color/style variants and horizontal auto-centering selector.
+  - [x] Velocity-based cursor tilt (`Tilt`) & directional leash (`Follow`) rotation modes (`baseRotationDegrees`, `velocityRotationIntensity`).
+  - [x] Micro-shake removal filter (`removeShakeThresholdPx`), `Optimize cursor changes`, `Keep cursor in sync with hovers`, and `Stop cursor movement at the end of the video`.
   - [x] Auto-hide cursor when idle (`hideWhenIdleAfterMs`).
   - [x] Loop cursor position back to start (`loopBackToStartMs`) for seamless looping videos/GIFs.
-  - [x] Click ripple animations & synthesized mechanical/Magic Mouse click sound effects.
-  - [x] Capture and render actual macOS cursor shapes (`arrow`, `pointingHand`, `iBeam`, `crosshair`, `resize`).
+  - [x] Click effect styles (`None`, `Circle`, `Ripple`) & bundled click sound effects (`Magic Mouse™`, `MX Master™`) with volume & live preview.
+  - [x] Capture and render actual macOS cursor shapes (`arrow`, `pointer`, `ibeam`, `crosshair`, `openhand`, `closedhand`).
 - [ ] **Audio Enhancements:**
-  - [x] Audio waveform visualization on the timeline.
+  - [x] Catmull-Rom cubic spline + max-reduction mipmap pyramid audio waveform visualization on the timeline.
   - [ ] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
   - [ ] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
   - [ ] Post-recording Voiceover recording directly onto the timeline.
-- [x] **Canvas Crop Tool:** Interactive crop overlay to trim unwanted margins of the recorded screen/window.
-- [x] **Reel Mode Safe-Zone Overlay:** Interactive TikTok & Instagram Reels safe-zone preview overlay.
-- [x] **Extract Current Frame:** Export or copy the current composited GPU frame as a high-res PNG.
+- [x] **Canvas Crop Tool:** Interactive crop modal & overlay to trim unwanted margins of the recorded screen/window.
+- [x] **Reel Mode Safe-Zone Overlay:** Interactive TikTok, Instagram Reels & YouTube Shorts safe-zone preview overlay.
+- [x] **Extract Current Frame:** CapCut/`Export still frames` modal (`PNG` / `JPEG` squircle toggles, resolution up to `4K`, live preview) and instant `Copy current frame to clipboard`.
+- [x] **Command Menu (`⌘K`):** Global searchable command palette (`CommandMenuOverlayView`) with keyboard navigation across all editor actions.
+- [x] **Pure AppKit Zero-Lag Tooltips:** Borderless floating `NSPanel` rendered via `PureAppKitTooltipCalloutView` (`< 0.02ms` draw time, zero `NSHostingView` overhead during 120Hz playback).
 - [ ] **Presets System:** Save and apply reusable style presets (Background + Padding + Shadow + Cursor + Zoom settings).
-- [ ] **Quick Export & GIF Export:**
-  - [ ] High-quality GIF export.
-  - [ ] Menu bar Quick Record & instant clipboard export widget.
+- [x] **Quick Export & GIF Export:**
+  - [x] High-quality animated GIF export (`High quality` & `Disable loop` options).
+  - [x] Instant `Export to clipboard` directly from the Export modal.
 
 ---
 
@@ -106,9 +111,11 @@
   - [ ] **AI Person Cutout:** Real-time background removal / blur using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest` — 0MB model bloat!).
   - [ ] Auto-hide webcam during silence.
 - [x] **Optical Glass Loupe Zoom:**
-  - [x] Alternative zoom presentation mode (`presentation: "loupe"`) with glass refraction, bevel highlight, and chromatic aberration shader.
-- [ ] **Keyboard Shortcuts HUD Overlay:**
-  - [ ] Render stylish animated keystroke badges (e.g. `⌘ + K`, `⇧ + ⌘ + P`) from `keys.jsonl` with customizable size, position, and filter (ignore single letters).
+  - [x] Alternative zoom presentation mode (`presentation: "loupe"`) with circular magnifying lens, bevel rim highlight, and adjustable loupe radius.
+- [x] **Keyboard Shortcuts 3D Keycaps & Multi-Track Editor:**
+  - [x] Render 3D bevel keycaps (`⌘`, `⇧`, `⌥`, `⌃`, `Space`, `⌫`, etc.) both on the live Preview Canvas and baked directly into exported videos/GIFs (`Pass 6` in `MetalFrameCompositor`).
+  - [x] Prose-typing suppression filter (ignores normal typing words/code even when `Show single key shortcuts` is enabled).
+  - [x] Dedicated `Close Shortcut editor` Inspector panel on segment click with live keyboard shortcut recording (`Record shortcut keys…`), 4-edge positioning (`Bottom`, `Top`, `Left` vertical stack, `Right` vertical stack), `Horizontal / Vertical offset` sliders (to avoid captions), `Default / Solid / Gradient` keycap color picker, multi-track support, and permanent deletion (`Remove shortcut`).
 - [ ] **Device Mockups & iOS Recording:**
   - [ ] Record connected iPhone/iPad screen via `AVCaptureSession` CoreMediaIO.
   - [ ] Clean vector/3D-rendered device bezels (iPhone, iPad, MacBook frames) with auto-orientation support.

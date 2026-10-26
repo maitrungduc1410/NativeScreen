@@ -11,11 +11,25 @@ Both smooth cursor gliding and virtual camera pan/zoom are driven by a damped ha
 $$\frac{d^2x}{dt^2} = -\frac{k}{m}(x - x_{\text{target}}) - \frac{c}{m}\frac{dx}{dt}$$
 
 Where:
-- $k$ = `stiffness` (Default: `125.0`)
-- $c$ = `damping` (Default: `12.0` for cursor, `14.0` for camera)
-- $m$ = `mass` (Default: `1.5`)
+- $k$ = `stiffness`:
+  - **Cursor Presets:**
+    - `Smooth` (Default): `stiffness: 470, damping: 70, mass: 3.0` ($\zeta \approx 0.93$)
+    - `Medium`: `stiffness: 340, damping: 60, mass: 3.0` ($\zeta \approx 0.94$)
+    - `Rapid`: `stiffness: 530, damping: 40, mass: 1.0` ($\zeta \approx 0.87$)
+  - **Camera Presets:**
+    - `Smooth` (Default): `stiffness: 170, damping: 50, mass: 3.0` ($\zeta \approx 1.11$, overdamped)
+    - `Focused`: `stiffness: 250, damping: 40, mass: 2.25` ($\zeta \approx 0.84$)
+- **Dynamic Critical Damping Clamp (`stepClampedSpring`):** Whenever approach velocity exceeds $|x_{\text{target}} - x| \cdot \sqrt{k / m}$, damping is dynamically boosted to at least critical damping $2\sqrt{k \cdot m}$ so neither the cursor nor the camera ever bounces or overshoots.
 
-### 1.1. Deterministic Evaluation at Any Timestamp $t$
+### 1.1. Lookahead Phase-Lag Compensation & Drag/Click Speed Boost
+A damped spring with parameters $(k, c)$ has a steady-state phase lag:
+$$\text{lagMs} = \frac{c}{k} \times 1000\text{ ms}$$
+To ensure the smoothed cursor arrives on buttons, hovers, and text selections at the exact millisecond the action happens in the recorded video:
+1. **Lookahead Target (`t + leadMs`):** At time $t$, the spring is fed the recorded target position at $t + \text{lagMs} / \text{speed}$.
+2. **Drag & Click Speed Multiplier:** During active `mouseDown ... mouseUp` drag intervals (e.g. highlighting text) and click events, the spring speed multiplier $\text{speed} \in [1.0, 4.2]$ scales $k_{\text{eff}} = k \cdot \text{speed}^2$ and $c_{\text{eff}} = c \cdot \text{speed}$ (while bypassing micro-shake filtering) so the cursor tip stays locked 1:1 to the selection edge.
+3. **First-Frame Epoch Synchronization:** `TelemetryRecorder` anchors `t = 0.0ms` to the exact presentation timestamp of the first captured `SCStream` video frame (`firstSampleTime`).
+
+### 1.2. Deterministic Evaluation at Any Timestamp $t$
 Because timeline scrubbing must be instant (random access to any frame $t$ without simulating from $t = 0$ every frame), we pre-solve or step the spring state at fixed 120Hz (`dt = 1.0 / 120.0` sec = `8.333 ms`) into a cached lookup array in memory whenever telemetry or zoom blocks change:
 - For a 10-minute video at 120Hz, the pre-solved trajectory array has only `72,000` points (`~1.1 MB` in RAM) and takes **`< 2 ms`** to compute on a single CPU core!
 - At render time (60fps/120fps preview or export), looking up the exact smoothed cursor position $(x, y)$, cursor velocity $(v_x, v_y)$, camera center $(c_x, c_y)$, and camera zoom $z$ at timestamp $t$ is an **$O(1)$ array interpolation**.
@@ -88,11 +102,11 @@ Every video frame at timestamp $t$ is composited on the GPU in a single command 
 - **Vector / High-Res Cursor Sprite:**
   - Render cursor texture at smoothed $(x, y)$ with scale `cursor.scale`, rotation $\theta$, and directional motion blur trail if cursor speed is high.
 
-### Pass 5: Camera Motion Blur (Shutter Integration)
-- When camera velocity $(\dot{c}_x, \dot{c}_y, \dot{Z})$ exceeds a small threshold and `motionBlurIntensity > 0`:
-  - Apply directional velocity blur along the instantaneous screen-space velocity vector (8–12 taps along shutter angle $180^\circ \cdot \text{motionBlurIntensity}$) so fast zoom-ins and pans look buttery smooth at 60fps.
+### Pass 5: Camera Motion Blur (1-Frame Shutter Integration)
+- Compares the camera state at $t$ against $t - 16.67\text{ ms}$ (1 frame shutter window) and activates only when per-frame displacement exceeds `1.8px/frame`:
+  - **Translational Pan Blur:** Applies `CIMotionBlur` along the instantaneous pan vector.
+  - **Radial Zoom Shutter Blend:** Applies a fast `< 0.4ms` 3-tap radial shutter blend (`1.0`, `stepScale1`, `stepScale2`) along the zoom trajectory, settling crystal-clear immediately once stationary.
 
-### Pass 6: Webcam Overlay / AI Person Cutout & Captions/Keystrokes
+### Pass 6: Webcam Overlay / AI Person Cutout & 3D Keyboard Shortcut Keycaps
 - Composite Webcam PiP (with squircle/circle SDF mask + shadow, or CoreML/Vision person segmentation alpha matte).
-- Notice: Webcam PiP scales by `scaleWhenZoomed` (e.g. `0.8x`) when the main screen is zoomed in so it doesn't obstruct content.
-- Render active Keystroke HUD pill (e.g., `⌘ + C`) and Subtitle/Caption text overlay on top.
+- Render active 3D Keyboard Shortcut Keycaps (`renderShortcutKeycapsOverlay` with cached `keycapSpriteCache`) across all visible shortcut tracks, supporting `Bottom`, `Top`, `Left` (vertical stack), and `Right` (vertical stack) dock positions, `offsetX`/`offsetY` shifts, and `Default` / `Solid` / `Gradient` 3D bevel keycap styles.

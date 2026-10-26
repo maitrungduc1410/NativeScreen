@@ -31,7 +31,7 @@
       "required": ["aspectRatioMode", "aspectRatioPreset", "paddingRatio", "cropRect01"],
       "properties": {
         "aspectRatioMode": { "type": "string", "enum": ["auto", "preset", "custom"] },
-        "aspectRatioPreset": { "type": "string", "enum": ["16:9", "9:16", "1:1", "4:3", "16:10"] },
+        "aspectRatioPreset": { "type": "string", "enum": ["16:9", "1:1", "4:3", "9:16", "3:4", "4:5", "16:10"] },
         "customAspectRatio": {
           "type": "object",
           "required": ["width", "height"],
@@ -94,9 +94,10 @@
         },
         "shadow": {
           "type": "object",
-          "required": ["enabled", "intensity", "blur", "distance", "angleDegrees"],
+          "required": ["enabled", "isDirectional", "intensity", "blur", "distance", "angleDegrees"],
           "properties": {
             "enabled": { "type": "boolean" },
+            "isDirectional": { "type": "boolean" },
             "intensity": { "type": "number", "minimum": 0, "maximum": 1 },
             "blur": { "type": "number", "minimum": 0 },
             "distance": { "type": "number", "minimum": 0 },
@@ -119,29 +120,42 @@
         "hidden",
         "scale",
         "themeId",
+        "alwaysUsePointer",
         "smoothMovementEnabled",
         "spring",
-        "removeShakeThresholdPx",
+        "baseRotationDegrees",
+        "rotationMode",
         "velocityRotationEnabled",
         "velocityRotationIntensity",
+        "stopMovementInLastPartMs",
+        "removeShakeThresholdPx",
+        "optimizeCursorChanges",
+        "keepInSyncWithHovers",
         "clickEffect"
       ],
       "properties": {
         "hidden": { "type": "boolean" },
         "scale": { "type": "number", "minimum": 0.25, "maximum": 5.0 },
         "themeId": { "type": "string" },
+        "variantId": { "type": ["string", "null"] },
+        "alwaysUsePointer": { "type": "boolean" },
         "smoothMovementEnabled": { "type": "boolean" },
         "spring": { "$ref": "#/$defs/springConfig" },
-        "removeShakeThresholdPx": { "type": "number", "minimum": 0 },
+        "baseRotationDegrees": { "type": "number", "minimum": -180, "maximum": 180 },
+        "rotationMode": { "type": "string", "enum": ["velocity", "directional"] },
         "velocityRotationEnabled": { "type": "boolean" },
         "velocityRotationIntensity": { "type": "number", "minimum": 0, "maximum": 2 },
         "hideWhenIdleAfterMs": { "type": ["number", "null"] },
         "loopBackToStartMs": { "type": ["number", "null"] },
+        "stopMovementInLastPartMs": { "type": "number", "minimum": 0 },
+        "removeShakeThresholdPx": { "type": "number", "minimum": 0 },
+        "optimizeCursorChanges": { "type": "boolean" },
+        "keepInSyncWithHovers": { "type": "boolean" },
         "clickEffect": {
           "type": "object",
           "required": ["visualStyle", "color", "soundSet", "soundVolume"],
           "properties": {
-            "visualStyle": { "type": "string", "enum": ["none", "ripple", "pulse", "ring"] },
+            "visualStyle": { "type": "string", "enum": ["none", "circle", "ripple", "pulse", "ring"] },
             "color": { "type": "string" },
             "soundSet": { "type": ["string", "null"] },
             "soundVolume": { "type": "number", "minimum": 0, "maximum": 1 }
@@ -221,6 +235,14 @@
       "required": [
         "enabled",
         "showKeystrokes",
+        "shortcutsSizeRatio",
+        "showSingleKeyShortcuts",
+        "hiddenShortcutStartMs",
+        "deletedShortcutStartMs",
+        "defaultShortcutStyle",
+        "shortcutTracks",
+        "customShortcuts",
+        "shortcutStyleOverrides",
         "keystrokesPosition01",
         "fontFamily",
         "fontSizeRatio",
@@ -233,6 +255,40 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "showKeystrokes": { "type": "boolean" },
+        "shortcutsSizeRatio": { "type": "number", "minimum": 0.05, "maximum": 0.35 },
+        "showSingleKeyShortcuts": { "type": "boolean" },
+        "hiddenShortcutStartMs": { "type": "array", "items": { "type": "integer" } },
+        "deletedShortcutStartMs": { "type": "array", "items": { "type": "integer" } },
+        "defaultShortcutStyle": { "$ref": "#/$defs/shortcutStyleConfig" },
+        "shortcutTracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "isHidden", "style"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "isHidden": { "type": "boolean" },
+              "style": { "$ref": "#/$defs/shortcutStyleConfig" }
+            }
+          }
+        },
+        "customShortcuts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customShortcutSegment" }
+        },
+        "shortcutStyleOverrides": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/shortcutStyleConfig" }
+        },
+        "shortcutTimingOverrides": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/point01" }
+        },
+        "shortcutKeyOverrides": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/customShortcutSegment" }
+        },
         "keystrokesPosition01": { "$ref": "#/$defs/point01" },
         "fontFamily": { "type": "string" },
         "fontSizeRatio": { "type": "number", "minimum": 0.01, "maximum": 0.2 },
@@ -257,18 +313,19 @@
     },
     "timeline": {
       "type": "object",
-      "required": ["slices", "zooms", "maskTracks"],
+      "required": ["slices", "zooms", "isZoomTrackHidden", "maskTracks", "isShortcutsTrackHidden", "dismissedTypingSuggestionStarts"],
       "properties": {
         "slices": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "sourceStartMs", "sourceEndMs", "speed", "muted", "hideCursor", "disableSmoothCursor"],
+            "required": ["id", "sourceStartMs", "sourceEndMs", "speed", "systemAudioVolume", "muted", "hideCursor", "disableSmoothCursor"],
             "properties": {
               "id": { "type": "string" },
               "sourceStartMs": { "type": "number", "minimum": 0 },
               "sourceEndMs": { "type": "number", "minimum": 0 },
               "speed": { "type": "number", "minimum": 0.1, "maximum": 16.0 },
+              "systemAudioVolume": { "type": "number", "minimum": 0, "maximum": 2.0 },
               "muted": { "type": "boolean" },
               "hideCursor": { "type": "boolean" },
               "disableSmoothCursor": { "type": "boolean" }
@@ -279,7 +336,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "sourceStartMs", "sourceEndMs", "scale", "mode", "presentation", "manualCenter01", "disabled"],
+            "required": ["id", "sourceStartMs", "sourceEndMs", "scale", "mode", "presentation", "manualCenter01", "instantAnimation", "disabled"],
             "properties": {
               "id": { "type": "string" },
               "sourceStartMs": { "type": "number", "minimum": 0 },
@@ -297,18 +354,21 @@
                   "chromaticAberration": { "type": "number", "minimum": 0, "maximum": 1 }
                 }
               },
+              "instantAnimation": { "type": "boolean" },
               "disabled": { "type": "boolean" }
             }
           }
         },
+        "isZoomTrackHidden": { "type": "boolean" },
         "maskTracks": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "name", "items"],
+            "required": ["id", "name", "isHidden", "items"],
             "properties": {
               "id": { "type": "string" },
               "name": { "type": "string" },
+              "isHidden": { "type": "boolean" },
               "items": {
                 "type": "array",
                 "items": {
@@ -320,7 +380,7 @@
                     "sourceEndMs": { "type": "number", "minimum": 0 },
                     "type": { "type": "string", "enum": ["blur", "spotlight"] },
                     "style": { "type": "string", "enum": ["gaussian", "pixelate", "solid", "dim"] },
-                    "intensity": { "type": "number", "minimum": 0, "maximum": 100 },
+                    "intensity": { "type": "number", "minimum": 0, "maximum": 160 },
                     "cornerRadius": { "type": "number", "minimum": 0 },
                     "keyframes": {
                       "type": "array",
@@ -340,7 +400,9 @@
               }
             }
           }
-        }
+        },
+        "isShortcutsTrackHidden": { "type": "boolean" },
+        "dismissedTypingSuggestionStarts": { "type": "array", "items": { "type": "integer" } }
       }
     }
   },
@@ -370,6 +432,39 @@
         "stiffness": { "type": "number", "exclusiveMinimum": 0 },
         "damping": { "type": "number", "exclusiveMinimum": 0 },
         "mass": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "shortcutStyleConfig": {
+      "type": "object",
+      "required": ["dockPosition", "offsetX", "offsetY", "colorMode", "solidColorHex", "gradientStartHex", "gradientEndHex", "textColorHex"],
+      "properties": {
+        "dockPosition": { "type": "string", "enum": ["bottom", "top", "left", "right"] },
+        "offsetX": { "type": "number", "minimum": -0.5, "maximum": 0.5 },
+        "offsetY": { "type": "number", "minimum": -0.5, "maximum": 0.5 },
+        "colorMode": { "type": "string", "enum": ["default", "solid", "gradient"] },
+        "solidColorHex": { "type": "string" },
+        "gradientStartHex": { "type": "string" },
+        "gradientEndHex": { "type": "string" },
+        "textColorHex": { "type": "string" }
+      }
+    },
+    "customShortcutSegment": {
+      "type": "object",
+      "required": ["id", "trackId", "sourceStartMs", "sourceEndMs", "modifiers", "primaryKey", "isHidden"],
+      "properties": {
+        "id": { "type": "string" },
+        "trackId": { "type": "string" },
+        "sourceStartMs": { "type": "number", "minimum": 0 },
+        "sourceEndMs": { "type": "number", "minimum": 0 },
+        "modifiers": { "type": "array", "items": { "type": "string" } },
+        "primaryKey": { "type": "string" },
+        "isHidden": { "type": "boolean" },
+        "customStyle": {
+          "anyOf": [
+            { "$ref": "#/$defs/shortcutStyleConfig" },
+            { "type": "null" }
+          ]
+        }
       }
     }
   }
