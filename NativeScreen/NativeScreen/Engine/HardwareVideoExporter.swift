@@ -616,7 +616,8 @@ public final class HardwareVideoExporter {
                     sourceVideoFrame: sourceCIImage,
                     sourceTimeMs: sourceMs,
                     session: session,
-                    outputSize: outputSize
+                    outputSize: outputSize,
+                    includeShortcutOverlay: true
                 )
 
                 guard let pool = adaptor.pixelBufferPool else { continue }
@@ -737,7 +738,8 @@ public final class HardwareVideoExporter {
                     sourceVideoFrame: sourceCIImage,
                     sourceTimeMs: sourceMs,
                     session: session,
-                    outputSize: outputSize
+                    outputSize: outputSize,
+                    includeShortcutOverlay: true
                 )
 
                 if let cgImage = compositor.ciContext.createCGImage(

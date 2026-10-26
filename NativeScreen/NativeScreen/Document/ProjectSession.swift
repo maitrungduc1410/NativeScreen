@@ -1039,7 +1039,8 @@ public final class ProjectSession: Identifiable {
             sourceVideoFrame: sourceCI,
             sourceTimeMs: sourceMs,
             session: self,
-            outputSize: outputSize
+            outputSize: outputSize,
+            includeShortcutOverlay: true
         )
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         return compositor.ciContext.createCGImage(

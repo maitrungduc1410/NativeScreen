@@ -52,6 +52,9 @@ public final class MetalFrameCompositor {
     private var lastMaskedScreenKey: MaskedScreenCacheKey?
     private var cachedMaskedScreenImage: CIImage?
 
+    // Pass 6 (3D Shortcut Keycap Sprite Cache) — avoids re-rasterizing keycap graphics on every frame!
+    private var keycapSpriteCache: [String: CIImage] = [:]
+
     public var isAnimatingBackgroundTransition: Bool {
         guard previousUnblurredBackgroundImage != nil else { return false }
         let elapsed = ProcessInfo.processInfo.systemUptime - backgroundTransitionStartUptime
@@ -77,7 +80,8 @@ public final class MetalFrameCompositor {
         sourceVideoFrame: CIImage?,
         sourceTimeMs: Double,
         session: ProjectSession,
-        outputSize: CGSize
+        outputSize: CGSize,
+        includeShortcutOverlay: Bool = false
     ) -> CIImage {
         let doc = session.document
         let canvasRect = CGRect(origin: .zero, size: outputSize)
@@ -328,6 +332,19 @@ public final class MetalFrameCompositor {
             .cropped(to: canvasRect)
             .composited(over: composite)
             .cropped(to: canvasRect)
+
+        // --- PASS 6: 3D Keyboard Shortcut Keycaps Overlay (For Video/GIF/Still-Frame Export!) ---
+        if includeShortcutOverlay {
+            let activeShortcuts = session.activeShortcutClustersWithStyles(atSourceMs: sourceTimeMs)
+            if !activeShortcuts.isEmpty {
+                composite = renderShortcutKeycapsOverlay(
+                    over: composite,
+                    activeItems: activeShortcuts,
+                    shortcutsSizeRatio: doc.captions.shortcutsSizeRatio,
+                    canvasRect: canvasRect
+                )
+            }
+        }
 
         return composite
     }
@@ -727,6 +744,306 @@ public final class MetalFrameCompositor {
 
         result = transformedCursor.composited(over: result)
         return result
+    }
+
+    // MARK: - Pass 6: 3D Keyboard Shortcut Keycaps Renderer (`renderShortcutKeycapsOverlay`)
+
+    private func renderShortcutKeycapsOverlay(
+        over baseImage: CIImage,
+        activeItems: [(cluster: ProjectSession.ShortcutPressCluster, style: ShortcutStyleConfig)],
+        shortcutsSizeRatio: Double,
+        canvasRect: CGRect
+    ) -> CIImage {
+        var output = baseImage
+        let keyHeight = max(34.0, round(canvasRect.height * CGFloat(shortcutsSizeRatio)))
+        let spacing = round(keyHeight * 0.10)
+        let edgeMargin = max(16.0, round(canvasRect.height * 0.05))
+        let shadowPad = max(18.0, ceil(keyHeight * 0.35))
+
+        for entry in activeItems {
+            let cluster = entry.cluster
+            let style = entry.style
+            guard !cluster.keyCaps.isEmpty else { continue }
+
+            let cacheKey = "\(cluster.id)_\(cluster.compactTimelineLabel)_\(Int(keyHeight))_\(style.dockPosition.rawValue)_\(style.colorMode.rawValue)_\(style.solidColorHex)_\(style.gradientStartHex)_\(style.gradientEndHex)_\(style.textColorHex)"
+
+            let groupSprite: CIImage
+            if let cached = keycapSpriteCache[cacheKey] {
+                groupSprite = cached
+            } else if let rendered = rasterizeShortcutClusterCIImage(
+                keyCaps: cluster.keyCaps,
+                style: style,
+                keyHeight: keyHeight,
+                spacing: spacing,
+                shadowPad: shadowPad
+            ) {
+                keycapSpriteCache[cacheKey] = rendered
+                groupSprite = rendered
+            } else {
+                continue
+            }
+
+            let contentW = groupSprite.extent.width - shadowPad * 2.0
+            let contentH = groupSprite.extent.height - shadowPad * 2.0
+
+            // Base position in CoreImage bottom-left coordinates (`y = 0` at bottom, `y = canvasRect.height` at top)
+            var contentOriginX: CGFloat
+            var contentOriginY: CGFloat
+
+            switch style.dockPosition {
+            case .bottom:
+                contentOriginX = (canvasRect.width - contentW) * 0.5
+                contentOriginY = edgeMargin
+            case .top:
+                contentOriginX = (canvasRect.width - contentW) * 0.5
+                contentOriginY = canvasRect.height - edgeMargin - contentH
+            case .left:
+                contentOriginX = edgeMargin
+                contentOriginY = (canvasRect.height - contentH) * 0.5
+            case .right:
+                contentOriginX = canvasRect.width - edgeMargin - contentW
+                contentOriginY = (canvasRect.height - contentH) * 0.5
+            }
+
+            // Apply normalized `offsetX` and `offsetY` (note: SwiftUI `offsetY > 0` moves down, so in bottom-up CoreImage it subtracts!)
+            contentOriginX += CGFloat(style.offsetX) * canvasRect.width
+            contentOriginY -= CGFloat(style.offsetY) * canvasRect.height
+
+            let spriteOriginX = round(contentOriginX - shadowPad)
+            let spriteOriginY = round(contentOriginY - shadowPad)
+
+            let positioned = groupSprite
+                .transformed(by: CGAffineTransform(translationX: spriteOriginX, y: spriteOriginY))
+                .cropped(to: canvasRect)
+            output = positioned.composited(over: output)
+        }
+
+        return output.cropped(to: canvasRect)
+    }
+
+    private func rasterizeShortcutClusterCIImage(
+        keyCaps: [ProjectSession.ShortcutKeyCap],
+        style: ShortcutStyleConfig,
+        keyHeight: CGFloat,
+        spacing: CGFloat,
+        shadowPad: CGFloat
+    ) -> CIImage? {
+        let isVertical = style.dockPosition.isVerticalStack
+        let keyWidths = keyCaps.map { round(keyHeight * CGFloat($0.widthRatio)) }
+
+        let contentW: CGFloat
+        let contentH: CGFloat
+        if isVertical {
+            contentW = keyWidths.max() ?? keyHeight
+            contentH = CGFloat(keyCaps.count) * keyHeight + CGFloat(max(0, keyCaps.count - 1)) * spacing
+        } else {
+            contentW = keyWidths.reduce(0, +) + CGFloat(max(0, keyCaps.count - 1)) * spacing
+            contentH = keyHeight
+        }
+
+        let bitmapW = max(4, Int(ceil(contentW + shadowPad * 2.0)))
+        let bitmapH = max(4, Int(ceil(contentH + shadowPad * 2.0)))
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+
+        guard let ctx = CGContext(
+            data: nil,
+            width: bitmapW,
+            height: bitmapH,
+            bitsPerComponent: 8,
+            bytesPerRow: bitmapW * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        // Flip CGContext so `y = 0` is at the top (matching SwiftUI top-down layout!)
+        ctx.translateBy(x: 0, y: CGFloat(bitmapH))
+        ctx.scaleBy(x: 1.0, y: -1.0)
+
+        let nsGraphicsCtx = NSGraphicsContext(cgContext: ctx, flipped: true)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = nsGraphicsCtx
+        defer { NSGraphicsContext.restoreGraphicsState() }
+
+        var cursorX = shadowPad
+        var cursorY = shadowPad
+
+        for (idx, cap) in keyCaps.enumerated() {
+            let kw = keyWidths[idx]
+            let kh = keyHeight
+            let capX = isVertical ? (shadowPad + (contentW - kw) * 0.5) : cursorX
+            let capY = isVertical ? cursorY : shadowPad
+            let capRect = CGRect(x: capX, y: capY, width: kw, height: kh)
+
+            drawSingle3DKeycap(in: ctx, rect: capRect, cap: cap, style: style)
+
+            if isVertical {
+                cursorY += kh + spacing
+            } else {
+                cursorX += kw + spacing
+            }
+        }
+
+        guard let cgImg = ctx.makeImage() else { return nil }
+        return CIImage(cgImage: cgImg)
+    }
+
+    private func drawSingle3DKeycap(
+        in ctx: CGContext,
+        rect: CGRect,
+        cap: ProjectSession.ShortcutKeyCap,
+        style: ShortcutStyleConfig
+    ) {
+        let kh = rect.height
+        let outerRadius = kh * 0.125
+        let borderThickness = max(1.2, kh * (3.0 / 256.0))
+        let innerRadius = max(2.0, outerRadius - borderThickness)
+        let innerPad = (kh - borderThickness * 2.0) * 0.125
+        let innerRect = rect.insetBy(dx: borderThickness, dy: borderThickness)
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+
+        let outerPath = CGPath(roundedRect: rect, cornerWidth: outerRadius, cornerHeight: outerRadius, transform: nil)
+        let innerPath = CGPath(roundedRect: innerRect, cornerWidth: innerRadius, cornerHeight: innerRadius, transform: nil)
+
+        // 1. Soft Drop Shadow + Base Dark Backing
+        ctx.saveGState()
+        ctx.setShadow(
+            offset: CGSize(width: 0, height: kh * 0.10),
+            blur: kh * 0.22,
+            color: NSColor.black.withAlphaComponent(0.42).cgColor
+        )
+        ctx.setFillColor(NSColor(srgbRed: 0.08, green: 0.08, blue: 0.10, alpha: 1.0).cgColor)
+        ctx.addPath(outerPath)
+        ctx.fillPath()
+        ctx.restoreGState()
+
+        // 2. Outer 3D Bevel Border Gradient
+        let bevelTop: CGColor
+        let bevelBottom: CGColor
+        switch style.colorMode {
+        case .defaultDark:
+            bevelTop = NSColor(srgbRed: 0.396, green: 0.396, blue: 0.396, alpha: 0.92).cgColor
+            bevelBottom = NSColor(srgbRed: 0.098, green: 0.098, blue: 0.098, alpha: 1.0).cgColor
+        case .solid, .gradient:
+            bevelTop = NSColor.white.withAlphaComponent(0.38).cgColor
+            bevelBottom = NSColor.black.withAlphaComponent(0.55).cgColor
+        }
+
+        if let bevelGrad = CGGradient(colorsSpace: colorSpace, colors: [bevelTop, bevelBottom] as CFArray, locations: [0.0, 1.0]) {
+            ctx.saveGState()
+            ctx.addPath(outerPath)
+            ctx.clip()
+            ctx.drawLinearGradient(
+                bevelGrad,
+                start: CGPoint(x: rect.midX, y: rect.minY),
+                end: CGPoint(x: rect.midX, y: rect.maxY),
+                options: []
+            )
+            ctx.restoreGState()
+        }
+
+        // 3. Inner Keycap Body Gradient (`#2B2B2B -> #191919` or Custom Solid / Gradient!)
+        let bodyStart: CGColor
+        let bodyEnd: CGColor
+        switch style.colorMode {
+        case .defaultDark:
+            bodyStart = NSColor(srgbRed: 0.169, green: 0.169, blue: 0.169, alpha: 1.0).cgColor
+            bodyEnd = NSColor(srgbRed: 0.098, green: 0.098, blue: 0.098, alpha: 1.0).cgColor
+        case .solid:
+            let c = nsColorFromHex(style.solidColorHex)
+            bodyStart = c.cgColor
+            bodyEnd = c.withAlphaComponent(0.76).cgColor
+        case .gradient:
+            bodyStart = nsColorFromHex(style.gradientStartHex).cgColor
+            bodyEnd = nsColorFromHex(style.gradientEndHex).cgColor
+        }
+
+        if let bodyGrad = CGGradient(colorsSpace: colorSpace, colors: [bodyStart, bodyEnd] as CFArray, locations: [0.0, 1.0]) {
+            ctx.saveGState()
+            ctx.addPath(innerPath)
+            ctx.clip()
+            let gradStart = (style.colorMode == .gradient)
+                ? CGPoint(x: innerRect.minX, y: innerRect.minY)
+                : CGPoint(x: innerRect.midX, y: innerRect.minY)
+            let gradEnd = (style.colorMode == .gradient)
+                ? CGPoint(x: innerRect.maxX, y: innerRect.maxY)
+                : CGPoint(x: innerRect.midX, y: innerRect.maxY)
+            ctx.drawLinearGradient(bodyGrad, start: gradStart, end: gradEnd, options: [])
+            ctx.restoreGState()
+        }
+
+        // 4. Keycap Symbol & Label Typography
+        let textNSColor: NSColor = (style.colorMode == .defaultDark) ? .white : nsColorFromHex(style.textColorHex)
+        let contentPad = borderThickness + innerPad
+        let textBox = rect.insetBy(dx: contentPad, dy: contentPad)
+
+        switch cap.labelPlacement {
+        case .center:
+            let font = NSFont.systemFont(ofSize: kh * 0.33, weight: .regular)
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: textNSColor
+            ]
+            let nsStr = cap.label as NSString
+            let sz = nsStr.size(withAttributes: attrs)
+            let tx = rect.midX - sz.width * 0.5
+            let ty = rect.midY - sz.height * 0.5
+            nsStr.draw(at: CGPoint(x: tx, y: ty), withAttributes: attrs)
+
+        case .bottomLeft:
+            if let sym = cap.symbol, !sym.isEmpty {
+                let symFont = NSFont.systemFont(ofSize: kh * 0.31, weight: .regular)
+                let symAttrs: [NSAttributedString.Key: Any] = [
+                    .font: symFont,
+                    .foregroundColor: textNSColor
+                ]
+                let nsSym = sym as NSString
+                nsSym.draw(at: CGPoint(x: textBox.minX, y: textBox.minY), withAttributes: symAttrs)
+            }
+            if !cap.label.isEmpty {
+                let lblFont = NSFont.systemFont(ofSize: kh * 0.215, weight: .medium)
+                let lblAttrs: [NSAttributedString.Key: Any] = [
+                    .font: lblFont,
+                    .foregroundColor: textNSColor.withAlphaComponent(0.96)
+                ]
+                let nsLbl = cap.label as NSString
+                let lSz = nsLbl.size(withAttributes: lblAttrs)
+                nsLbl.draw(at: CGPoint(x: textBox.minX, y: textBox.maxY - lSz.height), withAttributes: lblAttrs)
+            }
+
+        case .bottomCenter:
+            if let sym = cap.symbol, !sym.isEmpty {
+                let symFont = NSFont.systemFont(ofSize: kh * 0.31, weight: .regular)
+                let symAttrs: [NSAttributedString.Key: Any] = [
+                    .font: symFont,
+                    .foregroundColor: textNSColor
+                ]
+                let nsSym = sym as NSString
+                let sSz = nsSym.size(withAttributes: symAttrs)
+                nsSym.draw(at: CGPoint(x: rect.midX - sSz.width * 0.5, y: textBox.minY), withAttributes: symAttrs)
+            }
+            if !cap.label.isEmpty {
+                let lblFont = NSFont.systemFont(ofSize: kh * 0.215, weight: .medium)
+                let lblAttrs: [NSAttributedString.Key: Any] = [
+                    .font: lblFont,
+                    .foregroundColor: textNSColor.withAlphaComponent(0.96)
+                ]
+                let nsLbl = cap.label as NSString
+                let lSz = nsLbl.size(withAttributes: lblAttrs)
+                nsLbl.draw(at: CGPoint(x: rect.midX - lSz.width * 0.5, y: textBox.maxY - lSz.height), withAttributes: lblAttrs)
+            }
+        }
+    }
+
+    private func nsColorFromHex(_ hex: String) -> NSColor {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var rgb: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&rgb)
+        let r = CGFloat((rgb >> 16) & 0xFF) / 255.0
+        let g = CGFloat((rgb >> 8) & 0xFF) / 255.0
+        let b = CGFloat(rgb & 0xFF) / 255.0
+        return NSColor(srgbRed: r, green: g, blue: b, alpha: 1.0)
     }
 
     private func fallbackSyntheticScreenImage(size: CGSize) -> CIImage {
