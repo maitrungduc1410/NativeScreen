@@ -486,6 +486,8 @@ public final class MetalFrameCompositor {
             colorSpace: colorSpace
         )
         cmdBuf.commit()
+        // Wait for the one-time texture bake to finish on the GPU so Frame 0 never samples an uninitialized texture!
+        cmdBuf.waitUntilCompleted()
 
         guard let baked = CIImage(mtlTexture: tex, options: [.colorSpace: colorSpace]) else {
             return nil
