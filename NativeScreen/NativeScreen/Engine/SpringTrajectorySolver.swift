@@ -32,6 +32,8 @@ public struct SpringTrajectorySolver: Sendable {
         public var velocity01PerSec: Point01
         public var scaleVelocityPerSec: Double
         public var isLoupeMode: Bool
+        public var loupePresence01: Double
+        public var loupeScale: Double
         public var loupeConfig: LoupeConfig
     }
 
@@ -415,11 +417,16 @@ public struct SpringTrajectorySolver: Sendable {
         var rectVelY = 0.0
         var rectVelW = 0.0
 
-        // For Loupe mode, track lens center & scale smoothly
+        // For Loupe mode, track lens center, scale, and presence (`0.0 ... 1.0`) smoothly
         var loupeCenterX = 0.5
         var loupeCenterY = 0.5
+        var loupeScaleVal = 1.0
+        var loupePresenceVal = 0.0
         var loupeVelX = 0.0
         var loupeVelY = 0.0
+        var loupeVelScale = 0.0
+        var loupeVelPresence = 0.0
+        var lastActiveLoupeCfg = LoupeConfig()
         var prevCenter01 = Point01.center
 
         for step in 0..<totalSteps {
@@ -434,35 +441,60 @@ public struct SpringTrajectorySolver: Sendable {
             var targetScale = 1.0
             var targetFocusX = 0.5
             var targetFocusY = 0.5
-            var isLoupe = false
-            var loupeCfg = LoupeConfig()
+            var isLoupeActiveNow = false
+            var targetLoupePresence = 0.0
+            var targetLoupeScale = 1.0
+            var targetLoupeFocusX = loupeCenterX
+            var targetLoupeFocusY = loupeCenterY
+            var loupeCfg = lastActiveLoupeCfg
 
             if let zoom = activeZoom {
-                isLoupe = (zoom.presentation == .loupe)
-                loupeCfg = zoom.loupe
-                targetScale = max(1.0, zoom.scale)
-
-                switch zoom.mode {
-                case .followCursor:
-                    if isLoupe {
-                        // Loupe lens follows the smoothed cursor directly
-                        targetFocusX = cursorAtStep.x
-                        targetFocusY = cursorAtStep.y
-                    } else if let groups = zoomFocusGroups[zoom.id], !groups.isEmpty {
-                        // `ed(project, zoomRange, timeMs)`:
-                        // Pick the latest `MovesGroup` whose `startTimeMs <= tMs` (or the first group if before)
-                        let activeGroup = groups.last(where: { $0.startTimeMs <= tMs }) ?? groups[0]
-                        let groupCenter = activeGroup.timeWeightedCenter01
-                        targetFocusX = groupCenter.x
-                        targetFocusY = groupCenter.y
-                    } else {
-                        targetFocusX = cursorAtStep.x
-                        targetFocusY = cursorAtStep.y
+                isLoupeActiveNow = (zoom.presentation == .loupe)
+                if isLoupeActiveNow {
+                    loupeCfg = zoom.loupe
+                    lastActiveLoupeCfg = zoom.loupe
+                    targetLoupePresence = 1.0
+                    targetLoupeScale = max(1.0, zoom.scale)
+                    // Subtle organic hover wobble
+                    let wobbleX = sin((tMs / 15000.0) * 2.0 * .pi) * 0.008
+                    let wobbleY = cos((tMs / 18000.0) * 2.0 * .pi) * 0.008
+                    switch zoom.mode {
+                    case .followCursor:
+                        targetLoupeFocusX = min(1.0, max(0.0, cursorAtStep.x + wobbleX))
+                        targetLoupeFocusY = min(1.0, max(0.0, cursorAtStep.y + wobbleY))
+                    case .manual:
+                        targetLoupeFocusX = zoom.manualCenter01.x
+                        targetLoupeFocusY = zoom.manualCenter01.y
                     }
-
-                case .manual:
-                    targetFocusX = zoom.manualCenter01.x
-                    targetFocusY = zoom.manualCenter01.y
+                    // While Loupe is active, the underlying screen stays unzoomed (`1.0x`)
+                    targetScale = 1.0
+                    targetFocusX = 0.5
+                    targetFocusY = 0.5
+                } else {
+                    targetScale = max(1.0, zoom.scale)
+                    switch zoom.mode {
+                    case .followCursor:
+                        if let groups = zoomFocusGroups[zoom.id], !groups.isEmpty {
+                            let activeGroup = groups.last(where: { $0.startTimeMs <= tMs }) ?? groups[0]
+                            let groupCenter = activeGroup.timeWeightedCenter01
+                            targetFocusX = groupCenter.x
+                            targetFocusY = groupCenter.y
+                        } else {
+                            targetFocusX = cursorAtStep.x
+                            targetFocusY = cursorAtStep.y
+                        }
+                    case .manual:
+                        targetFocusX = zoom.manualCenter01.x
+                        targetFocusY = zoom.manualCenter01.y
+                    }
+                }
+            } else {
+                // Pre-warm `loupeCenterX/Y` towards an upcoming Loupe block so it spawns right on the cursor (`inactiveLoupeStandIn`)
+                if let upcomingLoupe = activeZooms.first(where: { $0.presentation == .loupe && $0.sourceStartMs > tMs && $0.sourceStartMs - tMs <= 450.0 }) {
+                    loupeCfg = upcomingLoupe.loupe
+                    lastActiveLoupeCfg = upcomingLoupe.loupe
+                    targetLoupeFocusX = (upcomingLoupe.mode == .manual) ? upcomingLoupe.manualCenter01.x : cursorAtStep.x
+                    targetLoupeFocusY = (upcomingLoupe.mode == .manual) ? upcomingLoupe.manualCenter01.y : cursorAtStep.y
                 }
             }
 
@@ -471,7 +503,7 @@ public struct SpringTrajectorySolver: Sendable {
             var targetRectX = 0.5 - targetFocusX * targetScale
             var targetRectY = 0.5 - targetFocusY * targetScale
 
-            if !isLoupe && document.motion.avoidEmptyBoundsWhenZooming && targetScale > 1.0001 {
+            if !isLoupeActiveNow && document.motion.avoidEmptyBoundsWhenZooming && targetScale > 1.0001 {
                 // `containInZoomArea`: ensures `targetRectX` is in `[1.0 - targetScale, 0.0]` so the zoomed screen never shows empty margins!
                 let minOrigin = 1.0 - targetScale
                 targetRectX = min(0.0, max(minOrigin, targetRectX))
@@ -479,7 +511,7 @@ public struct SpringTrajectorySolver: Sendable {
             }
 
             // Step the 3 screen-rect components `(rectX, rectY, rectW)` with the overshoot-clamped spring (or instantly if `zoom.instantAnimation == true`)!
-            if activeZoom?.instantAnimation == true {
+            if activeZoom?.instantAnimation == true && !isLoupeActiveNow {
                 rectX = targetRectX
                 rectY = targetRectY
                 rectW = targetRectW
@@ -510,30 +542,56 @@ public struct SpringTrajectorySolver: Sendable {
                 )
             }
 
-            // Also step Loupe center with a 1.5x stiffer spring
+            // Step Loupe center, scale & presence with the 1.5x stiffer `loupeSpring`
             let loupeSpring = SpringConfig(
                 stiffness: camSpring.stiffness * 1.5,
                 damping: camSpring.damping * 1.22,
                 mass: camSpring.mass
             )
-            (loupeCenterX, loupeVelX) = Self.stepClampedSpring(
-                current: loupeCenterX,
-                velocity: loupeVelX,
-                target: targetFocusX,
-                spring: loupeSpring,
-                dt: dt
-            )
-            (loupeCenterY, loupeVelY) = Self.stepClampedSpring(
-                current: loupeCenterY,
-                velocity: loupeVelY,
-                target: targetFocusY,
-                spring: loupeSpring,
-                dt: dt
-            )
+            if activeZoom?.instantAnimation == true && isLoupeActiveNow {
+                loupeCenterX = targetLoupeFocusX
+                loupeCenterY = targetLoupeFocusY
+                loupeScaleVal = targetLoupeScale
+                loupePresenceVal = targetLoupePresence
+                loupeVelX = 0.0
+                loupeVelY = 0.0
+                loupeVelScale = 0.0
+                loupeVelPresence = 0.0
+            } else {
+                (loupeCenterX, loupeVelX) = Self.stepClampedSpring(
+                    current: loupeCenterX,
+                    velocity: loupeVelX,
+                    target: targetLoupeFocusX,
+                    spring: loupeSpring,
+                    dt: dt
+                )
+                (loupeCenterY, loupeVelY) = Self.stepClampedSpring(
+                    current: loupeCenterY,
+                    velocity: loupeVelY,
+                    target: targetLoupeFocusY,
+                    spring: loupeSpring,
+                    dt: dt
+                )
+                (loupeScaleVal, loupeVelScale) = Self.stepClampedSpring(
+                    current: loupeScaleVal,
+                    velocity: loupeVelScale,
+                    target: targetLoupeScale,
+                    spring: loupeSpring,
+                    dt: dt
+                )
+                (loupePresenceVal, loupeVelPresence) = Self.stepClampedSpring(
+                    current: loupePresenceVal,
+                    velocity: loupeVelPresence,
+                    target: targetLoupePresence,
+                    spring: loupeSpring,
+                    dt: dt
+                )
+            }
 
+            let isLoupeVisible = (loupePresenceVal > 0.005)
             let solvedScale = max(1.0, rectW)
             let solvedCenter01: Point01
-            if isLoupe {
+            if isLoupeVisible {
                 solvedCenter01 = Point01(
                     x: min(1.0, max(0.0, loupeCenterX)),
                     y: min(1.0, max(0.0, loupeCenterY))
@@ -563,7 +621,9 @@ public struct SpringTrajectorySolver: Sendable {
                     scale: solvedScale,
                     velocity01PerSec: Point01(x: centerVelX, y: centerVelY),
                     scaleVelocityPerSec: rectVelW,
-                    isLoupeMode: isLoupe,
+                    isLoupeMode: isLoupeVisible,
+                    loupePresence01: min(1.0, max(0.0, loupePresenceVal)),
+                    loupeScale: max(1.0, loupeScaleVal),
                     loupeConfig: loupeCfg
                 )
             )
@@ -769,6 +829,8 @@ public struct SpringTrajectorySolver: Sendable {
                     velocity01PerSec: .zero,
                     scaleVelocityPerSec: 0.0,
                     isLoupeMode: false,
+                    loupePresence01: 0.0,
+                    loupeScale: 1.0,
                     loupeConfig: LoupeConfig()
                 )
             )
@@ -808,7 +870,9 @@ public struct SpringTrajectorySolver: Sendable {
             scale: cam0.scale + (cam1.scale - cam0.scale) * frac,
             velocity01PerSec: cam0.velocity01PerSec,
             scaleVelocityPerSec: cam0.scaleVelocityPerSec,
-            isLoupeMode: cam0.isLoupeMode,
+            isLoupeMode: cam0.isLoupeMode || cam1.isLoupeMode,
+            loupePresence01: cam0.loupePresence01 + (cam1.loupePresence01 - cam0.loupePresence01) * frac,
+            loupeScale: cam0.loupeScale + (cam1.loupeScale - cam0.loupeScale) * frac,
             loupeConfig: cam0.loupeConfig
         )
 

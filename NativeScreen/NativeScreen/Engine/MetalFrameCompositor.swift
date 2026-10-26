@@ -209,76 +209,30 @@ public final class MetalFrameCompositor {
             )
         }
 
-        // Apply Virtual Camera Pan & Zoom Transform (Classic mode) OR Optical Glass Loupe Lens (Loupe mode)
+        // Apply Virtual Camera Pan & Zoom Transform (Classic mode)
         // Note: When the user is interactively selecting or editing a Mask on the paused Preview Canvas,
         // zoom out to 1x (`zoomScale = 1.0`) so masks are drawn/adjusted on the full unzoomed source clip!
         let suppressZoomForMaskEditing = !includeShortcutOverlay
             && !session.isPlaying
             && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
         let zoomScale = suppressZoomForMaskEditing ? 1.0 : CGFloat(max(1.0, cameraState.scale))
-        if zoomScale > 1.002 {
+        if zoomScale > 1.002 && !cameraState.isLoupeMode {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
+            let canvasCenterX = canvasRect.midX
+            let canvasCenterY = canvasRect.midY
 
-            if cameraState.isLoupeMode {
-                let loupeRadius = max(40.0, min(screenFrameRect.width, screenFrameRect.height) * CGFloat(cameraState.loupeConfig.radius01))
-                let loupeRect = CGRect(
-                    x: focusX - loupeRadius,
-                    y: focusY - loupeRadius,
-                    width: loupeRadius * 2.0,
-                    height: loupeRadius * 2.0
-                )
+            var cameraTransform = CGAffineTransform.identity
+            cameraTransform = cameraTransform.translatedBy(x: canvasCenterX, y: canvasCenterY)
+            cameraTransform = cameraTransform.scaledBy(x: zoomScale, y: zoomScale)
+            cameraTransform = cameraTransform.translatedBy(x: -focusX, y: -focusY)
 
-                var zoomTransform = CGAffineTransform.identity
-                zoomTransform = zoomTransform.translatedBy(x: focusX, y: focusY)
-                zoomTransform = zoomTransform.scaledBy(x: zoomScale, y: zoomScale)
-                zoomTransform = zoomTransform.translatedBy(x: -focusX, y: -focusY)
-
-                let magnifiedScreen = positionedScreen.transformed(by: zoomTransform).cropped(to: loupeRect)
-                if let circleStencil = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                    "inputExtent": CIVector(cgRect: loupeRect),
-                    "inputRadius": loupeRadius,
-                    "inputColor": CIColor.white
-                ])?.outputImage {
-                    let clearBG = CIImage.empty().cropped(to: loupeRect)
-                    let circularLens = magnifiedScreen.applyingFilter("CIBlendWithMask", parameters: [
-                        kCIInputBackgroundImageKey: clearBG,
-                        kCIInputMaskImageKey: circleStencil
-                    ]).cropped(to: loupeRect)
-
-                    // Bevel glass rim around the loupe
-                    let borderRadius = loupeRadius + 2.5
-                    let borderRect = CGRect(
-                        x: focusX - borderRadius,
-                        y: focusY - borderRadius,
-                        width: borderRadius * 2.0,
-                        height: borderRadius * 2.0
-                    )
-                    if let rimCircle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                        "inputExtent": CIVector(cgRect: borderRect),
-                        "inputRadius": borderRadius,
-                        "inputColor": CIColor(red: 1, green: 1, blue: 1, alpha: 0.65)
-                    ])?.outputImage {
-                        positionedScreen = rimCircle.composited(over: positionedScreen)
-                    }
-                    positionedScreen = circularLens.composited(over: positionedScreen)
-                }
-            } else {
-                let canvasCenterX = canvasRect.midX
-                let canvasCenterY = canvasRect.midY
-
-                var cameraTransform = CGAffineTransform.identity
-                cameraTransform = cameraTransform.translatedBy(x: canvasCenterX, y: canvasCenterY)
-                cameraTransform = cameraTransform.scaledBy(x: zoomScale, y: zoomScale)
-                cameraTransform = cameraTransform.translatedBy(x: -focusX, y: -focusY)
-
-                // Crop immediately to `canvasRect` (+ small margin for motion blur) so downstream filters
-                // NEVER evaluate an oversized 1.8x–3.5x zoomed intermediate texture outside the visible canvas!
-                let zoomedMargin = canvasRect.insetBy(dx: -24, dy: -24)
-                positionedScreen = positionedScreen
-                    .transformed(by: cameraTransform)
-                    .cropped(to: zoomedMargin)
-            }
+            // Crop immediately to `canvasRect` (+ small margin for motion blur) so downstream filters
+            // NEVER evaluate an oversized 1.8x–3.5x zoomed intermediate texture outside the visible canvas!
+            let zoomedMargin = canvasRect.insetBy(dx: -24, dy: -24)
+            positionedScreen = positionedScreen
+                .transformed(by: cameraTransform)
+                .cropped(to: zoomedMargin)
         }
 
         // --- PASS 5: True 1-Frame Shutter Motion Blur ---
@@ -286,7 +240,7 @@ public final class MetalFrameCompositor {
         // - Translational pan blur (`CIMotionBlur`) ONLY fires when the camera center actually translates across pixels (`panPixelsPerFrame > 1.8`).
         // - Radial zoom blur (`CIZoomBlur`) ONLY fires during the fast impulse of a zoom change (`scalePixelsPerFrame > 1.8`).
         // - As soon as per-frame displacement drops below 1.8px (`rf.isStatic`), blur is 0.0 so the image settles crystal-clear!
-        if !suppressZoomForMaskEditing && doc.motion.motionBlurIntensity > 0.02 {
+        if !suppressZoomForMaskEditing && !cameraState.isLoupeMode && doc.motion.motionBlurIntensity > 0.02 {
             let prevCam = session.trajectorySolver.evaluate(atSourceMs: max(0.0, sourceTimeMs - 16.67)).camera
             let blurStrength = CGFloat(min(1.0, max(0.0, doc.motion.motionBlurIntensity)))
 
@@ -339,6 +293,27 @@ public final class MetalFrameCompositor {
             .cropped(to: canvasRect)
             .composited(over: composite)
             .cropped(to: canvasRect)
+
+        // --- PASS 5B: Liquid Glass Loupe Lens ---
+        // Rendered over the full scene (screen + background) so the 3D glass bevel refracts and casts its thrown shadow
+        // and rainbow caustics across both the screen window and the background wallpaper!
+        if !suppressZoomForMaskEditing && cameraState.loupePresence01 > 0.005 && cameraState.loupeScale > 1.002 {
+            let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
+            let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
+            let maxScreenDim = max(screenFrameRect.width, screenFrameRect.height)
+            let loupeRadius = max(48.0, maxScreenDim * CGFloat(cameraState.loupeConfig.radius01))
+
+            composite = LiquidGlassLoupeShaderRenderer.apply(
+                to: composite,
+                canvasRect: canvasRect,
+                centerPx: CGPoint(x: focusX, y: focusY),
+                radiusPx: loupeRadius,
+                zoomScale: CGFloat(cameraState.loupeScale),
+                bevelRatio: CGFloat(max(0.18, cameraState.loupeConfig.bevelRatio)),
+                chromaticAberration: CGFloat(max(0.55, cameraState.loupeConfig.chromaticAberration)),
+                presence: CGFloat(cameraState.loupePresence01)
+            )
+        }
 
         // --- PASS 6: 3D Keyboard Shortcut Keycaps Overlay (For Video/GIF/Still-Frame Export!) ---
         if includeShortcutOverlay {

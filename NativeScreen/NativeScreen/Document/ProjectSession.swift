@@ -825,14 +825,18 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    public func addZoomAtPlayhead() {
+    public func addZoomAtPlayhead(presentation: ZoomPresentation = .screen) {
         let srcMs = committedSourceTimeMs
         let maxDur = metadata.durationMs
         let cursorState = trajectorySolver.evaluate(atSourceMs: srcMs).cursor
 
         let sorted = document.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
         if let containing = sorted.first(where: { srcMs >= $0.sourceStartMs && srcMs <= $0.sourceEndMs }) {
+            if containing.presentation != presentation {
+                setZoomPresentation(id: containing.id, presentation: presentation)
+            }
             selectZoom(containing.id)
+            scrollToTimelineTrack("track_zoom")
             return
         }
 
@@ -849,10 +853,11 @@ public final class ProjectSession: Identifiable {
         let newZoom = ZoomBlock(
             sourceStartMs: startMs,
             sourceEndMs: endMs,
-            scale: 1.8,
+            scale: presentation == .loupe ? 2.0 : 1.8,
             mode: .followCursor,
-            presentation: .screen,
-            manualCenter01: cursorState.position01
+            presentation: presentation,
+            manualCenter01: cursorState.position01,
+            loupe: LoupeConfig(radius01: 0.35, bevelRatio: 0.25, chromaticAberration: 0.65)
         )
         mutate { doc in
             doc.timeline.isZoomTrackHidden = false

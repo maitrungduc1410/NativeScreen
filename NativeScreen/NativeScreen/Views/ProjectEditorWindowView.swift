@@ -392,14 +392,14 @@ public struct ProjectEditorWindowView: View {
                                         icon: "plus.magnifyingglass",
                                         tooltip: "Classic zoom"
                                     ) {
-                                        session.addZoomAtPlayhead()
+                                        session.addZoomAtPlayhead(presentation: .screen)
                                     }
 
                                     quickDockIconButton(
                                         icon: "sparkle.magnifyingglass",
-                                        tooltip: "Auto-cluster zooms"
+                                        tooltip: "Glass Loupe zoom"
                                     ) {
-                                        session.regenerateAutoZooms()
+                                        session.addZoomAtPlayhead(presentation: .loupe)
                                     }
 
                                     quickDockIconButton(

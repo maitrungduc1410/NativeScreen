@@ -2002,6 +2002,38 @@ public struct InspectorSidebarView: View {
                             range: 0.15...0.60,
                             defaultValue: 0.35
                         )
+
+                        coalescedSlider(
+                            title: "Glass bevel refraction",
+                            value: Binding(
+                                get: { zoom.loupe.bevelRatio },
+                                set: { v in
+                                    session.mutate { doc in
+                                        if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                            doc.timeline.zooms[idx].loupe.bevelRatio = v
+                                        }
+                                    }
+                                }
+                            ),
+                            range: 0.08...0.50,
+                            defaultValue: 0.25
+                        )
+
+                        coalescedSlider(
+                            title: "Chromatic aberration",
+                            value: Binding(
+                                get: { zoom.loupe.chromaticAberration },
+                                set: { v in
+                                    session.mutate { doc in
+                                        if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                            doc.timeline.zooms[idx].loupe.chromaticAberration = v
+                                        }
+                                    }
+                                }
+                            ),
+                            range: 0.0...1.2,
+                            defaultValue: 0.65
+                        )
                     }
 
                     Button {
