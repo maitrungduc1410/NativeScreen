@@ -467,10 +467,7 @@ public struct ProjectEditorWindowView: View {
 
                         // Center: Timecode + 3 Transport Buttons with Hover Highlight & Top Tooltips
                         HStack(spacing: 16) {
-                            Text(formatTimecode(session.effectivePreviewTimelineMs))
-                                .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .frame(width: 64, alignment: .trailing)
+                            LivePlayheadTimecodeTextView(session: session)
 
                             InstantTooltipButton(
                                 tooltip: "Jump to start",
@@ -1054,6 +1051,23 @@ public struct ProjectEditorWindowView: View {
         let secs = Int(totalSec) % 60
         let hundredths = Int((totalSec - floor(totalSec)) * 100)
         return String(format: "%02d:%02d.%02d", mins, secs, hundredths)
+    }
+}
+
+/// Isolated 120Hz timecode text view so `ProjectEditorWindowView.body` is NEVER invalidated during playback or timeline hover skimming!
+private struct LivePlayheadTimecodeTextView: View {
+    @Bindable var session: ProjectSession
+
+    var body: some View {
+        let totalSec = max(0.0, session.effectivePreviewTimelineMs / 1000.0)
+        let mins = Int(totalSec) / 60
+        let secs = Int(totalSec) % 60
+        let hundredths = Int((totalSec - floor(totalSec)) * 100)
+
+        Text(String(format: "%02d:%02d.%02d", mins, secs, hundredths))
+            .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
+            .foregroundStyle(.secondary)
+            .frame(width: 64, alignment: .trailing)
     }
 }
 

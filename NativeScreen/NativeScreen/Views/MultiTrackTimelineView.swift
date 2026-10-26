@@ -46,14 +46,6 @@ public struct MultiTrackTimelineView: View {
                 let totalTimelineMs = max(1000.0, session.timeMapper.totalTimelineDurationMs)
                 let stepInfo = SmoothTimeRulerView.computeStepIntervals(totalDurationMs: totalTimelineMs, width: contentWidth)
 
-                let playheadXInDoc = trackHorizontalInset + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
-                let playheadXInViewport = playheadXInDoc - horizontalScrollOffset
-
-                let hoverXInDoc: CGFloat? = (!session.isPlaying && session.hoverSkimTimelineMs != nil)
-                    ? (trackHorizontalInset + CGFloat(session.hoverSkimTimelineMs! / totalTimelineMs) * contentWidth)
-                    : nil
-                let hoverXInViewport: CGFloat? = hoverXInDoc.map { $0 - horizontalScrollOffset }
-
                 ZStack(alignment: .topLeading) {
                     VStack(spacing: 0) {
                         // A. FIXED TOP RULER BAR
@@ -358,39 +350,17 @@ public struct MultiTrackTimelineView: View {
                     }
 
                     // C. UNIFIED CONTINUOUS GHOST PLAYHEAD + COMMITTED PLAYHEAD OVERLAY
-                    // Spans seamlessly from the top of the Ruler through all tracks with zero gap between head and line!
-                    ZStack(alignment: .topLeading) {
-                        // 1. Ghost Hover Playhead (Smoothly ducks its teardrop head well below the main purple playhead!
-                        //    When Split Tool `isSplitModeActive` is ON, its vertical stem turns RED!)
-                        if let gx = hoverXInViewport, gx >= -8 && gx <= viewportWidth + 8 {
-                            let distToMain = abs(gx - playheadXInViewport)
-                            let proximity01 = max(0.0, min(1.0, 1.0 - (distToMain / 26.0)))
-                            let duckYOffset = 22.0 * proximity01 * (2.0 - proximity01)
-
-                            UnifiedPlayheadCanvasView(
-                                headColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.92),
-                                stemColor: session.isSplitModeActive
-                                    ? Color(red: 0.94, green: 0.32, blue: 0.26).opacity(0.90)
-                                    : Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.65),
-                                headTopY: 1.5 + duckYOffset,
-                                totalHeight: outerGeo.size.height
-                            )
-                            .frame(width: 18, height: outerGeo.size.height)
-                            .offset(x: gx - 9.0)
-                        }
-
-                        // 2. Main Committed Purple Playhead (100% connected single-path teardrop + vertical stem)
-                        if playheadXInViewport >= -8 && playheadXInViewport <= viewportWidth + 8 {
-                            UnifiedPlayheadCanvasView(
-                                headColor: Color(red: 0.44, green: 0.30, blue: 1.0),
-                                stemColor: Color(red: 0.44, green: 0.30, blue: 1.0).opacity(0.90),
-                                headTopY: 1.5,
-                                totalHeight: outerGeo.size.height
-                            )
-                            .frame(width: 18, height: outerGeo.size.height)
-                            .offset(x: playheadXInViewport - 9.0)
-                        }
-                    }
+                    // Isolated in its own `@Observable`-scoped `TimelinePlayheadsOverlayView` so 120Hz `playheadTimelineMs`
+                    // and `hoverSkimTimelineMs` updates NEVER re-evaluate the timeline tracks or segments!
+                    TimelinePlayheadsOverlayView(
+                        session: session,
+                        trackHorizontalInset: trackHorizontalInset,
+                        contentWidth: contentWidth,
+                        totalTimelineMs: totalTimelineMs,
+                        horizontalScrollOffset: horizontalScrollOffset,
+                        viewportWidth: viewportWidth,
+                        totalHeight: outerGeo.size.height
+                    )
                     .frame(width: viewportWidth, height: outerGeo.size.height, alignment: .topLeading)
                     .clipped()
                     .offset(x: labelColumnWidth)
@@ -515,7 +485,6 @@ public struct MultiTrackTimelineView: View {
                 let xStart = CGFloat(mapped.timelineStartMs / totalTimelineMs) * contentWidth
                 let blockW = max(12.0, CGFloat((mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs) * contentWidth)
                 let isSelected = (session.selectedSliceId == mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
-                let isPlayed = (session.effectivePreviewTimelineMs >= mapped.timelineStartMs && session.effectivePreviewTimelineMs <= mapped.timelineEndMs)
 
                 TimelineInteractiveSegmentView(
                     topTitle: "Clip",
@@ -525,7 +494,7 @@ public struct MultiTrackTimelineView: View {
                     ),
                     palette: .clip,
                     isSelected: isSelected,
-                    isPlayed: isPlayed,
+                    isPlayed: false,
                     isDimmed: false,
                     isSplitMode: session.isSplitModeActive,
                     xOffset: xStart,
@@ -661,7 +630,6 @@ public struct MultiTrackTimelineView: View {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedZoomId == zoom.id)
-                    let isPlayed = (session.effectivePreviewTimelineMs >= tStartMs && session.effectivePreviewTimelineMs <= tEndMs)
                     let timelineDurationMs = max(250.0, tEndMs - tStartMs)
 
                     TimelineInteractiveSegmentView(
@@ -672,7 +640,7 @@ public struct MultiTrackTimelineView: View {
                         ),
                         palette: .zoom,
                         isSelected: isSelected,
-                        isPlayed: isPlayed,
+                        isPlayed: false,
                         isDimmed: isHidden || zoom.disabled || zoom.scale <= 1.01,
                         isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
@@ -800,7 +768,6 @@ public struct MultiTrackTimelineView: View {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedMaskId == item.id)
-                    let isPlayed = (session.effectivePreviewTimelineMs >= tStartMs && session.effectivePreviewTimelineMs <= tEndMs)
                     let timelineDurationMs = max(220.0, tEndMs - tStartMs)
 
                     TimelineInteractiveSegmentView(
@@ -812,7 +779,7 @@ public struct MultiTrackTimelineView: View {
                         ),
                         palette: .mask,
                         isSelected: isSelected,
-                        isPlayed: isPlayed,
+                        isPlayed: false,
                         isDimmed: isHidden || item.disabled,
                         isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
@@ -1120,6 +1087,56 @@ private struct CutBoundaryTeardropBadgeView: View {
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
+            }
+        }
+    }
+}
+
+private struct TimelinePlayheadsOverlayView: View {
+    @Bindable var session: ProjectSession
+    let trackHorizontalInset: CGFloat
+    let contentWidth: CGFloat
+    let totalTimelineMs: Double
+    let horizontalScrollOffset: CGFloat
+    let viewportWidth: CGFloat
+    let totalHeight: CGFloat
+
+    var body: some View {
+        let playheadXInDoc = trackHorizontalInset + CGFloat(session.playheadTimelineMs / totalTimelineMs) * contentWidth
+        let playheadXInViewport = playheadXInDoc - horizontalScrollOffset
+
+        let hoverXInDoc: CGFloat? = (!session.isPlaying && session.hoverSkimTimelineMs != nil)
+            ? (trackHorizontalInset + CGFloat(session.hoverSkimTimelineMs! / totalTimelineMs) * contentWidth)
+            : nil
+        let hoverXInViewport: CGFloat? = hoverXInDoc.map { $0 - horizontalScrollOffset }
+
+        ZStack(alignment: .topLeading) {
+            if let gx = hoverXInViewport, gx >= -8 && gx <= viewportWidth + 8 {
+                let distToMain = abs(gx - playheadXInViewport)
+                let proximity01 = max(0.0, min(1.0, 1.0 - (distToMain / 26.0)))
+                let duckYOffset = 22.0 * proximity01 * (2.0 - proximity01)
+
+                UnifiedPlayheadCanvasView(
+                    headColor: Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.92),
+                    stemColor: session.isSplitModeActive
+                        ? Color(red: 0.94, green: 0.32, blue: 0.26).opacity(0.90)
+                        : Color(red: 0.25, green: 0.27, blue: 0.34).opacity(0.65),
+                    headTopY: 1.5 + duckYOffset,
+                    totalHeight: totalHeight
+                )
+                .frame(width: 18, height: totalHeight)
+                .offset(x: gx - 9.0)
+            }
+
+            if playheadXInViewport >= -8 && playheadXInViewport <= viewportWidth + 8 {
+                UnifiedPlayheadCanvasView(
+                    headColor: Color(red: 0.44, green: 0.30, blue: 1.0),
+                    stemColor: Color(red: 0.44, green: 0.30, blue: 1.0).opacity(0.90),
+                    headTopY: 1.5,
+                    totalHeight: totalHeight
+                )
+                .frame(width: 18, height: totalHeight)
+                .offset(x: playheadXInViewport - 9.0)
             }
         }
     }

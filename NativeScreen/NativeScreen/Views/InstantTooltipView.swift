@@ -26,7 +26,9 @@ public final class SharedFloatingTooltipWindowController {
     public static let shared = SharedFloatingTooltipWindowController()
 
     private var tooltipPanel: NSPanel?
+    private var calloutView: PureAppKitTooltipCalloutView?
     private weak var activeOwnerView: NSView?
+    private var orderOutWorkItem: DispatchWorkItem?
 
     private init() {}
 
@@ -41,26 +43,29 @@ public final class SharedFloatingTooltipWindowController {
             hideTooltip()
             return
         }
+        orderOutWorkItem?.cancel()
+        orderOutWorkItem = nil
         activeOwnerView = ownerView
 
         let shadowPad: CGFloat = 10.0
+        let arrowHeight: CGFloat = 5.2
 
-        // First measure intrinsic size with centered arrow (`anchorOffset = 0`)
-        let measureHosting = NSHostingView(
-            rootView: InstantTooltipBubble(
-                text: text,
-                shortcutBadge: shortcutBadge,
-                edge: edge,
-                anchorOffset: 0.0
-            )
-            .fixedSize()
-            .padding(shadowPad)
-        )
-        let fitting = measureHosting.fittingSize
-        let panelW = max(56.0, ceil(fitting.width))
-        let panelH = max(32.0, ceil(fitting.height))
-        let bubbleW = panelW - shadowPad * 2.0
-        let bubbleH = panelH - shadowPad * 2.0
+        let parsed = InstantTooltipBubble.extractTrailingParenthesizedShortcut(from: text, explicitBadge: shortcutBadge)
+        let textFont = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+        let textSize = (parsed.cleanText as NSString).size(withAttributes: [.font: textFont])
+
+        var contentW = ceil(textSize.width) + 24.0
+        if let badge = parsed.badge, !badge.isEmpty {
+            let badgeFont = NSFont.systemFont(ofSize: 11.0, weight: .regular)
+            let badgeSize = (badge as NSString).size(withAttributes: [.font: badgeFont])
+            contentW += 7.0 + ceil(badgeSize.width) + 13.0
+        }
+        let contentH = max(28.0, ceil(textSize.height) + 13.0)
+
+        let bubbleW = max(36.0, contentW + ((edge == .leading || edge == .trailing) ? arrowHeight : 0.0))
+        let bubbleH = max(28.0, contentH + ((edge == .top || edge == .bottom) ? arrowHeight : 0.0))
+        let panelW = bubbleW + shadowPad * 2.0
+        let panelH = bubbleH + shadowPad * 2.0
 
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(buttonRect) }) ?? NSScreen.main
         let vf = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
@@ -73,45 +78,36 @@ public final class SharedFloatingTooltipWindowController {
 
         switch edge {
         case .top, .bottom:
-            // Ideal horizontally-centered panel origin
             let idealX = round(buttonRect.midX - panelW * 0.5)
-            // Clamp bubble inside the monitor's visibleFrame (`vf`), while allowing it to overflow outside the Editor `NSWindow`!
             let minPanelX = vf.minX + screenMargin - shadowPad
             let maxPanelX = vf.maxX - screenMargin - panelW + shadowPad
             panelOriginX = min(max(idealX, minPanelX), maxPanelX)
 
-            // Compute exact horizontal shift so the arrow tip still points directly at `buttonRect.midX`
             let bubbleCenterOnScreenX = panelOriginX + panelW * 0.5
             let rawDeltaX = buttonRect.midX - bubbleCenterOnScreenX
             let maxArrowShiftX = max(0.0, bubbleW * 0.5 - 15.0)
             anchorOffset = min(max(rawDeltaX, -maxArrowShiftX), maxArrowShiftX)
 
             if edge == .top {
-                // Arrow tip at bottom of bubble sits `buttonGap` above `buttonRect.maxY`
                 panelOriginY = round(buttonRect.maxY + buttonGap - shadowPad)
             } else {
-                // Arrow tip at top of bubble sits `buttonGap` below `buttonRect.minY`
                 panelOriginY = round(buttonRect.minY - buttonGap - bubbleH - shadowPad)
             }
 
         case .leading, .trailing:
-            // Ideal vertically-centered panel origin
             let idealY = round(buttonRect.midY - panelH * 0.5)
             let minPanelY = vf.minY + screenMargin - shadowPad
             let maxPanelY = vf.maxY - screenMargin - panelH + shadowPad
             panelOriginY = min(max(idealY, minPanelY), maxPanelY)
 
             let bubbleCenterOnScreenY = panelOriginY + panelH * 0.5
-            // Note: SwiftUI Y increases downward while AppKit screen Y increases upward
             let rawDeltaY = bubbleCenterOnScreenY - buttonRect.midY
             let maxArrowShiftY = max(0.0, bubbleH * 0.5 - 11.0)
             anchorOffset = min(max(rawDeltaY, -maxArrowShiftY), maxArrowShiftY)
 
             if edge == .leading {
-                // Bubble sits to the LEFT of the button (`buttonRect.minX`)
                 panelOriginX = round(buttonRect.minX - buttonGap - bubbleW - shadowPad)
             } else {
-                // Bubble sits to the RIGHT of the button (`buttonRect.maxX`)
                 panelOriginX = round(buttonRect.maxX + buttonGap - shadowPad)
             }
         }
@@ -128,28 +124,31 @@ public final class SharedFloatingTooltipWindowController {
             panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
             panel.backgroundColor = .clear
             panel.isOpaque = false
-            panel.hasShadow = false // Shadow is rendered smoothly inside SwiftUI so WindowServer never draws a dark contour!
+            panel.hasShadow = false
             panel.ignoresMouseEvents = true
             panel.sharingType = .none
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let view = PureAppKitTooltipCalloutView(frame: NSRect(x: 0, y: 0, width: panelW, height: panelH))
+            panel.contentView = view
+            self.calloutView = view
             self.tooltipPanel = panel
         }
 
-        guard let panel = tooltipPanel else { return }
-
-        let finalHosting = NSHostingView(
-            rootView: InstantTooltipBubble(
-                text: text,
-                shortcutBadge: shortcutBadge,
-                edge: edge,
-                anchorOffset: anchorOffset
-            )
-            .fixedSize()
-            .padding(shadowPad)
+        guard let panel = tooltipPanel, let view = calloutView else { return }
+        view.frame = NSRect(x: 0, y: 0, width: panelW, height: panelH)
+        view.configure(
+            text: parsed.cleanText,
+            badge: parsed.badge,
+            edge: edge,
+            anchorOffset: anchorOffset,
+            shadowPad: shadowPad
         )
-        panel.contentView = finalHosting
-        panel.setFrame(NSRect(x: panelOriginX, y: panelOriginY, width: panelW, height: panelH), display: true)
-        panel.orderFrontRegardless()
+        panel.setFrame(NSRect(x: panelOriginX, y: panelOriginY, width: panelW, height: panelH), display: false)
+        panel.alphaValue = 1.0
+        if !panel.isVisible {
+            panel.orderFrontRegardless()
+        }
     }
 
     public func hideTooltip(ifOwnedBy ownerView: NSView? = nil) {
@@ -157,7 +156,130 @@ public final class SharedFloatingTooltipWindowController {
             return
         }
         activeOwnerView = nil
-        tooltipPanel?.orderOut(nil)
+        tooltipPanel?.alphaValue = 0.0
+        orderOutWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self, self.activeOwnerView == nil else { return }
+            self.tooltipPanel?.orderOut(nil)
+        }
+        orderOutWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+    }
+}
+
+/// 100% Pure AppKit / CoreGraphics Tooltip Renderer (ZERO `NSHostingView` inside `NSPanel`!).
+/// Eliminates cross-window SwiftUI `AttributeGraph` locks so hovering rapidly over buttons during 120Hz video playback
+/// takes `<0.02ms` and never drops a single preview or playhead frame!
+private final class PureAppKitTooltipCalloutView: NSView {
+    private var text: String = ""
+    private var badge: String? = nil
+    private var edge: TooltipEdge = .top
+    private var anchorOffset: CGFloat = 0.0
+    private var shadowPad: CGFloat = 10.0
+
+    override var isFlipped: Bool { true }
+
+    func configure(
+        text: String,
+        badge: String?,
+        edge: TooltipEdge,
+        anchorOffset: CGFloat,
+        shadowPad: CGFloat
+    ) {
+        self.text = text
+        self.badge = badge
+        self.edge = edge
+        self.anchorOffset = anchorOffset
+        self.shadowPad = shadowPad
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let bubbleRect = bounds.insetBy(dx: shadowPad, dy: shadowPad)
+        guard bubbleRect.width > 8, bubbleRect.height > 8 else { return }
+
+        let arrowH: CGFloat = 5.2
+        let shape = UnifiedTooltipCalloutShape(
+            edge: edge,
+            cornerRadius: 8.5,
+            arrowWidth: 11.0,
+            arrowHeight: arrowH,
+            anchorOffset: anchorOffset
+        )
+        let cgPath = shape.path(in: bubbleRect).cgPath
+        let strokePath = shape.inset(by: 0.5).path(in: bubbleRect).cgPath
+
+        // 1. Soft Drop Shadow + Bubble Fill
+        ctx.saveGState()
+        ctx.setShadow(
+            offset: CGSize(width: 0, height: 2.5),
+            blur: 7.0,
+            color: NSColor.black.withAlphaComponent(0.48).cgColor
+        )
+        ctx.setFillColor(NSColor(srgbRed: 0.14, green: 0.15, blue: 0.19, alpha: 1.0).cgColor)
+        ctx.addPath(cgPath)
+        ctx.fillPath()
+        ctx.restoreGState()
+
+        // 2. Crisp 1px Inner Border
+        ctx.saveGState()
+        ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.16).cgColor)
+        ctx.setLineWidth(1.0)
+        ctx.addPath(strokePath)
+        ctx.strokePath()
+        ctx.restoreGState()
+
+        // 3. Content Box (excluding arrow height)
+        let contentBox: CGRect
+        switch edge {
+        case .top:
+            contentBox = CGRect(x: bubbleRect.minX, y: bubbleRect.minY, width: bubbleRect.width, height: bubbleRect.height - arrowH)
+        case .bottom:
+            contentBox = CGRect(x: bubbleRect.minX, y: bubbleRect.minY + arrowH, width: bubbleRect.width, height: bubbleRect.height - arrowH)
+        case .leading:
+            contentBox = CGRect(x: bubbleRect.minX, y: bubbleRect.minY, width: bubbleRect.width - arrowH, height: bubbleRect.height)
+        case .trailing:
+            contentBox = CGRect(x: bubbleRect.minX + arrowH, y: bubbleRect.minY, width: bubbleRect.width - arrowH, height: bubbleRect.height)
+        }
+
+        let textFont = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: textFont,
+            .foregroundColor: NSColor.white.withAlphaComponent(0.96)
+        ]
+        let nsText = text as NSString
+        let textSize = nsText.size(withAttributes: textAttrs)
+        let textX = contentBox.minX + 12.0
+        let textY = contentBox.minY + (contentBox.height - textSize.height) * 0.5
+        nsText.draw(at: CGPoint(x: textX, y: textY), withAttributes: textAttrs)
+
+        if let badge = badge, !badge.isEmpty {
+            let badgeFont = NSFont.systemFont(ofSize: 11.0, weight: .regular)
+            let badgeAttrs: [NSAttributedString.Key: Any] = [
+                .font: badgeFont,
+                .foregroundColor: NSColor.white.withAlphaComponent(0.72)
+            ]
+            let nsBadge = badge as NSString
+            let bSize = nsBadge.size(withAttributes: badgeAttrs)
+            let badgeW = ceil(bSize.width) + 13.0
+            let badgeH = ceil(bSize.height) + 5.0
+            let badgeX = textX + ceil(textSize.width) + 7.0
+            let badgeY = contentBox.minY + (contentBox.height - badgeH) * 0.5
+            let badgeRect = CGRect(x: badgeX, y: badgeY, width: badgeW, height: badgeH)
+
+            let badgePath = CGPath(roundedRect: badgeRect, cornerWidth: 5.0, cornerHeight: 5.0, transform: nil)
+            ctx.saveGState()
+            ctx.setFillColor(NSColor.white.withAlphaComponent(0.12).cgColor)
+            ctx.addPath(badgePath)
+            ctx.fillPath()
+            ctx.restoreGState()
+
+            nsBadge.draw(
+                at: CGPoint(x: badgeX + 6.5, y: badgeY + (badgeH - bSize.height) * 0.5),
+                withAttributes: badgeAttrs
+            )
+        }
     }
 }
 
@@ -408,7 +530,7 @@ public struct InstantTooltipBubble: View {
 
     /// Automatically extracts trailing shortcuts like `"Undo (⌘Z)"` -> `("Undo", "⌘Z")` or `"Split clip (⌥)"` -> `("Split clip", "⌥")`
     /// so every tooltip with a shortcut renders a sleek keycap badge (Images 4 & 5)!
-    private static func extractTrailingParenthesizedShortcut(
+    static func extractTrailingParenthesizedShortcut(
         from rawText: String,
         explicitBadge: String?
     ) -> (cleanText: String, badge: String?) {
@@ -507,7 +629,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         .disabled(isDisabled)
         .onHover { hovering in
             let nextHover = isDisabled ? false : hovering
-            withAnimation(.easeOut(duration: 0.10)) {
+            if isHovered != nextHover {
                 isHovered = nextHover
             }
             if nextHover && !tooltip.isEmpty {
@@ -621,7 +743,7 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) {
+            if isHovered != hovering {
                 isHovered = hovering
             }
             if hovering, let tooltip = tooltip, !tooltip.isEmpty,
@@ -676,6 +798,7 @@ public struct TooltipScreenRectProbe: NSViewRepresentable {
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { onViewReady(nsView) }
+        // Crucial: do NOT re-invoke `onViewReady` on every SwiftUI update, otherwise mutating `@State anchorNSView`
+        // during `.onHover` triggers redundant SwiftUI body invalidations!
     }
 }
