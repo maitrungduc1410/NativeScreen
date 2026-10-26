@@ -33,7 +33,11 @@ public final class ProjectSession: Identifiable {
     public var selectedZoomId: String?
     public var selectedMaskId: String?
     public var selectedShortcutId: String?
+    public var pendingAddMaskType: MaskType? = nil
+    public var pendingAddMaskStyle: MaskStyle = .gaussian
     public var isDraggingTimelineSegment: Bool = false
+    public var scrollToTrackTargetId: String? = nil
+    public var scrollToTrackRevision: Int = 0
     public var selectedInspectorTab: InspectorTab = .background
 
     // Audio Waveform Envelope Samples (`0.0 ... 1.0`, ~240 buckets across `metadata.durationMs`)
@@ -116,6 +120,22 @@ public final class ProjectSession: Identifiable {
         )
         self.selectedSliceId = cleanedDoc.timeline.slices.first?.id
         self.audioWaveformSamples = Self.generateProceduralWaveform(durationMs: metadata.durationMs)
+
+        // Synchronize `shortcutTracks` with actual shortcuts so projects without shortcuts never show an empty default Shortcuts track!
+        let initialShortcutClusters = self.detectedShortcutClusters
+        if !initialShortcutClusters.isEmpty && self.document.captions.shortcutTracks.isEmpty {
+            self.document.captions.shortcutTracks = [
+                ShortcutTrackConfig(
+                    id: "default-shortcuts-track",
+                    name: "Shortcuts",
+                    isHidden: false,
+                    style: self.document.captions.defaultShortcutStyle
+                )
+            ]
+        } else if initialShortcutClusters.isEmpty && self.document.captions.customShortcuts.isEmpty {
+            self.document.captions.shortcutTracks.removeAll()
+        }
+
         Task { [weak self] in
             await self?.loadRealAudioWaveformIfAvailable()
         }
@@ -341,20 +361,102 @@ public final class ProjectSession: Identifiable {
 
     // MARK: - Selection & Deletion (`Delete` / `Backspace` / Context Menu)
 
+    public func scrollToTimelineTrack(_ trackTargetId: String) {
+        scrollToTrackTargetId = trackTargetId
+        scrollToTrackRevision &+= 1
+    }
+
+    public func beginInteractiveMaskSelection(type: MaskType, style: MaskStyle? = nil) {
+        isPlaying = false
+        hoverSkimTimelineMs = nil
+        isSplitModeActive = false
+        let resolvedStyle: MaskStyle = style ?? (type == .blur ? .gaussian : .dim)
+        if pendingAddMaskType == type && pendingAddMaskStyle == resolvedStyle {
+            pendingAddMaskType = nil
+            NSCursor.arrow.set()
+        } else {
+            pendingAddMaskType = type
+            pendingAddMaskStyle = resolvedStyle
+            selectedZoomId = nil
+            selectedShortcutId = nil
+            selectedInspectorTab = .masks
+        }
+        renderRevision &+= 1
+    }
+
+    public func cancelInteractiveMaskSelection() {
+        guard pendingAddMaskType != nil else { return }
+        pendingAddMaskType = nil
+        NSCursor.arrow.set()
+        renderRevision &+= 1
+    }
+
+    public func completeInteractiveMaskSelection(rect01: Rect01) {
+        let type = pendingAddMaskType ?? .blur
+        let style = pendingAddMaskStyle
+        pendingAddMaskType = nil
+        NSCursor.arrow.set()
+
+        let srcMs = committedSourceTimeMs
+        let maxDur = metadata.durationMs
+        let endMs = min(maxDur, srcMs + 4500.0)
+        let startMs = max(0.0, min(srcMs, endMs - 1200.0))
+        let clampedRect = rect01.clamped()
+
+        let item = MaskItem(
+            sourceStartMs: startMs,
+            sourceEndMs: endMs,
+            type: type,
+            style: style,
+            intensity: type == .spotlight ? 50.0 : 36.0,
+            cornerRadius: 12.0,
+            keyframes: [MaskKeyframe(sourceMs: startMs, rect01: clampedRect)]
+        )
+
+        var targetTrackId = ""
+        mutate { doc in
+            if let freeTrackIndex = doc.timeline.maskTracks.firstIndex(where: { track in
+                !track.items.contains(where: { !(endMs <= $0.sourceStartMs + 30.0 || startMs >= $0.sourceEndMs - 30.0) })
+            }) {
+                doc.timeline.maskTracks[freeTrackIndex].isHidden = false
+                doc.timeline.maskTracks[freeTrackIndex].items.append(item)
+                doc.timeline.maskTracks[freeTrackIndex].items.sort { $0.sourceStartMs < $1.sourceStartMs }
+                targetTrackId = doc.timeline.maskTracks[freeTrackIndex].id
+            } else {
+                let newTrackNumber = doc.timeline.maskTracks.count + 1
+                let newTrack = MaskTrack(
+                    name: newTrackNumber == 1 ? "Masks" : "Masks \(newTrackNumber)",
+                    isHidden: false,
+                    items: [item]
+                )
+                doc.timeline.maskTracks.append(newTrack)
+                targetTrackId = newTrack.id
+            }
+        }
+        selectMask(item.id)
+        if !targetTrackId.isEmpty {
+            scrollToTimelineTrack("track_mask_\(targetTrackId)")
+        }
+    }
+
     public func selectSlice(_ id: String?) {
         selectedSliceId = id
         selectedZoomId = nil
         selectedMaskId = nil
         selectedShortcutId = nil
+        pendingAddMaskType = nil
+        renderRevision &+= 1
     }
 
     public func selectZoom(_ id: String?) {
         selectedZoomId = id
         selectedMaskId = nil
         selectedShortcutId = nil
+        pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .zoom
         }
+        renderRevision &+= 1
     }
 
     public func selectMask(_ id: String?) {
@@ -364,15 +466,18 @@ public final class ProjectSession: Identifiable {
         if id != nil {
             selectedInspectorTab = .masks
         }
+        renderRevision &+= 1
     }
 
     public func selectShortcut(_ id: String?) {
         selectedShortcutId = id
         selectedZoomId = nil
         selectedMaskId = nil
+        pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .shortcuts
         }
+        renderRevision &+= 1
     }
 
     public func deleteSelectedTimelineItem() {
@@ -755,11 +860,12 @@ public final class ProjectSession: Identifiable {
             doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
         }
         selectZoom(newZoom.id)
+        scrollToTimelineTrack("track_zoom")
     }
 
     public func addZoomInRange(sourceStartMs: Double, sourceEndMs: Double) {
         guard sourceEndMs - sourceStartMs >= 350.0 else { return }
-        let midMs = (sourceStartMs + sourceEndMs) * 0.5
+        let midMs = (sourceStartMs + sourceStartMs) * 0.5
         let cursorState = trajectorySolver.evaluate(atSourceMs: midMs).cursor
         let newZoom = ZoomBlock(
             sourceStartMs: sourceStartMs,
@@ -774,7 +880,8 @@ public final class ProjectSession: Identifiable {
             doc.timeline.zooms.append(newZoom)
             doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
         }
-        selectedZoomId = newZoom.id
+        selectZoom(newZoom.id)
+        scrollToTimelineTrack("track_zoom")
     }
 
     public func regenerateAutoZooms() {
@@ -788,6 +895,7 @@ public final class ProjectSession: Identifiable {
             doc.timeline.isZoomTrackHidden = false
             doc.timeline.zooms = generated
         }
+        scrollToTimelineTrack("track_zoom")
     }
 
     public func addMaskAtPlayhead(type: MaskType = .blur, style: MaskStyle = .gaussian) {
@@ -796,15 +904,13 @@ public final class ProjectSession: Identifiable {
         let endMs = min(maxDur, srcMs + 4500.0)
         let startMs = max(0.0, min(srcMs, endMs - 1200.0))
 
-        let camState = trajectorySolver.evaluate(atSourceMs: srcMs).camera
-        let invScale = 1.0 / max(1.0, camState.scale)
         let existingCount = activeMasks(atSourceMs: srcMs).count
-        let offset = Double(existingCount % 4) * 0.03 * invScale
+        let offset = Double(existingCount % 4) * 0.03
 
-        let boxW = max(0.08, 0.28 * invScale)
-        let boxH = max(0.06, 0.14 * invScale)
-        let boxX = camState.center01.x - boxW * 0.5 + offset
-        let boxY = camState.center01.y - boxH * 0.5 + offset
+        let boxW = 0.28
+        let boxH = 0.14
+        let boxX = 0.5 - boxW * 0.5 + offset
+        let boxY = 0.5 - boxH * 0.5 + offset
         let initialRect = Rect01(x: boxX, y: boxY, width: boxW, height: boxH).clamped()
 
         let item = MaskItem(
@@ -817,6 +923,7 @@ public final class ProjectSession: Identifiable {
             keyframes: [MaskKeyframe(sourceMs: startMs, rect01: initialRect)]
         )
 
+        var targetTrackId = ""
         mutate { doc in
             if let freeTrackIndex = doc.timeline.maskTracks.firstIndex(where: { track in
                 !track.items.contains(where: { !(endMs <= $0.sourceStartMs + 30.0 || startMs >= $0.sourceEndMs - 30.0) })
@@ -824,6 +931,7 @@ public final class ProjectSession: Identifiable {
                 doc.timeline.maskTracks[freeTrackIndex].isHidden = false
                 doc.timeline.maskTracks[freeTrackIndex].items.append(item)
                 doc.timeline.maskTracks[freeTrackIndex].items.sort { $0.sourceStartMs < $1.sourceStartMs }
+                targetTrackId = doc.timeline.maskTracks[freeTrackIndex].id
             } else {
                 let newTrackNumber = doc.timeline.maskTracks.count + 1
                 let newTrack = MaskTrack(
@@ -832,16 +940,17 @@ public final class ProjectSession: Identifiable {
                     items: [item]
                 )
                 doc.timeline.maskTracks.append(newTrack)
+                targetTrackId = newTrack.id
             }
         }
         selectMask(item.id)
+        if !targetTrackId.isEmpty {
+            scrollToTimelineTrack("track_mask_\(targetTrackId)")
+        }
     }
 
     public func addMaskInRange(trackId: String, sourceStartMs: Double, sourceEndMs: Double) {
         guard sourceEndMs - sourceStartMs >= 300.0 else { return }
-        let midMs = (sourceStartMs + sourceEndMs) * 0.5
-        let camState = trajectorySolver.evaluate(atSourceMs: midMs).camera
-        let invScale = 1.0 / max(1.0, camState.scale)
 
         let existingTrack = document.timeline.maskTracks.first(where: { $0.id == trackId })
         let referenceMask = existingTrack?.items.last ?? document.timeline.maskTracks.first?.items.last
@@ -850,10 +959,10 @@ public final class ProjectSession: Identifiable {
         let inheritedIntensity = referenceMask?.intensity ?? (inheritedType == .spotlight ? 50.0 : 36.0)
         let inheritedCornerRadius = referenceMask?.cornerRadius ?? 12.0
 
-        let boxW = max(0.08, 0.28 * invScale)
-        let boxH = max(0.06, 0.14 * invScale)
-        let boxX = camState.center01.x - boxW * 0.5
-        let boxY = camState.center01.y - boxH * 0.5
+        let boxW = 0.28
+        let boxH = 0.14
+        let boxX = 0.5 - boxW * 0.5
+        let boxY = 0.5 - boxH * 0.5
         let initialRect = Rect01(x: boxX, y: boxY, width: boxW, height: boxH).clamped()
 
         let item = MaskItem(
@@ -874,6 +983,7 @@ public final class ProjectSession: Identifiable {
             }
         }
         selectMask(item.id)
+        scrollToTimelineTrack("track_mask_\(trackId)")
     }
 
     public func deleteMaskTrack(trackId: String) {
@@ -1040,6 +1150,10 @@ public final class ProjectSession: Identifiable {
 
     public func togglePlayPause() {
         if !isPlaying {
+            if pendingAddMaskType != nil {
+                pendingAddMaskType = nil
+                NSCursor.arrow.set()
+            }
             // Clear hoverSkimTimelineMs when starting playback so when playback pauses or finishes at the end,
             // it stays at `playheadTimelineMs` until the user actively moves the mouse on the timeline!
             hoverSkimTimelineMs = nil
@@ -1875,8 +1989,10 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Permanently deletes a shortcut segment (either telemetry-recorded or custom-inserted) from the timeline.
+    /// Permanently deletes a shortcut segment (either telemetry-recorded or custom-inserted) from the timeline,
+    /// and automatically removes the Shortcut track if it has no remaining segments.
     public func deleteShortcut(_ cluster: ShortcutPressCluster) {
+        let trackId = cluster.trackId
         mutate { doc in
             if cluster.isCustomSegment {
                 doc.captions.customShortcuts.removeAll { $0.id == cluster.id }
@@ -1892,6 +2008,21 @@ public final class ProjectSession: Identifiable {
         }
         if selectedShortcutId == cluster.id {
             selectedShortcutId = nil
+        }
+
+        // If the track now has 0 shortcut segments left, remove the empty track and renumber remaining tracks!
+        if shortcutClusters(forTrackId: trackId).isEmpty {
+            mutate { doc in
+                let isPrimary = (trackId == doc.captions.shortcutTracks.first?.id || trackId == "default-shortcuts-track")
+                if isPrimary, !doc.captions.shortcutTracks.isEmpty {
+                    doc.captions.shortcutTracks.removeFirst()
+                } else {
+                    doc.captions.shortcutTracks.removeAll { $0.id == trackId }
+                }
+                for idx in doc.captions.shortcutTracks.indices {
+                    doc.captions.shortcutTracks[idx].name = idx == 0 ? "Shortcuts" : "Shortcuts \(idx + 1)"
+                }
+            }
         }
     }
 
@@ -1933,6 +2064,7 @@ public final class ProjectSession: Identifiable {
                 end = min(gapEnd, gapStart + 1500.0)
             } else {
                 selectShortcut(cont.id)
+                scrollToTimelineTrack("track_shortcut_\(targetTrackId)")
                 return cont.id
             }
         } else {
@@ -1951,9 +2083,21 @@ public final class ProjectSession: Identifiable {
         )
         mutate { doc in
             doc.captions.showKeystrokes = true
+            if !doc.captions.shortcutTracks.contains(where: { $0.id == targetTrackId }) {
+                let nextIdx = doc.captions.shortcutTracks.count + 1
+                doc.captions.shortcutTracks.append(
+                    ShortcutTrackConfig(
+                        id: targetTrackId,
+                        name: nextIdx == 1 ? "Shortcuts" : "Shortcuts \(nextIdx)",
+                        isHidden: false,
+                        style: doc.captions.defaultShortcutStyle
+                    )
+                )
+            }
             doc.captions.customShortcuts.append(newSeg)
         }
         selectShortcut(newSeg.id)
+        scrollToTimelineTrack("track_shortcut_\(targetTrackId)")
         return newSeg.id
     }
 
@@ -1987,6 +2131,7 @@ public final class ProjectSession: Identifiable {
                 doc.captions.customShortcuts.append(copy)
             }
             selectShortcut(copy.id)
+            scrollToTimelineTrack("track_shortcut_\(cluster.trackId)")
         } else if origDur >= 500.0 {
             // Split the original segment in half at `mid` so the duplicate sits cleanly beside it with zero overlap!
             let mid = (orig.displayStartMs + orig.displayEndMs) * 0.5
@@ -2011,10 +2156,11 @@ public final class ProjectSession: Identifiable {
                 doc.captions.customShortcuts.append(copy)
             }
             selectShortcut(copy.id)
+            scrollToTimelineTrack("track_shortcut_\(cluster.trackId)")
         }
     }
 
-    /// Adds a new Shortcut Track (with a distinct default position like Top / Left / Right) and optionally inserts a sample shortcut on it.
+    /// Adds a new Shortcut Track (with a distinct default position like Bottom / Top / Left / Right) and scrolls the timeline to it.
     @discardableResult
     public func addShortcutTrack() -> String {
         let nextIndex = document.captions.shortcutTracks.count + 1
@@ -2022,7 +2168,7 @@ public final class ProjectSession: Identifiable {
         let chosenPos = defaultPositions[(nextIndex - 1) % defaultPositions.count]
         let newTrack = ShortcutTrackConfig(
             id: UUID().uuidString,
-            name: "Shortcuts \(nextIndex)",
+            name: nextIndex == 1 ? "Shortcuts" : "Shortcuts \(nextIndex)",
             isHidden: false,
             style: ShortcutStyleConfig(dockPosition: chosenPos)
         )
@@ -2030,14 +2176,19 @@ public final class ProjectSession: Identifiable {
             doc.captions.showKeystrokes = true
             doc.captions.shortcutTracks.append(newTrack)
         }
+        selectedShortcutId = nil
+        selectedInspectorTab = .shortcuts
+        scrollToTimelineTrack("track_shortcut_\(newTrack.id)")
         return newTrack.id
     }
 
     public func removeShortcutTrack(id: String) {
-        guard document.captions.shortcutTracks.count > 1 else { return }
         mutate { doc in
             doc.captions.shortcutTracks.removeAll { $0.id == id }
             doc.captions.customShortcuts.removeAll { $0.trackId == id }
+            for idx in doc.captions.shortcutTracks.indices {
+                doc.captions.shortcutTracks[idx].name = idx == 0 ? "Shortcuts" : "Shortcuts \(idx + 1)"
+            }
         }
     }
 

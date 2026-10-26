@@ -404,16 +404,25 @@ public struct ProjectEditorWindowView: View {
 
                                     quickDockIconButton(
                                         icon: "eye.slash",
-                                        tooltip: "Sensitive data mask"
+                                        tooltip: "Sensitive data mask",
+                                        isActive: session.pendingAddMaskType == .blur
                                     ) {
-                                        session.addMaskAtPlayhead(type: .blur, style: .gaussian)
+                                        session.beginInteractiveMaskSelection(type: .blur, style: .gaussian)
                                     }
 
                                     quickDockIconButton(
                                         icon: "viewfinder.rectangular",
-                                        tooltip: "Spotlight mask"
+                                        tooltip: "Spotlight mask",
+                                        isActive: session.pendingAddMaskType == .spotlight
                                     ) {
-                                        session.addMaskAtPlayhead(type: .spotlight, style: .dim)
+                                        session.beginInteractiveMaskSelection(type: .spotlight, style: .dim)
+                                    }
+
+                                    quickDockIconButton(
+                                        icon: "command",
+                                        tooltip: "Add shortcut track"
+                                    ) {
+                                        session.addShortcutTrack()
                                     }
                                 }
                                 .padding(7)
@@ -760,7 +769,11 @@ public struct ProjectEditorWindowView: View {
                 return event
             }
             switch event.keyCode {
-            case 53: // ESC: Exit Split Mode or clear selection
+            case 53: // ESC: Exit Add Mask Mode, Split Mode, or clear selection
+                if session.pendingAddMaskType != nil {
+                    session.cancelInteractiveMaskSelection()
+                    return nil
+                }
                 if session.isSplitModeActive {
                     isOptionKeyHeldForSplit = false
                     session.isSplitModeActive = false
@@ -771,6 +784,7 @@ public struct ProjectEditorWindowView: View {
                     session.selectedMaskId = nil
                     session.selectedZoomId = nil
                     session.selectedShortcutId = nil
+                    session.renderRevision &+= 1
                     return nil
                 }
                 return event
@@ -896,17 +910,23 @@ public struct ProjectEditorWindowView: View {
     }
 
     @ViewBuilder
-    private func quickDockIconButton(icon: String, tooltip: String, action: @escaping () -> Void) -> some View {
+    private func quickDockIconButton(
+        icon: String,
+        tooltip: String,
+        isActive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         InstantTooltipButton(
             tooltip: tooltip,
             edge: .trailing,
+            isActive: isActive,
             size: 32,
             cornerRadius: 9,
             action: action
         ) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.90))
+                .foregroundStyle(isActive ? Color(red: 0.72, green: 0.64, blue: 1.0) : .white.opacity(0.90))
         }
     }
 

@@ -210,7 +210,12 @@ public final class MetalFrameCompositor {
         }
 
         // Apply Virtual Camera Pan & Zoom Transform (Classic mode) OR Optical Glass Loupe Lens (Loupe mode)
-        let zoomScale = CGFloat(max(1.0, cameraState.scale))
+        // Note: When the user is interactively selecting or editing a Mask on the paused Preview Canvas,
+        // zoom out to 1x (`zoomScale = 1.0`) so masks are drawn/adjusted on the full unzoomed source clip!
+        let suppressZoomForMaskEditing = !includeShortcutOverlay
+            && !session.isPlaying
+            && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
+        let zoomScale = suppressZoomForMaskEditing ? 1.0 : CGFloat(max(1.0, cameraState.scale))
         if zoomScale > 1.002 {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
@@ -281,7 +286,7 @@ public final class MetalFrameCompositor {
         // - Translational pan blur (`CIMotionBlur`) ONLY fires when the camera center actually translates across pixels (`panPixelsPerFrame > 1.8`).
         // - Radial zoom blur (`CIZoomBlur`) ONLY fires during the fast impulse of a zoom change (`scalePixelsPerFrame > 1.8`).
         // - As soon as per-frame displacement drops below 1.8px (`rf.isStatic`), blur is 0.0 so the image settles crystal-clear!
-        if doc.motion.motionBlurIntensity > 0.02 {
+        if !suppressZoomForMaskEditing && doc.motion.motionBlurIntensity > 0.02 {
             let prevCam = session.trajectorySolver.evaluate(atSourceMs: max(0.0, sourceTimeMs - 16.67)).camera
             let blurStrength = CGFloat(min(1.0, max(0.0, doc.motion.motionBlurIntensity)))
 

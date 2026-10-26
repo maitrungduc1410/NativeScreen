@@ -2444,27 +2444,9 @@ public struct InspectorSidebarView: View {
                 // Multi-Track Selector (if >1 track exists, or shows current track settings)
                 if tracks.count > 1 {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Shortcut track")
-                                .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
-                            Spacer()
-                            if tracks.count > 1 && activeTrackIndex > 0 {
-                                Button {
-                                    session.removeShortcutTrack(id: activeTrack.id)
-                                    selectedShortcutTrackId = session.document.captions.shortcutTracks.first?.id ?? "default-shortcuts-track"
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "trash")
-                                            .font(.system(size: 11))
-                                        Text("Remove track")
-                                            .font(.system(size: 11.5))
-                                    }
-                                    .foregroundStyle(Color(red: 1.0, green: 0.45, blue: 0.45))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
+                        Text("Shortcut track")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
 
                         ScrollViewReader { trackProxy in
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -2568,7 +2550,7 @@ public struct InspectorSidebarView: View {
 
             inspectorDivider
 
-            // 3. Keycap Color (`Default` | `Solid` | `Gradient` + Color Picker!)
+            // 3. Keycap Color (`Default` | `Solid` | `Gradient` + Smooth Expandable Color Picker!)
             VStack(alignment: .leading, spacing: 12) {
                 Text("Keycap color")
                     .font(.system(size: 13, weight: .regular))
@@ -2580,7 +2562,9 @@ public struct InspectorSidebarView: View {
                             title: mode.label,
                             isSelected: current.colorMode == mode
                         ) {
-                            style.wrappedValue.colorMode = mode
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                style.wrappedValue.colorMode = mode
+                            }
                         }
                     }
                 }
@@ -2649,7 +2633,13 @@ public struct InspectorSidebarView: View {
                             )
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.035))
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
 
                 } else if current.colorMode == .gradient {
                     VStack(alignment: .leading, spacing: 10) {
@@ -2763,9 +2753,16 @@ public struct InspectorSidebarView: View {
                             )
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.035))
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: current.colorMode)
         }
     }
 

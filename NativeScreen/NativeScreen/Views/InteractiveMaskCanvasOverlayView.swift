@@ -1,16 +1,21 @@
 import SwiftUI
 import AppKit
 
-/// Clean, zero-jitter interactive mask handle overlay on the Preview Canvas.
-/// - Uses `CanvasCoordinateTransform` so mask handles move and scale with the Virtual Camera Zoom & Pan.
-/// - Solid subtle border (no dashed lines!) when hovered or selected.
-/// - Displays zero text badges on the preview canvas.
+/// Clean, zero-jitter interactive mask handle & drag-to-create overlay on the Preview Canvas.
+/// - When creating (`pendingAddMaskType != nil`) or editing (`selectedMaskId != nil`) a mask while paused,
+///   the preview automatically zooms out to `1x` (`cameraScale = 1.0`) so masks are drawn/adjusted on the full unzoomed source clip.
+/// - In Add-Mask mode (`pendingAddMaskType != nil`), the cursor changes to `NSCursor.crosshair` **only inside the actual video area**
+///   (`transform.screenFrameRect`), reverting to `NSCursor.arrow` over the outer background padding!
 public struct InteractiveMaskCanvasOverlayView: View {
     @Bindable var session: ProjectSession
     let canvasSize: CGSize
 
     @State private var dragStartRect01: Rect01?
     @State private var hoveredMaskId: String?
+    @State private var newMaskDragStartPt: CGPoint?
+    @State private var newMaskDragCurrentPt: CGPoint?
+
+    private let purpleAccent = Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
 
     public init(session: ProjectSession, canvasSize: CGSize) {
         self.session = session
@@ -21,6 +26,9 @@ public struct InteractiveMaskCanvasOverlayView: View {
         let srcMs = session.currentSourceTimeMs
         let activeMasks = session.activeMasks(atSourceMs: srcMs)
         let eval = session.trajectorySolver.evaluate(atSourceMs: srcMs)
+        let suppressZoomForMaskEditing = !session.isPlaying
+            && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
+
         let transform = CanvasCoordinateTransform(
             canvasSize: canvasSize,
             sourcePixelSize: CGSize(
@@ -29,20 +37,26 @@ public struct InteractiveMaskCanvasOverlayView: View {
             ),
             paddingRatio: session.document.canvas.paddingRatio,
             cropRect01: session.document.canvas.cropRect01,
-            cameraCenter01: eval.camera.isLoupeMode ? .center : eval.camera.center01,
-            cameraScale: eval.camera.isLoupeMode ? 1.0 : eval.camera.scale
+            cameraCenter01: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? .center : eval.camera.center01,
+            cameraScale: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? 1.0 : eval.camera.scale
         )
+        let videoRect = transform.baseScreenRect
 
         ZStack(alignment: .topLeading) {
-            // Clicking empty preview canvas deselects any active mask and opens the Background Inspector tab!
+            // Clicking empty preview canvas deselects any active mask (or cancels add-mask mode)
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    session.selectedMaskId = nil
-                    session.selectedInspectorTab = .background
+                    if session.pendingAddMaskType != nil {
+                        session.cancelInteractiveMaskSelection()
+                    } else {
+                        session.selectedMaskId = nil
+                        session.selectedInspectorTab = .background
+                    }
                 }
 
             if !session.isPlaying {
+                // 1. Existing Mask Interactive Handles
                 ForEach(activeMasks) { mask in
                     let rect01 = mask.interpolatedRect(at: srcMs)
                     let mappedRect = transform.canvasRect(fromSourceRect01: rect01)
@@ -52,7 +66,6 @@ public struct InteractiveMaskCanvasOverlayView: View {
                     let isHovered = (hoveredMaskId == mask.id)
 
                     ZStack {
-                        // Zero outline around the mask body — only an invisible hit-testing rectangle for dragging
                         Rectangle()
                             .fill(Color.white.opacity(0.001))
                             .contentShape(Rectangle())
@@ -94,7 +107,6 @@ public struct InteractiveMaskCanvasOverlayView: View {
                                     }
                             )
 
-                        // 4 Corner Resize Handles (Smooth fade in/out when selected or hovered)
                         Group {
                             cornerHandle(
                                 maskId: mask.id,
@@ -141,6 +153,131 @@ public struct InteractiveMaskCanvasOverlayView: View {
                     }
                     .frame(width: boxW, height: boxH)
                     .position(x: mappedRect.minX + boxW * 0.5, y: mappedRect.minY + boxH * 0.5)
+                }
+
+                // 2. Interactive Drag-to-Select New Mask Overlay
+                //    Scoped strictly to `videoRect` (`transform.screenFrameRect`), so `NSCursor.crosshair` ONLY activates
+                //    over the actual recorded video area and reverts to `NSCursor.arrow` over the background padding!
+                if let pendingMaskType = session.pendingAddMaskType, videoRect.width > 10, videoRect.height > 10 {
+                    ZStack(alignment: .topLeading) {
+                        Color.white.opacity(0.001)
+
+                        if let sPt = newMaskDragStartPt, let cPt = newMaskDragCurrentPt {
+                            let minX = max(0, min(videoRect.width, min(sPt.x, cPt.x)))
+                            let minY = max(0, min(videoRect.height, min(sPt.y, cPt.y)))
+                            let maxX = max(0, min(videoRect.width, max(sPt.x, cPt.x)))
+                            let maxY = max(0, min(videoRect.height, max(sPt.y, cPt.y)))
+                            let selW = max(2, maxX - minX)
+                            let selH = max(2, maxY - minY)
+
+                            ZStack {
+                                Rectangle()
+                                    .fill(purpleAccent.opacity(0.16))
+
+                                Rectangle()
+                                    .strokeBorder(
+                                        purpleAccent.opacity(0.95),
+                                        style: StrokeStyle(lineWidth: 1.5, dash: [5, 3])
+                                    )
+                            }
+                            .frame(width: selW, height: selH)
+                            .offset(x: minX, y: minY)
+                            .allowsHitTesting(false)
+                        } else {
+                            // Bottom instruction pill (`Drag to select the area for the new ...`)
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    Spacer()
+                                    Text("Drag to select the area for the new \(pendingMaskType == .blur ? "sensitive data" : "highlight") mask")
+                                        .font(.system(size: 12.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.92))
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 7)
+                                        .background(
+                                            Capsule(style: .continuous)
+                                                .fill(Color.black.opacity(0.72))
+                                        )
+                                        .overlay(
+                                            Capsule(style: .continuous)
+                                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                                        )
+                                    Spacer()
+                                }
+                                .padding(.bottom, 16)
+                            }
+                            .allowsHitTesting(false)
+                        }
+                    }
+                    .frame(width: videoRect.width, height: videoRect.height)
+                    .contentShape(Rectangle())
+                    .onContinuousHover(coordinateSpace: .local) { phase in
+                        switch phase {
+                        case .active:
+                            NSCursor.crosshair.set()
+                        case .ended:
+                            NSCursor.arrow.set()
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                NSCursor.crosshair.set()
+                                if newMaskDragStartPt == nil {
+                                    newMaskDragStartPt = value.startLocation
+                                }
+                                newMaskDragCurrentPt = value.location
+                            }
+                            .onEnded { value in
+                                let startLocal = newMaskDragStartPt ?? value.startLocation
+                                let endLocal = value.location
+                                newMaskDragStartPt = nil
+                                newMaskDragCurrentPt = nil
+
+                                let clampedStartX = max(0, min(videoRect.width, startLocal.x))
+                                let clampedStartY = max(0, min(videoRect.height, startLocal.y))
+                                let clampedEndX = max(0, min(videoRect.width, endLocal.x))
+                                let clampedEndY = max(0, min(videoRect.height, endLocal.y))
+
+                                let dragW = abs(clampedEndX - clampedStartX)
+                                let dragH = abs(clampedEndY - clampedStartY)
+
+                                let crop = session.document.canvas.cropRect01
+                                let finalRect01: Rect01
+
+                                if dragW >= 6.0 && dragH >= 6.0 {
+                                    let normX0 = Double(min(clampedStartX, clampedEndX) / max(1.0, videoRect.width))
+                                    let normY0 = Double(min(clampedStartY, clampedEndY) / max(1.0, videoRect.height))
+                                    let normW = Double(dragW / max(1.0, videoRect.width))
+                                    let normH = Double(dragH / max(1.0, videoRect.height))
+
+                                    finalRect01 = Rect01(
+                                        x: crop.x + normX0 * crop.width,
+                                        y: crop.y + normY0 * crop.height,
+                                        width: normW * crop.width,
+                                        height: normH * crop.height
+                                    ).clamped()
+                                } else {
+                                    // Single click without drag -> place a default 28% × 14% mask centered at click point
+                                    let clickNormX = Double(clampedEndX / max(1.0, videoRect.width))
+                                    let clickNormY = Double(clampedEndY / max(1.0, videoRect.height))
+                                    let srcX = crop.x + clickNormX * crop.width
+                                    let srcY = crop.y + clickNormY * crop.height
+                                    let defW = min(0.28, crop.width)
+                                    let defH = min(0.14, crop.height)
+                                    finalRect01 = Rect01(
+                                        x: max(crop.x, min(crop.x + crop.width - defW, srcX - defW * 0.5)),
+                                        y: max(crop.y, min(crop.y + crop.height - defH, srcY - defH * 0.5)),
+                                        width: defW,
+                                        height: defH
+                                    ).clamped()
+                                }
+
+                                session.completeInteractiveMaskSelection(rect01: finalRect01)
+                            }
+                    )
+                    .offset(x: videoRect.minX, y: videoRect.minY)
+                    .zIndex(80)
                 }
             }
         }

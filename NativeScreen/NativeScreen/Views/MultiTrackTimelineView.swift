@@ -123,235 +123,228 @@ public struct MultiTrackTimelineView: View {
                         // B. VERTICALLY SCROLLABLE BODY (Fixed Left Labels + Horizontally Scrollable Track Lanes)
                         let typingSuggestions = session.activeTypingSuggestions
                         let hasTypingSuggestions = !typingSuggestions.isEmpty
-                        let shortcutClusters = session.detectedShortcutClusters
-                        let hasShortcutsTrack = session.document.captions.showKeystrokes
-                            || !shortcutClusters.isEmpty
-                            || session.document.captions.shortcutTracks.count > 1
+                        let hasShortcutsTrack = !session.document.captions.shortcutTracks.isEmpty
 
-                        ScrollView(.vertical, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 0) {
-                                // B1. FIXED LEFT TRACK LABELS COLUMN
-                                VStack(alignment: .leading, spacing: rowSpacing) {
-                                    if hasTypingSuggestions {
-                                        Color.clear
-                                            .frame(width: labelColumnWidth, height: 19)
-                                            .padding(.bottom, -4)
-                                    }
-
-                                    HStack(spacing: 6) {
-                                        Text("Clip")
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundStyle(.white.opacity(0.65))
-                                    }
-                                    .padding(.leading, 14)
-                                    .frame(width: labelColumnWidth, height: clipRowHeight, alignment: .leading)
-
-                                    let zoomHidden = session.document.timeline.isZoomTrackHidden
-                                    HStack(spacing: 6) {
-                                        Button {
-                                            session.toggleZoomTrackVisibility()
-                                        } label: {
-                                            Image(systemName: zoomHidden ? "eye.slash" : "eye")
-                                                .font(.system(size: 10, weight: .medium))
-                                                .foregroundStyle(Color.white.opacity(zoomHidden ? 0.28 : 0.65))
+                        ScrollViewReader { verticalScrollProxy in
+                            ScrollView(.vertical, showsIndicators: false) {
+                                HStack(alignment: .top, spacing: 0) {
+                                    // B1. FIXED LEFT TRACK LABELS COLUMN
+                                    VStack(alignment: .leading, spacing: rowSpacing) {
+                                        if hasTypingSuggestions {
+                                            Color.clear
+                                                .frame(width: labelColumnWidth, height: 19)
+                                                .padding(.bottom, -4)
                                         }
-                                        .buttonStyle(.plain)
 
-                                        Text("Zoom")
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundStyle(Color.white.opacity(zoomHidden ? 0.30 : 0.65))
-                                    }
-                                    .padding(.leading, 14)
-                                    .frame(width: labelColumnWidth, height: zoomRowHeight, alignment: .leading)
+                                        HStack(spacing: 6) {
+                                            Text("Clip")
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundStyle(.white.opacity(0.65))
+                                        }
+                                        .padding(.leading, 14)
+                                        .frame(width: labelColumnWidth, height: clipRowHeight, alignment: .leading)
+                                        .id("track_clip")
 
-                                    ForEach(session.document.timeline.maskTracks) { track in
-                                        let maskHidden = track.isHidden
+                                        let zoomHidden = session.document.timeline.isZoomTrackHidden
                                         HStack(spacing: 6) {
                                             Button {
-                                                session.toggleMaskTrackVisibility(trackId: track.id)
+                                                session.toggleZoomTrackVisibility()
                                             } label: {
-                                                Image(systemName: maskHidden ? "eye.slash" : "eye")
+                                                Image(systemName: zoomHidden ? "eye.slash" : "eye")
                                                     .font(.system(size: 10, weight: .medium))
-                                                    .foregroundStyle(Color.white.opacity(maskHidden ? 0.28 : 0.65))
+                                                    .foregroundStyle(Color.white.opacity(zoomHidden ? 0.28 : 0.65))
                                             }
                                             .buttonStyle(.plain)
 
-                                            Text(track.name)
+                                            Text("Zoom")
                                                 .font(.system(size: 11, weight: .medium))
-                                                .foregroundStyle(Color.white.opacity(maskHidden ? 0.30 : 0.65))
-                                                .lineLimit(1)
+                                                .foregroundStyle(Color.white.opacity(zoomHidden ? 0.30 : 0.65))
                                         }
                                         .padding(.leading, 14)
-                                        .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
-                                    }
+                                        .frame(width: labelColumnWidth, height: zoomRowHeight, alignment: .leading)
+                                        .id("track_zoom")
 
-                                    if hasShortcutsTrack {
-                                        ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
-                                            let isTrackHidden = sTrack.isHidden
-                                                || (sIdx == 0 && session.document.timeline.isShortcutsTrackHidden)
-                                                || !session.document.captions.showKeystrokes
-
-                                            HStack(spacing: 5) {
+                                        ForEach(session.document.timeline.maskTracks) { track in
+                                            let maskHidden = track.isHidden
+                                            HStack(spacing: 6) {
                                                 Button {
-                                                    session.toggleShortcutsTrackVisibility(trackId: sTrack.id)
+                                                    session.toggleMaskTrackVisibility(trackId: track.id)
                                                 } label: {
-                                                    Image(systemName: isTrackHidden ? "eye.slash" : "eye")
+                                                    Image(systemName: maskHidden ? "eye.slash" : "eye")
                                                         .font(.system(size: 10, weight: .medium))
-                                                        .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.28 : 0.65))
+                                                        .foregroundStyle(Color.white.opacity(maskHidden ? 0.28 : 0.65))
                                                 }
                                                 .buttonStyle(.plain)
 
-                                                Button {
-                                                    session.selectedShortcutId = nil
-                                                    session.selectedInspectorTab = .shortcuts
-                                                } label: {
-                                                    Text(session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts")
-                                                        .font(.system(size: 11, weight: .medium))
-                                                        .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.30 : 0.65))
-                                                        .lineLimit(1)
-                                                        .minimumScaleFactor(0.85)
-                                                }
-                                                .buttonStyle(.plain)
-
-                                                Spacer(minLength: 2)
-
-                                                InstantTooltipButton(
-                                                    tooltip: "Add shortcut track",
-                                                    edge: .top,
-                                                    size: 20,
-                                                    cornerRadius: 5
-                                                ) {
-                                                    session.addShortcutTrack()
-                                                    session.selectedShortcutId = nil
-                                                    session.selectedInspectorTab = .shortcuts
-                                                } label: {
-                                                    Image(systemName: "plus")
-                                                        .font(.system(size: 10, weight: .semibold))
-                                                        .foregroundStyle(Color.white.opacity(0.55))
-                                                }
-                                                .padding(.trailing, 6)
+                                                Text(track.name)
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundStyle(Color.white.opacity(maskHidden ? 0.30 : 0.65))
+                                                    .lineLimit(1)
                                             }
                                             .padding(.leading, 14)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .id("track_mask_\(track.id)")
+                                        }
+
+                                        if hasShortcutsTrack {
+                                            ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
+                                                let isTrackHidden = sTrack.isHidden
+                                                    || (sIdx == 0 && session.document.timeline.isShortcutsTrackHidden)
+                                                    || !session.document.captions.showKeystrokes
+
+                                                HStack(spacing: 6) {
+                                                    Button {
+                                                        session.toggleShortcutsTrackVisibility(trackId: sTrack.id)
+                                                    } label: {
+                                                        Image(systemName: isTrackHidden ? "eye.slash" : "eye")
+                                                            .font(.system(size: 10, weight: .medium))
+                                                            .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.28 : 0.65))
+                                                    }
+                                                    .buttonStyle(.plain)
+
+                                                    Button {
+                                                        session.selectedShortcutId = nil
+                                                        session.selectedInspectorTab = .shortcuts
+                                                    } label: {
+                                                        Text(session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts")
+                                                            .font(.system(size: 11, weight: .medium))
+                                                            .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.30 : 0.65))
+                                                            .lineLimit(1)
+                                                            .minimumScaleFactor(0.85)
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                }
+                                                .padding(.leading, 14)
+                                                .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                                .id("track_shortcut_\(sTrack.id)")
+                                            }
                                         }
                                     }
-                                }
-                                .padding(.vertical, 8)
-                                .background(Color(red: 0.04, green: 0.04, blue: 0.06))
-                                .overlay(alignment: .trailing) {
-                                    Rectangle()
-                                        .fill(Color.white.opacity(0.06))
-                                        .frame(width: 1)
-                                }
-                                .zIndex(15)
+                                    .padding(.vertical, 8)
+                                    .background(Color(red: 0.04, green: 0.04, blue: 0.06))
+                                    .overlay(alignment: .trailing) {
+                                        Rectangle()
+                                            .fill(Color.white.opacity(0.06))
+                                            .frame(width: 1)
+                                    }
+                                    .zIndex(15)
 
-                                // B2. HORIZONTALLY SCROLLABLE TRACK LANES
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !session.isSplitModeActive)) { timelineCtx in
-                                        let baseWiggleY: CGFloat = session.isSplitModeActive
-                                            ? CGFloat(sin(timelineCtx.date.timeIntervalSinceReferenceDate * (2.0 * .pi / 0.70))) * 1.0
-                                            : 0.0
+                                    // B2. HORIZONTALLY SCROLLABLE TRACK LANES
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !session.isSplitModeActive)) { timelineCtx in
+                                            let baseWiggleY: CGFloat = session.isSplitModeActive
+                                                ? CGFloat(sin(timelineCtx.date.timeIntervalSinceReferenceDate * (2.0 * .pi / 0.70))) * 1.0
+                                                : 0.0
 
-                                        ZStack(alignment: .topLeading) {
-                                            VStack(alignment: .leading, spacing: rowSpacing) {
-                                                // Lane 0 (Optional): Speed up typing suggestion bars right above Clip
-                                                if hasTypingSuggestions {
-                                                    typingSuggestionsLaneView(
-                                                        suggestions: typingSuggestions,
+                                            ZStack(alignment: .topLeading) {
+                                                VStack(alignment: .leading, spacing: rowSpacing) {
+                                                    // Lane 0 (Optional): Speed up typing suggestion bars right above Clip
+                                                    if hasTypingSuggestions {
+                                                        typingSuggestionsLaneView(
+                                                            suggestions: typingSuggestions,
+                                                            contentWidth: contentWidth,
+                                                            totalTimelineMs: totalTimelineMs
+                                                        )
+                                                        .padding(.bottom, -4)
+                                                        .offset(y: baseWiggleY)
+                                                    }
+
+                                                    // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
+                                                    clipLaneView(
                                                         contentWidth: contentWidth,
-                                                        totalTimelineMs: totalTimelineMs
+                                                        totalTimelineMs: totalTimelineMs,
+                                                        minorTickStepSec: stepInfo.minor
                                                     )
-                                                    .padding(.bottom, -4)
                                                     .offset(y: baseWiggleY)
-                                                }
 
-                                                // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
-                                                clipLaneView(
-                                                    contentWidth: contentWidth,
-                                                    totalTimelineMs: totalTimelineMs,
-                                                    minorTickStepSec: stepInfo.minor
-                                                )
-                                                .offset(y: baseWiggleY)
-
-                                                // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
-                                                zoomLaneView(
-                                                    contentWidth: contentWidth,
-                                                    totalTimelineMs: totalTimelineMs
-                                                )
-                                                .offset(y: -baseWiggleY)
-
-                                                // Lane 3+: Dynamic Mask Tracks (`34pt` height)
-                                                ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
-                                                    let dir: CGFloat = ((2 + trackIdx) % 2 == 0) ? 1.0 : -1.0
-                                                    maskLaneView(
-                                                        track: track,
-                                                        trackIndex: trackIdx,
+                                                    // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
+                                                    zoomLaneView(
                                                         contentWidth: contentWidth,
                                                         totalTimelineMs: totalTimelineMs
                                                     )
-                                                    .offset(y: baseWiggleY * dir)
-                                                }
+                                                    .offset(y: -baseWiggleY)
 
-                                                // Lane 4+: Multi-Track Keyboard Shortcuts Lanes (`34pt` height)
-                                                if hasShortcutsTrack {
-                                                    ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
-                                                        let dir: CGFloat = ((2 + session.document.timeline.maskTracks.count + sIdx) % 2 == 0) ? 1.0 : -1.0
-                                                        shortcutsLaneView(
-                                                            track: sTrack,
-                                                            trackIndex: sIdx,
-                                                            clusters: session.shortcutClusters(forTrackId: sTrack.id),
+                                                    // Lane 3+: Dynamic Mask Tracks (`34pt` height)
+                                                    ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
+                                                        let dir: CGFloat = ((2 + trackIdx) % 2 == 0) ? 1.0 : -1.0
+                                                        maskLaneView(
+                                                            track: track,
+                                                            trackIndex: trackIdx,
                                                             contentWidth: contentWidth,
                                                             totalTimelineMs: totalTimelineMs
                                                         )
                                                         .offset(y: baseWiggleY * dir)
                                                     }
-                                                }
-                                            }
-                                            .padding(.vertical, 8)
-                                            .padding(.horizontal, trackHorizontalInset)
-                                            .background(
-                                                HorizontalScrollViewIntrospector { sv in
-                                                    if horizontalScrollView !== sv {
-                                                        horizontalScrollView = sv
+
+                                                    // Lane 4+: Multi-Track Keyboard Shortcuts Lanes (`34pt` height)
+                                                    if hasShortcutsTrack {
+                                                        ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
+                                                            let dir: CGFloat = ((2 + session.document.timeline.maskTracks.count + sIdx) % 2 == 0) ? 1.0 : -1.0
+                                                            shortcutsLaneView(
+                                                                track: sTrack,
+                                                                trackIndex: sIdx,
+                                                                clusters: session.shortcutClusters(forTrackId: sTrack.id),
+                                                                contentWidth: contentWidth,
+                                                                totalTimelineMs: totalTimelineMs
+                                                            )
+                                                            .offset(y: baseWiggleY * dir)
+                                                        }
                                                     }
                                                 }
-                                            )
-                                        }
-                                        .frame(width: totalDocumentWidth)
-                                    }
-                                    .coordinateSpace(name: "timelineContentSpace")
-                                    .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
-                                        switch phase {
-                                        case .active(let pt):
-                                            let localTrackX = pt.x - trackHorizontalInset
-                                            let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
-                                            session.setHoverSkimTimelineMs(frac * totalTimelineMs)
-                                        case .ended:
-                                            session.setHoverSkimTimelineMs(nil)
-                                        }
-                                    }
-                                    .simultaneousGesture(
-                                        SpatialTapGesture(coordinateSpace: .named("timelineContentSpace"))
-                                            .onEnded { event in
-                                                let localTrackX = event.location.x - trackHorizontalInset
-                                                let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
-                                                session.isPlaying = false
-                                                session.seek(toTimelineMs: frac * totalTimelineMs)
+                                                .padding(.vertical, 8)
+                                                .padding(.horizontal, trackHorizontalInset)
+                                                .background(
+                                                    HorizontalScrollViewIntrospector { sv in
+                                                        if horizontalScrollView !== sv {
+                                                            horizontalScrollView = sv
+                                                        }
+                                                    }
+                                                )
                                             }
-                                    )
-                                }
-                                .onScrollGeometryChange(for: CGFloat.self) { geo in
-                                    geo.contentOffset.x
-                                } action: { _, newX in
-                                    horizontalScrollOffset = max(0, newX)
+                                            .frame(width: totalDocumentWidth)
+                                        }
+                                        .coordinateSpace(name: "timelineContentSpace")
+                                        .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
+                                            switch phase {
+                                            case .active(let pt):
+                                                let localTrackX = pt.x - trackHorizontalInset
+                                                let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
+                                                session.setHoverSkimTimelineMs(frac * totalTimelineMs)
+                                            case .ended:
+                                                session.setHoverSkimTimelineMs(nil)
+                                            }
+                                        }
+                                        .simultaneousGesture(
+                                            SpatialTapGesture(coordinateSpace: .named("timelineContentSpace"))
+                                                .onEnded { event in
+                                                    let localTrackX = event.location.x - trackHorizontalInset
+                                                    let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
+                                                    session.isPlaying = false
+                                                    session.seek(toTimelineMs: frac * totalTimelineMs)
+                                                }
+                                        )
+                                    }
+                                    .onScrollGeometryChange(for: CGFloat.self) { geo in
+                                        geo.contentOffset.x
+                                    } action: { _, newX in
+                                        horizontalScrollOffset = max(0, newX)
+                                    }
                                 }
                             }
-                        }
-                        .onScrollGeometryChange(for: ScrollMetrics.self) { geo in
-                            ScrollMetrics(offsetY: geo.contentOffset.y, contentHeight: geo.contentSize.height)
-                        } action: { _, metrics in
-                            verticalScrollOffset = max(0, metrics.offsetY)
-                            verticalContentHeight = max(1, metrics.contentHeight)
+                            .onScrollGeometryChange(for: ScrollMetrics.self) { geo in
+                                ScrollMetrics(offsetY: geo.contentOffset.y, contentHeight: geo.contentSize.height)
+                            } action: { _, metrics in
+                                verticalScrollOffset = max(0, metrics.offsetY)
+                                verticalContentHeight = max(1, metrics.contentHeight)
+                            }
+                            .onChange(of: session.scrollToTrackRevision) { _, _ in
+                                guard let targetId = session.scrollToTrackTargetId else { return }
+                                DispatchQueue.main.async {
+                                    withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                        verticalScrollProxy.scrollTo(targetId, anchor: .bottom)
+                                    }
+                                }
+                            }
                         }
                     }
 

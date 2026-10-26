@@ -793,9 +793,7 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         hiddenShortcutStartMs: [Int] = [],
         deletedShortcutStartMs: [Int] = [],
         defaultShortcutStyle: ShortcutStyleConfig = ShortcutStyleConfig(),
-        shortcutTracks: [ShortcutTrackConfig] = [
-            ShortcutTrackConfig(id: "default-shortcuts-track", name: "Shortcuts", isHidden: false, style: ShortcutStyleConfig())
-        ],
+        shortcutTracks: [ShortcutTrackConfig] = [],
         customShortcuts: [CustomShortcutSegment] = [],
         shortcutStyleOverrides: [String: ShortcutStyleConfig] = [:],
         shortcutTimingOverrides: [Int: Point01] = [:],
@@ -864,14 +862,7 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.deletedShortcutStartMs = try container.decodeIfPresent([Int].self, forKey: .deletedShortcutStartMs) ?? []
         let defStyle = try container.decodeIfPresent(ShortcutStyleConfig.self, forKey: .defaultShortcutStyle) ?? ShortcutStyleConfig()
         self.defaultShortcutStyle = defStyle
-        let decodedTracks = try container.decodeIfPresent([ShortcutTrackConfig].self, forKey: .shortcutTracks)
-        if let tracks = decodedTracks, !tracks.isEmpty {
-            self.shortcutTracks = tracks
-        } else {
-            self.shortcutTracks = [
-                ShortcutTrackConfig(id: "default-shortcuts-track", name: "Shortcuts", isHidden: false, style: defStyle)
-            ]
-        }
+        self.shortcutTracks = try container.decodeIfPresent([ShortcutTrackConfig].self, forKey: .shortcutTracks) ?? []
         self.customShortcuts = try container.decodeIfPresent([CustomShortcutSegment].self, forKey: .customShortcuts) ?? []
         self.shortcutStyleOverrides = try container.decodeIfPresent([String: ShortcutStyleConfig].self, forKey: .shortcutStyleOverrides) ?? [:]
         self.shortcutTimingOverrides = try container.decodeIfPresent([Int: Point01].self, forKey: .shortcutTimingOverrides) ?? [:]
