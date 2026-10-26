@@ -33,6 +33,7 @@ public final class ProjectSession: Identifiable {
     public var selectedZoomId: String?
     public var selectedMaskId: String?
     public var selectedShortcutId: String?
+    public var isDraggingTimelineSegment: Bool = false
     public var selectedInspectorTab: InspectorTab = .background
 
     // Audio Waveform Envelope Samples (`0.0 ... 1.0`, ~240 buckets across `metadata.durationMs`)
@@ -203,12 +204,14 @@ public final class ProjectSession: Identifiable {
     public var canRedo: Bool { !redoStack.isEmpty }
 
     public func beginInteractiveEdit() {
+        isDraggingTimelineSegment = true
         if interactiveEditSnapshot == nil {
             interactiveEditSnapshot = document
         }
     }
 
     public func endInteractiveEdit() {
+        isDraggingTimelineSegment = false
         if let snapshot = interactiveEditSnapshot {
             interactiveEditSnapshot = nil
             if snapshot != document {

@@ -24,7 +24,7 @@ public struct MultiTrackTimelineView: View {
     @State private var maskTrackHoverX: [String: CGFloat] = [:]
     @State private var shortcutTrackHoverX: [String: CGFloat] = [:]
 
-    private let labelColumnWidth: CGFloat = 104
+    private let labelColumnWidth: CGFloat = 126
     private let trackHorizontalInset: CGFloat = 20
     private let rulerHeight: CGFloat = 30
     private let clipRowHeight: CGFloat = 52
@@ -209,21 +209,26 @@ public struct MultiTrackTimelineView: View {
                                                         .font(.system(size: 11, weight: .medium))
                                                         .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.30 : 0.65))
                                                         .lineLimit(1)
+                                                        .minimumScaleFactor(0.85)
                                                 }
                                                 .buttonStyle(.plain)
 
                                                 Spacer(minLength: 2)
 
-                                                Button {
-                                                    session.addCustomShortcut(trackId: sTrack.id)
+                                                InstantTooltipButton(
+                                                    tooltip: "Add shortcut track",
+                                                    edge: .top,
+                                                    size: 20,
+                                                    cornerRadius: 5
+                                                ) {
+                                                    session.addShortcutTrack()
+                                                    session.selectedShortcutId = nil
+                                                    session.selectedInspectorTab = .shortcuts
                                                 } label: {
                                                     Image(systemName: "plus")
-                                                        .font(.system(size: 9.5, weight: .bold))
-                                                        .foregroundStyle(Color.white.opacity(0.45))
-                                                        .frame(width: 16, height: 16)
+                                                        .font(.system(size: 10, weight: .semibold))
+                                                        .foregroundStyle(Color.white.opacity(0.55))
                                                 }
-                                                .buttonStyle(.plain)
-                                                .help("Add shortcut at playhead")
                                                 .padding(.trailing, 6)
                                             }
                                             .padding(.leading, 14)
@@ -565,7 +570,8 @@ public struct MultiTrackTimelineView: View {
     @ViewBuilder
     private func zoomLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
         let isHidden = session.document.timeline.isZoomTrackHidden
-        let addPreview = (!session.isSplitModeActive && !isHidden)
+        let isMousePressed = (NSEvent.pressedMouseButtons != 0)
+        let addPreview = (!session.isSplitModeActive && !session.isDraggingTimelineSegment && !isMousePressed && !isHidden)
             ? hoverAddZoomSpan(contentWidth: contentWidth, totalTimelineMs: totalTimelineMs)
             : nil
 
@@ -704,7 +710,11 @@ public struct MultiTrackTimelineView: View {
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
-                zoomTrackHoverX = max(0.0, min(contentWidth, pt.x))
+                if session.isDraggingTimelineSegment || NSEvent.pressedMouseButtons != 0 {
+                    zoomTrackHoverX = nil
+                } else {
+                    zoomTrackHoverX = max(0.0, min(contentWidth, pt.x))
+                }
             case .ended:
                 zoomTrackHoverX = nil
             }
@@ -759,7 +769,8 @@ public struct MultiTrackTimelineView: View {
         totalTimelineMs: Double
     ) -> some View {
         let isHidden = track.isHidden
-        let addPreview = (!session.isSplitModeActive && maskTrackHoverX[track.id] != nil)
+        let isMousePressed = (NSEvent.pressedMouseButtons != 0)
+        let addPreview = (!session.isSplitModeActive && !session.isDraggingTimelineSegment && !isMousePressed && maskTrackHoverX[track.id] != nil)
             ? hoverAddMaskSpan(track: track, contentWidth: contentWidth, totalTimelineMs: totalTimelineMs)
             : nil
 
@@ -896,7 +907,11 @@ public struct MultiTrackTimelineView: View {
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
-                maskTrackHoverX[track.id] = max(0.0, min(contentWidth, pt.x))
+                if session.isDraggingTimelineSegment || NSEvent.pressedMouseButtons != 0 {
+                    maskTrackHoverX.removeValue(forKey: track.id)
+                } else {
+                    maskTrackHoverX[track.id] = max(0.0, min(contentWidth, pt.x))
+                }
             case .ended:
                 maskTrackHoverX.removeValue(forKey: track.id)
             }
@@ -986,6 +1001,8 @@ public struct MultiTrackTimelineView: View {
 
             // Hover `+` preview block on empty areas of the Shortcuts track (click to insert a custom shortcut!)
             if !session.isSplitModeActive,
+               !session.isDraggingTimelineSegment,
+               NSEvent.pressedMouseButtons == 0,
                let previewSpan = hoverAddShortcutSpan(trackId: track.id, clusters: clusters, contentWidth: contentWidth, totalTimelineMs: totalTimelineMs) {
                 let pX = CGFloat(previewSpan.tStartMs / totalTimelineMs) * contentWidth
                 let pW = max(24.0, CGFloat((previewSpan.tEndMs - previewSpan.tStartMs) / totalTimelineMs) * contentWidth)
@@ -1056,7 +1073,11 @@ public struct MultiTrackTimelineView: View {
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
-                shortcutTrackHoverX[track.id] = max(0.0, min(contentWidth, pt.x))
+                if session.isDraggingTimelineSegment || NSEvent.pressedMouseButtons != 0 {
+                    shortcutTrackHoverX.removeValue(forKey: track.id)
+                } else {
+                    shortcutTrackHoverX[track.id] = max(0.0, min(contentWidth, pt.x))
+                }
             case .ended:
                 shortcutTrackHoverX.removeValue(forKey: track.id)
             }
