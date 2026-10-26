@@ -372,14 +372,14 @@ public struct InstantTooltipBubble: View {
 
         HStack(spacing: 7) {
             Text(text)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.system(size: 12.5, weight: .regular))
                 .foregroundStyle(.white.opacity(0.96))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
 
             if let badge = shortcutBadge, !badge.isEmpty {
                 Text(badge)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(.white.opacity(0.72))
                     .padding(.horizontal, 6.5)
                     .padding(.vertical, 2.5)

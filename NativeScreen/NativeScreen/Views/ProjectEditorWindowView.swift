@@ -1018,11 +1018,11 @@ public struct ProjectEditorWindowView: View {
         exportLatestSample = sample
 
         // Matches `ExportTimeEstimator.reportProgress`:
-        // Reset `measurementStart` if none exists, if progress jumped backwards, or after a >3s stall.
-        if exportMeasurementStart == nil
-            || prev == nil
-            || clamped < (prev?.progress01 ?? 0.0)
-            || (nowMs - (prev?.atMs ?? nowMs)) > 3000.0 {
+        // Keep `measurementStart` anchored at the initial sample (or reset only if progress jumped backwards or stalled >5s).
+        if exportMeasurementStart == nil {
+            // Anchor measurement to the start of the export (`exportStartedAtMs` at `progress01 = 0`) so cumulative throughput is accurate from frame 0!
+            exportMeasurementStart = (progress01: 0.0, atMs: exportStartedAtMs)
+        } else if let prev, (clamped < prev.progress01 || (nowMs - prev.atMs) > 5000.0) {
             exportMeasurementStart = sample
         }
     }
@@ -2706,23 +2706,25 @@ private struct ExportingFullOverlayView: View {
     private let purpleAccent = Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
 
     private var elapsedMs: Double {
-        max(0.0, nowUptimeMs - startedAtMs)
+        let liveNow = max(nowUptimeMs, latestSample?.atMs ?? nowUptimeMs)
+        return max(0.0, liveNow - startedAtMs)
     }
 
     /// Computes live remaining time in ms.
     private var timeLeftMs: Double? {
         guard let start = measurementStart, let latest = latestSample else { return nil }
         if latest.progress01 >= 1.0 { return 0.0 }
-        // If no sample arrived for >3s, consider stalled
-        if nowUptimeMs - latest.atMs > 3000.0 { return nil }
+        let liveNow = max(nowUptimeMs, latest.atMs)
+        // If no sample arrived for >5s, consider stalled
+        if liveNow - latest.atMs > 5000.0 { return nil }
         let measuredSpanMs = latest.atMs - start.atMs
-        // Require at least 1000ms of measurement before displaying ETA (`if return null`)
-        if measuredSpanMs < 1000.0 { return nil }
+        // Require at least 800ms of measurement (or >=8% progress) before displaying ETA
+        if measuredSpanMs < 800.0 && latest.progress01 < 0.08 { return nil }
         let progressDelta = latest.progress01 - start.progress01
-        guard progressDelta > 0.0005 else { return nil }
+        guard progressDelta > 0.005 else { return nil }
         let msPerFullProgress = measuredSpanMs / progressDelta
         let estimatedCompletionMs = latest.atMs + (1.0 - latest.progress01) * msPerFullProgress
-        return max(0.0, estimatedCompletionMs - nowUptimeMs)
+        return max(0.0, estimatedCompletionMs - liveNow)
     }
 
     /// Matches `q` and `J` (0 decimals for <5min total, 1 decimal for >5min, 2 decimals for >30min).

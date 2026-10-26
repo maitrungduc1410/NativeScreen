@@ -86,13 +86,14 @@ public final class HardwareVideoExporter {
             }
         }
 
-        /// Target bits-per-pixel at `1920x1080 @ 60fps`
+        /// Target bits-per-pixel at `1920x1080 @ 60fps` (`N`:
+        /// `[{ crf: 14, bitsPerPixel: 0.0816 }, { crf: 24, bitsPerPixel: 0.0221 }, { crf: 30, bitsPerPixel: 0.011 }, { crf: 42, bitsPerPixel: 0.0038 }]`)
         public var referenceBitsPerPixel: Double {
             switch self {
-            case .studio: return 0.30
-            case .socialMedia: return 0.05
-            case .web: return 0.0175
-            case .webLow: return 0.0075
+            case .studio: return 0.0816
+            case .socialMedia: return 0.0221
+            case .web: return 0.0110
+            case .webLow: return 0.0038
             }
         }
     }
@@ -335,29 +336,38 @@ public final class HardwareVideoExporter {
         }
     }
 
-    /// Formats a `(lowBytes, highBytes)` range into `"35–85MB"`, `"120–260kB"`, or `"1.2–2.4GB"`.
+    /// Formats a `(lowBytes, highBytes)` range into `"35–85MB"`, `"4.5–9.8MB"`, `"120–260KB"`, or `"1.2–2.4GB"`.
     public static func formatByteRange(lowBytes: Double, highBytes: Double) -> String {
-        let lowMB = lowBytes / 1_000_000.0
-        let highMB = highBytes / 1_000_000.0
-
-        if highMB < 1.0 {
-            let lowKB = max(1, Int(round(lowBytes / 10_000.0) * 10))
-            let highKB = max(lowKB + 10, Int(round(highBytes / 10_000.0) * 10))
-            return "\(lowKB)–\(highKB)kB"
-        } else if highMB >= 1000.0 {
-            let lowGB = lowMB / 1000.0
-            let highGB = highMB / 1000.0
-            return String(format: "%.1f–%.1fGB", lowGB, highGB)
-        } else {
-            func niceMB(_ v: Double) -> Int {
-                if v < 10 { return max(1, Int(round(v))) }
-                if v < 100 { return Int(round(v / 5.0) * 5) }
-                return Int(round(v / 10.0) * 10)
+        func formatUnit(_ bytes: Double) -> (amount: String, unit: String) {
+            let kb = bytes / 1000.0
+            if kb < 100.0 {
+                return ("\(max(1, Int(round(kb))))", "KB")
             }
-            let l = niceMB(lowMB)
-            let h = max(l + 1, niceMB(highMB))
-            return "\(l)–\(h)MB"
+            if kb < 995.0 {
+                let stepped = Int(round(kb / 10.0) * 10)
+                return ("\(stepped)", "KB")
+            }
+            let mb = bytes / 1_000_000.0
+            if mb < 25.0 {
+                return (String(format: "%.1f", mb), "MB")
+            }
+            let step = mb < 100.0 ? 5.0 : 10.0
+            let steppedMB = Int(round(mb / step) * step)
+            if steppedMB < 1000 {
+                return ("\(steppedMB)", "MB")
+            }
+            return (String(format: "%.1f", mb / 1000.0), "GB")
         }
+
+        let low = formatUnit(lowBytes)
+        let high = formatUnit(highBytes)
+        if low.unit == high.unit {
+            if low.amount == high.amount {
+                return "\(high.amount)\(high.unit)"
+            }
+            return "\(low.amount)–\(high.amount)\(high.unit)"
+        }
+        return "\(low.amount)\(low.unit)–\(high.amount)\(high.unit)"
     }
 
     /// Upfront export duration estimation.
@@ -578,6 +588,7 @@ public final class HardwareVideoExporter {
         }
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        var lastYieldUptime = ProcessInfo.processInfo.systemUptime
 
         do {
             for frameIdx in 0..<totalFrames {
@@ -626,7 +637,15 @@ public final class HardwareVideoExporter {
                 let localProgress = Double(frameIdx + 1) / Double(totalFrames)
                 let mappedProgress = progressRange.0 + localProgress * (progressRange.1 - progressRange.0)
                 onProgress(mappedProgress)
-                await Task.yield()
+
+                // Crucial: `Task.yield` on `@MainActor` only re-enqueues on the Swift concurrency executor without draining
+                // the AppKit/RunLoop redraw & timer events! Calling `Task.sleep(for: .milliseconds(1))` every ~80ms yields back to
+                // the main RunLoop so `00:04 • 00:06 left` and the progress bar repaint smoothly in real time!
+                let nowUptime = ProcessInfo.processInfo.systemUptime
+                if nowUptime - lastYieldUptime >= 0.08 || frameIdx == totalFrames - 1 {
+                    lastYieldUptime = nowUptime
+                    try await Task.sleep(for: .milliseconds(1))
+                }
             }
 
             try Task.checkCancellation()
@@ -731,7 +750,7 @@ public final class HardwareVideoExporter {
                 }
 
                 onProgress(Double(frameIdx + 1) / Double(totalFrames))
-                await Task.yield()
+                try await Task.sleep(for: .milliseconds(1))
             }
 
             try Task.checkCancellation()
