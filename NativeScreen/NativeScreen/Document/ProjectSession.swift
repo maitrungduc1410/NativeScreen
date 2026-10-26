@@ -834,6 +834,45 @@ public final class ProjectSession: Identifiable {
         selectMask(item.id)
     }
 
+    public func addMaskInRange(trackId: String, sourceStartMs: Double, sourceEndMs: Double) {
+        guard sourceEndMs - sourceStartMs >= 300.0 else { return }
+        let midMs = (sourceStartMs + sourceEndMs) * 0.5
+        let camState = trajectorySolver.evaluate(atSourceMs: midMs).camera
+        let invScale = 1.0 / max(1.0, camState.scale)
+
+        let existingTrack = document.timeline.maskTracks.first(where: { $0.id == trackId })
+        let referenceMask = existingTrack?.items.last ?? document.timeline.maskTracks.first?.items.last
+        let inheritedType = referenceMask?.type ?? .blur
+        let inheritedStyle = referenceMask?.style ?? .gaussian
+        let inheritedIntensity = referenceMask?.intensity ?? (inheritedType == .spotlight ? 50.0 : 36.0)
+        let inheritedCornerRadius = referenceMask?.cornerRadius ?? 12.0
+
+        let boxW = max(0.08, 0.28 * invScale)
+        let boxH = max(0.06, 0.14 * invScale)
+        let boxX = camState.center01.x - boxW * 0.5
+        let boxY = camState.center01.y - boxH * 0.5
+        let initialRect = Rect01(x: boxX, y: boxY, width: boxW, height: boxH).clamped()
+
+        let item = MaskItem(
+            sourceStartMs: sourceStartMs,
+            sourceEndMs: sourceEndMs,
+            type: inheritedType,
+            style: inheritedStyle,
+            intensity: inheritedIntensity,
+            cornerRadius: inheritedCornerRadius,
+            keyframes: [MaskKeyframe(sourceMs: sourceStartMs, rect01: initialRect)]
+        )
+
+        mutate { doc in
+            if let tIdx = doc.timeline.maskTracks.firstIndex(where: { $0.id == trackId }) {
+                doc.timeline.maskTracks[tIdx].isHidden = false
+                doc.timeline.maskTracks[tIdx].items.append(item)
+                doc.timeline.maskTracks[tIdx].items.sort { $0.sourceStartMs < $1.sourceStartMs }
+            }
+        }
+        selectMask(item.id)
+    }
+
     public func deleteMaskTrack(trackId: String) {
         mutate { doc in
             if let track = doc.timeline.maskTracks.first(where: { $0.id == trackId }),
