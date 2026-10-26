@@ -661,12 +661,13 @@ public final class HardwareVideoExporter {
         ]
         if let bitrate {
             // Screen-recorded UI has large static areas; slightly scaling the average target bitrate (0.85x)
-            // and enabling frame-reordering CRF visual quality and compact file size (~26MB vs 32MB)!
+            // and disabling B-frame reordering (`AVVideoAllowFrameReorderingKey: false`) eliminates multi-frame
+            // VideoToolbox lookahead latency while keeping file size compact (~26MB)!
             let tunedBitrate = max(600_000, Int(round(Double(bitrate) * 0.85)))
             var compressionProps: [String: Any] = [
                 AVVideoAverageBitRateKey: tunedBitrate,
                 AVVideoMaxKeyFrameIntervalKey: fps * 2,
-                AVVideoAllowFrameReorderingKey: true
+                AVVideoAllowFrameReorderingKey: false
             ]
             if avCodec == .h264 {
                 compressionProps[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel

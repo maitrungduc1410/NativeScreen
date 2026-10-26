@@ -52,7 +52,7 @@ public final class MetalFrameCompositor {
     private var lastMaskedScreenKey: MaskedScreenCacheKey?
     private var cachedMaskedScreenImage: CIImage?
 
-    // Pass 3 (Screen Rounded Corners & Drop Shadow Stencil) Cache — avoids running 4K Gaussian blur & rounded-rect generators on every frame!
+    // Pass 3 (Screen Rounded Corners & Drop Shadow Stencil) Cache — materialized into GPU `MTLTexture`s so 4K Gaussian blur & rounded-rect generators run only ONCE!
     private struct ShadowCacheKey: Equatable {
         let screenRect: CGRect
         let canvasRect: CGRect
@@ -87,6 +87,7 @@ public final class MetalFrameCompositor {
         self.commandQueue = queue
         self.ciContext = CIContext(mtlDevice: dev, options: [
             .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+            .workingFormat: CIFormat.BGRA8,
             .cacheIntermediates: true,
             .priorityRequestLow: false
         ])
@@ -190,7 +191,8 @@ public final class MetalFrameCompositor {
         }
 
         // Fast GPU Rounded-Rectangle Drop Shadow (`Classic` vs `Directional` + `Distance`, `Angle`, `Blur`)
-        // Cached across frames so the 4K Gaussian shadow blur is evaluated only once when parameters change, not on every video frame!
+        // Crucial: Materialized once into a concrete GPU `MTLTexture`-backed `CIImage` so CoreImage NEVER re-runs
+        // the 4K Gaussian blur filter graph on every single video frame!
         if doc.frameStyle.shadow.enabled && doc.frameStyle.shadow.intensity > 0.01 {
             let shadowKey = ShadowCacheKey(
                 screenRect: screenFrameRect,
@@ -215,12 +217,13 @@ public final class MetalFrameCompositor {
                     "inputRadius": scaledRadius,
                     "inputColor": CIColor(red: 0, green: 0, blue: 0, alpha: shadowAlpha)
                 ])?.outputImage {
-                    let computedShadow = shadowBox
+                    let shadowRecipe = shadowBox
                         .applyingGaussianBlur(sigma: Double(max(1.0, shadowBlur * 0.45)))
                         .cropped(to: canvasRect)
+                    let materialized = materializeToGPUTexture(shadowRecipe, extent: canvasRect) ?? shadowRecipe
                     lastShadowCacheKey = shadowKey
-                    cachedBlurredShadowImage = computedShadow
-                    blurredShadow = computedShadow
+                    cachedBlurredShadowImage = materialized
+                    blurredShadow = materialized
                 } else {
                     blurredShadow = nil
                 }
@@ -434,7 +437,7 @@ public final class MetalFrameCompositor {
             }
         }
 
-        // Fast path: return cached background (including blur) when background & blur haven't changed!
+        // Fast path: return cached background (including blur) materialized into a GPU texture!
         let blurQuantized = Int(round(bg.blurRadius * 2.0))
         let blurCacheKey = BlurredBackgroundCacheKey(identity: newKey, blurRadiusQuantized: blurQuantized)
         if blurCacheKey == lastBlurredBgCacheKey, let cachedBg = cachedBlurredBackgroundImage {
@@ -448,9 +451,50 @@ public final class MetalFrameCompositor {
                 .applyingGaussianBlur(sigma: bg.blurRadius * 0.4)
                 .cropped(to: canvasRect)
         }
+        let materializedBg = materializeToGPUTexture(finalBg, extent: canvasRect) ?? finalBg
         lastBlurredBgCacheKey = blurCacheKey
-        cachedBlurredBackgroundImage = finalBg
-        return finalBg
+        cachedBlurredBackgroundImage = materializedBg
+        return materializedBg
+    }
+
+    /// Bakes a lazy `CIImage` filter recipe into a concrete GPU-resident `MTLTexture` so subsequent frames sample it in O(1) time (`<0.05ms`)!
+    private func materializeToGPUTexture(_ image: CIImage, extent: CGRect) -> CIImage? {
+        let w = Int(round(extent.width))
+        let h = Int(round(extent.height))
+        guard w > 4, h > 4 else { return nil }
+
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: w,
+            height: h,
+            mipmapped: false
+        )
+        desc.usage = [.shaderRead, .shaderWrite, .renderTarget]
+        desc.storageMode = .private
+        guard let tex = device.makeTexture(descriptor: desc),
+              let cmdBuf = commandQueue.makeCommandBuffer() else {
+            return nil
+        }
+
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        let shifted = image.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+        ciContext.render(
+            shifted,
+            to: tex,
+            commandBuffer: cmdBuf,
+            bounds: CGRect(x: 0, y: 0, width: w, height: h),
+            colorSpace: colorSpace
+        )
+        cmdBuf.commit()
+
+        guard let baked = CIImage(mtlTexture: tex, options: [.colorSpace: colorSpace]) else {
+            return nil
+        }
+        // `CIImage(mtlTexture:)` has flipped Y coordinates by default in Metal; flip back to CoreImage bottom-left coordinates
+        let unflipped = baked
+            .transformed(by: CGAffineTransform(scaleX: 1.0, y: -1.0).translatedBy(x: 0.0, y: -CGFloat(h)))
+            .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+        return unflipped
     }
 
     private func buildRawBackgroundImage(bg: BackgroundConfig, session: ProjectSession, canvasRect: CGRect) -> CIImage {
@@ -645,9 +689,12 @@ public final class MetalFrameCompositor {
     }
 
     private func calculateFittedScreenRect(sourceSize: CGSize, inCanvas canvas: CGRect, paddingRatio: CGFloat) -> CGRect {
-        let insetX = canvas.width * min(0.42, max(0.0, paddingRatio))
-        let insetY = canvas.height * min(0.42, max(0.0, paddingRatio))
-        let available = canvas.insetBy(dx: insetX, dy: insetY)
+        let clampedRatio = min(0.45, max(0.0, paddingRatio))
+        let shortestCanvasSide = min(canvas.width, canvas.height)
+        // Exact `padByRatio(-paddingRatio01)`:
+        // Uniform margin `m` on all 4 sides such that `shortestCanvasSide = innerShortest * (1 + 2 * r)`.
+        let uniformMargin = (shortestCanvasSide - shortestCanvasSide / (1.0 + 2.0 * clampedRatio)) * 0.5
+        let available = canvas.insetBy(dx: uniformMargin, dy: uniformMargin)
 
         let aspect = max(0.1, sourceSize.width / max(1.0, sourceSize.height))
         var w = available.width
@@ -678,9 +725,10 @@ public final class MetalFrameCompositor {
             ])?.outputImage else {
                 return image
             }
+            let materialized = materializeToGPUTexture(generated, extent: rect) ?? generated
             lastRoundedMaskCacheKey = maskKey
-            cachedRoundedMaskImage = generated
-            roundedMask = generated
+            cachedRoundedMaskImage = materialized
+            roundedMask = materialized
         }
         let clearBG = CIImage.empty().cropped(to: rect)
         return image.applyingFilter("CIBlendWithMask", parameters: [

@@ -168,7 +168,9 @@ public struct CanvasConfig: Codable, Equatable, Hashable, Sendable {
         case .auto:
             let w = max(1.0, sourceWidth * cropRect01.width)
             let h = max(1.0, sourceHeight * cropRect01.height)
-            return w / h
+            let shortest = min(w, h)
+            let pad = shortest * max(0.0, paddingRatio)
+            return (w + 2.0 * pad) / (h + 2.0 * pad)
         case .preset:
             return aspectRatioPreset.ratio
         case .custom:
