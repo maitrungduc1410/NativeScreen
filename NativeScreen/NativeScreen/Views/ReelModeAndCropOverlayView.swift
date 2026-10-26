@@ -763,10 +763,10 @@ public struct ExportStillFrameModalView: View {
                         }
                     }
 
-                    // 3. Resolution (`480P`, `720P`, `1080P`, `2K`, `4K`, `8K`)
+                    // 3. Resolution (`480P`, `720P`, `1080P`, `2K`, `4K`, `8K` — Clean dropdown matching Export Video's Frame rate menu!)
                     HStack(spacing: 16) {
                         Text("Resolution")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.white.opacity(0.85))
                             .frame(width: 96, alignment: .leading)
 
@@ -784,21 +784,30 @@ public struct ExportStillFrameModalView: View {
                                 }
                             }
                         } label: {
-                            HStack {
+                            HStack(spacing: 6) {
                                 Text(selectedResolution.rawValue)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Spacer()
+                                    .font(.system(size: 13.5, weight: .regular).monospacedDigit())
+                                    .foregroundStyle(.white.opacity(0.95))
                                 Image(systemName: "chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 10.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.65))
+                                    .padding(.leading, 4)
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
                         }
-                        .menuStyle(.borderlessButton)
+                        .buttonStyle(.plain)
+                        .fixedSize()
+
+                        Spacer()
                     }
 
                     // 4. Format (`PNG` | `JPEG` — 2 toggle pill buttons)
