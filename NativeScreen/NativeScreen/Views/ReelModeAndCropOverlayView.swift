@@ -937,13 +937,20 @@ public struct ExportStillFrameModalView: View {
         let finalBaseName = cleanName.isEmpty ? "\(session.document.name)-frame" : cleanName
         let outURL = exportDirectoryURL.appendingPathComponent("\(finalBaseName).\(selectedFormat.fileExtension)")
 
-        // Prompt user before overwriting an existing file in the destination folder!
+        // Prompt user before overwriting an existing file in the destination folder (matching NSSavePanel's native caution alert + destructive red Replace button!)
         if FileManager.default.fileExists(atPath: outURL.path) {
             let alert = NSAlert()
-            alert.alertStyle = .warning
+            alert.alertStyle = .critical
+            if let cautionIcon = NSImage(named: NSImage.cautionName) {
+                alert.icon = cautionIcon
+            }
             alert.messageText = "“\(outURL.lastPathComponent)” already exists. Do you want to replace it?"
-            alert.informativeText = "A file or folder with the same name already exists in the folder \(exportDirectoryURL.lastPathComponent). Replacing it will overwrite its current contents."
-            alert.addButton(withTitle: "Replace")
+            let folderName = exportDirectoryURL.lastPathComponent
+            alert.informativeText = folderName == "Desktop"
+                ? "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents."
+                : "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents."
+            let replaceBtn = alert.addButton(withTitle: "Replace")
+            replaceBtn.hasDestructiveAction = true
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }

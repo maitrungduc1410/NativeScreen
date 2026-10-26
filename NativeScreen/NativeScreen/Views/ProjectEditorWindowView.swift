@@ -966,8 +966,13 @@ public struct ProjectEditorWindowView: View {
                 .appendingPathComponent("\(cleanName)-\(Int(Date().timeIntervalSince1970)).\(ext)")
             activeExportDestinationLabel = "Clipboard (\(cleanName).\(ext))"
         } else {
+            // Ensure NSSavePanel opens in expanded mode by default (showing the sidebar, file browser table, and "New Folder" button)
+            UserDefaults.standard.set(true, forKey: "NSNavPanelExpandedStateForSaveMode")
+
             let savePanel = NSSavePanel()
+            savePanel.message = "Where to save new recording export?"
             savePanel.canCreateDirectories = true
+            savePanel.showsTagField = false
             savePanel.isExtensionHidden = false
             switch exportConfig.format {
             case .mp4:
@@ -988,10 +993,17 @@ public struct ProjectEditorWindowView: View {
                 let hevcURL = chosenURL.deletingLastPathComponent().appendingPathComponent("\(baseName)-hevc.mp4")
                 if !FileManager.default.fileExists(atPath: chosenURL.path) && FileManager.default.fileExists(atPath: hevcURL.path) {
                     let alert = NSAlert()
-                    alert.alertStyle = .warning
+                    alert.alertStyle = .critical
+                    if let cautionIcon = NSImage(named: NSImage.cautionName) {
+                        alert.icon = cautionIcon
+                    }
                     alert.messageText = "“\(hevcURL.lastPathComponent)” already exists. Do you want to replace it?"
-                    alert.informativeText = "A file or folder with the same name already exists in the folder \(hevcURL.deletingLastPathComponent().lastPathComponent). Replacing it will overwrite its current contents."
-                    alert.addButton(withTitle: "Replace")
+                    let folderName = hevcURL.deletingLastPathComponent().lastPathComponent
+                    alert.informativeText = folderName == "Desktop"
+                        ? "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents."
+                        : "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents."
+                    let replaceBtn = alert.addButton(withTitle: "Replace")
+                    replaceBtn.hasDestructiveAction = true
                     alert.addButton(withTitle: "Cancel")
                     guard alert.runModal() == .alertFirstButtonReturn else { return }
                 }
