@@ -306,21 +306,23 @@ public struct InspectorSidebarView: View {
                                 Button {
                                     session.selectSystemWallpaper(item)
                                 } label: {
-                                    Group {
-                                        if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
-                                            Image(nsImage: nsImg)
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        } else {
-                                            Color.secondary.opacity(0.2)
+                                    Color.clear
+                                        .aspectRatio(1.0, contentMode: .fit)
+                                        .overlay {
+                                            if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
+                                                Image(nsImage: nsImg)
+                                                    .resizable()
+                                                    .scaledToFill()
+                                            } else {
+                                                Color.secondary.opacity(0.2)
+                                            }
                                         }
-                                    }
-                                    .aspectRatio(1.0, contentMode: .fit)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
-                                    )
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                        )
+                                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -350,7 +352,7 @@ public struct InspectorSidebarView: View {
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.white.opacity(0.92))
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             ColorSwatchPickerButton(
                                 hexColor: Binding(
                                     get: { stop0Hex },
@@ -366,7 +368,8 @@ public struct InspectorSidebarView: View {
                                             }
                                         }
                                     }
-                                )
+                                ),
+                                size: 32
                             )
 
                             HexInputBox(
@@ -379,7 +382,9 @@ public struct InspectorSidebarView: View {
                                             }
                                         }
                                     }
-                                )
+                                ),
+                                width: nil,
+                                height: 32
                             )
 
                             ColorSwatchPickerButton(
@@ -397,7 +402,8 @@ public struct InspectorSidebarView: View {
                                             }
                                         }
                                     }
-                                )
+                                ),
+                                size: 32
                             )
 
                             HexInputBox(
@@ -410,7 +416,9 @@ public struct InspectorSidebarView: View {
                                             }
                                         }
                                     }
-                                )
+                                ),
+                                width: nil,
+                                height: 32
                             )
 
                             Button {
@@ -424,9 +432,9 @@ public struct InspectorSidebarView: View {
                                 }
                             } label: {
                                 Image(systemName: "wand.and.stars")
-                                    .font(.system(size: 13.5, weight: .regular))
+                                    .font(.system(size: 13.0, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.90))
-                                    .frame(width: 36, height: 36)
+                                    .frame(width: 32, height: 32)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                                             .fill(Color.white.opacity(0.035))
@@ -1069,24 +1077,45 @@ public struct InspectorSidebarView: View {
                             }
                         }()
 
-                        HStack(spacing: 6) {
-                            inspectorPillOptionButton(title: "None", isSelected: normalizedSoundSet == nil) {
-                                session.mutate { $0.cursor.clickEffect.soundSet = nil }
+                        ScrollViewReader { soundProxy in
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    inspectorPillOptionButton(title: "None", isSelected: normalizedSoundSet == nil, horizontalPadding: 12) {
+                                        session.mutate { $0.cursor.clickEffect.soundSet = nil }
+                                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                            soundProxy.scrollTo("none", anchor: .center)
+                                        }
+                                    }
+                                    .id("none")
+
+                                    inspectorPillOptionButton(title: "Magic Mouse™", isSelected: normalizedSoundSet == "apple-magic-mouse", horizontalPadding: 12) {
+                                        session.mutate { $0.cursor.clickEffect.soundSet = "apple-magic-mouse" }
+                                        CursorClickSoundPlayer.shared.playClickSound(
+                                            soundSet: "apple-magic-mouse",
+                                            volume: session.document.cursor.clickEffect.soundVolume
+                                        )
+                                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                            soundProxy.scrollTo("apple-magic-mouse", anchor: .center)
+                                        }
+                                    }
+                                    .id("apple-magic-mouse")
+
+                                    inspectorPillOptionButton(title: "MX Master™", isSelected: normalizedSoundSet == "logitech-mx-master", horizontalPadding: 12) {
+                                        session.mutate { $0.cursor.clickEffect.soundSet = "logitech-mx-master" }
+                                        CursorClickSoundPlayer.shared.playClickSound(
+                                            soundSet: "logitech-mx-master",
+                                            volume: session.document.cursor.clickEffect.soundVolume
+                                        )
+                                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                            soundProxy.scrollTo("logitech-mx-master", anchor: .center)
+                                        }
+                                    }
+                                    .id("logitech-mx-master")
+                                }
+                                .padding(.vertical, 2)
+                                .padding(.trailing, 18)
                             }
-                            inspectorPillOptionButton(title: "Magic Mouse™", isSelected: normalizedSoundSet == "apple-magic-mouse") {
-                                session.mutate { $0.cursor.clickEffect.soundSet = "apple-magic-mouse" }
-                                CursorClickSoundPlayer.shared.playClickSound(
-                                    soundSet: "apple-magic-mouse",
-                                    volume: session.document.cursor.clickEffect.soundVolume
-                                )
-                            }
-                            inspectorPillOptionButton(title: "MX Master™", isSelected: normalizedSoundSet == "logitech-mx-master") {
-                                session.mutate { $0.cursor.clickEffect.soundSet = "logitech-mx-master" }
-                                CursorClickSoundPlayer.shared.playClickSound(
-                                    soundSet: "logitech-mx-master",
-                                    volume: session.document.cursor.clickEffect.soundVolume
-                                )
-                            }
+                            .padding(.trailing, -18)
                         }
 
                         if let activeSound = normalizedSoundSet {
@@ -1530,15 +1559,16 @@ public struct InspectorSidebarView: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 19, weight: .regular))
+                    .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.88))
 
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12.5, weight: .regular))
                     .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.88))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, width == nil ? 9 : 14)
             .frame(width: width, height: height, alignment: .leading)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .background(
@@ -1547,7 +1577,12 @@ public struct InspectorSidebarView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(isSelected ? 0.14 : 0.05), lineWidth: 1)
+                    .strokeBorder(
+                        isSelected
+                            ? Color(red: 0.44, green: 0.34, blue: 0.98)
+                            : Color.white.opacity(0.05),
+                        lineWidth: isSelected ? 1.3 : 1
+                    )
             )
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
@@ -2111,10 +2146,10 @@ public struct InspectorSidebarView: View {
                 .buttonStyle(.plain)
 
                 // Quick Modifier Toggle Pills (`⌘`, `⇧`, `⌥`, `⌃`, `⇪`) + Primary Key Input
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     ForEach([("Meta", "⌘"), ("Shift", "⇧"), ("Alt", "⌥"), ("Ctrl", "⌃"), ("CapsLock", "⇪")], id: \.0) { modKey, modSym in
                         let hasMod = cluster.modifiers.contains(modKey)
-                        inspectorPillOptionButton(title: modSym, isSelected: hasMod) {
+                        inspectorPillOptionButton(title: modSym, isSelected: hasMod, horizontalPadding: 10) {
                             var nextMods = cluster.modifiers
                             if let idx = nextMods.firstIndex(of: modKey) {
                                 nextMods.remove(at: idx)
@@ -2135,8 +2170,9 @@ public struct InspectorSidebarView: View {
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
-                    .frame(height: 34)
+                    .padding(.horizontal, 6)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(Color.white.opacity(0.04))
@@ -2488,7 +2524,8 @@ public struct InspectorSidebarView: View {
                     ForEach(ShortcutDockPosition.allCases) { pos in
                         inspectorPillOptionButton(
                             title: pos.label,
-                            isSelected: current.dockPosition == pos
+                            isSelected: current.dockPosition == pos,
+                            horizontalPadding: 11
                         ) {
                             style.wrappedValue.dockPosition = pos
                         }
@@ -2614,33 +2651,39 @@ public struct InspectorSidebarView: View {
                             .font(.system(size: 12.5, weight: .regular))
                             .foregroundStyle(.white.opacity(0.65))
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             ColorSwatchPickerButton(
                                 hexColor: Binding(
                                     get: { current.gradientStartHex },
                                     set: { style.wrappedValue.gradientStartHex = $0 }
-                                )
+                                ),
+                                size: 32
                             )
 
                             HexInputBox(
                                 hexColor: Binding(
                                     get: { current.gradientStartHex },
                                     set: { style.wrappedValue.gradientStartHex = $0 }
-                                )
+                                ),
+                                width: nil,
+                                height: 32
                             )
 
                             ColorSwatchPickerButton(
                                 hexColor: Binding(
                                     get: { current.gradientEndHex },
                                     set: { style.wrappedValue.gradientEndHex = $0 }
-                                )
+                                ),
+                                size: 32
                             )
 
                             HexInputBox(
                                 hexColor: Binding(
                                     get: { current.gradientEndHex },
                                     set: { style.wrappedValue.gradientEndHex = $0 }
-                                )
+                                ),
+                                width: nil,
+                                height: 32
                             )
 
                             Button {
@@ -2650,9 +2693,9 @@ public struct InspectorSidebarView: View {
                                 }
                             } label: {
                                 Image(systemName: "wand.and.stars")
-                                    .font(.system(size: 13.5, weight: .regular))
+                                    .font(.system(size: 13.0, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.90))
-                                    .frame(width: 36, height: 36)
+                                    .frame(width: 32, height: 32)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                                             .fill(Color.white.opacity(0.035))
@@ -2733,6 +2776,8 @@ public struct InspectorSidebarView: View {
                     .font(.system(size: 13.5, weight: .regular))
                 Text(title)
                     .font(.system(size: 13.5, weight: .regular))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.85))
             .frame(maxWidth: .infinity)
@@ -2826,13 +2871,16 @@ public struct InspectorSidebarView: View {
     private func inspectorPillOptionButton(
         title: String,
         isSelected: Bool,
+        horizontalPadding: CGFloat = 14,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 13.0, weight: .regular))
                 .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.82))
-                .padding(.horizontal, 15)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, horizontalPadding)
                 .frame(height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -3114,6 +3162,7 @@ private struct CursorStyleHorizontalCardView: View {
 
 private struct ColorSwatchPickerButton: View {
     @Binding var hexColor: String
+    var size: CGFloat = 36
     @State private var isShowingPopover = false
 
     var body: some View {
@@ -3122,7 +3171,7 @@ private struct ColorSwatchPickerButton: View {
         } label: {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(hex: hexColor))
-                .frame(width: 36, height: 36)
+                .frame(width: size, height: size)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.28), lineWidth: 1.2)
@@ -3138,15 +3187,18 @@ private struct ColorSwatchPickerButton: View {
 
 private struct HexInputBox: View {
     @Binding var hexColor: String
-    var width: CGFloat = 92
+    var width: CGFloat? = 96
+    var height: CGFloat = 36
 
     var body: some View {
         TextField("#4776E6", text: $hexColor)
             .textFieldStyle(.plain)
-            .font(.system(size: 13, weight: .regular))
+            .font(.system(size: 12.5, weight: .regular).monospacedDigit())
             .foregroundStyle(.white.opacity(0.95))
-            .padding(.horizontal, 11)
-            .frame(width: width, height: 36)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .frame(width: width, height: height)
+            .frame(maxWidth: width == nil ? .infinity : nil)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color.white.opacity(0.035))
