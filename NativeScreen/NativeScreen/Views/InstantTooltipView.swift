@@ -2,18 +2,22 @@ import SwiftUI
 import AppKit
 import QuartzCore
 
-/// & AppKit Tooltip System:
-/// 1. **Standalone Borderless `TooltipPanel` + `NSVisualEffectView` (`.tooltip` material, `.behindWindow`)**:
+/// Exact NativeScreen, and `.hover-magnet` System:
+/// 1. **Standalone Borderless `TooltipPanel` + `NSVisualEffectView` (`.popover` material, `.behindWindow`)**:
 ///    Every tooltip in the app is drawn by AppKit in a dedicated panel (`CGWindowLevelForKey(.popUpMenuWindow)`)
 ///    with `panel.sharingType` mirrored from the owner window (`ownerWindow.sharingType != .none ? .readOnly : .none`),
 ///    so screenshots (`⇧⌘4`) capture tooltips normally while private HUD windows remain hidden if needed.
 /// 2. **Exact `BubbleShape` Boolean CSG Silhouette (`margin = 7.0`, `cornerRadius = min(W/6, H/6, 6.667)`, `caretReach = 5.8`, `tipRadius = 2.0`)**:
 ///    Constructs the exact union of `bodyPath` and `caretPath` with rounded inner fillet joints (`strokeWidth: 9.0` & `4.0` CSG rounding),
-///    applied as `NSVisualEffectView.maskImage` and stroked with a seamless `1px` inner border (`white.opacity(0.14)`).
-///    This completely eliminates any broken/dashed line seam on the left/right/top/bottom pointer arrow!
+///    applied as `NSVisualEffectView.maskImage` and stroked with a seamless `1px` inner border (`white.opacity(0.16)`).
 /// 3. **Directional Slide-In (`4pt` offset, `0.13s easeOut`) & Smooth Reposition (`0.12s`)**:
 ///    When appearing from hidden, the tooltip slides in by `4pt` from the placement direction while fading in (`0 -> 1` alpha over `0.13s`).
 ///    When moving directly from one hovered button to an adjacent button, it glides (`0.12s`) to the new frame.
+/// 4. **Directional `.hover-magnet` Button Highlight**:
+///    Every button tracks cursor entry, movement, and exit via a zero-SwiftUI-overhead AppKit `NSTrackingArea` + `CALayer` spring solver
+///    (`stiffness = 1500, damping = 100, mass = 2`, `Ka = 2pt` magnetic pull, `qa = 10x` escape distance, `Ja = 0.8` entry scale).
+///    When the cursor enters from any angle (e.g. top-right corner), the highlight layer starts `22pt` outside in that exact direction
+///    and flies into the button (`overflow: visible`), tracks the cursor magnetically while inside, and flies out in the exit direction on leave!
 public enum TooltipEdge: Sendable {
     case leading
     case trailing
@@ -86,7 +90,6 @@ public struct BubbleShape: Sendable, Equatable {
         let br = bodyRect
         let r = cornerRadius
 
-        // Unit normal `(nx, ny)` pointing outward from the caret side, and unit tangent `(tx, ty)` along the edge
         let anchorX: CGFloat
         let anchorY: CGFloat
         let nx: CGFloat
@@ -96,25 +99,21 @@ public struct BubbleShape: Sendable, Equatable {
 
         switch caretSide {
         case .top:
-            // Protruding UP from top edge of bubble (in unflipped CoreGraphics coordinates where maxY is top, or we use consistent unflipped coordinates)
             anchorX = br.minX + caretOffset
             anchorY = br.maxY
             nx = 0.0; ny = 1.0
             tx = -1.0; ty = 0.0
         case .bottom:
-            // Protruding DOWN from bottom edge of bubble
             anchorX = br.minX + caretOffset
             anchorY = br.minY
             nx = 0.0; ny = -1.0
             tx = 1.0; ty = 0.0
         case .leading:
-            // Protruding LEFT from left edge of bubble
             anchorX = br.minX
             anchorY = br.minY + caretOffset
             nx = -1.0; ny = 0.0
             tx = 0.0; ty = -1.0
         case .trailing:
-            // Protruding RIGHT from right edge of bubble
             anchorX = br.maxX
             anchorY = br.minY + caretOffset
             nx = 1.0; ny = 0.0
@@ -169,7 +168,6 @@ public struct BubbleShape: Sendable, Equatable {
         let clippedCaret = clipRectPath.intersection(caretPath, using: .winding)
         let baseUnion = clippedCaret.union(bodyPath, using: .winding)
 
-        // Apply CSG fillet smoothing at the caret-body neck:
         let expand9 = baseUnion.copy(strokingWithWidth: 9.0, lineCap: .round, lineJoin: .round, miterLimit: 1.0)
         let grown = expand9.union(baseUnion, using: .winding)
         let shrink9 = grown.copy(strokingWithWidth: 9.0, lineCap: .round, lineJoin: .round, miterLimit: 1.0)
@@ -426,7 +424,6 @@ public final class SharedFloatingTooltipWindowController {
 
         activeOwnerView = ownerView
 
-        // Mirror owner window appearance & sharingType.
         if let ownerWindow = ownerView?.window {
             let bestMatch = ownerWindow.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) ?? .darkAqua
             panel.appearance = NSAppearance(named: bestMatch)
@@ -442,7 +439,6 @@ public final class SharedFloatingTooltipWindowController {
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(buttonRect) }) ?? NSScreen.main
         let vf = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
 
-        // Flip to opposite side if `requestedEdge` would overflow the screen edge (`6pt` margin)
         let gap: CGFloat = 6.63158
         var effectiveEdge = requestedEdge
         let fitsRequested: Bool = {
@@ -492,7 +488,6 @@ public final class SharedFloatingTooltipWindowController {
         let currentShowID = showCount
 
         if isCurrentlyShown && panel.isVisible && panel.alphaValue > 0.05 {
-            // Already visible -> smoothly glide to the new button over `0.12s`
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.12
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -500,13 +495,12 @@ public final class SharedFloatingTooltipWindowController {
                 panel.animator().alphaValue = 1.0
             }
         } else {
-            // Appearing from hidden -> start `4.0pt` closer to the button along `effectiveEdge` and slide into `targetFrame` over `0.13s easeOut`!
             let slideOffset: CGPoint = {
                 switch effectiveEdge {
-                case .top:      return CGPoint(x: 0.0, y: -4.0) // starts 4pt lower (closer to button), slides UP
-                case .bottom:   return CGPoint(x: 0.0, y: 4.0)  // starts 4pt higher (closer to button), slides DOWN
-                case .leading:  return CGPoint(x: 4.0, y: 0.0)  // starts 4pt right (closer to button), slides LEFT
-                case .trailing: return CGPoint(x: -4.0, y: 0.0) // starts 4pt left (closer to button), slides RIGHT
+                case .top:      return CGPoint(x: 0.0, y: -4.0)
+                case .bottom:   return CGPoint(x: 0.0, y: 4.0)
+                case .leading:  return CGPoint(x: 4.0, y: 0.0)
+                case .trailing: return CGPoint(x: -4.0, y: 0.0)
                 }
             }()
             let startFrame = targetFrame.offsetBy(dx: slideOffset.x, dy: slideOffset.y)
@@ -524,7 +518,6 @@ public final class SharedFloatingTooltipWindowController {
         }
         panel.invalidateShadow()
 
-        // Auto-hide safety timeout after 15s
         DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { [weak self] in
             guard let self, self.showCount == currentShowID else { return }
             self.hideTooltip()
@@ -683,7 +676,388 @@ public struct InstantTooltipBubble: View {
     }
 }
 
-// MARK: - 4. Reusable Tooltip Buttons (`InstantTooltipButton` & `SubToolbarPillButton`)
+// MARK: - 4. Exact 120Hz Directional `.hover-magnet` AppKit Layer Engine
+
+private struct ScalarSpring1D {
+    var value: Double = 0.0
+    var velocity: Double = 0.0
+    var target: Double = 0.0
+
+    var isAtRest: Bool {
+        abs(value - target) < 0.002 && abs(velocity) < 0.01
+    }
+
+    mutating func snap(to newValue: Double) {
+        value = newValue
+        target = newValue
+        velocity = 0.0
+    }
+
+    mutating func step(dt: Double, stiffness: Double = 1500.0, damping: Double = 100.0, mass: Double = 2.0, clampOvershoot: Bool = true) {
+        guard !isAtRest else {
+            value = target
+            velocity = 0.0
+            return
+        }
+        let prevDelta = value - target
+        let force = -stiffness * prevDelta - damping * velocity
+        let accel = force / mass
+        velocity += accel * dt
+        value += velocity * dt
+
+        if clampOvershoot && ((prevDelta < 0.0 && value > target) || (prevDelta > 0.0 && value < target)) {
+            value = target
+            velocity = 0.0
+        } else if isAtRest {
+            value = target
+            velocity = 0.0
+        }
+    }
+}
+
+/// Pure AppKit `NSView` that renders the directional `.hover-magnet` `CALayer` (`overflow: visible`)
+/// and drives `SharedFloatingTooltipWindowController` with zero SwiftUI `@State` invalidations during hover/move!
+@MainActor
+public final class HoverMagnetTrackingNSView: NSView {
+    var tooltip: String = ""
+    var shortcutBadge: String? = nil
+    var edge: TooltipEdge = .trailing
+    var cornerRadius: CGFloat = 6.0 {
+        didSet {
+            if abs(oldValue - cornerRadius) > 0.05 {
+                magnetLayer.cornerRadius = cornerRadius
+            }
+        }
+    }
+    var isButtonActive: Bool = false {
+        didSet {
+            if oldValue != isButtonActive {
+                applyMagnetTransform()
+            }
+        }
+    }
+    var isButtonDisabled: Bool = false {
+        didSet {
+            if isButtonDisabled && !oldValue {
+                isHoveredSpring.target = 0.0
+                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: self)
+                startSpringTimerIfNeeded()
+            }
+        }
+    }
+    var isRailTab: Bool = false {
+        didSet {
+            if oldValue != isRailTab {
+                applyMagnetTransform()
+            }
+        }
+    }
+    var hasActiveBorder: Bool = false {
+        didSet {
+            if oldValue != hasActiveBorder {
+                applyMagnetTransform()
+            }
+        }
+    }
+    var activeRGB: (CGFloat, CGFloat, CGFloat) = (0.45, 0.36, 0.96) {
+        didSet {
+            applyMagnetTransform()
+        }
+    }
+
+    private let magnetLayer = CALayer()
+    private var trackingAreaRef: NSTrackingArea?
+    private var springTimer: Timer?
+
+    // Exact springs (`isHoveredSpring`, `offsetSpring.x`, `offsetSpring.y`)
+    private var isHoveredSpring = ScalarSpring1D()
+    private var offsetXSpring = ScalarSpring1D()
+    private var offsetYSpring = ScalarSpring1D()
+
+    // Exact constants (`Ka = 2`, `qa = 10`, `Ja = 0.8`)
+    private let magnetMaxOffset: Double = 2.0
+    private let escapeMultiplier: Double = 10.0
+    private let entryScale: Double = 0.80
+
+    public override var isFlipped: Bool { true }
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = false
+
+        magnetLayer.cornerRadius = cornerRadius
+        magnetLayer.cornerCurve = .continuous
+        magnetLayer.masksToBounds = false
+        magnetLayer.opacity = 0.0
+        layer?.addSublayer(magnetLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Pass all mouse clicks straight through to the SwiftUI `Button` while `NSTrackingArea` still receives hover/move events!
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        return nil
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingAreaRef {
+            removeTrackingArea(existing)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaRef = area
+    }
+
+    public override func layout() {
+        super.layout()
+        layer?.masksToBounds = false
+        applyMagnetTransform()
+    }
+
+    private func computeMagnetTargetOffset(for event: NSEvent) -> CGPoint {
+        let localPt = convert(event.locationInWindow, from: nil)
+        let w = max(1.0, Double(bounds.width))
+        let h = max(1.0, Double(bounds.height))
+        let u = min(max(Double(localPt.x) / w, 0.0), 1.0)
+        let v = min(max(Double(localPt.y) / h, 0.0), 1.0)
+        let sx = u * 2.0 - 1.0
+        let sy = v * 2.0 - 1.0
+        return CGPoint(x: sx * magnetMaxOffset, y: sy * magnetMaxOffset)
+    }
+
+    public override func mouseEntered(with event: NSEvent) {
+        guard !isButtonDisabled else { return }
+        let targetOff = computeMagnetTargetOffset(for: event)
+
+        // Exact (`if (type === "enter") offsetSpring.snapToTarget(targetOff)`):
+        // When entering from idle, snap the offset spring to the entry angle so the highlight flies in from that exact angle!
+        if isHoveredSpring.value < 0.15 {
+            offsetXSpring.snap(to: Double(targetOff.x))
+            offsetYSpring.snap(to: Double(targetOff.y))
+        } else {
+            offsetXSpring.target = Double(targetOff.x)
+            offsetYSpring.target = Double(targetOff.y)
+        }
+        isHoveredSpring.target = 1.0
+        startSpringTimerIfNeeded()
+        presentTooltipIfNeeded()
+    }
+
+    public override func mouseMoved(with event: NSEvent) {
+        guard !isButtonDisabled else { return }
+        let targetOff = computeMagnetTargetOffset(for: event)
+        offsetXSpring.target = Double(targetOff.x)
+        offsetYSpring.target = Double(targetOff.y)
+        if isHoveredSpring.target < 0.5 {
+            isHoveredSpring.target = 1.0
+            presentTooltipIfNeeded()
+        }
+        startSpringTimerIfNeeded()
+    }
+
+    public override func mouseExited(with event: NSEvent) {
+        let targetOff = computeMagnetTargetOffset(for: event)
+        offsetXSpring.target = Double(targetOff.x)
+        offsetYSpring.target = Double(targetOff.y)
+        isHoveredSpring.target = 0.0
+        startSpringTimerIfNeeded()
+        SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: self)
+    }
+
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil {
+            stopSpringTimer()
+            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: self)
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    func presentTooltipIfNeeded() {
+        guard !isButtonDisabled, !tooltip.isEmpty, let win = window else { return }
+        let rectInWin = convert(bounds, to: nil)
+        let screenRect = win.convertToScreen(rectInWin)
+        SharedFloatingTooltipWindowController.shared.showTooltip(
+            text: tooltip,
+            shortcutBadge: shortcutBadge,
+            edge: edge,
+            forButtonScreenRect: screenRect,
+            ownerView: self
+        )
+    }
+
+    private func startSpringTimerIfNeeded() {
+        guard springTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.stepSprings()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        springTimer = timer
+    }
+
+    private func stopSpringTimer() {
+        springTimer?.invalidate()
+        springTimer = nil
+    }
+
+    private func stepSprings() {
+        let dt = 1.0 / 120.0
+        // Exact `Ya = { damping: 100, stiffness: 1500, mass: 2 }`
+        isHoveredSpring.step(dt: dt, stiffness: 1500.0, damping: 100.0, mass: 2.0)
+        offsetXSpring.step(dt: dt, stiffness: 1500.0, damping: 100.0, mass: 2.0, clampOvershoot: false)
+        offsetYSpring.step(dt: dt, stiffness: 1500.0, damping: 100.0, mass: 2.0, clampOvershoot: false)
+
+        applyMagnetTransform()
+
+        if isHoveredSpring.isAtRest && offsetXSpring.isAtRest && offsetYSpring.isAtRest {
+            if isHoveredSpring.target == 0.0 {
+                offsetXSpring.snap(to: 0.0)
+                offsetYSpring.snap(to: 0.0)
+            }
+            stopSpringTimer()
+        }
+    }
+
+    private func applyMagnetTransform() {
+        let b = bounds
+        guard b.width > 1.0, b.height > 1.0 else { return }
+
+        let h = min(max(isHoveredSpring.value, 0.0), 1.0)
+        let offX = offsetXSpring.value
+        let offY = offsetYSpring.value
+
+        // Active tool buttons (except rail tabs) stay visible at rest
+        let isPersistentActive = isButtonActive && !isRailTab
+        let enableEscape = !isPersistentActive
+
+        let tx: Double
+        let ty: Double
+        let scale: Double
+        let layerOpacity: Float
+
+        if enableEscape {
+            let escapeFactor = (1.0 - h) * escapeMultiplier
+            tx = offX + offX * escapeFactor
+            ty = offY + offY * escapeFactor
+            scale = entryScale + (1.0 - entryScale) * h
+            layerOpacity = h < 0.01 ? 0.0 : Float(h)
+        } else {
+            tx = offX
+            ty = offY
+            scale = 1.0
+            layerOpacity = 1.0
+        }
+
+        // Transform origin in normalized `[0, 1]` coordinates:
+        let scalarX = offX / magnetMaxOffset
+        let scalarY = offY / magnetMaxOffset
+        let originX = CGFloat((scalarX + 1.0) * 0.5) * b.width
+        let originY = CGFloat((scalarY + 1.0) * 0.5) * b.height
+
+        let cx = b.midX
+        let cy = b.midY
+        let s = CGFloat(scale)
+
+        // Equivalent to CSS `transform-origin: originX originY; transform: translate(tx, ty) scale(s)`
+        let posX = cx + (cx - originX) * (s - 1.0) + CGFloat(tx)
+        let posY = cy + (cy - originY) * (s - 1.0) + CGFloat(ty)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
+        magnetLayer.bounds = b
+        magnetLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        magnetLayer.position = CGPoint(x: posX, y: posY)
+        magnetLayer.setAffineTransform(CGAffineTransform(scaleX: s, y: s))
+        magnetLayer.cornerRadius = cornerRadius
+        magnetLayer.opacity = isButtonDisabled ? 0.0 : layerOpacity
+
+        if isPersistentActive {
+            let alpha = 0.24 + 0.12 * CGFloat(h)
+            magnetLayer.backgroundColor = NSColor(
+                srgbRed: activeRGB.0,
+                green: activeRGB.1,
+                blue: activeRGB.2,
+                alpha: alpha
+            ).cgColor
+            if hasActiveBorder {
+                magnetLayer.borderWidth = 1.0
+                magnetLayer.borderColor = NSColor(
+                    srgbRed: min(1.0, activeRGB.0 + 0.12),
+                    green: min(1.0, activeRGB.1 + 0.12),
+                    blue: min(1.0, activeRGB.2 + 0.12),
+                    alpha: 0.38 + 0.18 * CGFloat(h)
+                ).cgColor
+            } else {
+                magnetLayer.borderWidth = 0.0
+            }
+        } else {
+            // Exact `#ffffff14`
+            magnetLayer.backgroundColor = NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.095).cgColor
+            magnetLayer.borderWidth = 0.0
+        }
+
+        CATransaction.commit()
+    }
+}
+
+private struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
+    let tooltip: String
+    let shortcutBadge: String?
+    let edge: TooltipEdge
+    let cornerRadius: CGFloat
+    let isActive: Bool
+    let isDisabled: Bool
+    let isRailTab: Bool
+    let hasActiveBorder: Bool
+    let activeRGB: (CGFloat, CGFloat, CGFloat)
+    let onViewReady: (HoverMagnetTrackingNSView) -> Void
+
+    func makeNSView(context: Context) -> HoverMagnetTrackingNSView {
+        let v = HoverMagnetTrackingNSView(frame: .zero)
+        v.tooltip = tooltip
+        v.shortcutBadge = shortcutBadge
+        v.edge = edge
+        v.cornerRadius = cornerRadius
+        v.isButtonActive = isActive
+        v.isButtonDisabled = isDisabled
+        v.isRailTab = isRailTab
+        v.hasActiveBorder = hasActiveBorder
+        v.activeRGB = activeRGB
+        DispatchQueue.main.async {
+            onViewReady(v)
+        }
+        return v
+    }
+
+    func updateNSView(_ nsView: HoverMagnetTrackingNSView, context: Context) {
+        let tooltipChanged = (nsView.tooltip != tooltip || nsView.shortcutBadge != shortcutBadge)
+        nsView.tooltip = tooltip
+        nsView.shortcutBadge = shortcutBadge
+        nsView.edge = edge
+        nsView.cornerRadius = cornerRadius
+        nsView.isButtonActive = isActive
+        nsView.isButtonDisabled = isDisabled
+        nsView.isRailTab = isRailTab
+        nsView.hasActiveBorder = hasActiveBorder
+        nsView.activeRGB = activeRGB
+        if tooltipChanged {
+            nsView.presentTooltipIfNeeded()
+        }
+    }
+}
+
+// MARK: - 5. Reusable Tooltip & Directional `.hover-magnet` Buttons (`InstantTooltipButton` & `SubToolbarPillButton`)
 
 public struct InstantTooltipButton<LabelContent: View>: View {
     let tooltip: String
@@ -697,8 +1071,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     let action: () -> Void
     @ViewBuilder let label: () -> LabelContent
 
-    @State private var isHovered = false
-    @State private var anchorNSView: NSView?
+    @State private var magnetNSView: HoverMagnetTrackingNSView?
 
     public init(
         tooltip: String,
@@ -707,8 +1080,8 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         isActive: Bool = false,
         isDisabled: Bool = false,
         activeColor: Color = Color(red: 0.45, green: 0.36, blue: 0.96),
-        size: CGFloat = 32,
-        cornerRadius: CGFloat = 8,
+        size: CGFloat = 38,
+        cornerRadius: CGFloat = 6,
         action: @escaping () -> Void,
         @ViewBuilder label: @escaping () -> LabelContent
     ) {
@@ -727,7 +1100,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     public var body: some View {
         Button {
             guard !isDisabled else { return }
-            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: magnetNSView)
             action()
         } label: {
             ZStack {
@@ -739,81 +1112,36 @@ public struct InstantTooltipButton<LabelContent: View>: View {
                     HStack {
                         Spacer()
                         Circle()
-                            .fill(Color(red: 0.68, green: 0.60, blue: 1.0))
-                            .frame(width: 4.5, height: 4.5)
-                            .padding(.trailing, 3)
+                            .fill(Color(red: 0.65, green: 0.58, blue: 0.99))
+                            .frame(width: 4.0, height: 4.0)
+                            .padding(.trailing, 5)
                     }
                 }
             }
             .frame(width: size, height: size)
             .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(backgroundColor)
-            )
-            .background(
-                TooltipScreenRectProbe { v in
-                    anchorNSView = v
+                HoverMagnetBackgroundRepresentable(
+                    tooltip: tooltip,
+                    shortcutBadge: shortcutBadge,
+                    edge: edge,
+                    cornerRadius: cornerRadius,
+                    isActive: isActive,
+                    isDisabled: isDisabled,
+                    isRailTab: edge == .leading,
+                    hasActiveBorder: false,
+                    activeRGB: (0.45, 0.36, 0.96)
+                ) { v in
+                    magnetNSView = v
                 }
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .onHover { hovering in
-            let nextHover = isDisabled ? false : hovering
-            if isHovered != nextHover {
-                isHovered = nextHover
-            }
-            if nextHover && !tooltip.isEmpty {
-                presentFloatingTooltip()
-            } else {
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            }
-        }
-        .onChange(of: isDisabled) { _, disabled in
-            if disabled && isHovered {
-                isHovered = false
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            }
-        }
-        .onChange(of: tooltip) { _, newTooltip in
-            if isHovered && !isDisabled && !newTooltip.isEmpty {
-                presentFloatingTooltip()
-            }
-        }
-        .onDisappear {
-            if isHovered {
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            }
-        }
-    }
-
-    private func presentFloatingTooltip() {
-        guard let v = anchorNSView, let win = v.window else { return }
-        let rectInWin = v.convert(v.bounds, to: nil)
-        let screenRect = win.convertToScreen(rectInWin)
-        SharedFloatingTooltipWindowController.shared.showTooltip(
-            text: tooltip,
-            shortcutBadge: shortcutBadge,
-            edge: edge,
-            forButtonScreenRect: screenRect,
-            ownerView: v
-        )
-    }
-
-    private var backgroundColor: Color {
-        if isDisabled {
-            return Color.clear
-        }
-        if isActive {
-            if edge == .leading {
-                return isHovered ? Color.white.opacity(0.14) : Color.white.opacity(0.09)
-            }
-            return isHovered ? activeColor.opacity(0.38) : activeColor.opacity(0.28)
-        }
-        return isHovered ? Color.white.opacity(0.12) : Color.clear
     }
 }
 
+/// `control` Pill Button (`height: 36`, `paddingX: 12`, `cornerRadius: 6`) with directional `.hover-magnet` highlight!
 public struct SubToolbarPillButton<LabelContent: View>: View {
     let tooltip: String?
     let edge: TooltipEdge
@@ -822,8 +1150,7 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
     let onActionWithAnchorView: ((NSView?) -> Void)?
     @ViewBuilder let label: () -> LabelContent
 
-    @State private var isHovered = false
-    @State private var anchorNSView: NSView?
+    @State private var magnetNSView: HoverMagnetTrackingNSView?
 
     public init(
         tooltip: String? = nil,
@@ -843,71 +1170,34 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
 
     public var body: some View {
         Button {
-            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: magnetNSView)
             if let onActionWithAnchorView {
-                onActionWithAnchorView(anchorNSView)
+                onActionWithAnchorView(magnetNSView)
             } else {
                 action()
             }
         } label: {
             label()
                 .padding(.horizontal, 12)
-                .frame(height: 30)
+                .frame(height: 34)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(fillColor)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(borderColor, lineWidth: 1)
-                )
-                .background(
-                    TooltipScreenRectProbe { v in
-                        anchorNSView = v
+                    HoverMagnetBackgroundRepresentable(
+                        tooltip: tooltip ?? "",
+                        shortcutBadge: nil,
+                        edge: edge,
+                        cornerRadius: 6,
+                        isActive: isActive,
+                        isDisabled: false,
+                        isRailTab: false,
+                        hasActiveBorder: isActive,
+                        activeRGB: (0.35, 0.28, 0.72)
+                    ) { v in
+                        magnetNSView = v
                     }
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            if isHovered != hovering {
-                isHovered = hovering
-            }
-            if hovering, let tooltip = tooltip, !tooltip.isEmpty,
-               let v = anchorNSView, let win = v.window {
-                let rectInWin = v.convert(v.bounds, to: nil)
-                let screenRect = win.convertToScreen(rectInWin)
-                SharedFloatingTooltipWindowController.shared.showTooltip(
-                    text: tooltip,
-                    edge: edge,
-                    forButtonScreenRect: screenRect,
-                    ownerView: v
-                )
-            } else {
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            }
-        }
-        .onDisappear {
-            if isHovered {
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            }
-        }
-    }
-
-    private var fillColor: Color {
-        if isActive {
-            return isHovered
-                ? Color(red: 0.20, green: 0.18, blue: 0.34)
-                : Color(red: 0.14, green: 0.13, blue: 0.24)
-        }
-        return isHovered ? Color.white.opacity(0.10) : Color.clear
-    }
-
-    private var borderColor: Color {
-        if isActive {
-            return Color(red: 0.50, green: 0.44, blue: 0.95).opacity(isHovered ? 0.55 : 0.35)
-        }
-        return Color.clear
     }
 }
 
@@ -925,7 +1215,5 @@ public struct TooltipScreenRectProbe: NSViewRepresentable {
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {
-        // Crucial: do NOT re-invoke `onViewReady` on every SwiftUI update, otherwise mutating `@State anchorNSView`
-        // during `.onHover` triggers redundant SwiftUI body invalidations!
     }
 }

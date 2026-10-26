@@ -77,13 +77,35 @@ public final class ProjectSession: Identifiable {
 
         public var id: String { rawValue }
 
+        public var tooltipTitle: String {
+            switch self {
+            case .background: return "General"
+            case .cursor: return "Cursor"
+            case .zoom: return "Animations"
+            case .masks: return "Masks"
+            case .audio: return "Audio"
+            case .shortcuts: return "Keyboard Shortcuts"
+            }
+        }
+
+        public var shortcutBadge: String? {
+            switch self {
+            case .background: return "⌘ 1"
+            case .cursor: return "⌘ 2"
+            case .audio: return "⌘ 7"
+            case .shortcuts: return "⌘ 8"
+            case .zoom: return "⌘ 9"
+            case .masks: return nil
+            }
+        }
+
         public var systemImage: String {
             switch self {
-            case .background: return "swatchpalette"
-            case .cursor: return "cursorarrow.motionlines"
-            case .zoom: return "plus.magnifyingglass"
-            case .masks: return "eye.slash.circle"
-            case .audio: return "waveform"
+            case .background: return "inset.filled.square.dashed"
+            case .cursor: return "cursorarrow"
+            case .zoom: return "point.topleft.down.to.point.bottomright.curvepath.fill"
+            case .masks: return "circle.filled.pattern.diagonalline.rectangle"
+            case .audio: return "speaker.wave.1"
             case .shortcuts: return "command"
             }
         }

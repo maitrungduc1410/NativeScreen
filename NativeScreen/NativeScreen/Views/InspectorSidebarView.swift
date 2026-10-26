@@ -31,16 +31,17 @@ public struct InspectorSidebarView: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            // Vertical Icon Navigation Rail with Purple Active Dot Indicator (Left side)
-            VStack(spacing: 14) {
+            // Vertical Icon Navigation Rail with Purple Active Dot Indicator
+            VStack(spacing: 8) {
                 ForEach(ProjectSession.InspectorTab.allCases) { tab in
                     let isSelected = (session.selectedInspectorTab == tab)
                     InstantTooltipButton(
-                        tooltip: tab == .zoom ? "Animations" : tab.rawValue,
+                        tooltip: tab.tooltipTitle,
+                        shortcutBadge: tab.shortcutBadge,
                         edge: .leading,
-                        isActive: false,
-                        size: 38,
-                        cornerRadius: 9
+                        isActive: isSelected,
+                        size: 40,
+                        cornerRadius: 6
                     ) {
                         withAnimation(.easeOut(duration: 0.15)) {
                             session.selectedZoomId = nil
@@ -48,22 +49,13 @@ public struct InspectorSidebarView: View {
                             session.selectedInspectorTab = tab
                         }
                     } label: {
-                        ZStack {
-                            Image(systemName: tab == .zoom ? "point.topleft.down.to.point.bottomright.curvepath" : tab.systemImage)
-                                .font(.system(size: 14.5, weight: .semibold))
-                                .foregroundStyle(
-                                    isSelected
-                                        ? Color(red: 0.56, green: 0.46, blue: 1.0)
-                                        : .white.opacity(0.45)
-                                )
-
-                            if isSelected {
-                                Circle()
-                                    .fill(Color(red: 0.56, green: 0.46, blue: 1.0))
-                                    .frame(width: 4.5, height: 4.5)
-                                    .offset(x: 13.5)
-                            }
-                        }
+                        Image(systemName: tab.systemImage)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(
+                                isSelected
+                                    ? Color(red: 0.65, green: 0.58, blue: 0.99)
+                                    : .white.opacity(0.85)
+                            )
                     }
                 }
                 Spacer()

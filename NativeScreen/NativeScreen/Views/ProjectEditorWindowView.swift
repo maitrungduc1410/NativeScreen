@@ -45,33 +45,33 @@ public struct ProjectEditorWindowView: View {
             VStack(spacing: 0) {
                 // 1. UNIFIED DARK WINDOW HEADER BAR (Matches Header 1:1 & 2!)
                 ZStack {
-                    // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢 — Larger 34pt buttons & 16pt icons!)
-                    HStack(spacing: 6) {
+                    // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢 — 36pt buttons, 6pt radius & 16pt icons!)
+                    HStack(spacing: 4) {
                         InstantTooltipButton(
                             tooltip: "Show project in Finder",
                             shortcutBadge: "⇧ ⌘ O",
                             edge: .bottom,
-                            size: 34,
-                            cornerRadius: 8
+                            size: 36,
+                            cornerRadius: 6
                         ) {
                             NSWorkspace.shared.activateFileViewerSelecting([session.packageURL])
                         } label: {
                             Image(systemName: "folder")
                                 .font(.system(size: 15.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.82))
+                                .foregroundStyle(.white.opacity(0.85))
                         }
 
                         InstantTooltipButton(
                             tooltip: "Remove project",
                             edge: .bottom,
-                            size: 34,
-                            cornerRadius: 8
+                            size: 36,
+                            cornerRadius: 6
                         ) {
                             moveProjectToTrash()
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 15.0, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .foregroundStyle(.white.opacity(0.78))
                         }
 
                         Spacer()
@@ -157,8 +157,8 @@ public struct ProjectEditorWindowView: View {
                             shortcutBadge: "⌘ K",
                             edge: .bottom,
                             isActive: isShowingCommandMenu,
-                            size: 34,
-                            cornerRadius: 8
+                            size: 36,
+                            cornerRadius: 6
                         ) {
                             withAnimation(.easeOut(duration: 0.14)) {
                                 isShowingCommandMenu.toggle()
@@ -173,15 +173,15 @@ public struct ProjectEditorWindowView: View {
                             .fill(Color.white.opacity(0.12))
                             .frame(width: 1, height: 18)
 
-                        // 2. Undo & Redo Buttons (Larger 34pt hitbox & 15.5pt icons)
-                        HStack(spacing: 4) {
+                        // 2. Undo & Redo Buttons (36pt hitbox, 6pt radius & 15.5pt icons)
+                        HStack(spacing: 2) {
                             InstantTooltipButton(
                                 tooltip: "Undo",
                                 shortcutBadge: "⌘ Z",
                                 edge: .bottom,
                                 isDisabled: !session.canUndo,
-                                size: 34,
-                                cornerRadius: 8
+                                size: 36,
+                                cornerRadius: 6
                             ) {
                                 session.undo()
                             } label: {
@@ -196,8 +196,8 @@ public struct ProjectEditorWindowView: View {
                                 shortcutBadge: "⇧ ⌘ Z",
                                 edge: .bottom,
                                 isDisabled: !session.canRedo,
-                                size: 34,
-                                cornerRadius: 8
+                                size: 36,
+                                cornerRadius: 6
                             ) {
                                 session.redo()
                             } label: {
@@ -212,7 +212,7 @@ public struct ProjectEditorWindowView: View {
                             .fill(Color.white.opacity(0.12))
                             .frame(width: 1, height: 18)
 
-                        // 3. Prominent Purple Export Button (`height: 34`, `#4D2FF5`)
+                        // 3. Prominent Purple Export Button (`height: 36`, `radius: 6`, `#4D2FF5`)
                         Button {
                             isShowingExportSheet = true
                         } label: {
@@ -224,10 +224,10 @@ public struct ProjectEditorWindowView: View {
                             }
                             .fixedSize()
                             .padding(.horizontal, 16)
-                            .frame(height: 34)
+                            .frame(height: 36)
                             .background(
                                 Color(red: 0.302, green: 0.184, blue: 0.961),
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                             )
                             .foregroundStyle(.white)
                         }
@@ -385,39 +385,46 @@ public struct ProjectEditorWindowView: View {
                             )
                             .animation(.spring(response: 0.30, dampingFraction: 0.86), value: targetAspect)
 
-                            // Floating Left Quick Dock (Instant Tooltip + Smooth Highlight)
+                            // Floating Left Quick Dock
                             HStack {
-                                VStack(spacing: 8) {
-                                    quickDockIconButton(
-                                        icon: "plus.magnifyingglass",
-                                        tooltip: "Classic zoom"
-                                    ) {
-                                        session.addZoomAtPlayhead(presentation: .screen)
+                                VStack(spacing: 12) {
+                                    // Group 1: Zooms
+                                    VStack(spacing: 0) {
+                                        quickDockIconButton(
+                                            icon: "arrow.up.left.and.down.right.magnifyingglass",
+                                            tooltip: "Classic zoom"
+                                        ) {
+                                            session.addZoomAtPlayhead(presentation: .screen)
+                                        }
+
+                                        quickDockIconButton(
+                                            icon: "sparkle.magnifyingglass",
+                                            tooltip: "Loupe zoom"
+                                        ) {
+                                            session.addZoomAtPlayhead(presentation: .loupe)
+                                        }
                                     }
 
-                                    quickDockIconButton(
-                                        icon: "sparkle.magnifyingglass",
-                                        tooltip: "Glass Loupe zoom"
-                                    ) {
-                                        session.addZoomAtPlayhead(presentation: .loupe)
+                                    // Group 2: Masks
+                                    VStack(spacing: 0) {
+                                        quickDockIconButton(
+                                            icon: "circle.filled.pattern.diagonalline.rectangle",
+                                            tooltip: "Sensitive data mask",
+                                            isActive: session.pendingAddMaskType == .blur
+                                        ) {
+                                            session.beginInteractiveMaskSelection(type: .blur, style: .gaussian)
+                                        }
+
+                                        quickDockIconButton(
+                                            icon: "circle.rectangle.filled.pattern.diagonalline",
+                                            tooltip: "Highlight mask",
+                                            isActive: session.pendingAddMaskType == .spotlight
+                                        ) {
+                                            session.beginInteractiveMaskSelection(type: .spotlight, style: .dim)
+                                        }
                                     }
 
-                                    quickDockIconButton(
-                                        icon: "eye.slash",
-                                        tooltip: "Sensitive data mask",
-                                        isActive: session.pendingAddMaskType == .blur
-                                    ) {
-                                        session.beginInteractiveMaskSelection(type: .blur, style: .gaussian)
-                                    }
-
-                                    quickDockIconButton(
-                                        icon: "viewfinder.rectangular",
-                                        tooltip: "Spotlight mask",
-                                        isActive: session.pendingAddMaskType == .spotlight
-                                    ) {
-                                        session.beginInteractiveMaskSelection(type: .spotlight, style: .dim)
-                                    }
-
+                                    // Group 3: Keyboard Shortcuts Track
                                     quickDockIconButton(
                                         icon: "command",
                                         tooltip: "Add shortcut track"
@@ -425,15 +432,16 @@ public struct ProjectEditorWindowView: View {
                                         session.addShortcutTrack()
                                     }
                                 }
-                                .padding(7)
+                                .padding(6)
                                 .background(
-                                    Color(red: 0.11, green: 0.11, blue: 0.14).opacity(0.94),
-                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    Color(red: 0.11, green: 0.11, blue: 0.13).opacity(0.94),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                                         .strokeBorder(.white.opacity(0.10), lineWidth: 1)
                                 )
+                                .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
                                 .padding(.leading, 14)
                                 .zIndex(60)
 
@@ -452,8 +460,8 @@ public struct ProjectEditorWindowView: View {
                                 tooltip: "Split clip (⌥)",
                                 edge: .top,
                                 isActive: session.isSplitModeActive,
-                                size: 32,
-                                cornerRadius: 8
+                                size: 36,
+                                cornerRadius: 6
                             ) {
                                 isOptionKeyHeldForSplit = false
                                 session.isSplitModeActive.toggle()
@@ -462,11 +470,11 @@ public struct ProjectEditorWindowView: View {
                                 }
                             } label: {
                                 Image(systemName: "scissors")
-                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .font(.system(size: 15.0, weight: .medium))
                                     .foregroundStyle(
                                         session.isSplitModeActive
-                                            ? Color(red: 0.65, green: 0.55, blue: 1.0)
-                                            : .white.opacity(0.85)
+                                            ? Color(red: 0.65, green: 0.58, blue: 1.0)
+                                            : .white.opacity(0.88)
                                     )
                             }
 
@@ -475,33 +483,33 @@ public struct ProjectEditorWindowView: View {
                         .padding(.leading, 14)
 
                         // Center: Timecode + 3 Transport Buttons with Hover Highlight & Top Tooltips
-                        HStack(spacing: 16) {
+                        HStack(spacing: 12) {
                             LivePlayheadTimecodeTextView(session: session)
 
                             InstantTooltipButton(
                                 tooltip: "Jump to start",
                                 edge: .top,
-                                size: 32,
-                                cornerRadius: 8
+                                size: 36,
+                                cornerRadius: 6
                             ) {
                                 session.isPlaying = false
                                 session.seek(toTimelineMs: 0.0)
                             } label: {
                                 Image(systemName: "backward.end")
-                                    .font(.system(size: 13.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.85))
+                                    .font(.system(size: 14.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.88))
                             }
 
                             InstantTooltipButton(
                                 tooltip: session.isPlaying ? "Pause (Space)" : "Play (Space)",
                                 edge: .top,
-                                size: 36,
-                                cornerRadius: 9
+                                size: 40,
+                                cornerRadius: 6
                             ) {
                                 session.togglePlayPause()
                             } label: {
                                 Image(systemName: session.isPlaying ? "pause.circle" : "play.circle")
-                                    .font(.system(size: 26, weight: .regular))
+                                    .font(.system(size: 25, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.95))
                             }
                             .keyboardShortcut(.space, modifiers: [])
@@ -509,15 +517,15 @@ public struct ProjectEditorWindowView: View {
                             InstantTooltipButton(
                                 tooltip: "Jump to end",
                                 edge: .top,
-                                size: 32,
-                                cornerRadius: 8
+                                size: 36,
+                                cornerRadius: 6
                             ) {
                                 session.isPlaying = false
                                 session.seek(toTimelineMs: session.timeMapper.totalTimelineDurationMs)
                             } label: {
                                 Image(systemName: "forward.end")
-                                    .font(.system(size: 13.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.85))
+                                    .font(.system(size: 14.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.88))
                             }
 
                             Text(formatTimecode(session.timeMapper.totalTimelineDurationMs))
@@ -535,8 +543,8 @@ public struct ProjectEditorWindowView: View {
                                 tooltip: "Playback speed",
                                 edge: .top,
                                 isActive: abs(session.previewPlaybackRate - 1.0) > 0.01,
-                                size: 34,
-                                cornerRadius: 8
+                                size: 36,
+                                cornerRadius: 6
                             ) {
                                 NativeSegmentContextMenuPresenter.shared.presentPlaybackSpeedMenu(session: session)
                             } label: {
@@ -916,17 +924,18 @@ public struct ProjectEditorWindowView: View {
         isActive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
+        // Exact `Zo` (`squareControl`: `width: 38, height: 38, radius: 5, iconSize: 16`)
         InstantTooltipButton(
             tooltip: tooltip,
             edge: .trailing,
             isActive: isActive,
-            size: 32,
-            cornerRadius: 9,
+            size: 38,
+            cornerRadius: 5,
             action: action
         ) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isActive ? Color(red: 0.72, green: 0.64, blue: 1.0) : .white.opacity(0.90))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(isActive ? Color(red: 0.72, green: 0.64, blue: 1.0) : .white.opacity(0.95))
         }
     }
 
