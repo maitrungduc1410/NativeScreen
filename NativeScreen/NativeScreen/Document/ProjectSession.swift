@@ -1995,9 +1995,11 @@ public final class ProjectSession: Identifiable {
     }
 
     /// Permanently deletes a shortcut segment (either telemetry-recorded or custom-inserted) from the timeline,
-    /// and automatically removes the Shortcut track if it has no remaining segments.
+    /// and automatically removes the Shortcut track in the same atomic Undo transaction if it has no remaining segments.
     public func deleteShortcut(_ cluster: ShortcutPressCluster) {
         let trackId = cluster.trackId
+        let remainingOnTrackCount = shortcutClusters(forTrackId: trackId).filter { $0.id != cluster.id }.count
+
         mutate { doc in
             if cluster.isCustomSegment {
                 doc.captions.customShortcuts.removeAll { $0.id == cluster.id }
@@ -2010,14 +2012,9 @@ public final class ProjectSession: Identifiable {
                 doc.captions.shortcutKeyOverrides.removeValue(forKey: cluster.firstKeyDownMsInt)
             }
             doc.captions.shortcutStyleOverrides.removeValue(forKey: cluster.id)
-        }
-        if selectedShortcutId == cluster.id {
-            selectedShortcutId = nil
-        }
 
-        // If the track now has 0 shortcut segments left, remove the empty track and renumber remaining tracks!
-        if shortcutClusters(forTrackId: trackId).isEmpty {
-            mutate { doc in
+            // If the track now has 0 shortcut segments left, remove the empty track and renumber remaining tracks in the same Undo step!
+            if remainingOnTrackCount == 0 {
                 let isPrimary = (trackId == doc.captions.shortcutTracks.first?.id || trackId == "default-shortcuts-track")
                 if isPrimary, !doc.captions.shortcutTracks.isEmpty {
                     doc.captions.shortcutTracks.removeFirst()
@@ -2028,6 +2025,9 @@ public final class ProjectSession: Identifiable {
                     doc.captions.shortcutTracks[idx].name = idx == 0 ? "Shortcuts" : "Shortcuts \(idx + 1)"
                 }
             }
+        }
+        if selectedShortcutId == cluster.id {
+            selectedShortcutId = nil
         }
     }
 

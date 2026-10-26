@@ -1,41 +1,421 @@
 import SwiftUI
 import AppKit
+import QuartzCore
 
-/// instant hover tooltip & button highlight system:
-/// 1. **Standalone Borderless `NSPanel` (`SharedFloatingTooltipWindowController`)**:
-///    Every tooltip in the entire app (Editor window, Sub-Toolbar, Quick Dock, Inspector Rail, and Recording HUD)
-///    is rendered inside a dedicated floating `NSPanel` above the window, so it **overflows outside the Editor window bounds**
-///    whenever there is room on the monitor (`Split clip ⌥` overflowing left of the window edge!).
-/// 2. **Smart Screen-Edge Clamping & Dynamic Anchor Shift**:
-///    When the window/button is near the physical edge of the monitor, the tooltip bubble clamps inside the screen's
-///    `visibleFrame` while its pointer arrow (`anchorOffset`) **dynamically shifts** to stay pointed at the exact center of the button!
-/// 3. **Unified Single-Path Callout Shape (`UnifiedTooltipCalloutShape`)**:
-///    Draws the rounded rectangle AND the rounded-tip pointer arrow as **one continuous closed `Path`** with smooth fillets,
-///    so the fill and the `1px` inner border trace seamlessly around the entire bubble + arrow with zero seam!
+/// & AppKit Tooltip System:
+/// 1. **Standalone Borderless `TooltipPanel` + `NSVisualEffectView` (`.tooltip` material, `.behindWindow`)**:
+///    Every tooltip in the app is drawn by AppKit in a dedicated panel (`CGWindowLevelForKey(.popUpMenuWindow)`)
+///    with `panel.sharingType` mirrored from the owner window (`ownerWindow.sharingType != .none ? .readOnly : .none`),
+///    so screenshots (`⇧⌘4`) capture tooltips normally while private HUD windows remain hidden if needed.
+/// 2. **Exact `BubbleShape` Boolean CSG Silhouette (`margin = 7.0`, `cornerRadius = min(W/6, H/6, 6.667)`, `caretReach = 5.8`, `tipRadius = 2.0`)**:
+///    Constructs the exact union of `bodyPath` and `caretPath` with rounded inner fillet joints (`strokeWidth: 9.0` & `4.0` CSG rounding),
+///    applied as `NSVisualEffectView.maskImage` and stroked with a seamless `1px` inner border (`white.opacity(0.14)`).
+///    This completely eliminates any broken/dashed line seam on the left/right/top/bottom pointer arrow!
+/// 3. **Directional Slide-In (`4pt` offset, `0.13s easeOut`) & Smooth Reposition (`0.12s`)**:
+///    When appearing from hidden, the tooltip slides in by `4pt` from the placement direction while fading in (`0 -> 1` alpha over `0.13s`).
+///    When moving directly from one hovered button to an adjacent button, it glides (`0.12s`) to the new frame.
 public enum TooltipEdge: Sendable {
     case leading
     case trailing
     case top
     case bottom
+
+    var isVertical: Bool {
+        switch self {
+        case .top, .bottom: return true
+        case .leading, .trailing: return false
+        }
+    }
+
+    var opposite: TooltipEdge {
+        switch self {
+        case .top: return .bottom
+        case .bottom: return .top
+        case .leading: return .trailing
+        case .trailing: return .leading
+        }
+    }
+
+    /// The side of the tooltip bubble where the caret arrow protrudes (opposite to the placement side relative to the button).
+    var caretEdge: TooltipEdge {
+        opposite
+    }
 }
 
-// MARK: - 1. Shared Floating Tooltip `NSPanel` Controller (Used Everywhere in NativeScreen)
+// MARK: - 1. Exact `BubbleShape`
+
+public struct BubbleShape: Sendable, Equatable {
+    /// Extra margin around `bodySize` inside the `NSPanel` so the `5.8pt` caret tip fits cleanly inside the mask image.
+    public static let margin: CGFloat = 7.0
+
+    public var panelSize: CGSize
+    /// Side of the bubble where the caret arrow protrudes (`.bottom` when tooltip is `.top` of button, `.trailing` when tooltip is `.leading` of button, etc.).
+    public var caretSide: TooltipEdge
+    /// Caret center coordinate along the protruding edge (relative to `bodyRect.origin`).
+    public var caretOffset: CGFloat
+
+    public init(panelSize: CGSize, caretSide: TooltipEdge, caretOffset: CGFloat) {
+        self.panelSize = panelSize
+        self.caretSide = caretSide
+        self.caretOffset = caretOffset
+    }
+
+    public var bodyRect: CGRect {
+        CGRect(origin: .zero, size: panelSize).insetBy(dx: Self.margin, dy: Self.margin)
+    }
+
+    /// Exact `BubbleShape.cornerRadius`: `min(bodyRect.width / 6.0, bodyRect.height / 6.0, 6.666666666666667)`.
+    /// For a standard `28pt` tall tooltip, `28 / 6 = 4.67pt` `border-radius: 5px`!).
+    public var cornerRadius: CGFloat {
+        let br = bodyRect
+        return min(min(br.width / 6.0, br.height / 6.0), 20.0 / 3.0)
+    }
+
+    public var bodyPath: CGPath {
+        let br = bodyRect
+        guard br.width > 4, br.height > 4 else {
+            return CGPath(rect: br, transform: nil)
+        }
+        let r = cornerRadius
+        return CGPath(roundedRect: br, cornerWidth: r, cornerHeight: r, transform: nil)
+    }
+
+    /// Exact `BubbleShape.caretPath`:
+    /// Builds the rounded-tip triangle (`reach = 5.8`, `tipRadius = 2.0`) extending outward from `bodyRect` and overlapping deep into `bodyRect`.
+    public var caretPath: CGPath {
+        let br = bodyRect
+        let r = cornerRadius
+
+        // Unit normal `(nx, ny)` pointing outward from the caret side, and unit tangent `(tx, ty)` along the edge
+        let anchorX: CGFloat
+        let anchorY: CGFloat
+        let nx: CGFloat
+        let ny: CGFloat
+        let tx: CGFloat
+        let ty: CGFloat
+
+        switch caretSide {
+        case .top:
+            // Protruding UP from top edge of bubble (in unflipped CoreGraphics coordinates where maxY is top, or we use consistent unflipped coordinates)
+            anchorX = br.minX + caretOffset
+            anchorY = br.maxY
+            nx = 0.0; ny = 1.0
+            tx = -1.0; ty = 0.0
+        case .bottom:
+            // Protruding DOWN from bottom edge of bubble
+            anchorX = br.minX + caretOffset
+            anchorY = br.minY
+            nx = 0.0; ny = -1.0
+            tx = 1.0; ty = 0.0
+        case .leading:
+            // Protruding LEFT from left edge of bubble
+            anchorX = br.minX
+            anchorY = br.minY + caretOffset
+            nx = -1.0; ny = 0.0
+            tx = 0.0; ty = -1.0
+        case .trailing:
+            // Protruding RIGHT from right edge of bubble
+            anchorX = br.maxX
+            anchorY = br.minY + caretOffset
+            nx = 1.0; ny = 0.0
+            tx = 0.0; ty = 1.0
+        }
+
+        let depthIntoBody = caretSide.isVertical ? br.height : br.width
+        let d12 = max(0.0, min(depthIntoBody - r, r))
+        let reach: CGFloat = 5.8
+        let halfSpan: CGFloat = (d12 / reach + 1.0) * 4.8
+
+        let startPt = CGPoint(
+            x: anchorX - tx * halfSpan - nx * d12,
+            y: anchorY - ty * halfSpan - ny * d12
+        )
+        let preTipPt = CGPoint(
+            x: anchorX - tx * 1.5134848 + nx * 3.9916203,
+            y: anchorY - ty * 1.5134848 + ny * 3.9916203
+        )
+        let tipApexPt = CGPoint(
+            x: anchorX + nx * reach,
+            y: anchorY + ny * reach
+        )
+        let postTipPt = CGPoint(
+            x: anchorX + tx * 1.5134848 + nx * 3.9916203,
+            y: anchorY + ty * 1.5134848 + ny * 3.9916203
+        )
+        let endPt = CGPoint(
+            x: anchorX + tx * halfSpan - nx * d12,
+            y: anchorY + ty * halfSpan - ny * d12
+        )
+
+        let path = CGMutablePath()
+        path.move(to: startPt)
+        path.addLine(to: preTipPt)
+        path.addArc(tangent1End: tipApexPt, tangent2End: postTipPt, radius: 2.0)
+        path.addLine(to: endPt)
+        path.closeSubpath()
+        return path
+    }
+
+    /// Exact `BubbleShape.outline`:
+    /// Unions `bodyPath` and `caretPath`, and uses CoreGraphics path stroke-union/subtraction CSG (`9.0pt` outer fillet, `4.0pt` inner fillet)
+    /// so the caret base blends into the bubble edge with zero internal seam or dashed artifact!
+    public var outline: CGPath {
+        let br = bodyRect
+        let clipBox = caretSide.isVertical
+            ? br.insetBy(dx: 0.0, dy: -Self.margin)
+            : br.insetBy(dx: -Self.margin, dy: 0.0)
+        let clipRectPath = CGPath(rect: clipBox, transform: nil)
+
+        let clippedCaret = clipRectPath.intersection(caretPath, using: .winding)
+        let baseUnion = clippedCaret.union(bodyPath, using: .winding)
+
+        // Apply CSG fillet smoothing at the caret-body neck:
+        let expand9 = baseUnion.copy(strokingWithWidth: 9.0, lineCap: .round, lineJoin: .round, miterLimit: 1.0)
+        let grown = expand9.union(baseUnion, using: .winding)
+        let shrink9 = grown.copy(strokingWithWidth: 9.0, lineCap: .round, lineJoin: .round, miterLimit: 1.0)
+        let filletedOuter = grown.subtracting(shrink9, using: .winding)
+
+        let shrink4 = filletedOuter.copy(strokingWithWidth: 4.0, lineCap: .round, lineJoin: .round, miterLimit: 1.0)
+        let eroded = filletedOuter.subtracting(shrink4, using: .winding)
+        let expand4 = eroded.copy(strokingWithWidth: 4.0, lineCap: .round, lineJoin: .round, miterLimit: 1.0)
+        return expand4.union(eroded, using: .winding)
+    }
+
+    /// Builds the `NSImage` mask for `NSVisualEffectView.maskImage` (`flipped: false`).
+    public var maskImage: NSImage {
+        let size = panelSize
+        let outlinePath = outline
+        return NSImage(size: size, flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.setFillColor(NSColor.black.cgColor)
+            ctx.addPath(outlinePath)
+            ctx.fillPath(using: .winding)
+            return true
+        }
+    }
+}
+
+// MARK: - 2. Exact `TooltipPanel`, `TooltipContentView` & `SharedFloatingTooltipWindowController`
+
+@MainActor
+private final class TooltipPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+/// Renders the tooltip label (`12pt Medium`), optional `KeycapView` (`11pt Medium`, `secondaryLabelColor`, `cornerRadius = 3.0`,
+/// `labelColor.withAlphaComponent(0.1)` background), and a subtle `1px` inner border along `BubbleShape.outline`.
+@MainActor
+private final class TooltipContentView: NSView {
+    private var text: String = ""
+    private var badge: String? = nil
+    private var bubbleShape: BubbleShape?
+
+    private static let labelFont = NSFont.systemFont(ofSize: 12.0, weight: .medium)
+    private static let badgeFont = NSFont.systemFont(ofSize: 11.0, weight: .medium)
+    private static let lineHeight: CGFloat = {
+        let tf = NSTextField(labelWithString: " ")
+        tf.font = NSFont.systemFont(ofSize: 12.0, weight: .medium)
+        return tf.intrinsicContentSize.height
+    }()
+
+    override var isFlipped: Bool { false }
+
+    static func computeBodySize(text: String, badge: String?) -> CGSize {
+        let labelSize = (text as NSString).size(withAttributes: [.font: labelFont])
+        let labelW = ceil(labelSize.width)
+        let labelH = ceil(labelSize.height)
+
+        let rightExtra: CGFloat
+        if let badge, !badge.isEmpty {
+            let bSize = (badge as NSString).size(withAttributes: [.font: badgeFont])
+            let keycapW = max(24.0, ceil(bSize.width) + 14.0)
+            rightExtra = 8.0 + keycapW + 5.0
+        } else {
+            rightExtra = 11.0
+        }
+
+        let verticalPad = (14.0 - 0.5 * lineHeight) * 2.0
+        let bodyW = 11.0 + labelW + rightExtra
+        let bodyH = max(28.0, labelH + verticalPad)
+        return CGSize(width: bodyW, height: bodyH)
+    }
+
+    func configure(text: String, badge: String?, shape: BubbleShape) {
+        self.text = text
+        self.badge = badge
+        self.bubbleShape = shape
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext,
+              let shape = bubbleShape else { return }
+
+        let outlinePath = shape.outline
+
+        // 1. Subtle dark tint + crisp 1px inner border clipped to `outlinePath` so the bubble edge & caret tip look razor-sharp
+        ctx.saveGState()
+        ctx.addPath(outlinePath)
+        ctx.clip()
+
+        ctx.setFillColor(NSColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 0.58).cgColor)
+        ctx.fill(bounds)
+
+        ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.16).cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.addPath(outlinePath)
+        ctx.strokePath()
+        ctx.restoreGState()
+
+        // 2. Draw Label & Optional Keycap inside `bodyRect` (inset by `BubbleShape.margin = 7.0`)
+        let br = shape.bodyRect
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: Self.labelFont,
+            .foregroundColor: NSColor.labelColor
+        ]
+        let nsText = text as NSString
+        let textSize = nsText.size(withAttributes: textAttrs)
+        let textX = br.minX + 10.0
+        let textY = br.minY + floor((br.height - textSize.height) * 0.5)
+        nsText.draw(at: CGPoint(x: textX, y: textY), withAttributes: textAttrs)
+
+        if let badge = badge, !badge.isEmpty {
+            let badgeAttrs: [NSAttributedString.Key: Any] = [
+                .font: Self.badgeFont,
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]
+            let nsBadge = badge as NSString
+            let bSize = nsBadge.size(withAttributes: badgeAttrs)
+            let keycapW = max(24.0, ceil(bSize.width) + 14.0)
+            let keycapH: CGFloat = 18.0
+            let keycapX = br.maxX - 5.0 - keycapW
+            let keycapY = br.minY + (br.height - keycapH) * 0.5
+            let keycapRect = CGRect(x: keycapX, y: keycapY, width: keycapW, height: keycapH)
+
+            let keycapPath = CGPath(roundedRect: keycapRect, cornerWidth: 3.0, cornerHeight: 3.0, transform: nil)
+            ctx.saveGState()
+            ctx.setFillColor(NSColor.labelColor.withAlphaComponent(0.10).cgColor)
+            ctx.addPath(keycapPath)
+            ctx.fillPath()
+            ctx.restoreGState()
+
+            let bX = keycapRect.minX + (keycapW - bSize.width) * 0.5
+            let bY = keycapRect.minY + (keycapH - bSize.height) * 0.5
+            nsBadge.draw(at: CGPoint(x: bX, y: bY), withAttributes: badgeAttrs)
+        }
+    }
+}
 
 @MainActor
 public final class SharedFloatingTooltipWindowController {
     public static let shared = SharedFloatingTooltipWindowController()
 
-    private var tooltipPanel: NSPanel?
-    private var calloutView: PureAppKitTooltipCalloutView?
+    private let panel: TooltipPanel
+    private let blurView: NSVisualEffectView
+    private let contentView: TooltipContentView
     private weak var activeOwnerView: NSView?
-    private var orderOutWorkItem: DispatchWorkItem?
+    private var isCurrentlyShown: Bool = false
+    private var showCount: Int = 0
 
-    private init() {}
+    private init() {
+        let p = TooltipPanel(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: true
+        )
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = true
+        p.ignoresMouseEvents = true
+        p.animationBehavior = .none
+        p.isReleasedWhenClosed = false
+        p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.popUpMenuWindow)))
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        p.appearance = NSAppearance(named: .darkAqua)
+
+        let blur = NSVisualEffectView()
+        blur.material = .popover
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.autoresizingMask = [.width, .height]
+
+        let content = TooltipContentView(frame: .zero)
+        content.autoresizingMask = [.width, .height]
+        blur.addSubview(content)
+        p.contentView = blur
+
+        self.panel = p
+        self.blurView = blur
+        self.contentView = content
+    }
+
+    /// Exact `TooltipPanelController.layOut(placement:bodySize:anchor:screen:)`.
+    private static func layOut(
+        placement: TooltipEdge,
+        bodySize: CGSize,
+        anchor: CGRect,
+        screen: CGRect
+    ) -> (panelFrame: CGRect, shape: BubbleShape) {
+        let gap: CGFloat = 6.63158
+        let screenMargin: CGFloat = 6.0
+
+        var bodyOrigin = CGPoint.zero
+        let caretOffset: CGFloat
+
+        switch placement {
+        case .top, .bottom:
+            if placement == .top {
+                bodyOrigin.y = anchor.maxY + gap
+            } else {
+                bodyOrigin.y = anchor.minY - gap - bodySize.height
+            }
+            let idealX = anchor.midX - bodySize.width * 0.5
+            let minX = screen.minX + screenMargin
+            let maxX = screen.maxX - screenMargin - bodySize.width
+            bodyOrigin.x = min(max(idealX, minX), max(minX, maxX))
+
+            if bodySize.width < 25.6 {
+                caretOffset = bodySize.width * 0.5
+            } else {
+                let raw = anchor.midX - bodyOrigin.x
+                caretOffset = min(max(raw, 12.8), bodySize.width - 12.8)
+            }
+
+        case .leading, .trailing:
+            if placement == .leading {
+                bodyOrigin.x = anchor.minX - gap - bodySize.width
+            } else {
+                bodyOrigin.x = anchor.maxX + gap
+            }
+            let idealY = anchor.midY - bodySize.height * 0.5
+            let minY = screen.minY + screenMargin
+            let maxY = screen.maxY - screenMargin - bodySize.height
+            bodyOrigin.y = min(max(idealY, minY), max(minY, maxY))
+
+            if bodySize.height < 25.6 {
+                caretOffset = bodySize.height * 0.5
+            } else {
+                let raw = anchor.midY - bodyOrigin.y
+                caretOffset = min(max(raw, 12.8), bodySize.height - 12.8)
+            }
+        }
+
+        let bodyFrame = CGRect(origin: bodyOrigin, size: bodySize)
+        let panelFrame = bodyFrame.insetBy(dx: -BubbleShape.margin, dy: -BubbleShape.margin)
+        let shape = BubbleShape(
+            panelSize: panelFrame.size,
+            caretSide: placement.caretEdge,
+            caretOffset: caretOffset
+        )
+        return (panelFrame, shape)
+    }
 
     public func showTooltip(
         text: String,
         shortcutBadge: String? = nil,
-        edge: TooltipEdge,
+        edge requestedEdge: TooltipEdge,
         forButtonScreenRect buttonRect: NSRect,
         ownerView: NSView? = nil
     ) {
@@ -43,111 +423,111 @@ public final class SharedFloatingTooltipWindowController {
             hideTooltip()
             return
         }
-        orderOutWorkItem?.cancel()
-        orderOutWorkItem = nil
+
         activeOwnerView = ownerView
 
-        let shadowPad: CGFloat = 10.0
-        let arrowHeight: CGFloat = 5.2
+        // Mirror owner window appearance & sharingType.
+        if let ownerWindow = ownerView?.window {
+            let bestMatch = ownerWindow.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) ?? .darkAqua
+            panel.appearance = NSAppearance(named: bestMatch)
+            panel.sharingType = (ownerWindow.sharingType != .none) ? .readOnly : .none
+        } else {
+            panel.appearance = NSAppearance(named: .darkAqua)
+            panel.sharingType = .readOnly
+        }
 
         let parsed = InstantTooltipBubble.extractTrailingParenthesizedShortcut(from: text, explicitBadge: shortcutBadge)
-        let textFont = NSFont.systemFont(ofSize: 12.5, weight: .regular)
-        let textSize = (parsed.cleanText as NSString).size(withAttributes: [.font: textFont])
-
-        var contentW = ceil(textSize.width) + 24.0
-        if let badge = parsed.badge, !badge.isEmpty {
-            let badgeFont = NSFont.systemFont(ofSize: 11.0, weight: .regular)
-            let badgeSize = (badge as NSString).size(withAttributes: [.font: badgeFont])
-            contentW += 7.0 + ceil(badgeSize.width) + 13.0
-        }
-        let contentH = max(28.0, ceil(textSize.height) + 13.0)
-
-        let bubbleW = max(36.0, contentW + ((edge == .leading || edge == .trailing) ? arrowHeight : 0.0))
-        let bubbleH = max(28.0, contentH + ((edge == .top || edge == .bottom) ? arrowHeight : 0.0))
-        let panelW = bubbleW + shadowPad * 2.0
-        let panelH = bubbleH + shadowPad * 2.0
+        let bodySize = TooltipContentView.computeBodySize(text: parsed.cleanText, badge: parsed.badge)
 
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(buttonRect) }) ?? NSScreen.main
         let vf = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
-        let screenMargin: CGFloat = 6.0
-        let buttonGap: CGFloat = 5.0
 
-        var panelOriginX: CGFloat = 0.0
-        var panelOriginY: CGFloat = 0.0
-        var anchorOffset: CGFloat = 0.0
-
-        switch edge {
-        case .top, .bottom:
-            let idealX = round(buttonRect.midX - panelW * 0.5)
-            let minPanelX = vf.minX + screenMargin - shadowPad
-            let maxPanelX = vf.maxX - screenMargin - panelW + shadowPad
-            panelOriginX = min(max(idealX, minPanelX), maxPanelX)
-
-            let bubbleCenterOnScreenX = panelOriginX + panelW * 0.5
-            let rawDeltaX = buttonRect.midX - bubbleCenterOnScreenX
-            let maxArrowShiftX = max(0.0, bubbleW * 0.5 - 15.0)
-            anchorOffset = min(max(rawDeltaX, -maxArrowShiftX), maxArrowShiftX)
-
-            if edge == .top {
-                panelOriginY = round(buttonRect.maxY + buttonGap - shadowPad)
-            } else {
-                panelOriginY = round(buttonRect.minY - buttonGap - bubbleH - shadowPad)
+        // Flip to opposite side if `requestedEdge` would overflow the screen edge (`6pt` margin)
+        let gap: CGFloat = 6.63158
+        var effectiveEdge = requestedEdge
+        let fitsRequested: Bool = {
+            switch requestedEdge {
+            case .top:
+                return buttonRect.maxY + gap + bodySize.height <= vf.maxY - 6.0
+            case .bottom:
+                return buttonRect.minY - gap - bodySize.height >= vf.minY + 6.0
+            case .leading:
+                return buttonRect.minX - gap - bodySize.width >= vf.minX + 6.0
+            case .trailing:
+                return buttonRect.maxX + gap + bodySize.width <= vf.maxX - 6.0
             }
-
-        case .leading, .trailing:
-            let idealY = round(buttonRect.midY - panelH * 0.5)
-            let minPanelY = vf.minY + screenMargin - shadowPad
-            let maxPanelY = vf.maxY - screenMargin - panelH + shadowPad
-            panelOriginY = min(max(idealY, minPanelY), maxPanelY)
-
-            let bubbleCenterOnScreenY = panelOriginY + panelH * 0.5
-            let rawDeltaY = bubbleCenterOnScreenY - buttonRect.midY
-            let maxArrowShiftY = max(0.0, bubbleH * 0.5 - 11.0)
-            anchorOffset = min(max(rawDeltaY, -maxArrowShiftY), maxArrowShiftY)
-
-            if edge == .leading {
-                panelOriginX = round(buttonRect.minX - buttonGap - bubbleW - shadowPad)
-            } else {
-                panelOriginX = round(buttonRect.maxX + buttonGap - shadowPad)
+        }()
+        if !fitsRequested {
+            let opp = requestedEdge.opposite
+            let fitsOpposite: Bool = {
+                switch opp {
+                case .top:
+                    return buttonRect.maxY + gap + bodySize.height <= vf.maxY - 6.0
+                case .bottom:
+                    return buttonRect.minY - gap - bodySize.height >= vf.minY + 6.0
+                case .leading:
+                    return buttonRect.minX - gap - bodySize.width >= vf.minX + 6.0
+                case .trailing:
+                    return buttonRect.maxX + gap + bodySize.width <= vf.maxX - 6.0
+                }
+            }()
+            if fitsOpposite {
+                effectiveEdge = opp
             }
         }
 
-        if tooltipPanel == nil {
-            let panel = NSPanel(
-                contentRect: NSRect(x: panelOriginX, y: panelOriginY, width: panelW, height: panelH),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            panel.isReleasedWhenClosed = false
-            panel.isFloatingPanel = true
-            panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
-            panel.backgroundColor = .clear
-            panel.isOpaque = false
-            panel.hasShadow = false
-            panel.ignoresMouseEvents = true
-            panel.sharingType = .none
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-            let view = PureAppKitTooltipCalloutView(frame: NSRect(x: 0, y: 0, width: panelW, height: panelH))
-            panel.contentView = view
-            self.calloutView = view
-            self.tooltipPanel = panel
-        }
-
-        guard let panel = tooltipPanel, let view = calloutView else { return }
-        view.frame = NSRect(x: 0, y: 0, width: panelW, height: panelH)
-        view.configure(
-            text: parsed.cleanText,
-            badge: parsed.badge,
-            edge: edge,
-            anchorOffset: anchorOffset,
-            shadowPad: shadowPad
+        let (targetFrame, shape) = Self.layOut(
+            placement: effectiveEdge,
+            bodySize: bodySize,
+            anchor: buttonRect,
+            screen: vf
         )
-        panel.setFrame(NSRect(x: panelOriginX, y: panelOriginY, width: panelW, height: panelH), display: false)
-        panel.alphaValue = 1.0
-        if !panel.isVisible {
+
+        blurView.frame = CGRect(origin: .zero, size: targetFrame.size)
+        blurView.maskImage = shape.maskImage
+        contentView.frame = CGRect(origin: .zero, size: targetFrame.size)
+        contentView.configure(text: parsed.cleanText, badge: parsed.badge, shape: shape)
+
+        showCount &+= 1
+        let currentShowID = showCount
+
+        if isCurrentlyShown && panel.isVisible && panel.alphaValue > 0.05 {
+            // Already visible -> smoothly glide to the new button over `0.12s`
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.12
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(targetFrame, display: true)
+                panel.animator().alphaValue = 1.0
+            }
+        } else {
+            // Appearing from hidden -> start `4.0pt` closer to the button along `effectiveEdge` and slide into `targetFrame` over `0.13s easeOut`!
+            let slideOffset: CGPoint = {
+                switch effectiveEdge {
+                case .top:      return CGPoint(x: 0.0, y: -4.0) // starts 4pt lower (closer to button), slides UP
+                case .bottom:   return CGPoint(x: 0.0, y: 4.0)  // starts 4pt higher (closer to button), slides DOWN
+                case .leading:  return CGPoint(x: 4.0, y: 0.0)  // starts 4pt right (closer to button), slides LEFT
+                case .trailing: return CGPoint(x: -4.0, y: 0.0) // starts 4pt left (closer to button), slides RIGHT
+                }
+            }()
+            let startFrame = targetFrame.offsetBy(dx: slideOffset.x, dy: slideOffset.y)
+            panel.setFrame(startFrame, display: false)
+            panel.alphaValue = 0.0
             panel.orderFrontRegardless()
+            isCurrentlyShown = true
+
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.13
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(targetFrame, display: true)
+                panel.animator().alphaValue = 1.0
+            }
+        }
+        panel.invalidateShadow()
+
+        // Auto-hide safety timeout after 15s
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { [weak self] in
+            guard let self, self.showCount == currentShowID else { return }
+            self.hideTooltip()
         }
     }
 
@@ -156,138 +536,24 @@ public final class SharedFloatingTooltipWindowController {
             return
         }
         activeOwnerView = nil
-        tooltipPanel?.alphaValue = 0.0
-        orderOutWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self = self, self.activeOwnerView == nil else { return }
-            self.tooltipPanel?.orderOut(nil)
-        }
-        orderOutWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        isCurrentlyShown = false
+        showCount &+= 1
+        let hideID = showCount
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.10
+            panel.animator().alphaValue = 0.0
+        }, completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, !self.isCurrentlyShown, self.showCount == hideID else { return }
+                self.panel.orderOut(nil)
+            }
+        })
     }
 }
 
-/// 100% Pure AppKit / CoreGraphics Tooltip Renderer (ZERO `NSHostingView` inside `NSPanel`!).
-/// Eliminates cross-window SwiftUI `AttributeGraph` locks so hovering rapidly over buttons during 120Hz video playback
-/// takes `<0.02ms` and never drops a single preview or playhead frame!
-private final class PureAppKitTooltipCalloutView: NSView {
-    private var text: String = ""
-    private var badge: String? = nil
-    private var edge: TooltipEdge = .top
-    private var anchorOffset: CGFloat = 0.0
-    private var shadowPad: CGFloat = 10.0
+// MARK: - 3. Unified Single-Path Callout Shape & SwiftUI `InstantTooltipBubble`
 
-    override var isFlipped: Bool { true }
-
-    func configure(
-        text: String,
-        badge: String?,
-        edge: TooltipEdge,
-        anchorOffset: CGFloat,
-        shadowPad: CGFloat
-    ) {
-        self.text = text
-        self.badge = badge
-        self.edge = edge
-        self.anchorOffset = anchorOffset
-        self.shadowPad = shadowPad
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let bubbleRect = bounds.insetBy(dx: shadowPad, dy: shadowPad)
-        guard bubbleRect.width > 8, bubbleRect.height > 8 else { return }
-
-        let arrowH: CGFloat = 5.2
-        let shape = UnifiedTooltipCalloutShape(
-            edge: edge,
-            cornerRadius: 8.5,
-            arrowWidth: 11.0,
-            arrowHeight: arrowH,
-            anchorOffset: anchorOffset
-        )
-        let cgPath = shape.path(in: bubbleRect).cgPath
-        let strokePath = shape.inset(by: 0.5).path(in: bubbleRect).cgPath
-
-        // 1. Soft Drop Shadow + Bubble Fill
-        ctx.saveGState()
-        ctx.setShadow(
-            offset: CGSize(width: 0, height: 2.5),
-            blur: 7.0,
-            color: NSColor.black.withAlphaComponent(0.48).cgColor
-        )
-        ctx.setFillColor(NSColor(srgbRed: 0.14, green: 0.15, blue: 0.19, alpha: 1.0).cgColor)
-        ctx.addPath(cgPath)
-        ctx.fillPath()
-        ctx.restoreGState()
-
-        // 2. Crisp 1px Inner Border
-        ctx.saveGState()
-        ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.16).cgColor)
-        ctx.setLineWidth(1.0)
-        ctx.addPath(strokePath)
-        ctx.strokePath()
-        ctx.restoreGState()
-
-        // 3. Content Box (excluding arrow height)
-        let contentBox: CGRect
-        switch edge {
-        case .top:
-            contentBox = CGRect(x: bubbleRect.minX, y: bubbleRect.minY, width: bubbleRect.width, height: bubbleRect.height - arrowH)
-        case .bottom:
-            contentBox = CGRect(x: bubbleRect.minX, y: bubbleRect.minY + arrowH, width: bubbleRect.width, height: bubbleRect.height - arrowH)
-        case .leading:
-            contentBox = CGRect(x: bubbleRect.minX, y: bubbleRect.minY, width: bubbleRect.width - arrowH, height: bubbleRect.height)
-        case .trailing:
-            contentBox = CGRect(x: bubbleRect.minX + arrowH, y: bubbleRect.minY, width: bubbleRect.width - arrowH, height: bubbleRect.height)
-        }
-
-        let textFont = NSFont.systemFont(ofSize: 12.5, weight: .regular)
-        let textAttrs: [NSAttributedString.Key: Any] = [
-            .font: textFont,
-            .foregroundColor: NSColor.white.withAlphaComponent(0.96)
-        ]
-        let nsText = text as NSString
-        let textSize = nsText.size(withAttributes: textAttrs)
-        let textX = contentBox.minX + 12.0
-        let textY = contentBox.minY + (contentBox.height - textSize.height) * 0.5
-        nsText.draw(at: CGPoint(x: textX, y: textY), withAttributes: textAttrs)
-
-        if let badge = badge, !badge.isEmpty {
-            let badgeFont = NSFont.systemFont(ofSize: 11.0, weight: .regular)
-            let badgeAttrs: [NSAttributedString.Key: Any] = [
-                .font: badgeFont,
-                .foregroundColor: NSColor.white.withAlphaComponent(0.72)
-            ]
-            let nsBadge = badge as NSString
-            let bSize = nsBadge.size(withAttributes: badgeAttrs)
-            let badgeW = ceil(bSize.width) + 13.0
-            let badgeH = ceil(bSize.height) + 5.0
-            let badgeX = textX + ceil(textSize.width) + 7.0
-            let badgeY = contentBox.minY + (contentBox.height - badgeH) * 0.5
-            let badgeRect = CGRect(x: badgeX, y: badgeY, width: badgeW, height: badgeH)
-
-            let badgePath = CGPath(roundedRect: badgeRect, cornerWidth: 5.0, cornerHeight: 5.0, transform: nil)
-            ctx.saveGState()
-            ctx.setFillColor(NSColor.white.withAlphaComponent(0.12).cgColor)
-            ctx.addPath(badgePath)
-            ctx.fillPath()
-            ctx.restoreGState()
-
-            nsBadge.draw(
-                at: CGPoint(x: badgeX + 6.5, y: badgeY + (badgeH - bSize.height) * 0.5),
-                withAttributes: badgeAttrs
-            )
-        }
-    }
-}
-
-// MARK: - 2. Unified Single-Path Callout Shape (Continuous Border + Rounded Pointer Tip!)
-
-/// Draws the rounded rectangle bubble and its pointer arrow as a **single continuous closed `Path`**
-/// with a softly rounded arrow tip (`tipRadius`) and smooth base corners (`baseRadius`),
-/// seamless tooltip silhouette (Images 1–5).
 public struct UnifiedTooltipCalloutShape: InsettableShape {
     public var edge: TooltipEdge
     public var cornerRadius: CGFloat
@@ -298,9 +564,9 @@ public struct UnifiedTooltipCalloutShape: InsettableShape {
 
     public init(
         edge: TooltipEdge,
-        cornerRadius: CGFloat = 8.5,
-        arrowWidth: CGFloat = 11.0,
-        arrowHeight: CGFloat = 5.2,
+        cornerRadius: CGFloat = 5.0,
+        arrowWidth: CGFloat = 10.0,
+        arrowHeight: CGFloat = 5.8,
         anchorOffset: CGFloat = 0.0
     ) {
         self.edge = edge
@@ -320,155 +586,32 @@ public struct UnifiedTooltipCalloutShape: InsettableShape {
         let rect = fullRect.insetBy(dx: insetAmount, dy: insetAmount)
         guard rect.width > 8, rect.height > 8 else { return Path() }
 
-        let aw = arrowWidth
-        let ah = arrowHeight
-        let halfW = aw * 0.5
-        let tipRound: CGFloat = 1.6
-
-        // Compute the rectangular body box (excluding `arrowHeight` on the pointer side)
-        let box: CGRect
-        switch edge {
-        case .top:
-            // Bubble is ABOVE button -> arrow points DOWN from bottom edge
-            box = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: max(4, rect.height - ah))
-        case .bottom:
-            // Bubble is BELOW button -> arrow points UP from top edge
-            box = CGRect(x: rect.minX, y: rect.minY + ah, width: rect.width, height: max(4, rect.height - ah))
-        case .leading:
-            // Bubble is LEFT of button -> arrow points RIGHT from right edge
-            box = CGRect(x: rect.minX, y: rect.minY, width: max(4, rect.width - ah), height: rect.height)
-        case .trailing:
-            // Bubble is RIGHT of button -> arrow points LEFT from left edge
-            box = CGRect(x: rect.minX + ah, y: rect.minY, width: max(4, rect.width - ah), height: rect.height)
-        }
-
-        let r = min(cornerRadius - insetAmount * 0.5, min(box.width, box.height) * 0.45)
-
-        let clampMinX = box.minX + r + halfW + 2.0
-        let clampMaxX = box.maxX - r - halfW - 2.0
-        let arrowCenterX = min(max(box.midX + anchorOffset, clampMinX), max(clampMinX, clampMaxX))
-
-        let clampMinY = box.minY + r + halfW + 2.0
-        let clampMaxY = box.maxY - r - halfW - 2.0
-        let arrowCenterY = min(max(box.midY + anchorOffset, clampMinY), max(clampMinY, clampMaxY))
-
-        var p = Path()
-
-        // Start at Top-Left after corner curve, tracing clockwise:
-        p.move(to: CGPoint(x: box.minX + r, y: box.minY))
-
-        // 1. TOP EDGE (with upward arrow if `edge == .bottom`)
-        if edge == .bottom {
-            let leftBase = CGPoint(x: arrowCenterX - halfW, y: box.minY)
-            let tip = CGPoint(x: arrowCenterX, y: box.minY - ah)
-            let rightBase = CGPoint(x: arrowCenterX + halfW, y: box.minY)
-
-            p.addLine(to: CGPoint(x: leftBase.x - 1.5, y: box.minY))
-            p.addQuadCurve(to: CGPoint(x: leftBase.x + 1.2, y: box.minY - 1.1), control: leftBase)
-            p.addLine(to: CGPoint(x: tip.x - tipRound, y: tip.y + tipRound * 0.85))
-            p.addQuadCurve(to: CGPoint(x: tip.x + tipRound, y: tip.y + tipRound * 0.85), control: tip)
-            p.addLine(to: CGPoint(x: rightBase.x - 1.2, y: box.minY - 1.1))
-            p.addQuadCurve(to: CGPoint(x: rightBase.x + 1.5, y: box.minY), control: rightBase)
-        }
-        p.addLine(to: CGPoint(x: box.maxX - r, y: box.minY))
-
-        // Top-Right Corner
-        p.addArc(
-            center: CGPoint(x: box.maxX - r, y: box.minY + r),
-            radius: r,
-            startAngle: .degrees(-90),
-            endAngle: .degrees(0),
-            clockwise: false
+        let panelSize = CGSize(
+            width: rect.width + BubbleShape.margin * 2.0,
+            height: rect.height + BubbleShape.margin * 2.0
         )
-
-        // 2. RIGHT EDGE (with rightward arrow if `edge == .leading`)
-        if edge == .leading {
-            let topBase = CGPoint(x: box.maxX, y: arrowCenterY - halfW)
-            let tip = CGPoint(x: box.maxX + ah, y: arrowCenterY)
-            let bottomBase = CGPoint(x: box.maxX, y: arrowCenterY + halfW)
-
-            p.addLine(to: CGPoint(x: box.maxX, y: topBase.y - 1.5))
-            p.addQuadCurve(to: CGPoint(x: box.maxX + 1.1, y: topBase.y + 1.2), control: topBase)
-            p.addLine(to: CGPoint(x: tip.x - tipRound * 0.85, y: tip.y - tipRound))
-            p.addQuadCurve(to: CGPoint(x: tip.x - tipRound * 0.85, y: tip.y + tipRound), control: tip)
-            p.addLine(to: CGPoint(x: box.maxX + 1.1, y: bottomBase.y - 1.2))
-            p.addQuadCurve(to: CGPoint(x: box.maxX, y: bottomBase.y + 1.5), control: bottomBase)
-        }
-        p.addLine(to: CGPoint(x: box.maxX, y: box.maxY - r))
-
-        // Bottom-Right Corner
-        p.addArc(
-            center: CGPoint(x: box.maxX - r, y: box.maxY - r),
-            radius: r,
-            startAngle: .degrees(0),
-            endAngle: .degrees(90),
-            clockwise: false
+        let caretOffset = (edge.isVertical ? rect.width : rect.height) * 0.5 + anchorOffset
+        let shape = BubbleShape(
+            panelSize: panelSize,
+            caretSide: edge.caretEdge,
+            caretOffset: caretOffset
         )
-
-        // 3. BOTTOM EDGE (with downward arrow if `edge == .top`)
-        if edge == .top {
-            let rightBase = CGPoint(x: arrowCenterX + halfW, y: box.maxY)
-            let tip = CGPoint(x: arrowCenterX, y: box.maxY + ah)
-            let leftBase = CGPoint(x: arrowCenterX - halfW, y: box.maxY)
-
-            p.addLine(to: CGPoint(x: rightBase.x + 1.5, y: box.maxY))
-            p.addQuadCurve(to: CGPoint(x: rightBase.x - 1.2, y: box.maxY + 1.1), control: rightBase)
-            p.addLine(to: CGPoint(x: tip.x + tipRound, y: tip.y - tipRound * 0.85))
-            p.addQuadCurve(to: CGPoint(x: tip.x - tipRound, y: tip.y - tipRound * 0.85), control: tip)
-            p.addLine(to: CGPoint(x: leftBase.x + 1.2, y: box.maxY + 1.1))
-            p.addQuadCurve(to: CGPoint(x: leftBase.x - 1.5, y: box.maxY), control: leftBase)
-        }
-        p.addLine(to: CGPoint(x: box.minX + r, y: box.maxY))
-
-        // Bottom-Left Corner
-        p.addArc(
-            center: CGPoint(x: box.minX + r, y: box.maxY - r),
-            radius: r,
-            startAngle: .degrees(90),
-            endAngle: .degrees(180),
-            clockwise: false
+        var transform = CGAffineTransform(
+            translationX: rect.minX - BubbleShape.margin,
+            y: rect.minY - BubbleShape.margin
         )
-
-        // 4. LEFT EDGE (with leftward arrow if `edge == .trailing`)
-        if edge == .trailing {
-            let bottomBase = CGPoint(x: box.minX, y: arrowCenterY + halfW)
-            let tip = CGPoint(x: box.minX - ah, y: arrowCenterY)
-            let topBase = CGPoint(x: box.minX, y: arrowCenterY - halfW)
-
-            p.addLine(to: CGPoint(x: box.minX, y: bottomBase.y + 1.5))
-            p.addQuadCurve(to: CGPoint(x: box.minX - 1.1, y: bottomBase.y - 1.2), control: bottomBase)
-            p.addLine(to: CGPoint(x: tip.x + tipRound * 0.85, y: tip.y + tipRound))
-            p.addQuadCurve(to: CGPoint(x: tip.x + tipRound * 0.85, y: tip.y - tipRound), control: tip)
-            p.addLine(to: CGPoint(x: box.minX - 1.1, y: topBase.y + 1.2))
-            p.addQuadCurve(to: CGPoint(x: box.minX, y: topBase.y - 1.5), control: topBase)
+        if let cgPath = shape.outline.copy(using: &transform) {
+            return Path(cgPath)
         }
-        p.addLine(to: CGPoint(x: box.minX, y: box.minY + r))
-
-        // Top-Left Corner
-        p.addArc(
-            center: CGPoint(x: box.minX + r, y: box.minY + r),
-            radius: r,
-            startAngle: .degrees(180),
-            endAngle: .degrees(270),
-            clockwise: false
-        )
-
-        p.closeSubpath()
-        return p
+        return Path(roundedRect: rect, cornerRadius: cornerRadius)
     }
 }
-
-// MARK: - 3. Unified InstantTooltipBubble View (With Optional Keyboard Shortcut Keycap Badge!)
 
 public struct InstantTooltipBubble: View {
     public let text: String
     public let shortcutBadge: String?
     public let edge: TooltipEdge
     public let anchorOffset: CGFloat
-
-    private let bubbleFill = Color(red: 0.14, green: 0.15, blue: 0.19)
-    private let borderStroke = Color.white.opacity(0.16)
-    private let arrowHeight: CGFloat = 5.2
 
     public init(
         text: String,
@@ -484,52 +627,40 @@ public struct InstantTooltipBubble: View {
     }
 
     public var body: some View {
-        let calloutShape = UnifiedTooltipCalloutShape(
-            edge: edge,
-            cornerRadius: 8.5,
-            arrowWidth: 11.0,
-            arrowHeight: arrowHeight,
-            anchorOffset: anchorOffset
-        )
-
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             Text(text)
-                .font(.system(size: 12.5, weight: .regular))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.96))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
 
             if let badge = shortcutBadge, !badge.isEmpty {
                 Text(badge)
-                    .font(.system(size: 11, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .padding(.horizontal, 6.5)
-                    .padding(.vertical, 2.5)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+                    .padding(.horizontal, 7)
+                    .frame(minWidth: 24, minHeight: 18)
                     .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color.white.opacity(0.12))
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Color.white.opacity(0.10))
                     )
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6.5)
-        .padding(.top, edge == .bottom ? arrowHeight : 0)
-        .padding(.bottom, edge == .top ? arrowHeight : 0)
-        .padding(.leading, edge == .trailing ? arrowHeight : 0)
-        .padding(.trailing, edge == .leading ? arrowHeight : 0)
+        .padding(.leading, 10)
+        .padding(.trailing, shortcutBadge != nil ? 5 : 10)
+        .frame(minHeight: 28)
         .background(
-            calloutShape
-                .fill(bubbleFill)
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color(red: 0.14, green: 0.15, blue: 0.18))
         )
         .overlay(
-            calloutShape
-                .strokeBorder(borderStroke, lineWidth: 1.0)
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1.0)
         )
-        .shadow(color: .black.opacity(0.48), radius: 7, y: 2.5)
     }
 
     /// Automatically extracts trailing shortcuts like `"Undo (⌘Z)"` -> `("Undo", "⌘Z")` or `"Split clip (⌥)"` -> `("Split clip", "⌥")`
-    /// so every tooltip with a shortcut renders a sleek keycap badge (Images 4 & 5)!
+    /// so every tooltip with a shortcut renders a sleek keycap badge!
     static func extractTrailingParenthesizedShortcut(
         from rawText: String,
         explicitBadge: String?
@@ -603,7 +734,7 @@ public struct InstantTooltipButton<LabelContent: View>: View {
                 label()
                     .opacity(isDisabled ? 0.25 : 1.0)
 
-                // Active dot indicator on the right side for active rail tabs (style)
+                // Active dot indicator on the right side for active rail tabs
                 if isActive && !isDisabled && edge == .leading {
                     HStack {
                         Spacer()
@@ -675,18 +806,14 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         }
         if isActive {
             if edge == .leading {
-                // Inspector sidebar tab active style (subtle dark card with glowing icon + purple dot)
                 return isHovered ? Color.white.opacity(0.14) : Color.white.opacity(0.09)
             }
-            // Active tool button style (dark purple pill background when Split Clip is active!)
             return isHovered ? activeColor.opacity(0.38) : activeColor.opacity(0.28)
         }
         return isHovered ? Color.white.opacity(0.12) : Color.clear
     }
 }
 
-/// Pill Button with generous hitbox (`height: 30`), smooth hover highlight,
-/// active purple state (like `Reel mode`), and standalone floating tooltip!
 public struct SubToolbarPillButton<LabelContent: View>: View {
     let tooltip: String?
     let edge: TooltipEdge
