@@ -329,7 +329,7 @@ public final class SharedFloatingTooltipWindowController {
         p.ignoresMouseEvents = true
         p.animationBehavior = .none
         p.isReleasedWhenClosed = false
-        p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.popUpMenuWindow)))
+        p.level = NSWindow.Level(rawValue: max(Int(CGWindowLevelForKey(.popUpMenuWindow)), NSWindow.Level.screenSaver.rawValue + 2))
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         p.appearance = NSAppearance(named: .darkAqua)
 
@@ -428,6 +428,8 @@ public final class SharedFloatingTooltipWindowController {
             let bestMatch = ownerWindow.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) ?? .darkAqua
             panel.appearance = NSAppearance(named: bestMatch)
             panel.sharingType = (ownerWindow.sharingType != .none) ? .readOnly : .none
+            let baseLevel = max(Int(CGWindowLevelForKey(.popUpMenuWindow)), NSWindow.Level.screenSaver.rawValue + 2)
+            panel.level = NSWindow.Level(rawValue: max(baseLevel, ownerWindow.level.rawValue + 1))
         } else {
             panel.appearance = NSAppearance(named: .darkAqua)
             panel.sharingType = .readOnly
@@ -1011,19 +1013,43 @@ public final class HoverMagnetTrackingNSView: NSView {
     }
 }
 
-private struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
-    let tooltip: String
-    let shortcutBadge: String?
-    let edge: TooltipEdge
-    let cornerRadius: CGFloat
-    let isActive: Bool
-    let isDisabled: Bool
-    let isRailTab: Bool
-    let hasActiveBorder: Bool
-    let activeRGB: (CGFloat, CGFloat, CGFloat)
-    let onViewReady: (HoverMagnetTrackingNSView) -> Void
+public struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
+    public let tooltip: String
+    public let shortcutBadge: String?
+    public let edge: TooltipEdge
+    public let cornerRadius: CGFloat
+    public let isActive: Bool
+    public let isDisabled: Bool
+    public let isRailTab: Bool
+    public let hasActiveBorder: Bool
+    public let activeRGB: (CGFloat, CGFloat, CGFloat)
+    public let onViewReady: (HoverMagnetTrackingNSView) -> Void
 
-    func makeNSView(context: Context) -> HoverMagnetTrackingNSView {
+    public init(
+        tooltip: String,
+        shortcutBadge: String? = nil,
+        edge: TooltipEdge,
+        cornerRadius: CGFloat,
+        isActive: Bool,
+        isDisabled: Bool = false,
+        isRailTab: Bool = false,
+        hasActiveBorder: Bool = false,
+        activeRGB: (CGFloat, CGFloat, CGFloat) = (0.45, 0.36, 0.96),
+        onViewReady: @escaping (HoverMagnetTrackingNSView) -> Void
+    ) {
+        self.tooltip = tooltip
+        self.shortcutBadge = shortcutBadge
+        self.edge = edge
+        self.cornerRadius = cornerRadius
+        self.isActive = isActive
+        self.isDisabled = isDisabled
+        self.isRailTab = isRailTab
+        self.hasActiveBorder = hasActiveBorder
+        self.activeRGB = activeRGB
+        self.onViewReady = onViewReady
+    }
+
+    public func makeNSView(context: Context) -> HoverMagnetTrackingNSView {
         let v = HoverMagnetTrackingNSView(frame: .zero)
         v.tooltip = tooltip
         v.shortcutBadge = shortcutBadge
@@ -1040,7 +1066,7 @@ private struct HoverMagnetBackgroundRepresentable: NSViewRepresentable {
         return v
     }
 
-    func updateNSView(_ nsView: HoverMagnetTrackingNSView, context: Context) {
+    public func updateNSView(_ nsView: HoverMagnetTrackingNSView, context: Context) {
         let tooltipChanged = (nsView.tooltip != tooltip || nsView.shortcutBadge != shortcutBadge)
         nsView.tooltip = tooltip
         nsView.shortcutBadge = shortcutBadge

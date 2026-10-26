@@ -2544,8 +2544,7 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
     let onActionWithScreenRect: ((NSRect) -> Void)?
     @ViewBuilder let label: () -> LabelContent
 
-    @State private var isHovered = false
-    @State private var anchorNSView: NSView?
+    @State private var magnetNSView: HoverMagnetTrackingNSView?
 
     init(
         tooltip: String?,
@@ -2569,7 +2568,7 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
 
     var body: some View {
         Button {
-            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
+            SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: magnetNSView)
             if let onActionWithScreenRect {
                 onActionWithScreenRect(currentScreenRect())
             } else {
@@ -2579,53 +2578,29 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
             label()
                 .frame(width: width, height: height)
                 .background(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(backgroundColor)
-                )
-                .background(
-                    TooltipScreenRectProbe { v in
-                        anchorNSView = v
+                    HoverMagnetBackgroundRepresentable(
+                        tooltip: tooltip ?? "",
+                        shortcutBadge: nil,
+                        edge: .top,
+                        cornerRadius: min(cornerRadius, 8),
+                        isActive: isSelected,
+                        isDisabled: false,
+                        isRailTab: false,
+                        hasActiveBorder: false,
+                        activeRGB: (0.95, 0.96, 1.0)
+                    ) { v in
+                        magnetNSView = v
                     }
                 )
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHovered = hovering
-            }
-            if hovering, let tooltip = tooltip, !tooltip.isEmpty {
-                let rect = currentScreenRect()
-                if rect.width > 0 {
-                    SharedFloatingTooltipWindowController.shared.showTooltip(
-                        text: tooltip,
-                        edge: .top,
-                        forButtonScreenRect: rect,
-                        ownerView: anchorNSView
-                    )
-                }
-            } else {
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            }
-        }
-        .onDisappear {
-            if isHovered {
-                SharedFloatingTooltipWindowController.shared.hideTooltip(ifOwnedBy: anchorNSView)
-            }
-        }
     }
 
     private func currentScreenRect() -> NSRect {
-        guard let v = anchorNSView, let win = v.window else { return .zero }
+        guard let v = magnetNSView, let win = v.window else { return .zero }
         let rectInWin = v.convert(v.bounds, to: nil)
         return win.convertToScreen(rectInWin)
-    }
-
-    private var backgroundColor: Color {
-        if isSelected {
-            return isHovered ? Color.white.opacity(0.20) : Color.white.opacity(0.14)
-        }
-        return isHovered ? Color.white.opacity(0.11) : Color.clear
     }
 }
 
