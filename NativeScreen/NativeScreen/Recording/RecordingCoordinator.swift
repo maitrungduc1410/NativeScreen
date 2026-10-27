@@ -967,9 +967,9 @@ public final class RecordingCoordinator {
             await floatingCameraPreviewView?.stopSessionAndWait()
 
             let engine = ScreenCaptureEngine()
-            engine.onWebcamFrameCaptured = { [weak self] cgImg in
+            engine.onWebcamFrameCaptured = { [weak self] ioSurface in
                 Task { @MainActor [weak self] in
-                    self?.floatingCameraPreviewView?.displayCapturedFrame(cgImg)
+                    self?.floatingCameraPreviewView?.displayCapturedSurface(ioSurface)
                 }
             }
             let telemetry = TelemetryRecorder(
@@ -3094,6 +3094,7 @@ private final class LiveCameraPreviewHostNSView: NSView {
             newSession.addInput(input)
         }
         newSession.commitConfiguration()
+        ScreenCaptureEngine.configureHighestFrameRateFormat(on: device, maxHeight: 1080)
 
         // Create and attach `AVCaptureVideoPreviewLayer` BEFORE calling `startRunning` so `AVCaptureSession_Tundra`'s internal
         // connections/outputs array is NEVER mutated while `startRunning` is enumerating it on `sessionQueue`!
@@ -3116,10 +3117,10 @@ private final class LiveCameraPreviewHostNSView: NSView {
         }
     }
 
-    func displayCapturedFrame(_ cgImage: CGImage) {
+    func displayCapturedSurface(_ ioSurface: IOSurfaceRef) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        recordedFrameLayer.contents = cgImage
+        recordedFrameLayer.contents = ioSurface
         CATransaction.commit()
     }
 

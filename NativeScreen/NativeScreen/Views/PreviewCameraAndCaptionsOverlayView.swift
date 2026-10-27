@@ -291,25 +291,6 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
                 let asset = AVURLAsset(url: url)
                 let item = AVPlayerItem(asset: asset)
 
-                // Apply live GPU CoreImage color grading & sharpen via AVVideoComposition on the webcam AVPlayerItem!
-                item.videoComposition = AVVideoComposition(asset: asset, applyingCIFiltersWithHandler: { [weak self] request in
-                    guard let self = self else {
-                        request.finish(with: request.sourceImage, context: nil)
-                        return
-                    }
-                    var img = request.sourceImage
-                    if self.currentIsCutoutMode {
-                        img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(to: img)
-                    }
-                    img = LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
-                        to: img,
-                        preset: self.currentPreset,
-                        intensity: self.currentIntensity,
-                        sharpen01: self.currentSharpen01
-                    )
-                    request.finish(with: img, context: nil)
-                })
-
                 let avPlayer = AVPlayer(playerItem: item)
                 avPlayer.isMuted = true
                 self.player = avPlayer
@@ -322,6 +303,7 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
                 self.playerLayer = pLayer
                 lastSeekedMs = -1000.0
                 isSeeking = false
+                applyVideoCompositionIfNeeded(to: item, asset: asset, preset: preset, intensity: intensity, sharpen01: sharpen01, isCutoutMode: isCutoutMode, force: true)
             }
 
             let styleChanged = (currentPreset != preset)
@@ -333,6 +315,10 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
             currentIntensity = intensity
             currentSharpen01 = sharpen01
             currentIsCutoutMode = isCutoutMode
+
+            if styleChanged, let item = player?.currentItem, let asset = item.asset as? AVURLAsset {
+                applyVideoCompositionIfNeeded(to: item, asset: asset, preset: preset, intensity: intensity, sharpen01: sharpen01, isCutoutMode: isCutoutMode, force: false)
+            }
 
             guard let player = player else { return }
 
@@ -358,6 +344,44 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
         private var currentIntensity: Double = 1.0
         private var currentSharpen01: Double = 0.0
         private var currentIsCutoutMode: Bool = false
+
+        private func applyVideoCompositionIfNeeded(
+            to item: AVPlayerItem,
+            asset: AVURLAsset,
+            preset: CameraColorGradePreset,
+            intensity: Double,
+            sharpen01: Double,
+            isCutoutMode: Bool,
+            force: Bool
+        ) {
+            let needsFilter = (preset != .original && intensity > 0.01) || sharpen01 > 0.01 || isCutoutMode
+            if !needsFilter {
+                // Fast hardware zero-copy path when Original + 0 Sharpen + non-Cutout!
+                if item.videoComposition != nil {
+                    item.videoComposition = nil
+                }
+                return
+            }
+            if item.videoComposition == nil || force {
+                item.videoComposition = AVVideoComposition(asset: asset, applyingCIFiltersWithHandler: { [weak self] request in
+                    guard let self = self else {
+                        request.finish(with: request.sourceImage, context: nil)
+                        return
+                    }
+                    var img = request.sourceImage
+                    if self.currentIsCutoutMode {
+                        img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(to: img)
+                    }
+                    img = LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
+                        to: img,
+                        preset: self.currentPreset,
+                        intensity: self.currentIntensity,
+                        sharpen01: self.currentSharpen01
+                    )
+                    request.finish(with: img, context: nil)
+                })
+            }
+        }
 
         private func seekCoalesced(toMs ms: Double, fast: Bool) {
             guard let player = player else { return }

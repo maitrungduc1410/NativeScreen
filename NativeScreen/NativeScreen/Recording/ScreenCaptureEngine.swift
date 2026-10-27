@@ -38,7 +38,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     public private(set) var recordedDurationMs: Double = 0.0
     public var onFirstVideoFrameArrived: ((TimeInterval) -> Void)?
 
-    public var onWebcamFrameCaptured: (@Sendable (CGImage) -> Void)?
+    public var onWebcamFrameCaptured: (@Sendable (IOSurfaceRef) -> Void)?
 
     public func setPaused(_ paused: Bool) {
         videoQueue.async {
@@ -171,16 +171,21 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             }
         }
 
-        // 1. Webcam Video Input & Writer
+        // 1. Webcam Video Input & Writer (Configure 60fps when supported by the camera hardware!)
         if let camID = cameraDeviceID,
            let camDevice = AVCaptureDevice(uniqueID: camID) ?? AVCaptureDevice.default(for: .video),
            let camInput = try? AVCaptureDeviceInput(device: camDevice),
            session.canAddInput(camInput) {
             session.addInput(camInput)
 
+            let maxDimH: Int32 = (cameraMaxResolution == .p720) ? 720 : ((cameraMaxResolution == .p4k) ? 2160 : 1080)
+            let configuredFps = Self.configureHighestFrameRateFormat(on: camDevice, maxHeight: maxDimH)
+
             let vOutput = AVCaptureVideoDataOutput()
+            vOutput.alwaysDiscardsLateVideoFrames = true
             vOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]
             ]
             vOutput.setSampleBufferDelegate(self, queue: avDeviceQueue)
             if session.canAddOutput(vOutput) {
@@ -190,15 +195,17 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             if let webcamURL = outputWebcamURL {
                 try? FileManager.default.removeItem(at: webcamURL)
                 if let wWriter = try? AVAssetWriter(outputURL: webcamURL, fileType: .mp4) {
-                    let targetH: Int = (cameraMaxResolution == .p720) ? 720 : ((cameraMaxResolution == .p4k) ? 2160 : 1080)
-                    let targetW: Int = (targetH * 16) / 9
+                    let activeDims = CMVideoFormatDescriptionGetDimensions(camDevice.activeFormat.formatDescription)
+                    let targetH: Int = activeDims.height > 0 ? Int(activeDims.height) : Int(maxDimH)
+                    let targetW: Int = activeDims.width > 0 ? Int(activeDims.width) : ((targetH * 16) / 9)
                     let wSettings: [String: Any] = [
                         AVVideoCodecKey: AVVideoCodecType.h264,
                         AVVideoWidthKey: targetW,
                         AVVideoHeightKey: targetH,
                         AVVideoCompressionPropertiesKey: [
-                            AVVideoAverageBitRateKey: max(6_000_000, targetW * targetH * 3),
-                            AVVideoMaxKeyFrameIntervalKey: 30,
+                            AVVideoAverageBitRateKey: max(10_000_000, targetW * targetH * 5),
+                            AVVideoExpectedSourceFrameRateKey: configuredFps,
+                            AVVideoMaxKeyFrameIntervalKey: configuredFps,
                             AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
                         ]
                     ]
@@ -406,13 +413,11 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         guard pts.isValid else { return }
 
         if output is AVCaptureVideoDataOutput {
-            // Forward live frame to the floating camera preview window if open (100% thread-safe, no AVCaptureVideoPreviewLayer mutation race!)
+            // Zero-copy live preview handoff via `IOSurfaceRef` (< 0.01ms, zero `CIContext.createCGImage` stall on `avDeviceQueue`!)
             if let callback = onWebcamFrameCaptured,
-               let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                let ciImg = CIImage(cvPixelBuffer: pb)
-                if let cgImg = Self.sharedPreviewCIContext.createCGImage(ciImg, from: ciImg.extent) {
-                    callback(cgImg)
-                }
+               let pb = CMSampleBufferGetImageBuffer(sampleBuffer),
+               let surface = CVPixelBufferGetIOSurface(pb)?.takeUnretainedValue() {
+                callback(surface)
             }
 
             guard let wWriter = webcamWriter, wWriter.status == .writing,
@@ -441,7 +446,55 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         }
     }
 
-    private static let sharedPreviewCIContext = CIContext(options: [.useSoftwareRenderer: false])
+    /// Selects the highest frame rate format (preferring 60fps when supported by the camera, e.g. Continuity Camera / external 60fps webcams,
+    /// or locking cleanly to the highest native rate at `<= maxHeight`) so the camera never drops frames or defaults to a low-FPS preset!
+    @discardableResult
+    public static func configureHighestFrameRateFormat(on device: AVCaptureDevice, maxHeight: Int32 = 1080) -> Int {
+        var bestFormat: AVCaptureDevice.Format?
+        var bestRange: AVFrameRateRange?
+        var bestScore: Double = -1.0
+
+        for format in device.formats {
+            let desc = format.formatDescription
+            guard CMFormatDescriptionGetMediaType(desc) == kCMMediaType_Video else { continue }
+            let dims = CMVideoFormatDescriptionGetDimensions(desc)
+            guard dims.height <= maxHeight && dims.height >= 480 else { continue }
+
+            for range in format.videoSupportedFrameRateRanges {
+                let maxFps = min(60.0, range.maxFrameRate)
+                // Prioritize 60fps support first, then resolution closest to `maxHeight`
+                let fpsWeight = (maxFps >= 59.0) ? 100_000.0 : (maxFps * 1000.0)
+                let resWeight = Double(dims.height)
+                let score = fpsWeight + resWeight
+                if score > bestScore {
+                    bestScore = score
+                    bestFormat = format
+                    bestRange = range
+                }
+            }
+        }
+
+        guard let chosenFormat = bestFormat, let chosenRange = bestRange else {
+            return 30
+        }
+
+        let targetFps = min(60.0, chosenRange.maxFrameRate)
+        let frameDur = (targetFps >= 59.0)
+            ? CMTime(value: 1, timescale: 60)
+            : chosenRange.minFrameDuration
+
+        do {
+            try device.lockForConfiguration()
+            device.activeFormat = chosenFormat
+            device.activeVideoMinFrameDuration = frameDur
+            device.activeVideoMaxFrameDuration = frameDur
+            device.unlockForConfiguration()
+        } catch {
+            // Ignore if device refuses lock
+        }
+
+        return Int(round(targetFps))
+    }
 
     private static func adjustSampleBufferTime(_ sampleBuffer: CMSampleBuffer, bySubtracting offset: CMTime) -> CMSampleBuffer? {
         guard offset.isValid, CMTimeGetSeconds(offset) > 0.0001 else {
