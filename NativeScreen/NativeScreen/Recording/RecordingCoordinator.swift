@@ -964,6 +964,10 @@ public final class RecordingCoordinator {
                 ? recordingDir.appendingPathComponent("microphone.m4a")
                 : nil
 
+            // Stop the standalone pre-recording camera preview AVCaptureSession before starting ScreenCaptureEngine
+            // so the two AVCaptureSessions never compete for exclusive access to the same hardware camera device!
+            floatingCameraPreviewView?.stopSession()
+
             let engine = ScreenCaptureEngine()
             let telemetry = TelemetryRecorder(
                 telemetryDirectoryURL: telemetryDir,
@@ -1001,6 +1005,10 @@ public final class RecordingCoordinator {
             self.pauseStartUptime = nil
             self.accumulatedPausedSeconds = 0
             self.recordingElapsedSeconds = 0.0
+
+            if let sharedSession = engine.activeCaptureSession {
+                floatingCameraPreviewView?.attachExternalSession(sharedSession)
+            }
 
             updateHUDPanelFrameForCurrentState(animated: true)
             updateRecordedAreaHighlightOverlay()
@@ -3097,6 +3105,20 @@ private final class LiveCameraPreviewHostNSView: NSView {
         DispatchQueue.global(qos: .userInteractive).async {
             newSession.startRunning()
         }
+    }
+
+    func attachExternalSession(_ externalSession: AVCaptureSession) {
+        stopSession()
+        let pLayer = AVCaptureVideoPreviewLayer(session: externalSession)
+        pLayer.videoGravity = .resizeAspectFill
+        pLayer.frame = clipLayer.bounds
+        if let conn = pLayer.connection, conn.isVideoMirroringSupported {
+            conn.automaticallyAdjustsVideoMirroring = false
+            conn.isVideoMirrored = true
+        }
+        clipLayer.addSublayer(pLayer)
+        self.previewLayer = pLayer
+        needsLayout = true
     }
 
     func stopSession() {

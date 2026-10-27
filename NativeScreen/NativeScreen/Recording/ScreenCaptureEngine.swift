@@ -17,9 +17,11 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private var webcamWriter: AVAssetWriter?
     private var webcamVideoInput: AVAssetWriterInput?
     private var isWebcamSessionStarted: Bool = false
+    private var webcamFirstPTS: CMTime = .invalid
     private var microphoneWriter: AVAssetWriter?
     private var microphoneAudioInput: AVAssetWriterInput?
     private var isMicrophoneSessionStarted: Bool = false
+    private var microphoneFirstPTS: CMTime = .invalid
 
     private let videoQueue = DispatchQueue(label: "com.nativescreen.capture.video", qos: .userInteractive)
     private let audioQueue = DispatchQueue(label: "com.nativescreen.capture.audio", qos: .userInteractive)
@@ -168,7 +170,6 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         // 1. Webcam Video Input & Writer
         if let camID = cameraDeviceID,
-           let webcamURL = outputWebcamURL,
            let camDevice = AVCaptureDevice(uniqueID: camID) ?? AVCaptureDevice.default(for: .video),
            let camInput = try? AVCaptureDeviceInput(device: camDevice),
            session.canAddInput(camInput) {
@@ -183,29 +184,32 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 session.addOutput(vOutput)
             }
 
-            try? FileManager.default.removeItem(at: webcamURL)
-            if let wWriter = try? AVAssetWriter(outputURL: webcamURL, fileType: .mp4) {
-                let targetH: Int = (cameraMaxResolution == .p720) ? 720 : ((cameraMaxResolution == .p4k) ? 2160 : 1080)
-                let targetW: Int = (targetH * 16) / 9
-                let wSettings: [String: Any] = [
-                    AVVideoCodecKey: AVVideoCodecType.h264,
-                    AVVideoWidthKey: targetW,
-                    AVVideoHeightKey: targetH,
-                    AVVideoCompressionPropertiesKey: [
-                        AVVideoAverageBitRateKey: max(6_000_000, targetW * targetH * 3),
-                        AVVideoMaxKeyFrameIntervalKey: 30,
-                        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+            if let webcamURL = outputWebcamURL {
+                try? FileManager.default.removeItem(at: webcamURL)
+                if let wWriter = try? AVAssetWriter(outputURL: webcamURL, fileType: .mp4) {
+                    let targetH: Int = (cameraMaxResolution == .p720) ? 720 : ((cameraMaxResolution == .p4k) ? 2160 : 1080)
+                    let targetW: Int = (targetH * 16) / 9
+                    let wSettings: [String: Any] = [
+                        AVVideoCodecKey: AVVideoCodecType.h264,
+                        AVVideoWidthKey: targetW,
+                        AVVideoHeightKey: targetH,
+                        AVVideoCompressionPropertiesKey: [
+                            AVVideoAverageBitRateKey: max(6_000_000, targetW * targetH * 3),
+                            AVVideoMaxKeyFrameIntervalKey: 30,
+                            AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                        ]
                     ]
-                ]
-                let wInput = AVAssetWriterInput(mediaType: .video, outputSettings: wSettings)
-                wInput.expectsMediaDataInRealTime = true
-                if wWriter.canAdd(wInput) {
-                    wWriter.add(wInput)
-                }
-                if wWriter.startWriting() {
-                    self.webcamWriter = wWriter
-                    self.webcamVideoInput = wInput
-                    self.isWebcamSessionStarted = false
+                    let wInput = AVAssetWriterInput(mediaType: .video, outputSettings: wSettings)
+                    wInput.expectsMediaDataInRealTime = true
+                    if wWriter.canAdd(wInput) {
+                        wWriter.add(wInput)
+                    }
+                    if wWriter.startWriting() {
+                        self.webcamWriter = wWriter
+                        self.webcamVideoInput = wInput
+                        self.isWebcamSessionStarted = false
+                        self.webcamFirstPTS = .invalid
+                    }
                 }
             }
         }
@@ -241,15 +245,24 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                     self.microphoneWriter = mWriter
                     self.microphoneAudioInput = mInput
                     self.isMicrophoneSessionStarted = false
+                    self.microphoneFirstPTS = .invalid
                 }
             }
         }
 
         session.commitConfiguration()
         self.avCaptureSession = session
+        if let vOut = session.outputs.compactMap({ $0 as? AVCaptureVideoDataOutput }).first {
+            // Also attach a live preview layer if the floating camera preview window is open during recording!
+            _ = vOut
+        }
         avDeviceQueue.async {
             session.startRunning()
         }
+    }
+
+    public var activeCaptureSession: AVCaptureSession? {
+        avCaptureSession
     }
 
     public func stopCapture() async {
@@ -401,21 +414,25 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             guard let wWriter = webcamWriter, wWriter.status == .writing,
                   let wInput = webcamVideoInput else { return }
             if !isWebcamSessionStarted {
-                wWriter.startSession(atSourceTime: pts)
+                webcamFirstPTS = pts
+                wWriter.startSession(atSourceTime: .zero)
                 isWebcamSessionStarted = true
             }
+            let zeroBasedBuffer = Self.adjustSampleBufferTime(adjusted, bySubtracting: webcamFirstPTS) ?? adjusted
             if wInput.isReadyForMoreMediaData {
-                wInput.append(adjusted)
+                wInput.append(zeroBasedBuffer)
             }
         } else if output is AVCaptureAudioDataOutput {
             guard let mWriter = microphoneWriter, mWriter.status == .writing,
                   let mInput = microphoneAudioInput else { return }
             if !isMicrophoneSessionStarted {
-                mWriter.startSession(atSourceTime: pts)
+                microphoneFirstPTS = pts
+                mWriter.startSession(atSourceTime: .zero)
                 isMicrophoneSessionStarted = true
             }
+            let zeroBasedBuffer = Self.adjustSampleBufferTime(adjusted, bySubtracting: microphoneFirstPTS) ?? adjusted
             if mInput.isReadyForMoreMediaData {
-                mInput.append(adjusted)
+                mInput.append(zeroBasedBuffer)
             }
         }
     }

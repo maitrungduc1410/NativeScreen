@@ -77,16 +77,21 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         }
 
         let editorView = ProjectEditorWindowView(session: session)
-            .ignoresSafeArea(.container, edges: .top)
+            .ignoresSafeArea()
             .frame(minWidth: 1180, minHeight: 740)
         let hostingController = NSHostingController(rootView: editorView)
+        if #available(macOS 13.0, *) {
+            hostingController.safeAreaRegions = []
+        }
         hostingController.sizingOptions = [.minSize]
 
-        let initialSize = NSSize(width: 1320, height: 840)
+        // Default every newly opened project Editor window to fill the active monitor's `visibleFrame` (maximized full screen)!
+        let targetScreen = WindowDiscoveryService.screenUnderMouse() ?? NSScreen.main ?? NSScreen.screens.first
+        let screenVisibleFrame = targetScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let minWinSize = NSSize(width: 1180, height: 740)
 
         let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: initialSize),
+            contentRect: screenVisibleFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -96,12 +101,12 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.contentViewController = hostingController
         window.minSize = minWinSize
         window.contentMinSize = minWinSize
-        window.setContentSize(initialSize)
         window.title = "\(session.document.name).nativescreen"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
         window.isMovableByWindowBackground = false
+        window.collectionBehavior = [.fullScreenPrimary]
 
         let toolbar = NSToolbar(identifier: "NativeScreenUnifiedToolbar-\(session.id.uuidString)")
         toolbar.showsBaselineSeparator = false
@@ -109,22 +114,15 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.toolbarStyle = .unified
 
         window.delegate = self
-        window.setFrame(NSRect(origin: .zero, size: initialSize), display: false)
-        window.center()
-
-        // Cascade slightly if multiple project windows are open simultaneously
-        let openCount = editorWindowsBySessionID.count
-        if openCount > 0 {
-            let offset = CGFloat(openCount * 26)
-            var frame = window.frame
-            frame.origin.x += offset
-            frame.origin.y -= offset
-            window.setFrame(frame, display: false)
-        }
+        window.setFrame(screenVisibleFrame, display: true)
 
         editorWindowsBySessionID[session.id] = window
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    public func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
+        return [.autoHideToolbar, .autoHideMenuBar, .fullScreen]
     }
 
     // MARK: - Standalone Movable Crop Window (`NSWindow` tied to Project Session)

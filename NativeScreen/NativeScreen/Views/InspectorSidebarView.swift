@@ -2150,7 +2150,9 @@ public struct InspectorSidebarView: View {
                                     title: label,
                                     isSelected: abs(cam.cutoutPositionX01 - xVal) < 0.1
                                 ) {
-                                    session.mutate { $0.camera.cutoutPositionX01 = xVal }
+                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                        session.mutate { $0.camera.cutoutPositionX01 = xVal }
+                                    }
                                 }
                             }
                         }
@@ -2680,7 +2682,7 @@ public struct InspectorSidebarView: View {
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.white.opacity(0.92))
 
-                HStack(spacing: 6) {
+                FlowLayoutWrapRow(spacing: 6) {
                     inspectorPillOptionButton(
                         title: "Local (Apple Speech)",
                         isSelected: cap.localModelVariant == "system"
@@ -2702,6 +2704,7 @@ public struct InspectorSidebarView: View {
                             Text("On-Device Whisper")
                                 .font(.system(size: 12.5, weight: .regular))
                                 .foregroundStyle(.white.opacity(cap.localModelVariant != "system" ? 0.98 : 0.72))
+                                .lineLimit(1)
 
                             if anyWhisperInstalled {
                                 Image(systemName: "checkmark.circle.fill")
@@ -2709,6 +2712,7 @@ public struct InspectorSidebarView: View {
                                     .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.48))
                             }
                         }
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 12)
                         .frame(height: 34)
                         .background(

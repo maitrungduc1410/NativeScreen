@@ -1,6 +1,8 @@
 import SwiftUI
 import AppKit
 import CoreImage
+import AVFoundation
+import CoreMedia
 
 // MARK: - 1. Live Webcam & Captions Canvas Overlay (Matches Camera Layout, Camera Style & Captions)
 
@@ -109,15 +111,32 @@ private struct WebcamPipCanvasView: View {
         let cornerRadius = min(pipWidth, pipHeight) * CGFloat(max(0.04, min(0.50, camCfg.borderRadiusRatio)))
 
         ZStack {
-            GradedWebcamPortraitView(
-                preset: camCfg.colorGradePreset,
-                intensity: camCfg.colorGradeIntensity,
-                sharpen01: camCfg.sharpen01,
-                mirror: camCfg.mirror,
-                cropRect01: camCfg.cropRect01,
-                enableFaceTracking: camCfg.enableFaceTracking,
-                isCutoutMode: camCfg.layoutMode == .cutout
-            )
+            if let webcamURL = session.webcamVideoFileURL {
+                RealRecordedWebcamVideoView(
+                    videoURL: webcamURL,
+                    sourceTimeMs: session.currentSourceTimeMs + camCfg.delayAdjustmentMs,
+                    isPlaying: session.isPlaying,
+                    playbackRate: session.previewPlaybackRate * (session.currentActiveSlice?.speed ?? 1.0),
+                    preset: camCfg.colorGradePreset,
+                    intensity: camCfg.colorGradeIntensity,
+                    sharpen01: camCfg.sharpen01,
+                    mirror: camCfg.mirror,
+                    cropRect01: camCfg.cropRect01,
+                    enableFaceTracking: camCfg.enableFaceTracking,
+                    isCutoutMode: camCfg.layoutMode == .cutout
+                )
+            } else {
+                GradedWebcamPortraitView(
+                    preset: camCfg.colorGradePreset,
+                    intensity: camCfg.colorGradeIntensity,
+                    sharpen01: camCfg.sharpen01,
+                    mirror: camCfg.mirror,
+                    cropRect01: camCfg.cropRect01,
+                    enableFaceTracking: camCfg.enableFaceTracking,
+                    isCutoutMode: camCfg.layoutMode == .cutout,
+                    webcamVideoURL: nil
+                )
+            }
         }
         .frame(width: pipWidth, height: pipHeight)
         .clipShape(
@@ -139,6 +158,230 @@ private struct WebcamPipCanvasView: View {
             y: 6
         )
         .position(x: posX, y: posY)
+        .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.cutoutPositionX01)
+        .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.position01)
+        .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.layoutMode)
+    }
+}
+
+/// Decodes and renders the real recorded `recording/webcam.mp4` video stream synchronized with the Editor playhead & hover skimming,
+/// applying live GPU CoreImage color grading (`Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`),
+/// sharpening, crop, horizontal mirror, and on-device Vision face tracking / person cutout!
+private struct RealRecordedWebcamVideoView: View {
+    let videoURL: URL
+    let sourceTimeMs: Double
+    let isPlaying: Bool
+    let playbackRate: Double
+    let preset: CameraColorGradePreset
+    let intensity: Double
+    let sharpen01: Double
+    let mirror: Bool
+    let cropRect01: Rect01
+    let enableFaceTracking: Bool
+    let isCutoutMode: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = max(1, geo.size.width)
+            let h = max(1, geo.size.height)
+            let scaleX = 1.0 / max(0.25, CGFloat(cropRect01.width))
+            let scaleY = 1.0 / max(0.25, CGFloat(cropRect01.height))
+            let faceZoom: CGFloat = enableFaceTracking ? 1.16 : 1.0
+            let offsetX = (0.5 - CGFloat(cropRect01.center.x)) * w * scaleX
+            let offsetY = (0.5 - CGFloat(cropRect01.center.y)) * h * scaleY
+
+            RecordedWebcamNSViewRepresentable(
+                videoURL: videoURL,
+                sourceTimeMs: max(0.0, sourceTimeMs),
+                isPlaying: isPlaying,
+                playbackRate: playbackRate,
+                preset: preset,
+                intensity: intensity,
+                sharpen01: sharpen01,
+                isCutoutMode: isCutoutMode
+            )
+            .frame(width: w, height: h)
+            .scaleEffect(
+                x: (mirror ? 1.0 : -1.0) * scaleX * faceZoom,
+                y: scaleY * faceZoom
+            )
+            .offset(x: offsetX, y: offsetY)
+        }
+    }
+}
+
+private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
+    let videoURL: URL
+    let sourceTimeMs: Double
+    let isPlaying: Bool
+    let playbackRate: Double
+    let preset: CameraColorGradePreset
+    let intensity: Double
+    let sharpen01: Double
+    let isCutoutMode: Bool
+
+    func makeNSView(context: Context) -> WebcamPlayerHostNSView {
+        let view = WebcamPlayerHostNSView()
+        view.update(
+            url: videoURL,
+            sourceTimeMs: sourceTimeMs,
+            isPlaying: isPlaying,
+            playbackRate: playbackRate,
+            preset: preset,
+            intensity: intensity,
+            sharpen01: sharpen01,
+            isCutoutMode: isCutoutMode
+        )
+        return view
+    }
+
+    func updateNSView(_ nsView: WebcamPlayerHostNSView, context: Context) {
+        nsView.update(
+            url: videoURL,
+            sourceTimeMs: sourceTimeMs,
+            isPlaying: isPlaying,
+            playbackRate: playbackRate,
+            preset: preset,
+            intensity: intensity,
+            sharpen01: sharpen01,
+            isCutoutMode: isCutoutMode
+        )
+    }
+
+    @MainActor
+    final class WebcamPlayerHostNSView: NSView {
+        private var loadedURL: URL?
+        private var player: AVPlayer?
+        private var playerLayer: AVPlayerLayer?
+        private var lastSeekedMs: Double = -1000.0
+        private var isSeeking: Bool = false
+        private var pendingSeekMs: Double? = nil
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layer?.backgroundColor = NSColor.clear.cgColor
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            playerLayer?.frame = bounds
+            CATransaction.commit()
+        }
+
+        func update(
+            url: URL,
+            sourceTimeMs: Double,
+            isPlaying: Bool,
+            playbackRate: Double,
+            preset: CameraColorGradePreset,
+            intensity: Double,
+            sharpen01: Double,
+            isCutoutMode: Bool
+        ) {
+            if loadedURL != url {
+                loadedURL = url
+                GradedWebcamPortraitView.preloadFirstFrameIfNeeded(from: url)
+                let asset = AVURLAsset(url: url)
+                let item = AVPlayerItem(asset: asset)
+
+                // Apply live GPU CoreImage color grading & sharpen via AVVideoComposition on the webcam AVPlayerItem!
+                item.videoComposition = AVVideoComposition(asset: asset, applyingCIFiltersWithHandler: { [weak self] request in
+                    guard let self = self else {
+                        request.finish(with: request.sourceImage, context: nil)
+                        return
+                    }
+                    var img = request.sourceImage
+                    if self.currentIsCutoutMode {
+                        img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(to: img)
+                    }
+                    img = LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
+                        to: img,
+                        preset: self.currentPreset,
+                        intensity: self.currentIntensity,
+                        sharpen01: self.currentSharpen01
+                    )
+                    request.finish(with: img, context: nil)
+                })
+
+                let avPlayer = AVPlayer(playerItem: item)
+                avPlayer.isMuted = true
+                self.player = avPlayer
+
+                playerLayer?.removeFromSuperlayer()
+                let pLayer = AVPlayerLayer(player: avPlayer)
+                pLayer.videoGravity = .resizeAspectFill
+                pLayer.frame = bounds
+                layer?.addSublayer(pLayer)
+                self.playerLayer = pLayer
+                lastSeekedMs = -1000.0
+                isSeeking = false
+            }
+
+            let styleChanged = (currentPreset != preset)
+                || (abs(currentIntensity - intensity) > 0.01)
+                || (abs(currentSharpen01 - sharpen01) > 0.01)
+                || (currentIsCutoutMode != isCutoutMode)
+
+            currentPreset = preset
+            currentIntensity = intensity
+            currentSharpen01 = sharpen01
+            currentIsCutoutMode = isCutoutMode
+
+            guard let player = player else { return }
+
+            if isPlaying {
+                let desiredRate = Float(max(0.25, min(4.0, playbackRate)))
+                let currentSec = CMTimeGetSeconds(player.currentTime())
+                let driftMs = abs((currentSec.isFinite ? currentSec * 1000.0 : 0.0) - sourceTimeMs)
+                if abs(player.rate - desiredRate) > 0.05 || (!isSeeking && driftMs > 220.0) {
+                    seekCoalesced(toMs: sourceTimeMs, fast: false)
+                    player.rate = desiredRate
+                }
+            } else {
+                if player.rate != 0 {
+                    player.pause()
+                }
+                if styleChanged || abs(sourceTimeMs - lastSeekedMs) > 8.0 {
+                    seekCoalesced(toMs: sourceTimeMs, fast: true)
+                }
+            }
+        }
+
+        private var currentPreset: CameraColorGradePreset = .original
+        private var currentIntensity: Double = 1.0
+        private var currentSharpen01: Double = 0.0
+        private var currentIsCutoutMode: Bool = false
+
+        private func seekCoalesced(toMs ms: Double, fast: Bool) {
+            guard let player = player else { return }
+            if isSeeking {
+                pendingSeekMs = ms
+                return
+            }
+            isSeeking = true
+            lastSeekedMs = ms
+            let cmTime = CMTime(seconds: max(0.0, ms / 1000.0), preferredTimescale: 600)
+            let tol = fast ? CMTime(seconds: 0.04, preferredTimescale: 600) : .zero
+            player.seek(to: cmTime, toleranceBefore: tol, toleranceAfter: tol) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    self.isSeeking = false
+                    if let next = self.pendingSeekMs {
+                        self.pendingSeekMs = nil
+                        if abs(next - self.lastSeekedMs) > 4.0 {
+                            self.seekCoalesced(toMs: next, fast: true)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -151,6 +394,7 @@ public struct GradedWebcamPortraitView: View {
     public let cropRect01: Rect01
     public let enableFaceTracking: Bool
     public let isCutoutMode: Bool
+    public var webcamVideoURL: URL?
 
     public init(
         preset: CameraColorGradePreset,
@@ -159,7 +403,8 @@ public struct GradedWebcamPortraitView: View {
         mirror: Bool = false,
         cropRect01: Rect01 = .full,
         enableFaceTracking: Bool = false,
-        isCutoutMode: Bool = false
+        isCutoutMode: Bool = false,
+        webcamVideoURL: URL? = nil
     ) {
         self.preset = preset
         self.intensity = intensity
@@ -168,6 +413,7 @@ public struct GradedWebcamPortraitView: View {
         self.cropRect01 = cropRect01
         self.enableFaceTracking = enableFaceTracking
         self.isCutoutMode = isCutoutMode
+        self.webcamVideoURL = webcamVideoURL
     }
 
     public var body: some View {
@@ -197,11 +443,44 @@ public struct GradedWebcamPortraitView: View {
                 )
                 .offset(x: offsetX, y: offsetY)
         }
+        .onAppear {
+            if let url = webcamVideoURL {
+                Self.preloadFirstFrameIfNeeded(from: url)
+            }
+        }
     }
 
     private static var imageCache: [String: NSImage] = [:]
+    private static var preloadedVideoURL: URL?
     private static let sharedCIContext = CIContext(options: [.useSoftwareRenderer: false])
     private static var basePortraitCIImage: CIImage = buildBasePortraitCIImage()
+
+    public static func preloadFirstFrameIfNeeded(from url: URL) {
+        guard preloadedVideoURL != url else { return }
+        preloadedVideoURL = url
+        Task.detached(priority: .userInitiated) {
+            let asset = AVURLAsset(url: url)
+            let gen = AVAssetImageGenerator(asset: asset)
+            gen.appliesPreferredTrackTransform = true
+            let cmTime = CMTime(seconds: 0.1, preferredTimescale: 600)
+            if let (cgImg, _) = try? await gen.image(at: cmTime) {
+                let rawCI = CIImage(cgImage: cgImg)
+                let side = max(1.0, min(rawCI.extent.width, rawCI.extent.height))
+                let cropOriginX = (rawCI.extent.width - side) * 0.5
+                let cropOriginY = (rawCI.extent.height - side) * 0.5
+                let square = rawCI
+                    .cropped(to: CGRect(x: cropOriginX, y: cropOriginY, width: side, height: side))
+                    .transformed(by: CGAffineTransform(translationX: -cropOriginX, y: -cropOriginY))
+                    .transformed(by: CGAffineTransform(scaleX: 240.0 / side, y: 240.0 / side))
+                    .cropped(to: CGRect(x: 0, y: 0, width: 240, height: 240))
+
+                await MainActor.run {
+                    basePortraitCIImage = square
+                    imageCache.removeAll()
+                }
+            }
+        }
+    }
 
     public static func cachedGradedPortraitImage(
         preset: CameraColorGradePreset,

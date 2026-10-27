@@ -242,6 +242,9 @@ public struct ProjectEditorWindowView: View {
                 }
                 .frame(height: max(52, trafficLightCenterY * 2.0))
                 .background(Color(red: 0.05, green: 0.05, blue: 0.07))
+                .background(
+                    HeaderDoubleClickZoomView()
+                )
                 .zIndex(80)
 
             Divider()
@@ -570,9 +573,6 @@ public struct ProjectEditorWindowView: View {
                     .zIndex(70)
                 }
                 .zIndex(1)
-
-                Divider()
-                    .zIndex(2)
 
                 InspectorSidebarView(session: session)
                     .zIndex(90)
@@ -1549,6 +1549,43 @@ private struct NativeScreen3DKeycapView: View {
     }
 }
 
+/// Handles dragging the window by its custom header bar AND zooming (`window.zoom(nil)`) immediately on double-click,
+/// even on the very first click before the user has manually resized the window!
+private struct HeaderDoubleClickZoomView: NSViewRepresentable {
+    func makeNSView(context: Context) -> HeaderDragAndZoomNSView {
+        HeaderDragAndZoomNSView()
+    }
+
+    func updateNSView(_ nsView: HeaderDragAndZoomNSView, context: Context) {}
+
+    final class HeaderDragAndZoomNSView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                guard let win = window, !win.styleMask.contains(.fullScreen) else { return }
+                let vf = (win.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+                let isCurrentlyMaximized = abs(win.frame.width - vf.width) < 12.0 && abs(win.frame.height - vf.height) < 12.0
+                if isCurrentlyMaximized {
+                    let restoredW = min(vf.width * 0.84, max(1240.0, vf.width - 180.0))
+                    let restoredH = min(vf.height * 0.84, max(780.0, vf.height - 120.0))
+                    let restoredRect = NSRect(
+                        x: round(vf.midX - restoredW * 0.5),
+                        y: round(vf.midY - restoredH * 0.5),
+                        width: round(restoredW),
+                        height: round(restoredH)
+                    )
+                    win.setFrame(restoredRect, display: true, animate: true)
+                } else {
+                    win.setFrame(vf, display: true, animate: true)
+                }
+            } else {
+                window?.performDrag(with: event)
+            }
+        }
+    }
+}
+
 /// Configures the hosting `NSWindow` to hide the default system title text, merge the titlebar seamlessly into our dark header,
 /// and report the exact pixel vertical center (`centerYFromTop`) and right edge (`rightEdgeX`) of the native `🔴 🟡 🟢` traffic lights.
 private struct WindowTitlebarCleaner: NSViewRepresentable {
@@ -1569,15 +1606,51 @@ private struct WindowTitlebarCleaner: NSViewRepresentable {
 
     private final class TrafficLightMeasuringView: NSView {
         var onMetricsChanged: ((CGFloat, CGFloat) -> Void)?
+        private var fullscreenObservers: [NSObjectProtocol] = []
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             configureWindowAndMeasure()
+
+            for obs in fullscreenObservers {
+                NotificationCenter.default.removeObserver(obs)
+            }
+            fullscreenObservers.removeAll()
+
+            if let win = window {
+                let names: [Notification.Name] = [
+                    NSWindow.didEnterFullScreenNotification,
+                    NSWindow.didExitFullScreenNotification,
+                    NSWindow.didResizeNotification
+                ]
+                for name in names {
+                    let token = NotificationCenter.default.addObserver(
+                        forName: name,
+                        object: win,
+                        queue: .main
+                    ) { [weak self] _ in
+                        self?.configureWindowAndMeasure()
+                    }
+                    fullscreenObservers.append(token)
+                }
+            }
+        }
+
+        deinit {
+            for obs in fullscreenObservers {
+                NotificationCenter.default.removeObserver(obs)
+            }
         }
 
         func configureWindowAndMeasure() {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self, let window = self.window else { return }
+                if window.styleMask.contains(.fullScreen) {
+                    // In native macOS full-screen mode, the traffic lights move into the auto-hidden menu bar,
+                    // so our header bar needs no left traffic-light inset!
+                    self.onMetricsChanged?(26.0, 4.0)
+                    return
+                }
                 if let closeBtn = window.standardWindowButton(.closeButton),
                    let zoomBtn = window.standardWindowButton(.zoomButton) {
                     let closeCenterInWin = closeBtn.convert(
