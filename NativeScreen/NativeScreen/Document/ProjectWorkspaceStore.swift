@@ -64,6 +64,10 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         return loaded
     }
 
+    ///Editor Window Minimum Dimensions.
+    public static let minEditorWindowWidth: CGFloat = 1280.0
+    public static let minEditorWindowHeight: CGFloat = 780.0
+
     /// Creates or brings to front the native macOS Editor `NSWindow` for the given `ProjectSession`.
     public func presentEditorWindow(for session: ProjectSession) {
         if !RecordingCoordinator.shared.isRecording {
@@ -76,18 +80,26 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
             return
         }
 
+        let minWinSize = NSSize(width: Self.minEditorWindowWidth, height: Self.minEditorWindowHeight)
+
         let editorView = ProjectEditorWindowView(session: session)
             .ignoresSafeArea(.container, edges: .top)
+            .frame(minWidth: Self.minEditorWindowWidth, minHeight: Self.minEditorWindowHeight)
         let hostingController = NSHostingController(rootView: editorView)
-        hostingController.sizingOptions = []
+        hostingController.sizingOptions = [.minSize]
 
-        // Default every newly opened project Editor window to fill the active monitor's `visibleFrame` (maximized full screen)!
+        // Default every newly opened project Editor window to fill the active monitor's `visibleFrame` (maximized)!
         let targetScreen = WindowDiscoveryService.screenUnderMouse() ?? NSScreen.main ?? NSScreen.screens.first
-        let screenVisibleFrame = targetScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let minWinSize = NSSize(width: 1180, height: 760)
+        let rawVisibleFrame = targetScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let initialFrame = NSRect(
+            x: rawVisibleFrame.origin.x,
+            y: rawVisibleFrame.origin.y,
+            width: max(minWinSize.width, rawVisibleFrame.width),
+            height: max(minWinSize.height, rawVisibleFrame.height)
+        )
 
         let window = NSWindow(
-            contentRect: screenVisibleFrame,
+            contentRect: initialFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -102,7 +114,10 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
         window.isMovableByWindowBackground = false
-        window.collectionBehavior = [.fullScreenPrimary]
+
+        // Match NativeScreen:
+        // Disable macOS native Full-Screen space mode so the green traffic light button shows `+` (Zoom / Move & Resize)!
+        window.collectionBehavior = [.fullScreenNone]
 
         let toolbar = NSToolbar(identifier: "NativeScreenUnifiedToolbar-\(session.id.uuidString)")
         toolbar.showsBaselineSeparator = false
@@ -110,25 +125,60 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.toolbarStyle = .unified
 
         window.delegate = self
-        window.setFrame(screenVisibleFrame, display: true)
+        window.setFrame(initialFrame, display: true)
 
         editorWindowsBySessionID[session.id] = window
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
 
-    public func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
-        return [.autoHideToolbar, .autoHideMenuBar, .fullScreen]
+    public func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        if editorWindowsBySessionID.values.contains(where: { $0 === sender }) {
+            return NSSize(
+                width: max(Self.minEditorWindowWidth, frameSize.width),
+                height: max(Self.minEditorWindowHeight, frameSize.height)
+            )
+        }
+        return frameSize
     }
 
-    public func windowWillEnterFullScreen(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        window.toolbar?.isVisible = false
+    public func windowWillUseStandardFrame(_ window: NSWindow, defaultFrame newFrame: NSRect) -> NSRect {
+        let vf = (window.screen ?? NSScreen.main)?.visibleFrame ?? newFrame
+        return NSRect(
+            x: vf.origin.x,
+            y: vf.origin.y,
+            width: max(Self.minEditorWindowWidth, vf.width),
+            height: max(Self.minEditorWindowHeight, vf.height)
+        )
     }
 
-    public func windowDidExitFullScreen(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        window.toolbar?.isVisible = true
+    public func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
+        toggleWindowZoom(window)
+        return false
+    }
+
+    public func toggleWindowZoom(_ window: NSWindow) {
+        let vf = (window.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let isCurrentlyMaximized = abs(window.frame.width - vf.width) < 12.0 && abs(window.frame.height - vf.height) < 12.0
+        if isCurrentlyMaximized {
+            let restoredW = max(Self.minEditorWindowWidth, round(vf.width * 0.86))
+            let restoredH = max(Self.minEditorWindowHeight, round(vf.height * 0.86))
+            let restoredRect = NSRect(
+                x: round(vf.midX - restoredW * 0.5),
+                y: round(vf.midY - restoredH * 0.5),
+                width: restoredW,
+                height: restoredH
+            )
+            window.setFrame(restoredRect, display: true, animate: true)
+        } else {
+            let maxRect = NSRect(
+                x: vf.origin.x,
+                y: vf.origin.y,
+                width: max(Self.minEditorWindowWidth, vf.width),
+                height: max(Self.minEditorWindowHeight, vf.height)
+            )
+            window.setFrame(maxRect, display: true, animate: true)
+        }
     }
 
     // MARK: - Standalone Movable Crop Window (`NSWindow` tied to Project Session)
