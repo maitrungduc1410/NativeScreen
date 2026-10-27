@@ -164,15 +164,8 @@ public final class MetalFrameCompositor {
             guard doc.camera.enabled && session.hasRecordedCamera && doc.camera.layoutMode == .splitScreen else {
                 return false
             }
-            if let minSilenceMs = doc.camera.hideDuringSilenceMs {
-                let segs = doc.captions.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
-                for i in 0..<(segs.count - 1) {
-                    let gapStart = segs[i].sourceEndMs
-                    let gapEnd = segs[i + 1].sourceStartMs
-                    if (gapEnd - gapStart) >= minSilenceMs && sourceTimeMs >= gapStart + 150.0 && sourceTimeMs <= gapEnd - 150.0 {
-                        return false
-                    }
-                }
+            if session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
+                return false
             }
             return true
         }()
@@ -403,7 +396,7 @@ public final class MetalFrameCompositor {
 
         // --- PASS 6: 3D Keyboard Shortcut Keycaps + Camera & Captions Overlay (For Video/GIF/Still-Frame Export!) ---
         if includeShortcutOverlay {
-            if doc.camera.enabled && session.hasRecordedCamera {
+            if doc.camera.enabled && session.hasRecordedCamera && !session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
                 composite = renderWebcamOverlayForExport(
                     over: composite,
                     camCfg: doc.camera,

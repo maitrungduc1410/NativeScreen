@@ -24,19 +24,7 @@ public struct PreviewCameraAndCaptionsOverlayView: View {
         ZStack {
             // A. Selfie Camera Overlay (`Camera overlay` | `Split screen` | `Camera cutout`)
             if camCfg.enabled && session.hasRecordedCamera {
-                let isSilentHidden: Bool = {
-                    guard let minSilenceMs = camCfg.hideDuringSilenceMs else { return false }
-                    // Check if `sourceMs` falls inside a long silent gap (`>= minSilenceMs`) between spoken words
-                    let segs = capCfg.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
-                    for i in 0..<(segs.count - 1) {
-                        let gapStart = segs[i].sourceEndMs
-                        let gapEnd = segs[i + 1].sourceStartMs
-                        if (gapEnd - gapStart) >= minSilenceMs && sourceMs >= gapStart + 150.0 && sourceMs <= gapEnd - 150.0 {
-                            return true
-                        }
-                    }
-                    return false
-                }()
+                let isSilentHidden = session.isCameraHiddenDuringSilence(atSourceMs: sourceMs)
 
                 if !isSilentHidden {
                     WebcamPipCanvasView(

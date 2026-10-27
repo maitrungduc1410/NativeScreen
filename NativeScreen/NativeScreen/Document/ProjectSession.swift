@@ -2718,6 +2718,56 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    /// Evaluates whether the camera should be hidden at `sourceMs` due to `Hide during silence` (`hideDuringSilenceMs`),
+    /// checking both transcript inter-word gaps (when a transcript exists) and recorded audio waveform envelopes
+    /// (with a safe `count >= 2` guard so `0..<(segs.count - 1)` can NEVER crash when `segs` is empty!).
+    public func isCameraHiddenDuringSilence(atSourceMs sourceMs: Double) -> Bool {
+        guard let minSilenceMs = document.camera.hideDuringSilenceMs, minSilenceMs > 100.0 else {
+            return false
+        }
+
+        // 1. Check transcript inter-word gaps when >= 2 caption segments exist
+        let segs = document.captions.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        if segs.count >= 2 {
+            for i in 0..<(segs.count - 1) {
+                let gapStart = segs[i].sourceEndMs
+                let gapEnd = segs[i + 1].sourceStartMs
+                if (gapEnd - gapStart) >= minSilenceMs && sourceMs >= gapStart + 150.0 && sourceMs <= gapEnd - 150.0 {
+                    return true
+                }
+            }
+            return false
+        }
+
+        // 2. Fallback when no transcript has been generated yet: check `microphoneWaveformSamples` (or `audioWaveformSamples`)
+        let waveform = !microphoneWaveformSamples.isEmpty ? microphoneWaveformSamples : audioWaveformSamples
+        let totalMs = max(1.0, metadata.durationMs)
+        guard waveform.count >= 8, totalMs > minSilenceMs else { return false }
+
+        let msPerBin = totalMs / Double(waveform.count)
+        let currentBin = max(0, min(waveform.count - 1, Int(sourceMs / msPerBin)))
+        let silenceThreshold: Float = 0.08
+        guard waveform[currentBin] < silenceThreshold else { return false }
+
+        var startBin = currentBin
+        while startBin > 0 && waveform[startBin - 1] < silenceThreshold {
+            startBin -= 1
+        }
+        var endBin = currentBin
+        while endBin + 1 < waveform.count && waveform[endBin + 1] < silenceThreshold {
+            endBin += 1
+        }
+
+        let silentRunStartMs = Double(startBin) * msPerBin
+        let silentRunEndMs = Double(endBin + 1) * msPerBin
+        if (silentRunEndMs - silentRunStartMs) >= minSilenceMs
+            && sourceMs >= silentRunStartMs + 150.0
+            && sourceMs <= silentRunEndMs - 150.0 {
+            return true
+        }
+        return false
+    }
+
     /// Returns all inter-word silence pauses `>= 800ms` that are still present in the timeline slices and can be tightened.
     public var tightenablePauseRangesMs: [(startMs: Double, endMs: Double)] {
         let segs = document.captions.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
