@@ -2132,25 +2132,116 @@ public struct InspectorSidebarView: View {
                         }
                     }
                 } else if cam.layoutMode == .splitScreen {
-                    coalescedSlider(
-                        title: "Split ratio",
-                        value: Binding(
-                            get: { cam.splitScreenRatio01 },
-                            set: { v in session.mutate { $0.camera.splitScreenRatio01 = v } }
-                        ),
-                        range: 0.25...0.75,
-                        defaultValue: 0.50
-                    )
+                    // 1. `Split ratio` 3-Card Picker
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Split ratio")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
 
+                        SplitScreenRatioCardsPicker(
+                            ratio01: Binding(
+                                get: { cam.splitScreenRatio01 },
+                                set: { newRatio in
+                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                        session.mutate { $0.camera.splitScreenRatio01 = newRatio }
+                                    }
+                                }
+                            ),
+                            isFlipped: cam.splitFlip
+                        )
+                    }
+
+                    // 2. `Flip` Toggle
                     inspectorToggleRow(
                         title: "Flip",
                         icon: nil,
                         description: "If enabled, the layout will be flipped.",
                         isOn: Binding(
                             get: { cam.splitFlip },
-                            set: { v in session.mutate { $0.camera.splitFlip = v } }
+                            set: { v in
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                    session.mutate { $0.camera.splitFlip = v }
+                                }
+                            }
                         )
                     )
+
+                    // 3. `Fill`
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Fill")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+
+                            Text(
+                                cam.splitEnablePadding
+                                    ? "Has padding around and between screen and camera"
+                                    : "Split layout fills the entire screen."
+                            )
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.42))
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 6)
+
+                        HStack(spacing: 6) {
+                            inspectorPillOptionButton(
+                                title: "Fullscreen",
+                                isSelected: !cam.splitEnablePadding,
+                                horizontalPadding: 11
+                            ) {
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                    session.mutate { $0.camera.splitEnablePadding = false }
+                                }
+                            }
+
+                            inspectorPillOptionButton(
+                                title: "Padded",
+                                isSelected: cam.splitEnablePadding,
+                                horizontalPadding: 11
+                            ) {
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                    session.mutate {
+                                        $0.camera.splitEnablePadding = true
+                                        if $0.canvas.paddingRatio < 0.01 {
+                                            $0.canvas.paddingRatio = 0.10
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. `Padding` Slider with 3D Cube Icon Badge when `Padded` is selected
+                    if cam.splitEnablePadding {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .fill(Color.white.opacity(0.06))
+                                        .frame(width: 24, height: 22)
+                                    Image(systemName: "cube.transparent")
+                                        .font(.system(size: 11.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.75))
+                                }
+                                .help("Padding value is shared across all layouts in the project.")
+
+                                Text("Padding")
+                                    .font(.system(size: 13, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.92))
+                            }
+
+                            coalescedSliderRowOnly(
+                                value: Binding(
+                                    get: { session.document.canvas.paddingRatio },
+                                    set: { v in session.mutate { $0.canvas.paddingRatio = v } }
+                                ),
+                                range: 0.0...0.40,
+                                defaultValue: 0.10
+                            )
+                        }
+                    }
                 } else if cam.layoutMode == .cutout {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Camera Position")
@@ -2280,7 +2371,9 @@ public struct InspectorSidebarView: View {
                 inspectorDivider
 
                 // 7. `Camera rounded corners` & `Hide during silence`
-                if cam.layoutMode != .cutout {
+                let showCameraRoundedCorners = (cam.layoutMode == .overlay)
+                    || (cam.layoutMode == .splitScreen && cam.splitEnablePadding)
+                if showCameraRoundedCorners {
                     coalescedSlider(
                         title: "Camera rounded corners",
                         value: Binding(
@@ -2290,6 +2383,13 @@ public struct InspectorSidebarView: View {
                         range: 0.0...0.50,
                         defaultValue: 0.22
                     )
+
+                    if cam.layoutMode == .splitScreen && session.document.canvas.paddingRatio <= 0.005 {
+                        Text("For split screen layout, when padding is 0, the camera border radius will only be applied during zoom.")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.42))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     inspectorDivider
                 }
@@ -3674,6 +3774,140 @@ public struct InspectorSidebarView: View {
                 }
             }
             .frame(height: 44)
+        }
+    }
+
+    /// 3-Card `Split ratio` Picker
+    private struct SplitScreenRatioCardsPicker: View {
+        @Binding var ratio01: Double
+        let isFlipped: Bool
+
+        private var isAutoSelected: Bool {
+            ratio01 <= 0.01
+        }
+
+        private var isHalfSelected: Bool {
+            abs(ratio01 - 0.5) < 0.05
+        }
+
+        private var isTwoThirdsSelected: Bool {
+            abs(ratio01 - (2.0 / 3.0)) < 0.05
+        }
+
+        var body: some View {
+            HStack(spacing: 8) {
+                // 1. `Auto` Card
+                Button {
+                    ratio01 = 0.0
+                } label: {
+                    ZStack {
+                        splitCardBackground(isSelected: isAutoSelected)
+                        Text("Auto")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(isAutoSelected ? 0.96 : 0.72))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 60)
+                }
+                .buttonStyle(.plain)
+
+                // 2. `½ | ½` Card (`screenRatio01 = 0.5`)
+                Button {
+                    ratio01 = 0.5
+                } label: {
+                    ZStack {
+                        splitCardBackground(isSelected: isHalfSelected)
+
+                        GeometryReader { geo in
+                            let w = max(10, geo.size.width - 8)
+                            let h = max(10, geo.size.height - 8)
+                            HStack(spacing: 2) {
+                                splitSubPane(label: "½", isSelected: isHalfSelected)
+                                    .frame(width: (w - 2) * 0.5, height: h)
+                                splitSubPane(label: "½", isSelected: isHalfSelected)
+                                    .frame(width: (w - 2) * 0.5, height: h)
+                            }
+                            .padding(4)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 60)
+                }
+                .buttonStyle(.plain)
+
+                // 3. `⅔ | ⅓` Card
+                Button {
+                    ratio01 = 2.0 / 3.0
+                } label: {
+                    ZStack {
+                        splitCardBackground(isSelected: isTwoThirdsSelected)
+
+                        GeometryReader { geo in
+                            let w = max(10, geo.size.width - 8)
+                            let h = max(10, geo.size.height - 8)
+                            let leftShare: CGFloat = isFlipped ? (1.0 / 3.0) : (2.0 / 3.0)
+                            let rightShare: CGFloat = 1.0 - leftShare
+                            let leftLabel = isFlipped ? "⅓" : "⅔"
+                            let rightLabel = isFlipped ? "⅔" : "⅓"
+
+                            HStack(spacing: 2) {
+                                splitSubPane(label: leftLabel, isSelected: isTwoThirdsSelected)
+                                    .frame(width: (w - 2) * leftShare, height: h)
+                                splitSubPane(label: rightLabel, isSelected: isTwoThirdsSelected)
+                                    .frame(width: (w - 2) * rightShare, height: h)
+                            }
+                            .padding(4)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 60)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
+        @ViewBuilder
+        private func splitCardBackground(isSelected: Bool) -> some View {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(
+                    isSelected
+                        ? Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.22)
+                        : Color.white.opacity(0.035)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(
+                            isSelected
+                                ? Color(red: 0.48, green: 0.36, blue: 1.0)
+                                : Color.white.opacity(0.08),
+                            lineWidth: isSelected ? 1.5 : 1.0
+                        )
+                )
+        }
+
+        @ViewBuilder
+        private func splitSubPane(label: String, isSelected: Bool) -> some View {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? Color(red: 0.38, green: 0.24, blue: 0.96).opacity(0.25)
+                            : Color.white.opacity(0.03)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(
+                                isSelected
+                                    ? Color(red: 0.52, green: 0.40, blue: 1.0).opacity(0.45)
+                                    : Color.white.opacity(0.06),
+                                lineWidth: 1.0
+                            )
+                    )
+
+                Text(label)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.96 : 0.72))
+            }
         }
     }
 

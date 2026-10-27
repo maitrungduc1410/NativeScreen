@@ -77,10 +77,40 @@ private struct WebcamPipCanvasView: View {
             ? CGFloat(1.0 - (1.0 - camCfg.scaleWhenZoomed) * zoomProgress01)
             : 1.0
 
+        let crop01 = session.document.canvas.cropRect01
+        let sourceScreenSize = CGSize(
+            width: max(640.0, Double(session.metadata.captureTarget.pixelSize.width) * crop01.width),
+            height: max(400.0, Double(session.metadata.captureTarget.pixelSize.height) * crop01.height)
+        )
+        let splitGeo = MetalFrameCompositor.computeSplitScreenGeometry(
+            canvasSize: canvasSize,
+            sourceScreenSize: sourceScreenSize,
+            cameraConfig: camCfg,
+            canvasPaddingRatio: session.document.canvas.paddingRatio
+        )
+
         let aspect = CGFloat(camCfg.aspectRatioPreset.aspectValue)
         let baseRef = min(canvasSize.width, canvasSize.height)
-        let pipHeight = max(64.0, baseRef * CGFloat(camCfg.sizeRatio) * 0.58 * zoomScaleMultiplier)
-        let pipWidth = max(64.0, pipHeight * aspect)
+        let overlayHeight = max(64.0, baseRef * CGFloat(camCfg.sizeRatio) * 0.58 * zoomScaleMultiplier)
+        let overlayWidth = max(64.0, overlayHeight * aspect)
+
+        // In Split Screen mode, when unzoomed (`zoomProgress01 == 0`) the camera occupies `splitGeo.cameraRect`,
+        // and during active zoom (`zoomProgress01 > 0`) it smoothly transitions toward its corner overlay variant (`getCameraOverlayVariant`).
+        let splitZoomedSide = max(84.0, baseRef * 0.34)
+        let pipWidth: CGFloat = {
+            if camCfg.layoutMode == .splitScreen {
+                let t = CGFloat(zoomProgress01)
+                return splitGeo.cameraRect.width + (splitZoomedSide - splitGeo.cameraRect.width) * t
+            }
+            return overlayWidth
+        }()
+        let pipHeight: CGFloat = {
+            if camCfg.layoutMode == .splitScreen {
+                let t = CGFloat(zoomProgress01)
+                return splitGeo.cameraRect.height + (splitZoomedSide - splitGeo.cameraRect.height) * t
+            }
+            return overlayHeight
+        }()
 
         let margin: CGFloat = max(16.0, baseRef * 0.035)
         let availW = max(1.0, canvasSize.width - pipWidth - margin * 2.0)
@@ -93,7 +123,12 @@ private struct WebcamPipCanvasView: View {
             case .cutout:
                 return margin + CGFloat(max(0.0, min(1.0, camCfg.cutoutPositionX01))) * availW + pipWidth * 0.5
             case .splitScreen:
-                return camCfg.splitFlip ? (pipWidth * 0.5 + margin) : (canvasSize.width - pipWidth * 0.5 - margin)
+                let baseMidX = splitGeo.cameraRect.midX
+                let zoomedCornerX = camCfg.splitFlip
+                    ? (margin + pipWidth * 0.5)
+                    : (canvasSize.width - margin - pipWidth * 0.5)
+                let t = CGFloat(zoomProgress01)
+                return baseMidX + (zoomedCornerX - baseMidX) * t
             }
         }()
 
@@ -104,11 +139,34 @@ private struct WebcamPipCanvasView: View {
             case .cutout:
                 return canvasSize.height - pipHeight * 0.46
             case .splitScreen:
-                return canvasSize.height * 0.5
+                let isHorizontal = (canvasSize.width >= canvasSize.height)
+                let baseMidY = isHorizontal
+                    ? splitGeo.cameraRect.midY
+                    : (canvasSize.height - splitGeo.cameraRect.midY)
+                let zoomedCornerY = canvasSize.height - margin - pipHeight * 0.5
+                let t = CGFloat(zoomProgress01)
+                return baseMidY + (zoomedCornerY - baseMidY) * t
             }
         }()
 
-        let cornerRadius = min(pipWidth, pipHeight) * CGFloat(max(0.04, min(0.50, camCfg.borderRadiusRatio)))
+        let effectiveCornerRadius: CGFloat = {
+            switch camCfg.layoutMode {
+            case .cutout:
+                return pipWidth * 0.36
+            case .splitScreen:
+                let baseRadius = min(pipWidth, pipHeight) * CGFloat(max(0.0, min(0.50, camCfg.borderRadiusRatio)))
+                if splitGeo.hasPadding {
+                    return baseRadius
+                } else {
+                    //: "For split screen layout, when padding is 0, the camera border radius will only be applied during zoom."
+                    return baseRadius * CGFloat(zoomProgress01)
+                }
+            case .overlay:
+                return min(pipWidth, pipHeight) * CGFloat(max(0.0, min(0.50, camCfg.borderRadiusRatio)))
+            }
+        }()
+        let isFullscreenSplitUnzoomed = (camCfg.layoutMode == .splitScreen && !splitGeo.hasPadding && zoomProgress01 < 0.02)
+
         let activeCustomPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
             camCfg.customColorPresets.first(where: { $0.id == id })
         }
@@ -148,19 +206,22 @@ private struct WebcamPipCanvasView: View {
         .frame(width: pipWidth, height: pipHeight)
         .clipShape(
             RoundedRectangle(
-                cornerRadius: camCfg.layoutMode == .cutout ? pipWidth * 0.36 : cornerRadius,
+                cornerRadius: effectiveCornerRadius,
                 style: .continuous
             )
         )
         .overlay(
             RoundedRectangle(
-                cornerRadius: camCfg.layoutMode == .cutout ? pipWidth * 0.36 : cornerRadius,
+                cornerRadius: effectiveCornerRadius,
                 style: .continuous
             )
-            .strokeBorder(Color.white.opacity(camCfg.layoutMode == .cutout ? 0.0 : 0.16), lineWidth: 1.0)
+            .strokeBorder(
+                Color.white.opacity((camCfg.layoutMode == .cutout || isFullscreenSplitUnzoomed) ? 0.0 : 0.14),
+                lineWidth: 1.0
+            )
         )
         .shadow(
-            color: .black.opacity(camCfg.layoutMode == .cutout ? 0.35 : 0.48),
+            color: .black.opacity(isFullscreenSplitUnzoomed ? 0.0 : (camCfg.layoutMode == .cutout ? 0.35 : 0.45)),
             radius: 16,
             y: 6
         )
@@ -168,6 +229,9 @@ private struct WebcamPipCanvasView: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.cutoutPositionX01)
         .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.position01)
         .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.layoutMode)
+        .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.splitScreenRatio01)
+        .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.splitFlip)
+        .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.splitEnablePadding)
     }
 }
 

@@ -160,11 +160,40 @@ public final class MetalFrameCompositor {
         }
 
         // --- PASS 3: Screen Rounded Corners, Drop Shadow & Camera Zoom/Pan Transform ---
-        let screenFrameRect = calculateFittedScreenRect(
-            sourceSize: maskedScreen.extent.size,
-            inCanvas: canvasRect,
-            paddingRatio: CGFloat(doc.canvas.paddingRatio)
-        )
+        let isSplitScreenActive: Bool = {
+            guard doc.camera.enabled && session.hasRecordedCamera && doc.camera.layoutMode == .splitScreen else {
+                return false
+            }
+            if let minSilenceMs = doc.camera.hideDuringSilenceMs {
+                let segs = doc.captions.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
+                for i in 0..<(segs.count - 1) {
+                    let gapStart = segs[i].sourceEndMs
+                    let gapEnd = segs[i + 1].sourceStartMs
+                    if (gapEnd - gapStart) >= minSilenceMs && sourceTimeMs >= gapStart + 150.0 && sourceTimeMs <= gapEnd - 150.0 {
+                        return false
+                    }
+                }
+            }
+            return true
+        }()
+
+        let screenFrameRect: CGRect = {
+            if isSplitScreenActive {
+                let splitGeo = Self.computeSplitScreenGeometry(
+                    canvasSize: outputSize,
+                    sourceScreenSize: maskedScreen.extent.size,
+                    cameraConfig: doc.camera,
+                    canvasPaddingRatio: doc.canvas.paddingRatio
+                )
+                return splitGeo.screenRect
+            } else {
+                return calculateFittedScreenRect(
+                    sourceSize: maskedScreen.extent.size,
+                    inCanvas: canvasRect,
+                    paddingRatio: CGFloat(doc.canvas.paddingRatio)
+                )
+            }
+        }()
 
         let scaleX = screenFrameRect.width / max(1.0, maskedScreen.extent.width)
         let scaleY = screenFrameRect.height / max(1.0, maskedScreen.extent.height)
@@ -271,8 +300,13 @@ public final class MetalFrameCompositor {
         if zoomScale > 1.002 && !cameraState.isLoupeMode {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
-            let canvasCenterX = canvasRect.midX
-            let canvasCenterY = canvasRect.midY
+            let zoomInterp01 = min(1.0, max(0.0, (zoomScale - 1.0) / 0.5))
+            let canvasCenterX = isSplitScreenActive
+                ? (screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zoomInterp01)
+                : canvasRect.midX
+            let canvasCenterY = isSplitScreenActive
+                ? (screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zoomInterp01)
+                : canvasRect.midY
 
             var cameraTransform = CGAffineTransform.identity
             cameraTransform = cameraTransform.translatedBy(x: canvasCenterX, y: canvasCenterY)
@@ -373,6 +407,8 @@ public final class MetalFrameCompositor {
                 composite = renderWebcamOverlayForExport(
                     over: composite,
                     camCfg: doc.camera,
+                    sourceScreenSize: maskedScreen.extent.size,
+                    canvasPaddingRatio: doc.canvas.paddingRatio,
                     currentZoomScale: cameraState.scale,
                     canvasRect: canvasRect
                 )
@@ -402,11 +438,152 @@ public final class MetalFrameCompositor {
         return composite
     }
 
-    public func screenFrameRectInCanvas(session: ProjectSession, canvasSize: CGSize) -> CGRect {
-        let rawSize = CGSize(
-            width: max(640, session.metadata.captureTarget.pixelSize.width),
-            height: max(400, session.metadata.captureTarget.pixelSize.height)
+    public struct SplitScreenStageGeometry: Equatable, Sendable {
+        public let screenRect: CGRect
+        public let cameraRect: CGRect
+        public let zoomArea: CGRect
+        public let hasPadding: Bool
+        public let padPx: CGFloat
+    }
+
+    /// Exact Split-Screen Stage Geometry:
+    /// Computes both the Screen region (`screenRect` fitted inside `zoomArea`) and the Camera region (`cameraRect`)
+    /// for `Auto` (`<= 0`), `½ | ½` (`0.5`), and `⅔ | ⅓` (`2/3`), honoring `splitFlip` and `splitEnablePadding` (`Fullscreen` vs `Padded`).
+    public static func computeSplitScreenGeometry(
+        canvasSize: CGSize,
+        sourceScreenSize: CGSize,
+        cameraConfig: CameraConfig,
+        canvasPaddingRatio: Double
+    ) -> SplitScreenStageGeometry {
+        let hasPadding = cameraConfig.splitEnablePadding && canvasPaddingRatio > 0.001
+        let clampedRatio = hasPadding ? min(0.45, max(0.0, CGFloat(canvasPaddingRatio))) : 0.0
+        let shortestSide = min(canvasSize.width, canvasSize.height)
+        let padPx = (shortestSide - shortestSide / (1.0 + 2.0 * clampedRatio)) * 0.5
+        let area = CGRect(
+            x: padPx,
+            y: padPx,
+            width: max(64.0, canvasSize.width - padPx * 2.0),
+            height: max(64.0, canvasSize.height - padPx * 2.0)
         )
+
+        let screenAspect = max(0.2, sourceScreenSize.width / max(1.0, sourceScreenSize.height))
+        let isHorizontal = (canvasSize.width >= canvasSize.height)
+
+        if isHorizontal {
+            let availW = max(64.0, area.width - padPx)
+            let cameraW: CGFloat
+            if cameraConfig.splitScreenRatio01 <= 0.01 {
+                // `Auto` ratio
+                let naturalScreenW = min(availW * 0.68, area.height * screenAspect)
+                let rawCamW = availW - naturalScreenW
+                if (rawCamW / max(1.0, area.height)) > 0.40 {
+                    cameraW = min(availW * 0.62, rawCamW)
+                } else {
+                    cameraW = min(availW * 0.50, area.height * 0.50)
+                }
+            } else {
+                // Explicit `½ | ½` (`0.5`) or `⅔ | ⅓` (`2/3`) ratio
+                let screenShare = CGFloat(max(0.25, min(0.75, cameraConfig.splitScreenRatio01)))
+                let cameraShare = 1.0 - screenShare
+                let rawCamW = availW * cameraShare
+                if (rawCamW / max(1.0, area.height)) > 0.40 {
+                    cameraW = rawCamW
+                } else {
+                    cameraW = min(availW * 0.50, area.height * 0.50)
+                }
+            }
+
+            let zoomAreaW = max(64.0, availW - cameraW)
+            let zoomArea: CGRect
+            let cameraRect: CGRect
+            if cameraConfig.splitFlip {
+                // Flipped: Camera on Left, Screen on Right ( & 2!)
+                cameraRect = CGRect(x: area.minX, y: area.minY, width: cameraW, height: area.height)
+                zoomArea = CGRect(x: area.maxX - zoomAreaW, y: area.minY, width: zoomAreaW, height: area.height)
+            } else {
+                // Default: Screen on Left, Camera on Right ( & 4!)
+                zoomArea = CGRect(x: area.minX, y: area.minY, width: zoomAreaW, height: area.height)
+                cameraRect = CGRect(x: area.maxX - cameraW, y: area.minY, width: cameraW, height: area.height)
+            }
+
+            // Fit screen inside `zoomArea`
+            let maxScreenH = hasPadding ? (zoomArea.height * 0.90) : zoomArea.height
+            var sw = zoomArea.width
+            var sh = sw / screenAspect
+            if sh > maxScreenH {
+                sh = maxScreenH
+                sw = sh * screenAspect
+            }
+            let screenRect = CGRect(
+                x: zoomArea.midX - sw * 0.5,
+                y: zoomArea.midY - sh * 0.5,
+                width: sw,
+                height: sh
+            )
+            return SplitScreenStageGeometry(
+                screenRect: screenRect,
+                cameraRect: cameraRect,
+                zoomArea: zoomArea,
+                hasPadding: hasPadding,
+                padPx: padPx
+            )
+        } else {
+            // Vertical split for portrait canvases (e.g. 9:16)
+            let availH = max(64.0, area.height - padPx)
+            let screenShare: CGFloat = (cameraConfig.splitScreenRatio01 <= 0.01)
+                ? 0.50
+                : CGFloat(max(0.25, min(0.75, cameraConfig.splitScreenRatio01)))
+            let cameraH = availH * (1.0 - screenShare)
+            let zoomAreaH = max(64.0, availH - cameraH)
+
+            let zoomArea: CGRect
+            let cameraRect: CGRect
+            if cameraConfig.splitFlip {
+                cameraRect = CGRect(x: area.minX, y: area.minY, width: area.width, height: cameraH)
+                zoomArea = CGRect(x: area.minX, y: area.maxY - zoomAreaH, width: area.width, height: zoomAreaH)
+            } else {
+                zoomArea = CGRect(x: area.minX, y: area.minY, width: area.width, height: zoomAreaH)
+                cameraRect = CGRect(x: area.minX, y: area.maxY - cameraH, width: area.width, height: cameraH)
+            }
+
+            let maxScreenW = hasPadding ? (zoomArea.width * 0.90) : zoomArea.width
+            var sh = zoomArea.height
+            var sw = sh * screenAspect
+            if sw > maxScreenW {
+                sw = maxScreenW
+                sh = sw / screenAspect
+            }
+            let screenRect = CGRect(
+                x: zoomArea.midX - sw * 0.5,
+                y: zoomArea.midY - sh * 0.5,
+                width: sw,
+                height: sh
+            )
+            return SplitScreenStageGeometry(
+                screenRect: screenRect,
+                cameraRect: cameraRect,
+                zoomArea: zoomArea,
+                hasPadding: hasPadding,
+                padPx: padPx
+            )
+        }
+    }
+
+    public func screenFrameRectInCanvas(session: ProjectSession, canvasSize: CGSize) -> CGRect {
+        let crop01 = session.document.canvas.cropRect01
+        let rawSize = CGSize(
+            width: max(640.0, Double(session.metadata.captureTarget.pixelSize.width) * crop01.width),
+            height: max(400.0, Double(session.metadata.captureTarget.pixelSize.height) * crop01.height)
+        )
+        let doc = session.document
+        if doc.camera.enabled && session.hasRecordedCamera && doc.camera.layoutMode == .splitScreen {
+            return Self.computeSplitScreenGeometry(
+                canvasSize: canvasSize,
+                sourceScreenSize: rawSize,
+                cameraConfig: doc.camera,
+                canvasPaddingRatio: doc.canvas.paddingRatio
+            ).screenRect
+        }
         return calculateFittedScreenRect(
             sourceSize: rawSize,
             inCanvas: CGRect(origin: .zero, size: canvasSize),
@@ -1207,6 +1384,8 @@ public final class MetalFrameCompositor {
     private func renderWebcamOverlayForExport(
         over background: CIImage,
         camCfg: CameraConfig,
+        sourceScreenSize: CGSize,
+        canvasPaddingRatio: Double,
         currentZoomScale: Double,
         canvasRect: CGRect
     ) -> CIImage {
@@ -1215,20 +1394,68 @@ public final class MetalFrameCompositor {
             ? CGFloat(1.0 - (1.0 - camCfg.scaleWhenZoomed) * zoomProgress01)
             : 1.0
 
+        let splitGeo = Self.computeSplitScreenGeometry(
+            canvasSize: canvasRect.size,
+            sourceScreenSize: sourceScreenSize,
+            cameraConfig: camCfg,
+            canvasPaddingRatio: canvasPaddingRatio
+        )
+
         let aspect = CGFloat(camCfg.aspectRatioPreset.aspectValue)
         let baseRef = min(canvasRect.width, canvasRect.height)
-        let pipHeight = max(64.0, baseRef * CGFloat(camCfg.sizeRatio) * 0.58 * zoomScaleMultiplier)
-        let pipWidth = max(64.0, pipHeight * aspect)
+        let overlayHeight = max(64.0, baseRef * CGFloat(camCfg.sizeRatio) * 0.58 * zoomScaleMultiplier)
+        let overlayWidth = max(64.0, overlayHeight * aspect)
+
+        let splitZoomedSide = max(84.0, baseRef * 0.34)
+        let pipWidth: CGFloat = (camCfg.layoutMode == .splitScreen)
+            ? (splitGeo.cameraRect.width + (splitZoomedSide - splitGeo.cameraRect.width) * CGFloat(zoomProgress01))
+            : overlayWidth
+        let pipHeight: CGFloat = (camCfg.layoutMode == .splitScreen)
+            ? (splitGeo.cameraRect.height + (splitZoomedSide - splitGeo.cameraRect.height) * CGFloat(zoomProgress01))
+            : overlayHeight
 
         let margin: CGFloat = max(16.0, baseRef * 0.035)
         let availW = max(1.0, canvasRect.width - pipWidth - margin * 2.0)
         let availH = max(1.0, canvasRect.height - pipHeight - margin * 2.0)
 
-        let originX = margin + CGFloat(max(0.0, min(1.0, camCfg.position01.x))) * availW
-        // Convert top-left `position01.y` (`0 = top, 1 = bottom`) to bottom-left CoreImage Y
-        let originY = margin + CGFloat(1.0 - max(0.0, min(1.0, camCfg.position01.y))) * availH
+        let originX: CGFloat = {
+            switch camCfg.layoutMode {
+            case .overlay:
+                return margin + CGFloat(max(0.0, min(1.0, camCfg.position01.x))) * availW
+            case .cutout:
+                return margin + CGFloat(max(0.0, min(1.0, camCfg.cutoutPositionX01))) * availW
+            case .splitScreen:
+                let baseOriginX = splitGeo.cameraRect.minX
+                let zoomedOriginX = camCfg.splitFlip ? margin : (canvasRect.width - margin - pipWidth)
+                return baseOriginX + (zoomedOriginX - baseOriginX) * CGFloat(zoomProgress01)
+            }
+        }()
 
-        let gradedNSImg = GradedWebcamPortraitView.cachedGradedPortraitImage(
+        // Bottom-left CoreImage Y coordinate
+        let originY: CGFloat = {
+            switch camCfg.layoutMode {
+            case .overlay:
+                return margin + CGFloat(1.0 - max(0.0, min(1.0, camCfg.position01.y))) * availH
+            case .cutout:
+                return 0.0
+            case .splitScreen:
+                let baseOriginY = splitGeo.cameraRect.minY
+                let zoomedOriginY = margin
+                return baseOriginY + (zoomedOriginY - baseOriginY) * CGFloat(zoomProgress01)
+            }
+        }()
+
+        let activeCustomPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
+            camCfg.customColorPresets.first(where: { $0.id == id })
+        }
+        let gradedNSImg = activeCustomPreset.map {
+            GradedWebcamPortraitView.cachedGradedCustomPresetImage(
+                customPreset: $0,
+                intensity: camCfg.colorGradeIntensity,
+                sharpen01: camCfg.sharpen01,
+                isCutoutMode: camCfg.layoutMode == .cutout
+            )
+        } ?? GradedWebcamPortraitView.cachedGradedPortraitImage(
             preset: camCfg.colorGradePreset,
             intensity: camCfg.colorGradeIntensity,
             sharpen01: camCfg.sharpen01,
@@ -1239,20 +1466,32 @@ public final class MetalFrameCompositor {
             return background
         }
 
-        let scaleX = pipWidth / max(1.0, rawCI.extent.width)
-        let scaleY = pipHeight / max(1.0, rawCI.extent.height)
+        // Aspect-fill crop inside `pipRect` so portrait/landscape split-screen camera frames never stretch!
+        let scale = max(pipWidth / max(1.0, rawCI.extent.width), pipHeight / max(1.0, rawCI.extent.height))
+        let scaledW = rawCI.extent.width * scale
+        let scaledH = rawCI.extent.height * scale
         let pipRect = CGRect(x: originX, y: originY, width: pipWidth, height: pipHeight)
         let scaled = rawCI
-            .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-            .transformed(by: CGAffineTransform(translationX: originX, y: originY))
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .transformed(by: CGAffineTransform(
+                translationX: originX + (pipWidth - scaledW) * 0.5,
+                y: originY + (pipHeight - scaledH) * 0.5
+            ))
             .cropped(to: pipRect)
 
-        let cornerRadius = min(pipWidth, pipHeight) * CGFloat(max(0.04, min(0.50, camCfg.borderRadiusRatio)))
-        if let mask = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-            "inputExtent": CIVector(cgRect: pipRect),
-            "inputRadius": cornerRadius,
-            "inputColor": CIColor.white
-        ])?.outputImage?.cropped(to: pipRect),
+        let baseRadius = min(pipWidth, pipHeight) * CGFloat(max(0.0, min(0.50, camCfg.borderRadiusRatio)))
+        let cornerRadius: CGFloat = {
+            if camCfg.layoutMode == .splitScreen {
+                return splitGeo.hasPadding ? baseRadius : (baseRadius * CGFloat(zoomProgress01))
+            }
+            return baseRadius
+        }()
+        if cornerRadius > 0.5,
+           let mask = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+               "inputExtent": CIVector(cgRect: pipRect),
+               "inputRadius": cornerRadius,
+               "inputColor": CIColor.white
+           ])?.outputImage?.cropped(to: pipRect),
            let masked = CIFilter(name: "CIBlendWithAlphaMask", parameters: [
                kCIInputImageKey: scaled,
                kCIInputBackgroundImageKey: CIImage.empty(),
