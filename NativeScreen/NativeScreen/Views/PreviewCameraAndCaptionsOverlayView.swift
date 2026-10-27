@@ -180,32 +180,70 @@ private struct RealRecordedWebcamVideoView: View {
     let enableFaceTracking: Bool
     let isCutoutMode: Bool
 
-    var body: some View {
-        GeometryReader { geo in
-            let w = max(1, geo.size.width)
-            let h = max(1, geo.size.height)
-            let scaleX = 1.0 / max(0.25, CGFloat(cropRect01.width))
-            let scaleY = 1.0 / max(0.25, CGFloat(cropRect01.height))
-            let faceZoom: CGFloat = enableFaceTracking ? 1.16 : 1.0
-            let offsetX = (0.5 - CGFloat(cropRect01.center.x)) * w * scaleX
-            let offsetY = (0.5 - CGFloat(cropRect01.center.y)) * h * scaleY
+    @State private var hasPlayableTrack: Bool = true
+    @State private var checkedURL: URL? = nil
 
-            RecordedWebcamNSViewRepresentable(
-                videoURL: videoURL,
-                sourceTimeMs: max(0.0, sourceTimeMs),
-                isPlaying: isPlaying,
-                playbackRate: playbackRate,
-                preset: preset,
-                intensity: intensity,
-                sharpen01: sharpen01,
-                isCutoutMode: isCutoutMode
-            )
-            .frame(width: w, height: h)
-            .scaleEffect(
-                x: (mirror ? 1.0 : -1.0) * scaleX * faceZoom,
-                y: scaleY * faceZoom
-            )
-            .offset(x: offsetX, y: offsetY)
+    var body: some View {
+        ZStack {
+            if hasPlayableTrack {
+                GeometryReader { geo in
+                    let w = max(1, geo.size.width)
+                    let h = max(1, geo.size.height)
+                    let scaleX = 1.0 / max(0.25, CGFloat(cropRect01.width))
+                    let scaleY = 1.0 / max(0.25, CGFloat(cropRect01.height))
+                    let faceZoom: CGFloat = enableFaceTracking ? 1.16 : 1.0
+                    let offsetX = (0.5 - CGFloat(cropRect01.center.x)) * w * scaleX
+                    let offsetY = (0.5 - CGFloat(cropRect01.center.y)) * h * scaleY
+
+                    RecordedWebcamNSViewRepresentable(
+                        videoURL: videoURL,
+                        sourceTimeMs: max(0.0, sourceTimeMs),
+                        isPlaying: isPlaying,
+                        playbackRate: playbackRate,
+                        preset: preset,
+                        intensity: intensity,
+                        sharpen01: sharpen01,
+                        isCutoutMode: isCutoutMode
+                    )
+                    .frame(width: w, height: h)
+                    .scaleEffect(
+                        x: (mirror ? 1.0 : -1.0) * scaleX * faceZoom,
+                        y: scaleY * faceZoom
+                    )
+                    .offset(x: offsetX, y: offsetY)
+                }
+            } else {
+                GradedWebcamPortraitView(
+                    preset: preset,
+                    intensity: intensity,
+                    sharpen01: sharpen01,
+                    mirror: mirror,
+                    cropRect01: cropRect01,
+                    enableFaceTracking: enableFaceTracking,
+                    isCutoutMode: isCutoutMode,
+                    webcamVideoURL: nil
+                )
+            }
+        }
+        .onAppear {
+            verifyVideoTrackIfNeeded(for: videoURL)
+        }
+        .onChange(of: videoURL) { _, newURL in
+            verifyVideoTrackIfNeeded(for: newURL)
+        }
+    }
+
+    private func verifyVideoTrackIfNeeded(for url: URL) {
+        guard checkedURL != url else { return }
+        checkedURL = url
+        Task {
+            let asset = AVURLAsset(url: url)
+            let tracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
+            let dur = (try? await asset.load(.duration)) ?? .zero
+            let isValid = !tracks.isEmpty && CMTimeGetSeconds(dur) > 0.05
+            await MainActor.run {
+                self.hasPlayableTrack = isValid
+            }
         }
     }
 }

@@ -184,24 +184,220 @@ public final class WarmCameraCaptureController: NSObject, AVCaptureVideoDataOutp
     }
 }
 
+/// Keeps the selected hardware microphone session warm while the HUD is open or recording,
+/// computing real-time RMS/peak audio levels (`instantLevel01` bright bar + `trailingPeakHold01` slow-decay bar)
+/// and forwarding raw audio `CMSampleBuffer`s to `ScreenCaptureEngine` during recording!
+public final class WarmMicrophoneCaptureController: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
+    public static let shared = WarmMicrophoneCaptureController()
+
+    private let micQueue = DispatchQueue(label: "com.nativescreen.microphone.warmSession", qos: .userInteractive)
+    private let stateLock = NSLock()
+
+    private var session: AVCaptureSession?
+    private var activeDeviceID: String?
+
+    private var _instantLevel01: Double = 0.0
+    private var _trailingPeakHold01: Double = 0.0
+    private var _lastPeakHoldUptime: TimeInterval = 0.0
+    private var _lastUIEmitUptime: TimeInterval = 0.0
+
+    private var _onLevelUpdate: (@Sendable (String, Double, Double) -> Void)?
+    private var _onRecordingSampleBuffer: (@Sendable (CMSampleBuffer) -> Void)?
+
+    public func setLevelUpdateHandler(_ handler: (@Sendable (String, Double, Double) -> Void)?) {
+        stateLock.lock()
+        _onLevelUpdate = handler
+        stateLock.unlock()
+    }
+
+    public func setRecordingSampleBufferHandler(_ handler: (@Sendable (CMSampleBuffer) -> Void)?) {
+        stateLock.lock()
+        _onRecordingSampleBuffer = handler
+        stateLock.unlock()
+    }
+
+    public func ensureWarmSession(deviceID: String) {
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        if authStatus == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                guard granted else { return }
+                self?.ensureWarmSession(deviceID: deviceID)
+            }
+            return
+        }
+
+        micQueue.async { [weak self] in
+            guard let self = self else { return }
+            if let existing = self.session,
+               existing.isRunning,
+               self.activeDeviceID == deviceID {
+                return
+            }
+
+            if let existing = self.session {
+                existing.stopRunning()
+                self.session = nil
+                self.activeDeviceID = nil
+            }
+
+            guard let micDevice = AVCaptureDevice(uniqueID: deviceID) ?? AVCaptureDevice.default(for: .audio),
+                  let micInput = try? AVCaptureDeviceInput(device: micDevice) else {
+                return
+            }
+
+            let newSession = AVCaptureSession()
+            newSession.beginConfiguration()
+            if newSession.canAddInput(micInput) {
+                newSession.addInput(micInput)
+            }
+
+            let aOutput = AVCaptureAudioDataOutput()
+            // Request standard 16-bit Linear PCM so both level metering and AAC `AVAssetWriter` encoding work reliably across all macOS audio devices
+            aOutput.audioSettings = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsNonInterleaved: false
+            ]
+            aOutput.setSampleBufferDelegate(self, queue: self.micQueue)
+            if newSession.canAddOutput(aOutput) {
+                newSession.addOutput(aOutput)
+            }
+            newSession.commitConfiguration()
+
+            self.stateLock.lock()
+            self._instantLevel01 = 0.0
+            self._trailingPeakHold01 = 0.0
+            self.stateLock.unlock()
+
+            self.session = newSession
+            self.activeDeviceID = deviceID
+            newSession.startRunning()
+        }
+    }
+
+    public func stopSession() {
+        micQueue.async { [weak self] in
+            guard let self = self else { return }
+            if let existing = self.session {
+                existing.stopRunning()
+                self.session = nil
+                self.activeDeviceID = nil
+            }
+            self.stateLock.lock()
+            self._instantLevel01 = 0.0
+            self._trailingPeakHold01 = 0.0
+            self.stateLock.unlock()
+        }
+    }
+
+    public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
+
+        let rawLevel01 = Self.computeNormalizedAudioLevel01(from: sampleBuffer)
+        let now = ProcessInfo.processInfo.systemUptime
+
+        stateLock.lock()
+        // 1. Bright bar (`_instantLevel01`): fast attack (0.68), responsive release (0.38)
+        if rawLevel01 >= _instantLevel01 {
+            _instantLevel01 = _instantLevel01 * 0.32 + rawLevel01 * 0.68
+        } else {
+            _instantLevel01 = max(0.0, _instantLevel01 * 0.62 + rawLevel01 * 0.38)
+        }
+
+        // 2. Dimmer trailing peak-hold bar (`_trailingPeakHold01`):
+        // Rises immediately with `_instantLevel01`, holds for ~90ms, then decays smoothly behind the bright bar!
+        if _instantLevel01 >= _trailingPeakHold01 {
+            _trailingPeakHold01 = _instantLevel01
+            _lastPeakHoldUptime = now
+        } else if (now - _lastPeakHoldUptime) > 0.09 {
+            _trailingPeakHold01 = max(_instantLevel01, _trailingPeakHold01 * 0.86 - 0.008)
+        }
+
+        let shouldEmitUI = (now - _lastUIEmitUptime) >= 0.030
+        if shouldEmitUI {
+            _lastUIEmitUptime = now
+        }
+        let devID = activeDeviceID ?? ""
+        let instantSnap = _instantLevel01
+        let trailingSnap = max(_instantLevel01, _trailingPeakHold01)
+        let levelHandler = shouldEmitUI ? _onLevelUpdate : nil
+        let recordingHandler = _onRecordingSampleBuffer
+        stateLock.unlock()
+
+        levelHandler?(devID, instantSnap, trailingSnap)
+        recordingHandler?(sampleBuffer)
+    }
+
+    private static func computeNormalizedAudioLevel01(from sampleBuffer: CMSampleBuffer) -> Double {
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return 0.0 }
+        let length = CMBlockBufferGetDataLength(blockBuffer)
+        guard length >= 4 else { return 0.0 }
+
+        var dataPtr: UnsafeMutablePointer<CChar>?
+        var lengthAtOffset: Int = 0
+        let status = CMBlockBufferGetDataPointer(
+            blockBuffer,
+            atOffset: 0,
+            lengthAtOffsetOut: &lengthAtOffset,
+            totalLengthOut: nil,
+            dataPointerOut: &dataPtr
+        )
+        guard status == kCMBlockBufferNoErr, let rawPtr = dataPtr, lengthAtOffset >= 4 else {
+            return 0.0
+        }
+
+        let sampleCount = lengthAtOffset / MemoryLayout<Int16>.size
+        guard sampleCount > 0 else { return 0.0 }
+        let int16Ptr = UnsafeRawPointer(rawPtr).assumingMemoryBound(to: Int16.self)
+
+        var sumSquares: Double = 0.0
+        var peak: Double = 0.0
+        let step = max(1, sampleCount / 256)
+        var counted = 0
+        var i = 0
+        while i < sampleCount {
+            let s = Double(int16Ptr[i]) / 32768.0
+            let absS = abs(s)
+            if absS > peak { peak = absS }
+            sumSquares += s * s
+            counted += 1
+            i += step
+        }
+        guard counted > 0 else { return 0.0 }
+        let rms = sqrt(sumSquares / Double(counted))
+        let combined = max(rms * 1.65, peak * 0.85)
+        if combined < 0.002 {
+            return 0.0
+        }
+        // Convert to perceptual dB curve (-48 dB .. 0 dB -> 0.0 .. 1.0)
+        let db = 20.0 * log10(max(0.0001, min(1.0, combined)))
+        let normalized = (db + 48.0) / 48.0
+        return max(0.0, min(1.0, pow(max(0.0, normalized), 1.15)))
+    }
+}
+
 /// Native macOS Screen & Audio Capture Engine powered by `ScreenCaptureKit` + `AVAssetWriter` (VideoToolbox hardware encoding).
 /// Excludes the system cursor (`showsCursor = false`) and NativeScreen's own HUD windows from the captured video stream.
-public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
+public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var systemAudioInput: AVAssetWriterInput?
 
-    // Optional Webcam + Microphone capture session & writers
-    private var avCaptureSession: AVCaptureSession?
+    // Optional Webcam + Microphone capture writers
     private var webcamWriter: AVAssetWriter?
     private var webcamVideoInput: AVAssetWriterInput?
+    private var webcamPixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var isWebcamSessionStarted: Bool = false
     private var webcamFirstPTS: CMTime = .invalid
+    private var lastAppendedWebcamPTS: CMTime = .invalid
     private var microphoneWriter: AVAssetWriter?
     private var microphoneAudioInput: AVAssetWriterInput?
     private var isMicrophoneSessionStarted: Bool = false
     private var microphoneFirstPTS: CMTime = .invalid
+    private var lastAppendedMicrophonePTS: CMTime = .invalid
 
     private let videoQueue = DispatchQueue(label: "com.nativescreen.capture.video", qos: .userInteractive)
     private let audioQueue = DispatchQueue(label: "com.nativescreen.capture.audio", qos: .userInteractive)
@@ -335,7 +531,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         microphoneDeviceID: String?,
         outputMicrophoneURL: URL?
     ) {
-        // 1. Webcam Video Input & Writer (Uses the persistent `WarmCameraCaptureController` so starting recording NEVER restarts the camera ISP!)
+        // 1. Webcam Video Input & Writer (Uses `WarmCameraCaptureController` + `AVAssetWriterInputPixelBufferAdaptor` so it is 100% immune to format description changes and ISP resets!)
         if let camID = cameraDeviceID {
             let maxDimH: Int32 = (cameraMaxResolution == .p720) ? 720 : ((cameraMaxResolution == .p4k) ? 2160 : 1080)
             WarmCameraCaptureController.shared.ensureWarmSession(
@@ -347,8 +543,10 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                     if let webcamURL = outputWebcamURL {
                         try? FileManager.default.removeItem(at: webcamURL)
                         if let wWriter = try? AVAssetWriter(outputURL: webcamURL, fileType: .mp4) {
-                            let targetH: Int = resolvedDims.height > 0 ? Int(resolvedDims.height) : Int(maxDimH)
-                            let targetW: Int = resolvedDims.width > 0 ? Int(resolvedDims.width) : ((targetH * 16) / 9)
+                            let rawH: Int = resolvedDims.height > 0 ? Int(resolvedDims.height) : Int(maxDimH)
+                            let rawW: Int = resolvedDims.width > 0 ? Int(resolvedDims.width) : ((rawH * 16) / 9)
+                            let targetW = max(2, rawW & ~1)
+                            let targetH = max(2, rawH & ~1)
                             let wSettings: [String: Any] = [
                                 AVVideoCodecKey: AVVideoCodecType.h264,
                                 AVVideoWidthKey: targetW,
@@ -362,14 +560,25 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                             ]
                             let wInput = AVAssetWriterInput(mediaType: .video, outputSettings: wSettings)
                             wInput.expectsMediaDataInRealTime = true
+                            let pbAttrs: [String: Any] = [
+                                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                                kCVPixelBufferWidthKey as String: targetW,
+                                kCVPixelBufferHeightKey as String: targetH
+                            ]
+                            let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+                                assetWriterInput: wInput,
+                                sourcePixelBufferAttributes: pbAttrs
+                            )
                             if wWriter.canAdd(wInput) {
                                 wWriter.add(wInput)
                             }
                             if wWriter.startWriting() {
                                 self.webcamWriter = wWriter
                                 self.webcamVideoInput = wInput
+                                self.webcamPixelBufferAdaptor = adaptor
                                 self.isWebcamSessionStarted = false
                                 self.webcamFirstPTS = .invalid
+                                self.lastAppendedWebcamPTS = .invalid
                             }
                         }
                     }
@@ -384,48 +593,40 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             }
         }
 
-        // 2. Microphone Audio Input & Writer (Dedicated audio-only session so starting mic capture never touches camera clock/ISP)
+        // 2. Microphone Audio Input & Writer (Uses `WarmMicrophoneCaptureController` so HUD metering and recording share one warm audio stream!)
         if let micID = microphoneDeviceID,
-           let micURL = outputMicrophoneURL,
-           let micDevice = AVCaptureDevice(uniqueID: micID) ?? AVCaptureDevice.default(for: .audio),
-           let micInput = try? AVCaptureDeviceInput(device: micDevice) {
-            let session = AVCaptureSession()
-            session.beginConfiguration()
-            if session.canAddInput(micInput) {
-                session.addInput(micInput)
-            }
-
-            let aOutput = AVCaptureAudioDataOutput()
-            aOutput.setSampleBufferDelegate(self, queue: avDeviceQueue)
-            if session.canAddOutput(aOutput) {
-                session.addOutput(aOutput)
-            }
-
-            try? FileManager.default.removeItem(at: micURL)
-            if let mWriter = try? AVAssetWriter(outputURL: micURL, fileType: .m4a) {
-                let mSettings: [String: Any] = [
-                    AVFormatIDKey: kAudioFormatMPEG4AAC,
-                    AVSampleRateKey: 48_000,
-                    AVNumberOfChannelsKey: 1,
-                    AVEncoderBitRateKey: 128_000
-                ]
-                let mInput = AVAssetWriterInput(mediaType: .audio, outputSettings: mSettings)
-                mInput.expectsMediaDataInRealTime = true
-                if mWriter.canAdd(mInput) {
-                    mWriter.add(mInput)
+           let micURL = outputMicrophoneURL {
+            WarmMicrophoneCaptureController.shared.ensureWarmSession(deviceID: micID)
+            avDeviceQueue.async { [weak self] in
+                guard let self = self else { return }
+                try? FileManager.default.removeItem(at: micURL)
+                if let mWriter = try? AVAssetWriter(outputURL: micURL, fileType: .m4a) {
+                    let mSettings: [String: Any] = [
+                        AVFormatIDKey: kAudioFormatMPEG4AAC,
+                        AVSampleRateKey: 48_000,
+                        AVNumberOfChannelsKey: 1,
+                        AVEncoderBitRateKey: 128_000
+                    ]
+                    let mInput = AVAssetWriterInput(mediaType: .audio, outputSettings: mSettings)
+                    mInput.expectsMediaDataInRealTime = true
+                    if mWriter.canAdd(mInput) {
+                        mWriter.add(mInput)
+                    }
+                    if mWriter.startWriting() {
+                        self.microphoneWriter = mWriter
+                        self.microphoneAudioInput = mInput
+                        self.isMicrophoneSessionStarted = false
+                        self.microphoneFirstPTS = .invalid
+                        self.lastAppendedMicrophonePTS = .invalid
+                    }
                 }
-                if mWriter.startWriting() {
-                    self.microphoneWriter = mWriter
-                    self.microphoneAudioInput = mInput
-                    self.isMicrophoneSessionStarted = false
-                    self.microphoneFirstPTS = .invalid
-                }
-            }
 
-            session.commitConfiguration()
-            self.avCaptureSession = session
-            avDeviceQueue.async {
-                session.startRunning()
+                WarmMicrophoneCaptureController.shared.setRecordingSampleBufferHandler { [weak self] sampleBuffer in
+                    guard let self = self else { return }
+                    self.avDeviceQueue.async {
+                        self.handleMicrophoneSampleBuffer(sampleBuffer)
+                    }
+                }
             }
         }
     }
@@ -437,30 +638,53 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         }
 
         WarmCameraCaptureController.shared.setRecordingSampleBufferHandler(nil)
+        WarmMicrophoneCaptureController.shared.setRecordingSampleBufferHandler(nil)
 
-        let activeMicSession = avCaptureSession
-        avCaptureSession = nil
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             avDeviceQueue.async {
-                activeMicSession?.stopRunning()
                 let group = DispatchGroup()
                 if let wWriter = self.webcamWriter {
-                    self.webcamVideoInput?.markAsFinished()
-                    if wWriter.status == .writing {
+                    let wInput = self.webcamVideoInput
+                    let wAdaptor = self.webcamPixelBufferAdaptor
+                    if self.isWebcamSessionStarted && wWriter.status == .writing {
+                        wInput?.markAsFinished()
                         group.enter()
-                        wWriter.finishWriting { group.leave() }
+                        // Crucial: Capture `wWriter`, `wInput`, `wAdaptor` strongly inside `finishWriting` so ARC never deallocates
+                        // `AVAssetWriter` before the MP4 `moov` atom is flushed to disk!
+                        wWriter.finishWriting {
+                            _ = (wWriter, wInput, wAdaptor)
+                            self.avDeviceQueue.async {
+                                self.webcamWriter = nil
+                                self.webcamVideoInput = nil
+                                self.webcamPixelBufferAdaptor = nil
+                                group.leave()
+                            }
+                        }
+                    } else {
+                        wWriter.cancelWriting()
+                        self.webcamWriter = nil
+                        self.webcamVideoInput = nil
+                        self.webcamPixelBufferAdaptor = nil
                     }
-                    self.webcamWriter = nil
-                    self.webcamVideoInput = nil
                 }
                 if let mWriter = self.microphoneWriter {
-                    self.microphoneAudioInput?.markAsFinished()
-                    if mWriter.status == .writing {
+                    let mInput = self.microphoneAudioInput
+                    if self.isMicrophoneSessionStarted && mWriter.status == .writing {
+                        mInput?.markAsFinished()
                         group.enter()
-                        mWriter.finishWriting { group.leave() }
+                        mWriter.finishWriting {
+                            _ = (mWriter, mInput)
+                            self.avDeviceQueue.async {
+                                self.microphoneWriter = nil
+                                self.microphoneAudioInput = nil
+                                group.leave()
+                            }
+                        }
+                    } else {
+                        mWriter.cancelWriting()
+                        self.microphoneWriter = nil
+                        self.microphoneAudioInput = nil
                     }
-                    self.microphoneWriter = nil
-                    self.microphoneAudioInput = nil
                 }
                 group.notify(queue: self.avDeviceQueue) {
                     cont.resume()
@@ -568,22 +792,23 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
     private func handleWebcamSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard CMSampleBufferDataIsReady(sampleBuffer),
-              !isPausedInternal else {
+              !isPausedInternal,
+              let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             return
         }
 
         if let callback = onWebcamFrameCaptured,
-           let pb = CMSampleBufferGetImageBuffer(sampleBuffer),
            let surface = CVPixelBufferGetIOSurface(pb)?.takeUnretainedValue() {
             callback(surface)
         }
 
         guard let wWriter = webcamWriter, wWriter.status == .writing,
-              let wInput = webcamVideoInput else { return }
+              let wInput = webcamVideoInput,
+              let wAdaptor = webcamPixelBufferAdaptor else { return }
 
-        let adjusted = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: accumulatedPausedTime) ?? sampleBuffer
-        let pts = CMSampleBufferGetPresentationTimeStamp(adjusted)
-        guard pts.isValid else { return }
+        let rawPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        guard rawPTS.isValid else { return }
+        let pts = accumulatedPausedTime.isValid ? CMTimeSubtract(rawPTS, accumulatedPausedTime) : rawPTS
 
         if !isWebcamSessionStarted {
             // Guard against cold-start ISP black frames if the user started recording within milliseconds of selecting a camera
@@ -594,9 +819,20 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             wWriter.startSession(atSourceTime: .zero)
             isWebcamSessionStarted = true
         }
-        let zeroBasedBuffer = Self.adjustSampleBufferTime(adjusted, bySubtracting: webcamFirstPTS) ?? adjusted
+
+        var framePTS = CMTimeSubtract(pts, webcamFirstPTS)
+        if !framePTS.isValid || CMTimeGetSeconds(framePTS) < 0 {
+            framePTS = .zero
+        }
+        // Guarantee strictly monotonic presentation timestamps so `AVAssetWriter` never fails on cold-start clock jitter
+        if lastAppendedWebcamPTS.isValid && CMTimeCompare(framePTS, lastAppendedWebcamPTS) <= 0 {
+            framePTS = CMTimeAdd(lastAppendedWebcamPTS, CMTime(value: 1, timescale: 600))
+        }
+
         if wInput.isReadyForMoreMediaData {
-            wInput.append(zeroBasedBuffer)
+            if wAdaptor.append(pb, withPresentationTime: framePTS) {
+                lastAppendedWebcamPTS = framePTS
+            }
         }
     }
 
@@ -630,9 +866,11 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         return (sumLuma / count) < 10
     }
 
-    public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    private func handleMicrophoneSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard CMSampleBufferDataIsReady(sampleBuffer),
-              !isPausedInternal else {
+              !isPausedInternal,
+              let mWriter = microphoneWriter, mWriter.status == .writing,
+              let mInput = microphoneAudioInput else {
             return
         }
 
@@ -640,17 +878,19 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         let pts = CMSampleBufferGetPresentationTimeStamp(adjusted)
         guard pts.isValid else { return }
 
-        if output is AVCaptureAudioDataOutput {
-            guard let mWriter = microphoneWriter, mWriter.status == .writing,
-                  let mInput = microphoneAudioInput else { return }
-            if !isMicrophoneSessionStarted {
-                microphoneFirstPTS = pts
-                mWriter.startSession(atSourceTime: .zero)
-                isMicrophoneSessionStarted = true
-            }
-            let zeroBasedBuffer = Self.adjustSampleBufferTime(adjusted, bySubtracting: microphoneFirstPTS) ?? adjusted
-            if mInput.isReadyForMoreMediaData {
-                mInput.append(zeroBasedBuffer)
+        if !isMicrophoneSessionStarted {
+            microphoneFirstPTS = pts
+            mWriter.startSession(atSourceTime: .zero)
+            isMicrophoneSessionStarted = true
+        }
+        guard let zeroBasedBuffer = Self.adjustSampleBufferTime(adjusted, bySubtracting: microphoneFirstPTS) else { return }
+        let zeroPTS = CMSampleBufferGetPresentationTimeStamp(zeroBasedBuffer)
+        if lastAppendedMicrophonePTS.isValid && CMTimeCompare(zeroPTS, lastAppendedMicrophonePTS) <= 0 {
+            return
+        }
+        if mInput.isReadyForMoreMediaData {
+            if mInput.append(zeroBasedBuffer) {
+                lastAppendedMicrophonePTS = zeroPTS
             }
         }
     }

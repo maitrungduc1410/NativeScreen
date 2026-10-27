@@ -709,8 +709,32 @@ public struct ProjectEditorWindowView: View {
     }
 
     private func moveProjectToTrash() {
-        try? FileManager.default.trashItem(at: session.packageURL, resultingItemURL: nil)
-        NSApp.keyWindow?.close()
+        let wasPlaying = session.isPlaying
+        if wasPlaying {
+            session.isPlaying = false
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Delete this project?"
+        alert.informativeText = "This action cannot be undone."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+
+        if let window = NSApp.keyWindow {
+            alert.beginSheetModal(for: window) { response in
+                if response == .alertFirstButtonReturn {
+                    try? FileManager.default.trashItem(at: session.packageURL, resultingItemURL: nil)
+                    window.close()
+                }
+            }
+        } else {
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                try? FileManager.default.trashItem(at: session.packageURL, resultingItemURL: nil)
+                NSApp.keyWindow?.close()
+            }
+        }
     }
 
     // MARK: - Keyboard Shortcuts (`Delete`/`Backspace`, `ESC`) & Outside Click Title Commit

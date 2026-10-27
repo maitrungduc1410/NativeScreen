@@ -42,8 +42,11 @@ public final class ProjectSession: Identifiable {
     public var scrollToTrackRevision: Int = 0
     public var selectedInspectorTab: InspectorTab = .background
 
-    // Audio Waveform Envelope Samples (`0.0 ... 1.0`, ~240 buckets across `metadata.durationMs`)
+    // Audio Waveform Envelope Samples (`0.0 ... 1.0`, ~240 buckets/sec across `metadata.durationMs`)
+    // - `audioWaveformSamples`: System / App Audio waveform (Purple `#4D2FF5` in Timeline Clip)
+    // - `microphoneWaveformSamples`: Recorded Microphone waveform (Translucent White in Timeline Clip)
     public var audioWaveformSamples: [Float] = []
+    public var microphoneWaveformSamples: [Float] = []
 
     // Clipboard for Zoom / Mask Copy & Cut (`⌘C` / `⌘X`)
     public var copiedZoomBlock: ZoomBlock?
@@ -167,7 +170,13 @@ public final class ProjectSession: Identifiable {
             document: cleanedDoc
         )
         self.selectedSliceId = nil
-        self.audioWaveformSamples = Self.generateProceduralWaveform(durationMs: metadata.durationMs)
+        let realDisplayVideoExists = FileManager.default.fileExists(
+            atPath: packageURL.appendingPathComponent("recording").appendingPathComponent(metadata.tracks.displayVideo).path
+        )
+        self.audioWaveformSamples = realDisplayVideoExists
+            ? []
+            : Self.generateProceduralWaveform(durationMs: metadata.durationMs)
+        self.microphoneWaveformSamples = []
 
         // Synchronize `shortcutTracks` with actual shortcuts so projects without shortcuts never show an empty default Shortcuts track!
         let initialShortcutClusters = self.detectedShortcutClusters
@@ -1537,18 +1546,37 @@ public final class ProjectSession: Identifiable {
     }
 
     private func loadRealAudioWaveformIfAvailable() async {
-        let url = videoFileURL
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let durationSec = max(1.0, metadata.durationMs / 1000.0)
+        let targetBinCount = max(256, min(16384, Int(durationSec * 240.0)))
+
+        // 1. System / App Audio Waveform (`display.mp4` -> Purple waveform on timeline clips)
+        let sysURL = videoFileURL
+        if FileManager.default.fileExists(atPath: sysURL.path) {
+            if let sysSamples = await Self.extractNormalizedAudioWaveform(from: sysURL, targetBinCount: targetBinCount) {
+                self.audioWaveformSamples = sysSamples
+            } else {
+                self.audioWaveformSamples = []
+            }
+        }
+
+        // 2. Microphone Audio Waveform (`microphone.m4a` -> Translucent white waveform on timeline clips)
+        if let micURL = microphoneAudioFileURL, FileManager.default.fileExists(atPath: micURL.path) {
+            if let micSamples = await Self.extractNormalizedAudioWaveform(from: micURL, targetBinCount: targetBinCount) {
+                self.microphoneWaveformSamples = micSamples
+            } else {
+                self.microphoneWaveformSamples = []
+            }
+        }
+    }
+
+    private static func extractNormalizedAudioWaveform(from url: URL, targetBinCount: Int) async -> [Float]? {
         let asset = AVURLAsset(url: url)
         guard let tracks = try? await asset.loadTracks(withMediaType: .audio),
               let audioTrack = tracks.first else {
-            return
+            return nil
         }
 
-        let durationSec = max(1.0, metadata.durationMs / 1000.0)
-        // Extract at the high-density 800 bins/sec so the mip-pyramid has full resolution!
-        let targetBinCount = max(256, min(16384, Int(durationSec * 240.0)))
-        let extracted: [Float]? = await Task.detached(priority: .utility) {
+        return await Task.detached(priority: .utility) {
             guard let reader = try? AVAssetReader(asset: asset) else { return nil }
             let settings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
@@ -1568,13 +1596,13 @@ public final class ProjectSession: Identifiable {
             while reader.status == .reading, let sampleBuffer = output.copyNextSampleBuffer() {
                 guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { continue }
                 let length = CMBlockBufferGetDataLength(blockBuffer)
+                guard length >= 2 else { continue }
                 var data = Data(count: length)
                 data.withUnsafeMutableBytes { rawBuffer in
                     if let baseAddress = rawBuffer.baseAddress {
                         CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: baseAddress)
                         let int16Ptr = baseAddress.assumingMemoryBound(to: Int16.self)
                         let totalSamples = length / MemoryLayout<Int16>.size
-                        // Subdivide each CMSampleBuffer into 128-sample chunks so every syllable peak/valley is captured!
                         let chunkSize = 128
                         var offset = 0
                         while offset < totalSamples {
@@ -1584,7 +1612,7 @@ public final class ProjectSession: Identifiable {
                             while i < end {
                                 let v = abs(Float(int16Ptr[i])) / 32768.0
                                 if v > maxSample { maxSample = v }
-                                i += 2
+                                i += 1
                             }
                             rawPeaks.append(maxSample)
                             offset += chunkSize
@@ -1596,10 +1624,14 @@ public final class ProjectSession: Identifiable {
             guard rawPeaks.count >= 8 else { return nil }
             let sortedPeaks = rawPeaks.sorted()
             let p95Idx = min(sortedPeaks.count - 1, Int(Double(sortedPeaks.count) * 0.95))
-            let referencePeak = max(0.03, sortedPeaks[p95Idx])
+            let p95Peak = sortedPeaks[p95Idx]
+            let maxPeak = sortedPeaks.last ?? 0.0
+            // If the audio track is completely silent (e.g. silent system audio), return nil so no fake flat bar is drawn!
+            guard maxPeak >= 0.002 else { return nil }
+            let referencePeak = max(0.025, p95Peak)
 
             let finalCount = min(targetBinCount, rawPeaks.count)
-            var buckets = [Float](repeating: 0.04, count: finalCount)
+            var buckets = [Float](repeating: 0.02, count: finalCount)
             for b in 0..<finalCount {
                 let startIdx = (b * rawPeaks.count) / finalCount
                 let endIdx = max(startIdx + 1, ((b + 1) * rawPeaks.count) / finalCount)
@@ -1608,14 +1640,10 @@ public final class ProjectSession: Identifiable {
                     localMax = max(localMax, rawPeaks[j])
                 }
                 let normalized = min(1.0, localMax / referencePeak)
-                buckets[b] = min(0.98, max(0.03, pow(normalized, 0.62)))
+                buckets[b] = localMax < 0.0015 ? 0.015 : min(0.98, max(0.02, pow(normalized, 0.62)))
             }
             return buckets
         }.value
-
-        if let realSamples = extracted {
-            self.audioWaveformSamples = realSamples
-        }
     }
 
     // MARK: - Speed Up Typing Suggestion Detection & Actions

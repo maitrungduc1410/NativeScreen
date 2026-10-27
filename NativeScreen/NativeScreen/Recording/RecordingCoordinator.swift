@@ -151,8 +151,13 @@ public final class RecordingCoordinator {
             if activeHUDMenuKind == nil {
                 lastHUDMenuClosedUptime = ProcessInfo.processInfo.systemUptime
             }
+            updateHUDMicrophoneLevelMeter()
         }
     }
+
+    // Live Connected Devices (Dynamically updated via `AVCaptureDeviceWasConnected` / `AVCaptureDeviceWasDisconnected`)
+    public var connectedCameras: [CapturableMediaDeviceInfo] = []
+    public var connectedMicrophones: [CapturableMediaDeviceInfo] = []
 
     // Camera Recording State ( & 9)
     public var selectedCameraDeviceID: String? = nil {
@@ -187,7 +192,9 @@ public final class RecordingCoordinator {
     public var selectedMicrophoneName: String? = nil {
         didSet { updateHUDPanelFrameForCurrentState(animated: true) }
     }
-    public var liveMicrophoneLevel01: Double = 0.38
+    public var liveMicrophoneLevel01: Double = 0.0
+    public var liveMicrophonePeakHold01: Double = 0.0
+    public var monitoredMicrophoneDeviceID: String? = nil
 
     // System Audio & Per-App Audio State ( & 3)
     public var captureSystemAudio: Bool = true {
@@ -237,33 +244,43 @@ public final class RecordingCoordinator {
 
     public func availableCameraDevices() -> [CapturableMediaDeviceInfo] {
         let defaultID = AVCaptureDevice.default(for: .video)?.uniqueID
+        // Exclude `.deskViewCamera` so virtual overhead Desk View cameras never clutter the presenter camera list!
         var deviceTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .external]
         if #available(macOS 14.0, *) {
             deviceTypes.append(.continuityCamera)
-            deviceTypes.append(.deskViewCamera)
         }
         let session = AVCaptureDevice.DiscoverySession(
             deviceTypes: deviceTypes,
             mediaType: .video,
             position: .unspecified
         )
-        var list = session.devices.map { dev in
-            CapturableMediaDeviceInfo(
-                id: dev.uniqueID,
-                name: dev.localizedName,
-                isDefault: dev.uniqueID == defaultID
+        var seenIDs = Set<String>()
+        var list: [CapturableMediaDeviceInfo] = []
+        for dev in session.devices {
+            guard dev.isConnected,
+                  !dev.isSuspended,
+                  !dev.localizedName.localizedCaseInsensitiveContains("Desk View"),
+                  !seenIDs.contains(dev.uniqueID) else {
+                continue
+            }
+            seenIDs.insert(dev.uniqueID)
+            list.append(
+                CapturableMediaDeviceInfo(
+                    id: dev.uniqueID,
+                    name: dev.localizedName,
+                    isDefault: dev.uniqueID == defaultID
+                )
             )
         }
-        if list.isEmpty {
-            list = [
-                CapturableMediaDeviceInfo(id: "built-in-camera", name: "MacBook Pro Camera", isDefault: true)
-            ]
-        } else if !list.contains(where: { $0.isDefault }) {
+        if !list.isEmpty && !list.contains(where: { $0.isDefault }) {
             let first = list[0]
             list[0] = CapturableMediaDeviceInfo(id: first.id, name: first.name, isDefault: true)
         }
-        // Sort so Default camera is at the top
-        list.sort { ($0.isDefault ? 0 : 1) < ($1.isDefault ? 0 : 1) }
+        // Sort so Default camera is at the top, followed by alphabetical order in)
+        list.sort { a, b in
+            if a.isDefault != b.isDefault { return a.isDefault }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
         return list
     }
 
@@ -274,23 +291,54 @@ public final class RecordingCoordinator {
             mediaType: .audio,
             position: .unspecified
         )
-        var list = session.devices.map { dev in
-            CapturableMediaDeviceInfo(
-                id: dev.uniqueID,
-                name: dev.localizedName,
-                isDefault: dev.uniqueID == defaultID
+        var seenIDs = Set<String>()
+        var list: [CapturableMediaDeviceInfo] = []
+        for dev in session.devices {
+            guard dev.isConnected,
+                  !dev.isSuspended,
+                  !seenIDs.contains(dev.uniqueID) else {
+                continue
+            }
+            seenIDs.insert(dev.uniqueID)
+            list.append(
+                CapturableMediaDeviceInfo(
+                    id: dev.uniqueID,
+                    name: dev.localizedName,
+                    isDefault: dev.uniqueID == defaultID
+                )
             )
         }
-        if list.isEmpty {
-            list = [
-                CapturableMediaDeviceInfo(id: "built-in-mic", name: "MacBook Pro Microphone", isDefault: true)
-            ]
-        } else if !list.contains(where: { $0.isDefault }) {
+        if !list.isEmpty && !list.contains(where: { $0.isDefault }) {
             let first = list[0]
             list[0] = CapturableMediaDeviceInfo(id: first.id, name: first.name, isDefault: true)
         }
-        list.sort { ($0.isDefault ? 0 : 1) < ($1.isDefault ? 0 : 1) }
+        list.sort { a, b in
+            if a.isDefault != b.isDefault { return a.isDefault }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
         return list
+    }
+
+    public func refreshConnectedMediaDevices() {
+        let cams = availableCameraDevices()
+        let mics = availableMicrophoneDevices()
+        self.connectedCameras = cams
+        self.connectedMicrophones = mics
+
+        if let selCam = selectedCameraDeviceID, !cams.contains(where: { $0.id == selCam }) {
+            selectedCameraDeviceID = nil
+            selectedCameraName = nil
+        }
+        if let selMic = selectedMicrophoneDeviceID, !mics.contains(where: { $0.id == selMic }) {
+            if let defMic = mics.first {
+                selectedMicrophoneDeviceID = defMic.id
+                selectedMicrophoneName = defMic.name
+            } else {
+                captureMicrophone = false
+                selectedMicrophoneDeviceID = nil
+                selectedMicrophoneName = nil
+            }
+        }
     }
 
     public func runningAudioApps() -> [RunningAudioAppInfo] {
@@ -392,6 +440,26 @@ public final class RecordingCoordinator {
         if defaults.object(forKey: highlightRecordedAreaKey) != nil {
             self.highlightRecordedArea = defaults.bool(forKey: highlightRecordedAreaKey)
         }
+
+        refreshConnectedMediaDevices()
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name.AVCaptureDeviceWasConnected,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshConnectedMediaDevices()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name.AVCaptureDeviceWasDisconnected,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshConnectedMediaDevices()
+            }
+        }
     }
 
     // MARK: - Show / Hide Floating Recording HUD Bar (`NSPanel`)
@@ -400,7 +468,10 @@ public final class RecordingCoordinator {
         if let hosting = hudPanel?.contentView {
             let fittingW = ceil(hosting.fittingSize.width)
             if fittingW >= 248 {
-                return NSSize(width: fittingW, height: Self.barHeight)
+                // Always round up to an even integer width so `width * 0.5` is an exact integer (0.0 fractional part),
+                // preventing 0.5pt rounding drift to the left on negative-coordinate secondary monitors (`x < 0`)!
+                let evenW = ceil(fittingW / 2.0) * 2.0
+                return NSSize(width: evenW, height: Self.barHeight)
             }
         }
         let width: CGFloat
@@ -411,10 +482,12 @@ public final class RecordingCoordinator {
         } else {
             width = Self.idleBarWidth
         }
-        return NSSize(width: width, height: Self.barHeight)
+        let evenW = ceil(width / 2.0) * 2.0
+        return NSSize(width: evenW, height: Self.barHeight)
     }
 
     public func showRecordingHUD() {
+        refreshConnectedMediaDevices()
         if hudPanel == nil {
             let initialSize = NSSize(width: Self.idleBarWidth, height: Self.barHeight)
             let panel = DraggableHUDPanel(
@@ -429,7 +502,9 @@ public final class RecordingCoordinator {
             panel.backgroundColor = .clear
             panel.isOpaque = false
             panel.hasShadow = true
-            panel.sharingType = .none // Exclude Recording HUD from all screen recordings (ScreenCaptureKit / CGWindowList)
+            // When idle (not recording), keep `.readOnly` so system screenshots can capture the HUD;
+            // when recording starts, we switch `sharingType = .none` so neither screen recordings nor screenshots capture the active recording HUD!
+            panel.sharingType = isRecording ? .none : .readOnly
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isMovableByWindowBackground = false
             panel.isDragEnabled = { [weak self] in
@@ -450,6 +525,7 @@ public final class RecordingCoordinator {
 
         let desiredSize = currentDesiredPanelSize
         if let panel = hudPanel {
+            panel.sharingType = isRecording ? .none : .readOnly
             let restoredOrigin = restoredAndClampedHUDOrigin(panelSize: desiredSize)
             panel.setFrame(NSRect(origin: restoredOrigin, size: desiredSize), display: true)
             panel.orderFrontRegardless()
@@ -469,10 +545,10 @@ public final class RecordingCoordinator {
             guard let self = self, let panel = self.hudPanel else { return }
             let newSize = self.currentDesiredPanelSize
             let currentFrame = panel.frame
-            guard abs(currentFrame.width - newSize.width) > 1.0 || abs(currentFrame.height - newSize.height) > 1.0 else {
+            guard abs(currentFrame.width - newSize.width) >= 2.0 || abs(currentFrame.height - newSize.height) >= 1.0 else {
                 return
             }
-            let newOriginX = round(currentFrame.midX - newSize.width * 0.5)
+            let newOriginX = floor(currentFrame.midX - newSize.width * 0.5 + 0.5)
             var targetOrigin = NSPoint(x: newOriginX, y: currentFrame.origin.y)
 
             // Clamp inside the current monitor's visibleFrame
@@ -632,21 +708,36 @@ public final class RecordingCoordinator {
     }
 
     private func updateHUDMicrophoneLevelMeter() {
-        let shouldRun = isHUDVisible && captureMicrophone && selectedMicrophoneDeviceID != nil
-        if shouldRun {
-            guard hudMicLevelTimer == nil else { return }
-            hudMicLevelTimer = Timer.scheduledTimer(withTimeInterval: 0.16, repeats: true) { [weak self] _ in
+        let isMenuMonitoring = (isHUDVisible && activeHUDMenuKind == .microphone)
+        let isHUDMicActive = ((isHUDVisible || isRecording || isCountingDown) && captureMicrophone && selectedMicrophoneDeviceID != nil)
+
+        if isHUDMicActive || isMenuMonitoring {
+            hudMicLevelTimer?.invalidate()
+            hudMicLevelTimer = nil
+            let targetMicID = selectedMicrophoneDeviceID ?? connectedMicrophones.first?.id ?? AVCaptureDevice.default(for: .audio)?.uniqueID
+            guard let micID = targetMicID else { return }
+
+            WarmMicrophoneCaptureController.shared.setLevelUpdateHandler { [weak self] devID, instant01, trailing01 in
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
-                    withAnimation(.easeInOut(duration: 0.14)) {
-                        self.liveMicrophoneLevel01 = Double.random(in: 0.28...0.52)
+                    self.monitoredMicrophoneDeviceID = devID
+                    withAnimation(.linear(duration: 0.045)) {
+                        self.liveMicrophoneLevel01 = instant01
+                        self.liveMicrophonePeakHold01 = trailing01
                     }
                 }
             }
+            WarmMicrophoneCaptureController.shared.ensureWarmSession(deviceID: micID)
         } else {
             hudMicLevelTimer?.invalidate()
             hudMicLevelTimer = nil
+            WarmMicrophoneCaptureController.shared.setLevelUpdateHandler(nil)
+            if !isRecording {
+                WarmMicrophoneCaptureController.shared.stopSession()
+            }
             liveMicrophoneLevel01 = 0.0
+            liveMicrophonePeakHold01 = 0.0
+            monitoredMicrophoneDeviceID = nil
         }
     }
 
@@ -859,6 +950,8 @@ public final class RecordingCoordinator {
         lastErrorMessage = nil
         isPickingTarget = false
         stopPickerOverlay()
+        // Hide the active recording HUD (`[⏹ 0:04 | ⏸ ↺ 🗑]`) from both ScreenCaptureKit recordings and system screenshots!
+        hudPanel?.sharingType = .none
 
         do {
             let shareable = try await SCShareableContent.excludingDesktopWindows(
@@ -1039,7 +1132,9 @@ public final class RecordingCoordinator {
                     let now = ProcessInfo.processInfo.systemUptime
                     self.recordingElapsedSeconds = max(0.0, now - self.recordingStartUptime - self.accumulatedPausedSeconds)
                     let newSecInt = Int(self.recordingElapsedSeconds)
-                    if newSecInt != prevSecInt {
+                    // Only resize the HUD panel when the timer text digit count actually changes (e.g., 9:59 -> 10:00),
+                    // preventing 1Hz frame recalculations from drifting the HUD on secondary monitors!
+                    if (prevSecInt / 600) != (newSecInt / 600) {
                         self.updateHUDPanelFrameForCurrentState(animated: false)
                     }
                 }
@@ -1130,7 +1225,9 @@ public final class RecordingCoordinator {
 
     private func restorePostRecordingSystemState() {
         hideRecordedAreaHighlightOverlay()
+        hudPanel?.sharingType = .readOnly
         updateFloatingCameraPreviewWindow()
+        updateHUDMicrophoneLevelMeter()
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
         }
@@ -1417,16 +1514,15 @@ public final class HUDNativeMenuPresenter: NSObject {
         from panel: NSWindow?
     ) {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
+        coordinator.refreshConnectedMediaDevices()
 
         let menu = NSMenu(title: "Camera")
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
-        let cameras = coordinator.availableCameraDevices()
         let contentView = NSHostingView(
             rootView: HUDCameraMenuContentView(
                 coordinator: coordinator,
-                cameras: cameras,
                 onDismiss: { [weak self] in
                     self?.dismissActiveMenu()
                 }
@@ -1458,16 +1554,15 @@ public final class HUDNativeMenuPresenter: NSObject {
         from panel: NSWindow?
     ) {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
+        coordinator.refreshConnectedMediaDevices()
 
         let menu = NSMenu(title: "Microphone")
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
-        let microphones = coordinator.availableMicrophoneDevices()
         let contentView = NSHostingView(
             rootView: HUDMicrophoneMenuContentView(
                 coordinator: coordinator,
-                microphones: microphones,
                 onDismiss: { [weak self] in
                     self?.dismissActiveMenu()
                 }
@@ -1734,12 +1829,11 @@ private final class HUDMenuClosureTarget: NSObject {
 
 private struct HUDCameraMenuContentView: View {
     @Bindable var coordinator: RecordingCoordinator
-    let cameras: [CapturableMediaDeviceInfo]
     let onDismiss: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(cameras) { cam in
+            ForEach(coordinator.connectedCameras) { cam in
                 let isSelected = (coordinator.selectedCameraDeviceID == cam.id)
                 HUDSelectableMenuRowButton(isSelected: isSelected) {
                     coordinator.selectedCameraDeviceID = cam.id
@@ -1859,17 +1953,15 @@ private struct HUDCameraMenuContentView: View {
 
 private struct HUDMicrophoneMenuContentView: View {
     @Bindable var coordinator: RecordingCoordinator
-    let microphones: [CapturableMediaDeviceInfo]
     let onDismiss: () -> Void
-
-    @State private var animatedLevels: [Double] = [0.36, 0.24, 0.08, 0.18]
-    @State private var levelTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(microphones.enumerated()), id: \.element.id) { index, mic in
+            ForEach(coordinator.connectedMicrophones) { mic in
                 let isSelected = (coordinator.captureMicrophone && coordinator.selectedMicrophoneDeviceID == mic.id)
-                let baseLevel = animatedLevels[index % animatedLevels.count]
+                let isMonitored = (coordinator.monitoredMicrophoneDeviceID == mic.id) || (coordinator.monitoredMicrophoneDeviceID == nil && mic.isDefault)
+                let instantLevel = isMonitored ? coordinator.liveMicrophoneLevel01 : 0.0
+                let trailingLevel = isMonitored ? coordinator.liveMicrophonePeakHold01 : 0.0
 
                 HUDSelectableMenuRowButton(isSelected: isSelected, rowHeight: 44) {
                     coordinator.selectedMicrophoneDeviceID = mic.id
@@ -1892,20 +1984,26 @@ private struct HUDMicrophoneMenuContentView: View {
                             }
                         }
 
-                        // Live Blue Audio Level Meter Bar underneath each microphone name
+                        // Live Dual-Bar Audio Level Meter underneath each microphone name
                         GeometryReader { geo in
+                            let totalW = max(10.0, geo.size.width)
+                            let brightW = totalW * CGFloat(max(0.0, min(1.0, instantLevel)))
+                            let trailW = totalW * CGFloat(max(instantLevel, min(1.0, trailingLevel)))
                             ZStack(alignment: .leading) {
                                 Capsule()
                                     .fill(Color.white.opacity(0.15))
-                                    .frame(height: 3.5)
+                                    .frame(width: totalW, height: 3.5)
 
-                                let activeWidth = index < 2
-                                    ? max(4.0, geo.size.width * CGFloat(baseLevel))
-                                    : 0.0
-                                if activeWidth > 0 {
+                                if trailW > 1.0 {
+                                    Capsule()
+                                        .fill(Color(red: 0.04, green: 0.52, blue: 1.0).opacity(0.42))
+                                        .frame(width: max(3.5, trailW), height: 3.5)
+                                }
+
+                                if brightW > 1.0 {
                                     Capsule()
                                         .fill(Color(red: 0.04, green: 0.52, blue: 1.0))
-                                        .frame(width: activeWidth, height: 3.5)
+                                        .frame(width: max(3.5, brightW), height: 3.5)
                                 }
                             }
                         }
@@ -1931,24 +2029,6 @@ private struct HUDMicrophoneMenuContentView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
-        .onAppear {
-            levelTimer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { _ in
-                Task { @MainActor in
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        animatedLevels = [
-                            Double.random(in: 0.26...0.48),
-                            Double.random(in: 0.16...0.32),
-                            0.0,
-                            0.0
-                        ]
-                    }
-                }
-            }
-        }
-        .onDisappear {
-            levelTimer?.invalidate()
-            levelTimer = nil
-        }
     }
 }
 
@@ -2445,20 +2525,32 @@ public struct RecordingHUDBarView: View {
 
                         if hasMic {
                             GeometryReader { meterGeo in
-                                let totalW = max(10, meterGeo.size.width)
-                                let activeW = max(6, totalW * CGFloat(max(0.18, coordinator.liveMicrophoneLevel01)))
+                                let totalW = max(10.0, meterGeo.size.width)
+                                let brightW = totalW * CGFloat(max(0.0, min(1.0, coordinator.liveMicrophoneLevel01)))
+                                let trailingW = totalW * CGFloat(max(coordinator.liveMicrophoneLevel01, min(1.0, coordinator.liveMicrophonePeakHold01)))
                                 ZStack(alignment: .leading) {
+                                    // 1. Dark base track
                                     Capsule()
-                                        .fill(Color.white.opacity(0.18))
+                                        .fill(Color.white.opacity(0.14))
                                         .frame(width: totalW, height: 3.0)
 
-                                    Capsule()
-                                        .fill(Color.white.opacity(0.62))
-                                        .frame(width: activeW, height: 3.0)
+                                    // 2. Dimmer trailing peak-hold bar (decays slightly slower behind the bright bar)
+                                    if trailingW > 0.5 {
+                                        Capsule()
+                                            .fill(Color.white.opacity(0.30))
+                                            .frame(width: max(3.0, trailingW), height: 3.0)
+                                    }
+
+                                    // 3. Bright instantaneous level bar
+                                    if brightW > 0.5 {
+                                        Capsule()
+                                            .fill(Color.white.opacity(0.68))
+                                            .frame(width: max(3.0, brightW), height: 3.0)
+                                    }
                                 }
                             }
                             .frame(height: 3.0)
-                            .padding(.horizontal, 6)
+                            .padding(.horizontal, 8)
                             .padding(.bottom, 3.0)
                         }
                     }
@@ -2657,6 +2749,7 @@ public struct RecordingHUDBarView: View {
                     Text(formatCompactElapsed(coordinator.recordingElapsedSeconds))
                         .font(.system(size: 15, weight: .regular).monospacedDigit())
                         .lineLimit(1)
+                        .frame(minWidth: 38, alignment: .leading)
                         .fixedSize(horizontal: true, vertical: false)
                         .foregroundStyle(coordinator.isRecordingPaused ? Color.orange : stopRed)
                 }

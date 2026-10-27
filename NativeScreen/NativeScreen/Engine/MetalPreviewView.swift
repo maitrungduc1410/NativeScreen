@@ -61,8 +61,10 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         private var lastCanvasAspect: Double = -1.0
         private var lastFrameTickUptime: TimeInterval = 0
 
-        // Video frame decoder for recorded `.mp4` / `.m3u8`
+        // Video frame decoder for recorded `.mp4` / `.m3u8` + synchronized Microphone `.m4a` audio player
         private var player: AVPlayer?
+        private var micPlayer: AVPlayer?
+        private var loadedMicURL: URL?
         private var videoOutput: AVPlayerItemVideoOutput?
         private var playerItemStatusObserver: NSKeyValueObservation?
         private var loadedVideoURL: URL?
@@ -75,6 +77,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             self.session = session
             super.init()
             setupVideoDecoderIfNeeded(for: session.videoFileURL)
+            setupMicrophonePlayerIfNeeded(for: session.microphoneAudioFileURL)
         }
 
         func attach(mtkView: MTKView) {
@@ -85,6 +88,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         func updateSession(_ newSession: ProjectSession, canvasAspect: Double, mtkView: MTKView) {
             self.session = newSession
             setupVideoDecoderIfNeeded(for: newSession.videoFileURL)
+            setupMicrophonePlayerIfNeeded(for: newSession.microphoneAudioFileURL)
 
             if newSession.isPlaying {
                 if mtkView.isPaused {
@@ -93,6 +97,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     mtkView.isPaused = false
                 }
             } else {
+                if let micPlayer = micPlayer, micPlayer.rate != 0 {
+                    micPlayer.pause()
+                }
                 let animatingBg = compositor?.isAnimatingBackgroundTransition ?? false
                 if !animatingBg && !mtkView.isPaused {
                     mtkView.isPaused = true
@@ -174,6 +181,21 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     self.seekDecoderCoalesced(toSourceMs: self.session.currentSourceTimeMs, fastSkim: false)
                 }
             }
+        }
+
+        private func setupMicrophonePlayerIfNeeded(for url: URL?) {
+            guard loadedMicURL != url else { return }
+            loadedMicURL = url
+            guard let micURL = url, FileManager.default.fileExists(atPath: micURL.path) else {
+                micPlayer?.pause()
+                micPlayer = nil
+                return
+            }
+            let asset = AVURLAsset(url: micURL)
+            let item = AVPlayerItem(asset: asset)
+            let mPlayer = AVPlayer(playerItem: item)
+            mPlayer.isMuted = false
+            self.micPlayer = mPlayer
         }
 
         private func seekDecoderCoalesced(toSourceMs sourceMs: Double, fastSkim: Bool) {
@@ -270,12 +292,27 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             if let output = videoOutput {
                 let activeSlice = session.currentActiveSlice
                 let sliceSpeed = activeSlice?.speed ?? 1.0
-                let sliceVol = (activeSlice?.muted == true) ? 0.0 : (activeSlice?.systemAudioVolume ?? 1.0)
-                let effectiveVolume = Float(min(2.0, max(0.0, sliceVol * session.document.audio.systemAudioVolume)))
+                let masterVol = session.document.audio.masterVolume
+                let sliceVol = (activeSlice?.muted == true || session.document.audio.muteSystemAudio) ? 0.0 : (activeSlice?.systemAudioVolume ?? 1.0)
+                let effectiveVolume = Float(min(2.0, max(0.0, sliceVol * session.document.audio.systemAudioVolume * masterVol)))
+                let micVol = (activeSlice?.muted == true || session.document.audio.muteMicrophone) ? 0.0 : (session.document.audio.microphoneVolume * masterVol)
+                let effectiveMicVolume = Float(min(2.0, max(0.0, micVol)))
                 let desiredRate = Float(session.previewPlaybackRate * sliceSpeed)
                 if session.isPlaying, let player = player {
                     player.isMuted = (effectiveVolume <= 0.001)
                     player.volume = effectiveVolume
+
+                    // Synchronize `micPlayer` (`microphone.m4a`) in lockstep with `player` (`display.mp4`)!
+                    if let micPlayer = micPlayer {
+                        micPlayer.isMuted = (effectiveMicVolume <= 0.001)
+                        micPlayer.volume = effectiveMicVolume
+                        let micCurrentMs = max(0.0, CMTimeGetSeconds(micPlayer.currentTime()) * 1000.0)
+                        let micDriftMs = abs(micCurrentMs - sourceMs)
+                        if abs(micPlayer.rate - desiredRate) > 0.05 || micDriftMs > 180.0 {
+                            micPlayer.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                            micPlayer.rate = desiredRate
+                        }
+                    }
 
                     // Only seek AVPlayer when starting playback (`rate` changed) or jumping across a cut boundary (`drift > 180ms` while not actively seeking).
                     // Never snap `sourceMs` to `displayTime` (which is quantized at 60Hz = 16.67ms steps), because the 120Hz spring camera & cursor
@@ -291,8 +328,13 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                         }
                         player.rate = desiredRate
                     }
-                } else if !session.isPlaying, let player = player, player.rate != 0 {
-                    player.pause()
+                } else if !session.isPlaying {
+                    if let player = player, player.rate != 0 {
+                        player.pause()
+                    }
+                    if let micPlayer = micPlayer, micPlayer.rate != 0 {
+                        micPlayer.pause()
+                    }
                 }
 
                 // Poll `output` using `output.itemTime(forHostTime: CACurrentMediaTime)` during playback

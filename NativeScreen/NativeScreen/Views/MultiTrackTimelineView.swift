@@ -523,8 +523,14 @@ public struct MultiTrackTimelineView: View {
                         sourceStartMs: mapped.slice.sourceStartMs,
                         sourceEndMs: mapped.slice.sourceEndMs,
                         totalSourceMs: session.metadata.durationMs,
-                        volumeScale: mapped.slice.muted ? 0.0 : mapped.slice.systemAudioVolume,
-                        waveformSamples: session.audioWaveformSamples
+                        volumeScale: (mapped.slice.muted || session.document.audio.muteSystemAudio)
+                            ? 0.0
+                            : (mapped.slice.systemAudioVolume * session.document.audio.systemAudioVolume),
+                        waveformSamples: session.audioWaveformSamples,
+                        microphoneVolumeScale: (mapped.slice.muted || session.document.audio.muteMicrophone)
+                            ? 0.0
+                            : session.document.audio.microphoneVolume,
+                        microphoneWaveformSamples: session.microphoneWaveformSamples
                     ),
                     onClickAtLocalX: { localX in
                         let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
@@ -1386,10 +1392,12 @@ private struct ClipSegmentDecoration: Equatable, View {
     let totalSourceMs: Double
     let volumeScale: Double
     let waveformSamples: [Float]
+    var microphoneVolumeScale: Double = 0.0
+    var microphoneWaveformSamples: [Float] = []
 
     var body: some View {
         Canvas { context, size in
-            // A. Smooth Catmull-Rom Cubic Spline + Mip-Pyramid Audio Waveform
+            // A1. System / App Audio Waveform (`#4D2FF5` Purple)
             if !waveformSamples.isEmpty && totalSourceMs > 1.0 && volumeScale > 0.005 {
                 let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
                 let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
@@ -1469,6 +1477,57 @@ private struct ClipSegmentDecoration: Equatable, View {
                         with: .color(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.12))
                     )
                 }
+            }
+
+            // A2. Recorded Microphone Audio Waveform (Translucent White)
+            if !microphoneWaveformSamples.isEmpty && totalSourceMs > 1.0 && microphoneVolumeScale > 0.005 {
+                let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
+                let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
+                let clampedMicVol = CGFloat(min(1.5, max(0.0, microphoneVolumeScale)))
+
+                let micPyramid = Self.buildWaveformPyramid(from: microphoneWaveformSamples)
+                let baseCount = Double(microphoneWaveformSamples.count)
+                let sliceSampleSpan = max(1.0, (endFrac - startFrac) * baseCount)
+
+                let pxPerBin: Double = 11.0
+                let samplesPerBin = max(1.0, (sliceSampleSpan / Double(max(1.0, size.width))) * pxPerBin)
+                let maxWaveHeightPx: CGFloat = min(size.height * 0.68, 32.0)
+
+                let stepPx: CGFloat = 1.5
+                let pointCount = max(4, Int(ceil(size.width / stepPx)))
+
+                var micWavePath = Path()
+                micWavePath.move(to: CGPoint(x: 0, y: size.height))
+
+                for i in 0...pointCount {
+                    let localFrac = Double(i) / Double(pointCount)
+                    let globalFrac = startFrac + localFrac * (endFrac - startFrac)
+                    let samplePos = globalFrac * baseCount
+
+                    let env01 = Self.readWaveformEnvelope(
+                        pyramid: micPyramid,
+                        samplePosition: samplePos,
+                        samplesPerBin: samplesPerBin
+                    )
+                    let x = CGFloat(localFrac) * size.width
+                    let waveH = min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedMicVol)
+                    micWavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
+                }
+
+                micWavePath.addLine(to: CGPoint(x: size.width, y: size.height))
+                micWavePath.closeSubpath()
+
+                context.fill(
+                    micWavePath,
+                    with: .linearGradient(
+                        Gradient(colors: [
+                            Color.white.opacity(0.44),
+                            Color.white.opacity(0.20)
+                        ]),
+                        startPoint: CGPoint(x: 0, y: size.height - maxWaveHeightPx),
+                        endPoint: CGPoint(x: 0, y: size.height)
+                    )
+                )
             }
 
             // B. Vertical Ruler Tick Lines at every minor/major ruler dot
