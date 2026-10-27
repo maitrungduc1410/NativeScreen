@@ -78,14 +78,13 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
         let editorView = ProjectEditorWindowView(session: session)
             .ignoresSafeArea(.container, edges: .top)
-            .frame(minWidth: 1180, minHeight: 740)
         let hostingController = NSHostingController(rootView: editorView)
-        hostingController.sizingOptions = [.minSize]
+        hostingController.sizingOptions = []
 
         // Default every newly opened project Editor window to fill the active monitor's `visibleFrame` (maximized full screen)!
         let targetScreen = WindowDiscoveryService.screenUnderMouse() ?? NSScreen.main ?? NSScreen.screens.first
         let screenVisibleFrame = targetScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let minWinSize = NSSize(width: 1180, height: 740)
+        let minWinSize = NSSize(width: 1180, height: 760)
 
         let window = NSWindow(
             contentRect: screenVisibleFrame,

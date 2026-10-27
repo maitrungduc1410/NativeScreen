@@ -39,7 +39,7 @@ public struct InspectorSidebarView: View {
     public var body: some View {
         HStack(spacing: 0) {
             // Vertical Icon Navigation Rail with Purple Active Dot Indicator
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 ForEach(ProjectSession.InspectorTab.allCases) { tab in
                     let isSelected = (session.selectedInspectorTab == tab)
                     InstantTooltipButton(
@@ -47,7 +47,7 @@ public struct InspectorSidebarView: View {
                         shortcutBadge: tab.shortcutBadge,
                         edge: .leading,
                         isActive: isSelected,
-                        size: 40,
+                        size: 38,
                         cornerRadius: 6
                     ) {
                         withAnimation(.easeOut(duration: 0.15)) {
@@ -56,7 +56,7 @@ public struct InspectorSidebarView: View {
                         }
                     } label: {
                         Image(systemName: tab.systemImage)
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.system(size: 15.5, weight: .medium))
                             .foregroundStyle(
                                 isSelected
                                     ? Color(red: 0.65, green: 0.58, blue: 0.99)
@@ -64,9 +64,9 @@ public struct InspectorSidebarView: View {
                             )
                     }
                 }
-                Spacer()
+                Spacer(minLength: 0)
             }
-            .padding(.vertical, 16)
+            .padding(.vertical, 10)
             .padding(.horizontal, 6)
             .frame(maxHeight: .infinity)
             .background(Color(red: 0.04, green: 0.04, blue: 0.055))

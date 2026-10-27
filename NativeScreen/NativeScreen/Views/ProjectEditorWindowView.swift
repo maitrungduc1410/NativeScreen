@@ -48,6 +48,7 @@ public struct ProjectEditorWindowView: View {
         ZStack {
             VStack(spacing: 0) {
                 // 1. UNIFIED DARK WINDOW HEADER BAR (Matches Header 1:1 & 2!)
+                let centerY = max(24.0, trafficLightCenterY)
                 ZStack {
                     // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢 — 36pt buttons, 6pt radius & 16pt icons!)
                     HStack(spacing: 4) {
@@ -81,6 +82,9 @@ public struct ProjectEditorWindowView: View {
                         Spacer()
                     }
                     .padding(.leading, trafficLightRightEdgeX + 12)
+                    .frame(height: 36)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, max(6.0, centerY - 18.0))
 
                     // Center: In-Place Editable Project Title (`Name` bright + `.nativescreen` dimmed)
                     HStack(spacing: 0) {
@@ -150,6 +154,9 @@ public struct ProjectEditorWindowView: View {
                             }
                         }
                     }
+                    .frame(height: 36)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, max(6.0, centerY - 18.0))
 
                     // Right Controls: Command Menu (`⌘`) | Undo & Redo | Export ( & 2!)
                     HStack(spacing: 10) {
@@ -239,8 +246,11 @@ public struct ProjectEditorWindowView: View {
                         .keyboardShortcut("e", modifiers: [.command])
                     }
                     .padding(.trailing, 14)
+                    .frame(height: 36)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, max(6.0, centerY - 18.0))
                 }
-                .frame(height: max(52, trafficLightCenterY * 2.0))
+                .frame(height: max(52.0, centerY + 26.0))
                 .background(Color(red: 0.05, green: 0.05, blue: 0.07))
                 .background(
                     HeaderDoubleClickZoomView()
@@ -572,12 +582,13 @@ public struct ProjectEditorWindowView: View {
                     .background(Color(red: 0.03, green: 0.03, blue: 0.04))
                     .zIndex(70)
                 }
-                .frame(minWidth: 680, maxWidth: .infinity, minHeight: 340, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .zIndex(1)
 
                 InspectorSidebarView(session: session)
                     .zIndex(90)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
@@ -585,7 +596,7 @@ public struct ProjectEditorWindowView: View {
             MultiTrackTimelineView(session: session)
                 .frame(height: 245)
             }
-            .frame(minWidth: 1180, minHeight: 740)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .allowsHitTesting(!isModalOverlayActive)
             .environment(\.isTooltipAndHoverBlocked, isModalOverlayActive)
 
