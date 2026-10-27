@@ -16,6 +16,10 @@ import CoreGraphics
 ///    Uses the `Smooth` (`stiffness: 170, damping: 50, mass: 3.0`, $\zeta \approx 1.11$) or `Focused`
 ///    (`stiffness: 250, damping: 40, mass: 2.25`) presets plus dynamic critical damping boost (`2 * sqrt(k * m)`)
 ///    so the camera NEVER bounces or wobbles back and forth!
+///
+/// Architecture & Mathematical References:
+/// - `spec/03-CINEMATIC-ENGINE-AND-MATH.md` (§1 120Hz Spring Physics Solver, Lookahead Phase-Lag Compensation, Drag Acceleration & Stationary `CursorMovesGroup` Clustering)
+/// - `spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md` (§6 Telemetry Clock Synchronization & Spring Phase-Lag Lookahead)
 public struct SpringTrajectorySolver: Sendable {
     public struct CursorFrameState: Sendable {
         public var position01: Point01

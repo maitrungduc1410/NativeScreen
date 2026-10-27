@@ -7,6 +7,11 @@ import AppKit
 
 /// Shared GPU Compositor that executes the 6-Pass Cinematic Render Pipeline on a `CAMetalDrawable` (for 0% Idle CPU Preview)
 /// or an offscreen `CVPixelBuffer` (for ultra-fast `VideoToolbox` hardware MP4/HEVC export).
+///
+/// Architecture & Performance References:
+/// - `spec/03-CINEMATIC-ENGINE-AND-MATH.md` (§3 6-Pass GPU Compositor Pipeline, §4 1-Frame Shutter Motion Blur)
+/// - `spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md` (§4 Baking Static 4K GPU Stencils & Drop Shadows into VRAM `MTLTexture`s, §5 Uniform Shortest-Side Padding `padByRatio`)
+/// - `spec/platforms/macos-metal-videotoolbox.md` (§2.1 `materializeToGPUTexture` and Frame-0 `waitUntilCompleted` sync)
 public final class MetalFrameCompositor {
     public let device: MTLDevice
     public let commandQueue: MTLCommandQueue

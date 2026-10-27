@@ -28,12 +28,17 @@
 
 ```text
 NativeScreen/
-├── spec/                           # Cross-platform specifications, schemas & checklists
+├── spec/                           # Cross-platform specifications, schemas, ADRs & platform guides
+│   ├── README.md
 │   ├── 01-OVERVIEW-AND-ARCHITECTURE.md
 │   ├── 02-FILE-FORMAT-AND-SCHEMA.md
 │   ├── 03-CINEMATIC-ENGINE-AND-MATH.md
 │   ├── 04-UI-UX-AND-LEGAL-GUIDELINES.md
 │   ├── 05-FEATURE-CHECKLIST.md
+│   ├── 06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md
+│   ├── platforms/
+│   │   ├── macos-metal-videotoolbox.md
+│   │   └── windows-d3d11-mediafoundation.md
 │   └── schemas/
 │       └── project.schema.json
 ├── NativeScreen/                   # macOS Native App (Swift, SwiftUI, AppKit, Metal, ScreenCaptureKit)

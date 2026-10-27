@@ -18,6 +18,10 @@ import QuartzCore
 ///    (`stiffness = 1500, damping = 100, mass = 2`, `Ka = 2pt` magnetic pull, `qa = 10x` escape distance, `Ja = 0.8` entry scale).
 ///    When the cursor enters from any angle (e.g. top-right corner), the highlight layer starts `22pt` outside in that exact direction
 ///    and flies into the button (`overflow: visible`), tracks the cursor magnetically while inside, and flies out in the exit direction on leave!
+///
+/// Architecture & Performance References:
+/// - `spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md` (§7 Retained-Layer `.hover-magnet` Physics, §8 CSG Fillet Tooltip Geometry & `sharingType` Inheritance)
+/// - `spec/platforms/macos-metal-videotoolbox.md` (§3 AppKit & SwiftUI Integration)
 public enum TooltipEdge: Sendable {
     case leading
     case trailing

@@ -11,6 +11,10 @@ import AppKit
 /// Supports MP4 (`H.264`, `HEVC`, or `Both`), Apple `ProRes` (`422 LT`, `422`, `422 HQ`, `4444`), and animated `GIF`,
 /// with the file-size range estimator, upfront export time estimator, live ETA calculator,
 /// Hybrid Parallel Hardware + Software H.264 Encoding (`VTCompressionSession`), and instant cooperative cancellation (`Stop export`).
+///
+/// Architecture & Performance References:
+/// - `spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md` (§1 Hybrid Parallel Video Encoding, §2 Constant-Quality Keyframe Budgeting & `ITU_R_709_2`, §3 Sequential Zero-Copy Decoding, §11 Power-Law File Size & Live ETA)
+/// - `spec/platforms/macos-metal-videotoolbox.md` (§1.1–1.4 `AVAssetReaderTrackOutput`, `VTParallelCompressionWorker` 14-frame lookahead backpressure)
 public final class HardwareVideoExporter {
 
     // MARK: - 1. Export Settings Models
