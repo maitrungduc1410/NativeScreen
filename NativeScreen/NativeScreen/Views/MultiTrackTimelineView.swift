@@ -1790,12 +1790,15 @@ private struct TimelineInteractiveSegmentView: View {
     var body: some View {
         // 1px visual gap between adjacent touching segments
         let segWidth = max(6.0, width - 1.0)
-        let edgeHitWidth = min(edgeHandleHitWidth, max(5.0, segWidth * 0.22))
+        // Adaptive edge hit width: up to `13pt` on wide segments, and at least ~1/3 of `segWidth` (`>= 5.5pt`) on narrow segments
+        // so even a minimum-width segment always has a left resize zone, a center move zone, and a right resize zone!
+        let edgeHitWidth = min(edgeHandleHitWidth, max(5.5, segWidth * 0.34))
         // NativeScreen: `.track-item.is-hovered & { opacity: 1; transform: scaleY(1); }`
-        // Resize handles ONLY appear on hover or during an active resize drag — NOT permanently when selected!
+        // Resize handles appear on hover or during an active resize drag — including on narrow segments!
         let showHandles = !isSplitMode
-            && segWidth >= 28
             && (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight)
+        let handleBarWidth: CGFloat = segWidth < 24 ? 2.4 : 3.0
+        let handleHorizontalInset: CGFloat = min(6.5, max(2.2, (segWidth - handleBarWidth * 2.0 - 3.5) * 0.5))
 
         // opacity rules (`Xm = 0.50` when disabled, `Zm = 0.30` when dimmed by another open item on the same track)
         let bodyOpacity: Double = (isDimmed ? 0.50 : 1.0) * (isDimmedBySelection ? 0.30 : 1.0)
@@ -1845,21 +1848,21 @@ private struct TimelineInteractiveSegmentView: View {
             }
 
             // 5. Left & Right Edge Resize Bars
-            if !isSplitMode && segWidth >= 28 {
+            if !isSplitMode && segWidth >= 10 {
                 HStack(spacing: 0) {
                     Capsule()
                         .fill(Color.white.opacity(0.95))
-                        .frame(width: 3.0, height: max(8, height - 18))
+                        .frame(width: handleBarWidth, height: max(8, height - 18))
                         .scaleEffect(x: 1.0, y: showHandles ? 1.0 : 0.95)
-                        .padding(.leading, 6.5)
+                        .padding(.leading, handleHorizontalInset)
 
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 2)
 
                     Capsule()
                         .fill(Color.white.opacity(0.95))
-                        .frame(width: 3.0, height: max(8, height - 18))
+                        .frame(width: handleBarWidth, height: max(8, height - 18))
                         .scaleEffect(x: 1.0, y: showHandles ? 1.0 : 0.95)
-                        .padding(.trailing, 6.5)
+                        .padding(.trailing, handleHorizontalInset)
                 }
                 .opacity(showHandles ? 1.0 : 0.0)
                 .animation(.easeInOut(duration: 0.16), value: showHandles)
@@ -1872,7 +1875,7 @@ private struct TimelineInteractiveSegmentView: View {
                 onRightClick(pointInView, parentView)
             }
         )
-        .contentShape(Rectangle())
+        .contentShape(Rectangle().inset(by: -3.0))
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
@@ -1880,7 +1883,7 @@ private struct TimelineInteractiveSegmentView: View {
                 // Crucial: because `.offset(x: xOffset)` is applied AFTER `.onContinuousHover(coordinateSpace: .local)`,
                 // SwiftUI passes `pt.x` in the parent `ZStack` coordinate space (`xOffset .. xOffset + segWidth`).
                 // Subtracting `xOffset` gives the true `[0 .. segWidth]` local coordinate!
-                let localX = (pt.x >= xOffset - 2 && pt.x <= xOffset + segWidth + 2) ? (pt.x - xOffset) : pt.x
+                let localX = (pt.x >= xOffset - 6 && pt.x <= xOffset + segWidth + 6) ? (pt.x - xOffset) : pt.x
                 lastHoverLocalX = max(0, min(segWidth, localX))
                 if !isHovered {
                     isHovered = true
@@ -1888,7 +1891,7 @@ private struct TimelineInteractiveSegmentView: View {
                 if isSplitMode {
                     NSCursor.crosshair.set()
                 } else {
-                    if segWidth >= 28 && (lastHoverLocalX <= edgeHitWidth || lastHoverLocalX >= segWidth - edgeHitWidth) {
+                    if lastHoverLocalX <= edgeHitWidth || lastHoverLocalX >= segWidth - edgeHitWidth {
                         NSCursor.resizeLeftRight.set()
                     } else {
                         NSCursor.arrow.set()
@@ -1916,10 +1919,10 @@ private struct TimelineInteractiveSegmentView: View {
                         dragInitialEndMs = endMs
                         dragInitialSegWidth = max(12.0, width)
 
-                        if !isSplitMode && segWidth >= 32 && localX <= edgeHitWidth {
+                        if !isSplitMode && localX <= edgeHitWidth {
                             activeDragMode = .resizeLeft
                             NSCursor.resizeLeftRight.set()
-                        } else if !isSplitMode && segWidth >= 32 && localX >= segWidth - edgeHitWidth {
+                        } else if !isSplitMode && localX >= segWidth - edgeHitWidth {
                             activeDragMode = .resizeRight
                             NSCursor.resizeLeftRight.set()
                         } else {
@@ -2383,8 +2386,11 @@ private struct ShortcutTimelineSegmentView: View {
     }
 
     var body: some View {
-        let segWidth = max(4.0, width)
-        let showHandles = (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight) && segWidth >= 32
+        let segWidth = max(12.0, width)
+        let adaptiveEdgeHitWidth = min(edgeHitWidth, max(5.0, segWidth * 0.34))
+        let showHandles = (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight) && segWidth >= 10
+        let handleBarWidth: CGFloat = segWidth < 24 ? 2.2 : 3.0
+        let handleHorizontalInset: CGFloat = min(5.0, max(2.0, (segWidth - handleBarWidth * 2.0 - 3.0) * 0.5))
 
         ZStack {
             // 1. `W_` Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
@@ -2434,18 +2440,18 @@ private struct ShortcutTimelineSegmentView: View {
                     .allowsHitTesting(false)
             }
 
-            // 5. Left & Right Resize Handles on Hover / Selection
+            // 5. Left & Right Resize Handles on Hover
             if showHandles {
                 HStack(spacing: 0) {
                     Capsule()
                         .fill(Color.white.opacity(0.88))
-                        .frame(width: 3.0, height: max(8, height - 14))
-                        .padding(.leading, 5.0)
-                    Spacer(minLength: 4)
+                        .frame(width: handleBarWidth, height: max(8, height - 14))
+                        .padding(.leading, handleHorizontalInset)
+                    Spacer(minLength: 2)
                     Capsule()
                         .fill(Color.white.opacity(0.88))
-                        .frame(width: 3.0, height: max(8, height - 14))
-                        .padding(.trailing, 5.0)
+                        .frame(width: handleBarWidth, height: max(8, height - 14))
+                        .padding(.trailing, handleHorizontalInset)
                 }
                 .allowsHitTesting(false)
             }
@@ -2466,16 +2472,16 @@ private struct ShortcutTimelineSegmentView: View {
                 )
             }
         )
-        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(Rectangle().inset(by: -3.0))
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
                 guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
-                let localX = (pt.x >= xOffset - 2 && pt.x <= xOffset + segWidth + 2) ? (pt.x - xOffset) : pt.x
+                let localX = (pt.x >= xOffset - 6 && pt.x <= xOffset + segWidth + 6) ? (pt.x - xOffset) : pt.x
                 if !isHovered {
                     isHovered = true
                 }
-                if segWidth >= 32 && (localX <= edgeHitWidth || localX >= segWidth - edgeHitWidth) {
+                if localX <= adaptiveEdgeHitWidth || localX >= segWidth - adaptiveEdgeHitWidth {
                     NSCursor.resizeLeftRight.set()
                 } else {
                     NSCursor.arrow.set()
@@ -2501,10 +2507,10 @@ private struct ShortcutTimelineSegmentView: View {
                         dragInitialStartMs = startMs
                         dragInitialEndMs = endMs
 
-                        if segWidth >= 32 && localX <= edgeHitWidth {
+                        if localX <= adaptiveEdgeHitWidth {
                             activeDragMode = .resizeLeft
                             NSCursor.resizeLeftRight.set()
-                        } else if segWidth >= 32 && localX >= segWidth - edgeHitWidth {
+                        } else if localX >= segWidth - adaptiveEdgeHitWidth {
                             activeDragMode = .resizeRight
                             NSCursor.resizeLeftRight.set()
                         } else {
