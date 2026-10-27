@@ -788,7 +788,7 @@ public struct ProjectEditorWindowView: View {
                 return event
             }
             switch event.keyCode {
-            case 53: // ESC: Exit Add Mask Mode, Split Mode, or clear selection
+            case 53: // ESC: Exit Add Mask Mode, Split Mode, close open Segment Editor / clear selection, or return Sidebar to General
                 if session.pendingAddMaskType != nil {
                     session.cancelInteractiveMaskSelection()
                     return nil
@@ -799,11 +799,19 @@ public struct ProjectEditorWindowView: View {
                     NSCursor.arrow.set()
                     return nil
                 }
-                if session.selectedMaskId != nil || session.selectedZoomId != nil || session.selectedShortcutId != nil {
-                    session.selectedMaskId = nil
-                    session.selectedZoomId = nil
-                    session.selectedShortcutId = nil
-                    session.renderRevision &+= 1
+                if session.selectedSliceId != nil
+                    || session.selectedMaskId != nil
+                    || session.selectedZoomId != nil
+                    || session.selectedShortcutId != nil {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        session.clearTimelineSelection()
+                    }
+                    return nil
+                }
+                if session.selectedInspectorTab != .background {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        session.selectedInspectorTab = .background
+                    }
                     return nil
                 }
                 return event

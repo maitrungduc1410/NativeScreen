@@ -27,10 +27,10 @@ public struct MultiTrackTimelineView: View {
     private let labelColumnWidth: CGFloat = 126
     private let trackHorizontalInset: CGFloat = 20
     private let rulerHeight: CGFloat = 30
-    private let clipRowHeight: CGFloat = 52
-    private let zoomRowHeight: CGFloat = 46
+    private let clipRowHeight: CGFloat = 48
+    private let zoomRowHeight: CGFloat = 48
     private let maskRowHeight: CGFloat = 34
-    private let rowSpacing: CGFloat = 8
+    private let rowSpacing: CGFloat = 12
 
     public init(session: ProjectSession) {
         self.session = session
@@ -323,6 +323,7 @@ public struct MultiTrackTimelineView: View {
                                                     let localTrackX = event.location.x - trackHorizontalInset
                                                     let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
                                                     session.isPlaying = false
+                                                    session.clearTimelineSelection()
                                                     session.seek(toTimelineMs: frac * totalTimelineMs)
                                                 }
                                         )
@@ -480,13 +481,14 @@ public struct MultiTrackTimelineView: View {
     @ViewBuilder
     private func clipLaneView(contentWidth: CGFloat, totalTimelineMs: Double, minorTickStepSec: Double) -> some View {
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.018))
-
             ForEach(session.timeMapper.mappedSlices, id: \.slice.id) { mapped in
                 let xStart = CGFloat(mapped.timelineStartMs / totalTimelineMs) * contentWidth
                 let blockW = max(12.0, CGFloat((mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs) * contentWidth)
                 let isSelected = (session.selectedSliceId == mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
+                let isOtherSliceSelected = (session.selectedSliceId != nil && session.selectedSliceId != mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
+                let isPlayedNow = abs(session.committedSourceTimeMs - mapped.slice.sourceStartMs) >= 0.0
+                    && session.committedSourceTimeMs >= mapped.slice.sourceStartMs
+                    && session.committedSourceTimeMs <= mapped.slice.sourceEndMs
 
                 TimelineInteractiveSegmentView(
                     topTitle: "Clip",
@@ -496,8 +498,9 @@ public struct MultiTrackTimelineView: View {
                     ),
                     palette: .clip,
                     isSelected: isSelected,
-                    isPlayed: false,
-                    isDimmed: false,
+                    isPlayed: isPlayedNow,
+                    isDimmed: isOtherSliceSelected,
+                    isDimmedBySelection: isOtherSliceSelected,
                     isSplitMode: session.isSplitModeActive,
                     xOffset: xStart,
                     width: blockW,
@@ -572,9 +575,6 @@ public struct MultiTrackTimelineView: View {
             : nil
 
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.018))
-
             // Empty-Track Prompt when no zooms exist and not hovering
             if session.document.timeline.zooms.isEmpty && addPreview == nil {
                 Text("Click or drag to add zoom on cursor")
@@ -582,7 +582,7 @@ public struct MultiTrackTimelineView: View {
                     .foregroundStyle(.white.opacity(0.35))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.08))
                     )
                     .allowsHitTesting(false)
@@ -599,30 +599,18 @@ public struct MultiTrackTimelineView: View {
                     session.addZoomInRange(sourceStartMs: preview.srcStartMs, sourceEndMs: preview.srcEndMs)
                 } label: {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [palette.fillTop, palette.fillBottom],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.innerEdgeGlow.opacity(0.45), lineWidth: 3.5)
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.innerEdgeGlow.opacity(0.22), lineWidth: 7.0)
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.ringBorder.opacity(0.82), lineWidth: 1.0)
+                        SegmentBodyCanvas(
+                            palette: palette,
+                            isSelected: false,
+                            isPlayed: false
+                        )
 
                         Image(systemName: "plus")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.white.opacity(0.96))
                     }
                     .frame(width: previewW, height: zoomRowHeight)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .offset(x: previewX)
@@ -634,6 +622,9 @@ public struct MultiTrackTimelineView: View {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedZoomId == zoom.id)
+                    let isOtherZoomSelected = (session.selectedZoomId != nil && session.selectedZoomId != zoom.id)
+                    let isPlayedNow = session.committedSourceTimeMs >= zoom.sourceStartMs
+                        && session.committedSourceTimeMs <= zoom.sourceEndMs
                     let timelineDurationMs = max(250.0, tEndMs - tStartMs)
 
                     TimelineInteractiveSegmentView(
@@ -644,8 +635,9 @@ public struct MultiTrackTimelineView: View {
                         ),
                         palette: .zoom,
                         isSelected: isSelected,
-                        isPlayed: false,
+                        isPlayed: isPlayedNow,
                         isDimmed: isHidden || zoom.disabled || zoom.scale <= 1.01,
+                        isDimmedBySelection: isOtherZoomSelected,
                         isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
                         width: blockW,
@@ -773,9 +765,6 @@ public struct MultiTrackTimelineView: View {
             : nil
 
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.015))
-
             // Hover `+` Ghost Add-Mask Preview Block ( `Screenshot_2026-10-26_at_2.29.54_PM.png` 1:1!)
             if let preview = addPreview {
                 let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
@@ -792,30 +781,18 @@ public struct MultiTrackTimelineView: View {
                     )
                 } label: {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [palette.fillTop, palette.fillBottom],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.innerEdgeGlow.opacity(0.45), lineWidth: 3.5)
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.innerEdgeGlow.opacity(0.22), lineWidth: 7.0)
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.ringBorder.opacity(0.82), lineWidth: 1.0)
+                        SegmentBodyCanvas(
+                            palette: palette,
+                            isSelected: false,
+                            isPlayed: false
+                        )
 
                         Image(systemName: "plus")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.white.opacity(0.96))
                     }
                     .frame(width: previewW, height: maskRowHeight)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .offset(x: previewX)
@@ -828,6 +805,9 @@ public struct MultiTrackTimelineView: View {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedMaskId == item.id)
+                    let isOtherMaskSelected = (session.selectedMaskId != nil && session.selectedMaskId != item.id)
+                    let isPlayedNow = session.committedSourceTimeMs >= item.sourceStartMs
+                        && session.committedSourceTimeMs <= item.sourceEndMs
                     let timelineDurationMs = max(220.0, tEndMs - tStartMs)
 
                     TimelineInteractiveSegmentView(
@@ -839,8 +819,9 @@ public struct MultiTrackTimelineView: View {
                         ),
                         palette: .mask,
                         isSelected: isSelected,
-                        isPlayed: false,
+                        isPlayed: isPlayedNow,
                         isDimmed: isHidden || item.disabled,
+                        isDimmedBySelection: isOtherMaskSelected,
                         isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
                         width: blockW,
@@ -995,8 +976,7 @@ public struct MultiTrackTimelineView: View {
             || !session.document.captions.showKeystrokes
 
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.015))
+            Color.clear
 
             // Hover `+` preview block on empty areas of the Shortcuts track (click to insert a custom shortcut!)
             if !session.isSplitModeActive,
@@ -1497,7 +1477,7 @@ private struct ClipSegmentDecoration: Equatable, View {
                 tickMs += stepMs
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .allowsHitTesting(false)
     }
 
@@ -1575,58 +1555,169 @@ private struct ClipSegmentDecoration: Equatable, View {
 private struct SegmentShaderPalette: Equatable {
     let fillTop: Color
     let fillBottom: Color
+    /// Base `glow` (`color.darken(0.2).opacity(0.8)`)
     let innerEdgeGlow: Color
+    /// `activeGlow` (`color.darken(0.2).opacity(0.5)`)
+    let activeInnerEdgeGlow: Color
+    /// `playedGlow` (`color.opacity(0.5)`)
     let playedInnerEdgeGlow: Color
+    /// Base `ring` (`color.lightness(+40)`)
     let ringBorder: Color
+    /// `playedRing` (`color.lightness(+15)`)
     let playedRingBorder: Color
+    /// Outer selection ring
+    let selectedOuterOutline: Color
 
     /// Clip (`#93610C`):
     /// - `fillTop`: `#93610C` (`0.576, 0.380, 0.047`)
     /// - `fillBottom` (`lightness(+15)`): `#DA9012` (`0.855, 0.565, 0.071`)
     /// - `glow` (`darken(0.2).opacity(0.8)`): `#764E0A` (`0.463, 0.306, 0.039, 0.80`)
+    /// - `activeGlow` (`darken(0.2).opacity(0.5)`): `#764E0A` (`0.463, 0.306, 0.039, 0.50`)
+    /// - `playedGlow` (`opacity(0.5)`): `#93610C` (`0.576, 0.380, 0.047, 0.50`)
     /// - `ring` (`lightness(+40)`): `#F4C677` (`0.957, 0.776, 0.467`)
     /// - `playedRing` (`lightness(+15)`): `#DA9012` (`0.855, 0.565, 0.071`)
+    /// - `selectedOuterOutline` (`lightness(+20).opacity(0.8)`): `#EC9E18` (`0.925, 0.620, 0.094, 0.80`)
     static let clip = SegmentShaderPalette(
         fillTop: Color(red: 0.576, green: 0.380, blue: 0.047),
         fillBottom: Color(red: 0.855, green: 0.565, blue: 0.071),
         innerEdgeGlow: Color(red: 0.463, green: 0.306, blue: 0.039).opacity(0.80),
+        activeInnerEdgeGlow: Color(red: 0.463, green: 0.306, blue: 0.039).opacity(0.50),
         playedInnerEdgeGlow: Color(red: 0.576, green: 0.380, blue: 0.047).opacity(0.50),
         ringBorder: Color(red: 0.957, green: 0.776, blue: 0.467),
-        playedRingBorder: Color(red: 0.855, green: 0.565, blue: 0.071)
+        playedRingBorder: Color(red: 0.855, green: 0.565, blue: 0.071),
+        selectedOuterOutline: Color(red: 0.925, green: 0.620, blue: 0.094).opacity(0.80)
     )
 
     /// Zoom (`#4D2FF5`):
     /// - `fillTop`: `#4D2FF5` (`0.302, 0.184, 0.961`)
     /// - `fillBottom` (`lightness(+15)`): `#8B78F9` (`0.545, 0.471, 0.976`)
     /// - `glow` (`darken(0.2).opacity(0.8)`): `#2B0BDF` (`0.169, 0.043, 0.875, 0.80`)
+    /// - `activeGlow` (`darken(0.2).opacity(0.5)`): `#2B0BDF` (`0.169, 0.043, 0.875, 0.50`)
+    /// - `playedGlow` (`opacity(0.5)`): `#4D2FF5` (`0.302, 0.184, 0.961, 0.50`)
     /// - `ring` (`lightness(+40)`): `#F4F2FE` (`0.957, 0.949, 0.996`)
     /// - `playedRing` (`lightness(+15)`): `#8B78F9` (`0.545, 0.471, 0.976`)
+    /// - `selectedOuterOutline` (`lightness(+20).opacity(0.8)`): `#A091FA` (`0.627, 0.569, 0.980, 0.80`)
     static let zoom = SegmentShaderPalette(
         fillTop: Color(red: 0.302, green: 0.184, blue: 0.961),
         fillBottom: Color(red: 0.545, green: 0.471, blue: 0.976),
         innerEdgeGlow: Color(red: 0.169, green: 0.043, blue: 0.875).opacity(0.80),
+        activeInnerEdgeGlow: Color(red: 0.169, green: 0.043, blue: 0.875).opacity(0.50),
         playedInnerEdgeGlow: Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.50),
         ringBorder: Color(red: 0.957, green: 0.949, blue: 0.996),
-        playedRingBorder: Color(red: 0.545, green: 0.471, blue: 0.976)
+        playedRingBorder: Color(red: 0.545, green: 0.471, blue: 0.976),
+        selectedOuterOutline: Color(red: 0.627, green: 0.569, blue: 0.980).opacity(0.80)
     )
 
     /// Mask (`#82345A`):
     /// - `fillTop`: `#82345A` (`0.510, 0.204, 0.353`)
     /// - `fillBottom` (`lightness(+15)`): `#B74B80` (`0.718, 0.294, 0.502`)
     /// - `glow` (`darken(0.2).opacity(0.8)`): `#682A48` (`0.408, 0.165, 0.282, 0.80`)
+    /// - `activeGlow` (`darken(0.2).opacity(0.5)`): `#682A48` (`0.408, 0.165, 0.282, 0.50`)
+    /// - `playedGlow` (`opacity(0.5)`): `#82345A` (`0.510, 0.204, 0.353, 0.50`)
     /// - `ring` (`lightness(+40)`): `#DCA6C0` (`0.863, 0.651, 0.753`)
     /// - `playedRing` (`lightness(+15)`): `#B74B80` (`0.718, 0.294, 0.502`)
+    /// - `selectedOuterOutline` (`lightness(+20).opacity(0.8)`): `#C65D91` (`0.776, 0.365, 0.569, 0.80`)
     static let mask = SegmentShaderPalette(
         fillTop: Color(red: 0.510, green: 0.204, blue: 0.353),
         fillBottom: Color(red: 0.718, green: 0.294, blue: 0.502),
         innerEdgeGlow: Color(red: 0.408, green: 0.165, blue: 0.282).opacity(0.80),
+        activeInnerEdgeGlow: Color(red: 0.408, green: 0.165, blue: 0.282).opacity(0.50),
         playedInnerEdgeGlow: Color(red: 0.510, green: 0.204, blue: 0.353).opacity(0.50),
         ringBorder: Color(red: 0.863, green: 0.651, blue: 0.753),
-        playedRingBorder: Color(red: 0.718, green: 0.294, blue: 0.502)
+        playedRingBorder: Color(red: 0.718, green: 0.294, blue: 0.502),
+        selectedOuterOutline: Color(red: 0.776, green: 0.365, blue: 0.569).opacity(0.80)
     )
 }
 
-// MARK: - Interactive Segment Block with Shader Look, Waveform, Inset Handles & Normal-Weight Icon Labels
+/// Renders the `shadeBody`
+/// with a smooth, continuous normal-CDF inner glow feather (`box-shadow: inset 0px 0px 15px 3px glowColor`) and zero sharp concentric rings!
+private struct SegmentBodyCanvas: View, Equatable {
+    let palette: SegmentShaderPalette
+    let isSelected: Bool
+    let isPlayed: Bool
+
+    var body: some View {
+        let glowColor: Color = isSelected
+            ? palette.activeInnerEdgeGlow
+            : (isPlayed ? palette.playedInnerEdgeGlow : palette.innerEdgeGlow)
+        let ringColor: Color = isSelected
+            ? Color.white
+            : (isPlayed ? palette.playedRingBorder : palette.ringBorder)
+
+        ZStack {
+            // 1. Vertical LinearGradient (`fillTop` -> `fillBottom`)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [palette.fillTop, palette.fillBottom],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            // 2. Smooth 4-edge Gaussian-CDF inner vignette (`GLOW_SPREAD_PX = 3`, `GLOW_SIGMA_PX = 7.5`)
+            //    Using 4 edge-aligned multi-stop `LinearGradient`s produces a 100% smooth, continuous fade from the edges
+            //    with ZERO sharp step boundaries and ZERO offscreen blur buffer allocations during resize!
+            GeometryReader { geo in
+                let w = max(1.0, geo.size.width)
+                let h = max(1.0, geo.size.height)
+                let fadeDepthY = min(h * 0.48, 18.0)
+                let fadeDepthX = min(w * 0.45, 20.0)
+                let yFrac1 = min(0.48, (fadeDepthY * 0.22) / h)
+                let yFrac2 = min(0.49, (fadeDepthY * 0.55) / h)
+                let yFrac3 = min(0.50, fadeDepthY / h)
+                let xFrac1 = min(0.48, (fadeDepthX * 0.22) / w)
+                let xFrac2 = min(0.49, (fadeDepthX * 0.55) / w)
+                let xFrac3 = min(0.50, fadeDepthX / w)
+
+                ZStack {
+                    // Top & Bottom smooth Gaussian-CDF falloff
+                    LinearGradient(
+                        stops: [
+                            .init(color: glowColor.opacity(0.72), location: 0.0),
+                            .init(color: glowColor.opacity(0.42), location: yFrac1),
+                            .init(color: glowColor.opacity(0.14), location: yFrac2),
+                            .init(color: .clear, location: yFrac3),
+                            .init(color: .clear, location: 1.0 - yFrac3),
+                            .init(color: glowColor.opacity(0.14), location: 1.0 - yFrac2),
+                            .init(color: glowColor.opacity(0.42), location: 1.0 - yFrac1),
+                            .init(color: glowColor.opacity(0.72), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+
+                    // Left & Right smooth Gaussian-CDF falloff
+                    LinearGradient(
+                        stops: [
+                            .init(color: glowColor.opacity(0.68), location: 0.0),
+                            .init(color: glowColor.opacity(0.38), location: xFrac1),
+                            .init(color: glowColor.opacity(0.12), location: xFrac2),
+                            .init(color: .clear, location: xFrac3),
+                            .init(color: .clear, location: 1.0 - xFrac3),
+                            .init(color: glowColor.opacity(0.12), location: 1.0 - xFrac2),
+                            .init(color: glowColor.opacity(0.38), location: 1.0 - xFrac1),
+                            .init(color: glowColor.opacity(0.68), location: 1.0)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .allowsHitTesting(false)
+
+            // 3. Crisp 1px inner ring
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(
+                    ringColor.opacity(isSelected ? 0.95 : 0.72),
+                    lineWidth: 1.0
+                )
+        }
+    }
+}
+
+// MARK: - Interactive Segment Block with Shader Look, Waveform, Inset Handles & Icon Labels
 
 private enum SegmentSubtitleContent: Equatable {
     case clip(durationText: String, speedText: String)
@@ -1647,6 +1738,7 @@ private struct TimelineInteractiveSegmentView: View {
     let isSelected: Bool
     let isPlayed: Bool
     let isDimmed: Bool
+    var isDimmedBySelection: Bool = false
     let isSplitMode: Bool
     let xOffset: CGFloat
     let width: CGFloat
@@ -1676,84 +1768,84 @@ private struct TimelineInteractiveSegmentView: View {
     @State private var dragInitialSegWidth: CGFloat = 60.0
     @State private var verticalDragOffset: CGFloat = 0.0
 
-    private let edgeHandleHitWidth: CGFloat = 11.0
+    private let edgeHandleHitWidth: CGFloat = 13.0
 
     var body: some View {
         // 1px visual gap between adjacent touching segments
         let segWidth = max(6.0, width - 1.0)
         let edgeHitWidth = min(edgeHandleHitWidth, max(5.0, segWidth * 0.22))
-        let showHandles = !isSplitMode && segWidth >= 28 && (isSelected || isHovered)
-        // Always keep the segment colors and border 100% vibrant (do NOT darken when mouse leaves!)
-        let outerRingColor: Color = isSelected ? Color.white : palette.ringBorder
+        // NativeScreen: `.track-item.is-hovered & { opacity: 1; transform: scaleY(1); }`
+        // Resize handles ONLY appear on hover or during an active resize drag — NOT permanently when selected!
+        let showHandles = !isSplitMode
+            && segWidth >= 28
+            && (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight)
+
+        // opacity rules (`Xm = 0.50` when disabled, `Zm = 0.30` when dimmed by another open item on the same track)
+        let bodyOpacity: Double = (isDimmed ? 0.50 : 1.0) * (isDimmedBySelection ? 0.30 : 1.0)
 
         ZStack(alignment: .leading) {
-            // 1. `shadeBody` Vertical LinearGradient (`fillTop` -> `fillBottom`) + Inner Edge Blurred Glow (`glowColor * glowAlpha`)
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [palette.fillTop, palette.fillBottom],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(palette.innerEdgeGlow.opacity(0.45), lineWidth: 3.5)
-
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(palette.innerEdgeGlow.opacity(0.22), lineWidth: 7.0)
-            }
-            // When `isDimmed` (e.g. Zoom = `1x` or disabled), the `shadeBody` multiplies body opacity by `disabledOpacity = Xm = 0.50`!
-            .opacity(isDimmed ? 0.50 : 1.0)
+            // 1. `shadeBody` (`radiusPx = 10`, smooth Gaussian-CDF inner glow + 1px ring)
+            EquatableView(
+                content: SegmentBodyCanvas(
+                    palette: palette,
+                    isSelected: isSelected,
+                    isPlayed: isPlayed
+                )
+            )
+            .opacity(bodyOpacity)
 
             // 2. Clip-Specific Decoration: Audio Waveform along Bottom + Ruler Vertical Tick Lines from Top (Equatable so it never redraws during hover skimming!)
             if let deco = clipDecoration {
                 EquatableView(content: deco)
+                    .opacity(isDimmedBySelection ? 0.30 : 1.0)
             }
 
-            // 3. Crisp 1px Outer Ring Border ( when dimmed at 1x zoom!)
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(
-                    outerRingColor.opacity(isSelected ? 0.98 : (isDimmed ? 0.44 : 0.84)),
-                    lineWidth: 1.0
-                )
+            // 3. Outer 1px Selection Outline
+            if isSelected {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(palette.selectedOuterOutline, lineWidth: 1.0)
+                    .padding(-1.5)
+                    .allowsHitTesting(false)
+            }
 
-            // 4. Centered Title & Icon Subtitle (Matches Images 2, 5, 6, 7 — Regular/Normal weight!)
+            // 4. Centered Title (`w600`, `12px`, `opacity: 0.55`) & Icon Subtitle (`449` weight, `13px`)
             if segWidth > 42 {
                 VStack(spacing: 1.5) {
                     Text(topTitle)
-                        .font(.system(size: 11.0, weight: .regular))
-                        .foregroundStyle(.white.opacity(isDimmed ? 0.34 : 0.48))
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(1)
 
                     if segWidth > 64 {
                         subtitleRowView
-                            .opacity(isDimmed ? 0.62 : 1.0)
                     }
                 }
+                .opacity(bodyOpacity)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 10)
+                .padding(.bottom, 1)
                 .allowsHitTesting(false)
             }
 
-            // 5. Left & Right Edge Resize Bars (Inset 6.5pt inside the segment, smooth fade in/out)
+            // 5. Left & Right Edge Resize Bars
             if !isSplitMode && segWidth >= 28 {
                 HStack(spacing: 0) {
                     Capsule()
-                        .fill(Color.white.opacity(0.92))
-                        .frame(width: 3.5, height: max(8, height - 14))
+                        .fill(Color.white.opacity(0.95))
+                        .frame(width: 3.0, height: max(8, height - 18))
+                        .scaleEffect(x: 1.0, y: showHandles ? 1.0 : 0.95)
                         .padding(.leading, 6.5)
 
                     Spacer(minLength: 4)
 
                     Capsule()
-                        .fill(Color.white.opacity(0.92))
-                        .frame(width: 3.5, height: max(8, height - 14))
+                        .fill(Color.white.opacity(0.95))
+                        .frame(width: 3.0, height: max(8, height - 18))
+                        .scaleEffect(x: 1.0, y: showHandles ? 1.0 : 0.95)
                         .padding(.trailing, 6.5)
                 }
                 .opacity(showHandles ? 1.0 : 0.0)
-                .animation(.easeInOut(duration: 0.15), value: showHandles)
+                .animation(.easeInOut(duration: 0.16), value: showHandles)
                 .allowsHitTesting(false)
             }
         }
@@ -2275,7 +2367,7 @@ private struct ShortcutTimelineSegmentView: View {
 
     var body: some View {
         let segWidth = max(4.0, width)
-        let showHandles = (isHovered || isSelected || activeDragMode != nil) && segWidth >= 32
+        let showHandles = (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight) && segWidth >= 32
 
         ZStack {
             // 1. `W_` Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)

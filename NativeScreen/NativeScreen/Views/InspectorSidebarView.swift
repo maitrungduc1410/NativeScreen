@@ -44,8 +44,7 @@ public struct InspectorSidebarView: View {
                         cornerRadius: 6
                     ) {
                         withAnimation(.easeOut(duration: 0.15)) {
-                            session.selectedZoomId = nil
-                            session.selectedShortcutId = nil
+                            session.clearTimelineSelection()
                             session.selectedInspectorTab = tab
                         }
                     } label: {

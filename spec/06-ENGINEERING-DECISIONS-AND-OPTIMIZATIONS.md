@@ -232,7 +232,8 @@ then timeline segment dragging/resizing drops to ~20–30fps on the main thread.
 2. **Up-Front `ResolvedFocusGroup` Centroids, Settled Spring Fast-Path & Conditional Loupe Integration**:
    - Compute each `CursorMovesGroup`'s time-weighted centroid once when partitioning groups (`buildMovesGroupsForZoom` using $O(\log N)$ binary search on `cursorEvents`).
    - Precompute $\omega_0 = \sqrt{k/m}$ and $c_{\text{crit}} = 2\sqrt{km}$ outside the 120Hz loop, early-exit `stepClampedSpring` in $O(1)$ whenever $|x_{\text{target}} - x| < 0.0004 \land |v| < 0.0004$, and skip the 4 Loupe springs entirely when `!hasAnyLoupeZoom`.
-3. **Memoized Telemetry Derivations & Zero-Blur Segment Views**:
+3. **Memoized Telemetry Derivations & Smooth Gaussian-CDF Inner Glow (`SegmentBodyCanvas`)**:
    - Cache `activeTypingSuggestions` and `detectedShortcutClusters` on `ProjectSession` (invalidated only when `slices`, `dismissedTypingSuggestionStarts`, or `captions` change).
-   - Render timeline segment inner edge glows using layered vector `strokeBorder`s (zero offscreen Gaussian `.blur()` allocation during width resize) and suspend `.onContinuousHover` skimming while `isDraggingTimelineSegment` or mouse buttons are pressed.
+   - Render timeline segment inner edge glows (`radiusPx = 10`, `GLOW_SPREAD_PX = 3`, `GLOW_SIGMA_PX = 7.5`) using 4-edge multi-stop Gaussian-CDF `LinearGradient`s (`SegmentBodyCanvas`), eliminating both offscreen Gaussian `.blur()` buffer allocations during resize and sharp concentric stroke step boundaries.
+   - Show edge resize handle capsules (`3 pt` width, `9 pt` vertical inset, `6.5 pt` horizontal inset) **only on hover or active edge resize** (`isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight`), and dim sibling segments on the same track (`opacity = 0.30`) when a segment editor is open. Clicking empty timeline space or pressing `Escape` clears any active segment selection (`clearTimelineSelection()`).
 

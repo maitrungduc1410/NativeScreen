@@ -148,7 +148,7 @@ public final class ProjectSession: Identifiable {
             clickEvents: clickEvents,
             document: cleanedDoc
         )
-        self.selectedSliceId = cleanedDoc.timeline.slices.first?.id
+        self.selectedSliceId = nil
         self.audioWaveformSamples = Self.generateProceduralWaveform(durationMs: metadata.durationMs)
 
         // Synchronize `shortcutTracks` with actual shortcuts so projects without shortcuts never show an empty default Shortcuts track!
@@ -482,6 +482,7 @@ public final class ProjectSession: Identifiable {
 
     public func selectZoom(_ id: String?) {
         selectedZoomId = id
+        selectedSliceId = nil
         selectedMaskId = nil
         selectedShortcutId = nil
         pendingAddMaskType = nil
@@ -493,6 +494,7 @@ public final class ProjectSession: Identifiable {
 
     public func selectMask(_ id: String?) {
         selectedMaskId = id
+        selectedSliceId = nil
         selectedZoomId = nil
         selectedShortcutId = nil
         if id != nil {
@@ -503,12 +505,22 @@ public final class ProjectSession: Identifiable {
 
     public func selectShortcut(_ id: String?) {
         selectedShortcutId = id
+        selectedSliceId = nil
         selectedZoomId = nil
         selectedMaskId = nil
         pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .shortcuts
         }
+        renderRevision &+= 1
+    }
+
+    public func clearTimelineSelection() {
+        selectedSliceId = nil
+        selectedZoomId = nil
+        selectedMaskId = nil
+        selectedShortcutId = nil
+        pendingAddMaskType = nil
         renderRevision &+= 1
     }
 
