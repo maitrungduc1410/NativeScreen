@@ -109,6 +109,9 @@ private struct WebcamPipCanvasView: View {
         }()
 
         let cornerRadius = min(pipWidth, pipHeight) * CGFloat(max(0.04, min(0.50, camCfg.borderRadiusRatio)))
+        let activeCustomPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
+            camCfg.customColorPresets.first(where: { $0.id == id })
+        }
 
         ZStack {
             if let webcamURL = session.webcamVideoFileURL {
@@ -118,16 +121,20 @@ private struct WebcamPipCanvasView: View {
                     isPlaying: session.isPlaying,
                     playbackRate: session.previewPlaybackRate * (session.currentActiveSlice?.speed ?? 1.0),
                     preset: camCfg.colorGradePreset,
+                    customPreset: activeCustomPreset,
                     intensity: camCfg.colorGradeIntensity,
                     sharpen01: camCfg.sharpen01,
                     mirror: camCfg.mirror,
                     cropRect01: camCfg.cropRect01,
                     enableFaceTracking: camCfg.enableFaceTracking,
-                    isCutoutMode: camCfg.layoutMode == .cutout
+                    isCutoutMode: camCfg.layoutMode == .cutout,
+                    cutoutEdgeSoftness: camCfg.cutoutEdgeSoftness,
+                    cutoutEdgeInset: camCfg.cutoutEdgeInset
                 )
             } else {
                 GradedWebcamPortraitView(
                     preset: camCfg.colorGradePreset,
+                    customPreset: activeCustomPreset,
                     intensity: camCfg.colorGradeIntensity,
                     sharpen01: camCfg.sharpen01,
                     mirror: camCfg.mirror,
@@ -173,12 +180,15 @@ private struct RealRecordedWebcamVideoView: View {
     let isPlaying: Bool
     let playbackRate: Double
     let preset: CameraColorGradePreset
+    var customPreset: CustomCameraColorPreset? = nil
     let intensity: Double
     let sharpen01: Double
     let mirror: Bool
     let cropRect01: Rect01
     let enableFaceTracking: Bool
     let isCutoutMode: Bool
+    var cutoutEdgeSoftness: Double = 0.20
+    var cutoutEdgeInset: Double = 0.0
 
     @State private var hasPlayableTrack: Bool = true
     @State private var checkedURL: URL? = nil
@@ -201,9 +211,12 @@ private struct RealRecordedWebcamVideoView: View {
                         isPlaying: isPlaying,
                         playbackRate: playbackRate,
                         preset: preset,
+                        customPreset: customPreset,
                         intensity: intensity,
                         sharpen01: sharpen01,
-                        isCutoutMode: isCutoutMode
+                        isCutoutMode: isCutoutMode,
+                        cutoutEdgeSoftness: cutoutEdgeSoftness,
+                        cutoutEdgeInset: cutoutEdgeInset
                     )
                     .frame(width: w, height: h)
                     .scaleEffect(
@@ -215,6 +228,7 @@ private struct RealRecordedWebcamVideoView: View {
             } else {
                 GradedWebcamPortraitView(
                     preset: preset,
+                    customPreset: customPreset,
                     intensity: intensity,
                     sharpen01: sharpen01,
                     mirror: mirror,
@@ -254,9 +268,12 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
     let isPlaying: Bool
     let playbackRate: Double
     let preset: CameraColorGradePreset
+    let customPreset: CustomCameraColorPreset?
     let intensity: Double
     let sharpen01: Double
     let isCutoutMode: Bool
+    let cutoutEdgeSoftness: Double
+    let cutoutEdgeInset: Double
 
     func makeNSView(context: Context) -> WebcamPlayerHostNSView {
         let view = WebcamPlayerHostNSView()
@@ -266,9 +283,12 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
             isPlaying: isPlaying,
             playbackRate: playbackRate,
             preset: preset,
+            customPreset: customPreset,
             intensity: intensity,
             sharpen01: sharpen01,
-            isCutoutMode: isCutoutMode
+            isCutoutMode: isCutoutMode,
+            cutoutEdgeSoftness: cutoutEdgeSoftness,
+            cutoutEdgeInset: cutoutEdgeInset
         )
         return view
     }
@@ -280,9 +300,12 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
             isPlaying: isPlaying,
             playbackRate: playbackRate,
             preset: preset,
+            customPreset: customPreset,
             intensity: intensity,
             sharpen01: sharpen01,
-            isCutoutMode: isCutoutMode
+            isCutoutMode: isCutoutMode,
+            cutoutEdgeSoftness: cutoutEdgeSoftness,
+            cutoutEdgeInset: cutoutEdgeInset
         )
     }
 
@@ -319,9 +342,12 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
             isPlaying: Bool,
             playbackRate: Double,
             preset: CameraColorGradePreset,
+            customPreset: CustomCameraColorPreset?,
             intensity: Double,
             sharpen01: Double,
-            isCutoutMode: Bool
+            isCutoutMode: Bool,
+            cutoutEdgeSoftness: Double,
+            cutoutEdgeInset: Double
         ) {
             if loadedURL != url {
                 loadedURL = url
@@ -341,21 +367,45 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
                 self.playerLayer = pLayer
                 lastSeekedMs = -1000.0
                 isSeeking = false
-                applyVideoCompositionIfNeeded(to: item, asset: asset, preset: preset, intensity: intensity, sharpen01: sharpen01, isCutoutMode: isCutoutMode, force: true)
+                applyVideoCompositionIfNeeded(
+                    to: item,
+                    asset: asset,
+                    preset: preset,
+                    customPreset: customPreset,
+                    intensity: intensity,
+                    sharpen01: sharpen01,
+                    isCutoutMode: isCutoutMode,
+                    force: true
+                )
             }
 
             let styleChanged = (currentPreset != preset)
+                || (currentCustomPreset != customPreset)
                 || (abs(currentIntensity - intensity) > 0.01)
                 || (abs(currentSharpen01 - sharpen01) > 0.01)
                 || (currentIsCutoutMode != isCutoutMode)
+                || (abs(currentCutoutEdgeSoftness - cutoutEdgeSoftness) > 0.01)
+                || (abs(currentCutoutEdgeInset - cutoutEdgeInset) > 0.01)
 
             currentPreset = preset
+            currentCustomPreset = customPreset
             currentIntensity = intensity
             currentSharpen01 = sharpen01
             currentIsCutoutMode = isCutoutMode
+            currentCutoutEdgeSoftness = cutoutEdgeSoftness
+            currentCutoutEdgeInset = cutoutEdgeInset
 
             if styleChanged, let item = player?.currentItem, let asset = item.asset as? AVURLAsset {
-                applyVideoCompositionIfNeeded(to: item, asset: asset, preset: preset, intensity: intensity, sharpen01: sharpen01, isCutoutMode: isCutoutMode, force: false)
+                applyVideoCompositionIfNeeded(
+                    to: item,
+                    asset: asset,
+                    preset: preset,
+                    customPreset: customPreset,
+                    intensity: intensity,
+                    sharpen01: sharpen01,
+                    isCutoutMode: isCutoutMode,
+                    force: false
+                )
             }
 
             guard let player = player else { return }
@@ -379,20 +429,24 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
         }
 
         private var currentPreset: CameraColorGradePreset = .original
+        private var currentCustomPreset: CustomCameraColorPreset? = nil
         private var currentIntensity: Double = 1.0
         private var currentSharpen01: Double = 0.0
         private var currentIsCutoutMode: Bool = false
+        private var currentCutoutEdgeSoftness: Double = 0.20
+        private var currentCutoutEdgeInset: Double = 0.0
 
         private func applyVideoCompositionIfNeeded(
             to item: AVPlayerItem,
             asset: AVURLAsset,
             preset: CameraColorGradePreset,
+            customPreset: CustomCameraColorPreset?,
             intensity: Double,
             sharpen01: Double,
             isCutoutMode: Bool,
             force: Bool
         ) {
-            let needsFilter = (preset != .original && intensity > 0.01) || sharpen01 > 0.01 || isCutoutMode
+            let needsFilter = ((preset != .original || customPreset != nil) && intensity > 0.01) || sharpen01 > 0.01 || isCutoutMode
             if !needsFilter {
                 // Fast hardware zero-copy path when Original + 0 Sharpen + non-Cutout!
                 if item.videoComposition != nil {
@@ -408,11 +462,16 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
                     }
                     var img = request.sourceImage
                     if self.currentIsCutoutMode {
-                        img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(to: img)
+                        img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(
+                            to: img,
+                            edgeSoftness: self.currentCutoutEdgeSoftness,
+                            edgeInset: self.currentCutoutEdgeInset
+                        )
                     }
                     img = LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
                         to: img,
                         preset: self.currentPreset,
+                        customPreset: self.currentCustomPreset,
                         intensity: self.currentIntensity,
                         sharpen01: self.currentSharpen01
                     )
@@ -450,6 +509,7 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
 /// Renders a realistic portrait webcam feed with live CoreImage color grading (`Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`), sharpening, crop, and horizontal mirror.
 public struct GradedWebcamPortraitView: View {
     public let preset: CameraColorGradePreset
+    public var customPreset: CustomCameraColorPreset? = nil
     public let intensity: Double
     public let sharpen01: Double
     public let mirror: Bool
@@ -460,6 +520,7 @@ public struct GradedWebcamPortraitView: View {
 
     public init(
         preset: CameraColorGradePreset,
+        customPreset: CustomCameraColorPreset? = nil,
         intensity: Double = 1.0,
         sharpen01: Double = 0.0,
         mirror: Bool = false,
@@ -469,6 +530,7 @@ public struct GradedWebcamPortraitView: View {
         webcamVideoURL: URL? = nil
     ) {
         self.preset = preset
+        self.customPreset = customPreset
         self.intensity = intensity
         self.sharpen01 = sharpen01
         self.mirror = mirror
@@ -479,7 +541,14 @@ public struct GradedWebcamPortraitView: View {
     }
 
     public var body: some View {
-        let gradedNSImage = Self.cachedGradedPortraitImage(
+        let gradedNSImage = customPreset.map {
+            Self.cachedGradedCustomPresetImage(
+                customPreset: $0,
+                intensity: intensity,
+                sharpen01: sharpen01,
+                isCutoutMode: isCutoutMode
+            )
+        } ?? Self.cachedGradedPortraitImage(
             preset: preset,
             intensity: intensity,
             sharpen01: sharpen01,
@@ -514,11 +583,14 @@ public struct GradedWebcamPortraitView: View {
 
     private static var imageCache: [String: NSImage] = [:]
     private static var preloadedVideoURL: URL?
-    private static let sharedCIContext = CIContext(options: [.useSoftwareRenderer: false])
+    fileprivate static let sharedCIContext = CIContext(options: [.useSoftwareRenderer: false])
     private static var basePortraitCIImage: CIImage = buildBasePortraitCIImage()
 
-    public static func preloadFirstFrameIfNeeded(from url: URL) {
-        guard preloadedVideoURL != url else { return }
+    public static func preloadFirstFrameIfNeeded(from url: URL, onLoaded: (@MainActor () -> Void)? = nil) {
+        if preloadedVideoURL == url {
+            onLoaded?()
+            return
+        }
         preloadedVideoURL = url
         Task.detached(priority: .userInitiated) {
             let asset = AVURLAsset(url: url)
@@ -539,6 +611,7 @@ public struct GradedWebcamPortraitView: View {
                 await MainActor.run {
                     basePortraitCIImage = square
                     imageCache.removeAll()
+                    onLoaded?()
                 }
             }
         }
@@ -561,6 +634,36 @@ public struct GradedWebcamPortraitView: View {
         let graded = LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
             to: base,
             preset: preset,
+            intensity: intensity,
+            sharpen01: sharpen01
+        )
+        let extent = CGRect(x: 0, y: 0, width: 240, height: 240)
+        if let cgImg = sharedCIContext.createCGImage(graded, from: extent) {
+            let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: 240, height: 240))
+            imageCache[cacheKey] = nsImg
+            return nsImg
+        }
+        return NSImage(size: NSSize(width: 240, height: 240))
+    }
+
+    public static func cachedGradedCustomPresetImage(
+        customPreset: CustomCameraColorPreset,
+        intensity: Double = 1.0,
+        sharpen01: Double = 0.0,
+        isCutoutMode: Bool = false
+    ) -> NSImage {
+        let intKey = Int(round(intensity * 20.0))
+        let sharpKey = Int(round(sharpen01 * 20.0))
+        let cacheKey = "custom_\(customPreset.id)_\(customPreset.warmth)_\(customPreset.backgroundPop)_\(customPreset.contrast)_\(customPreset.colorIntensity)_\(intKey)_\(sharpKey)_\(isCutoutMode)"
+        if let existing = imageCache[cacheKey] {
+            return existing
+        }
+
+        let base = isCutoutMode ? buildBasePortraitCIImage(cutoutBackground: true) : basePortraitCIImage
+        let graded = LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
+            to: base,
+            preset: .original,
+            customPreset: customPreset,
             intensity: intensity,
             sharpen01: sharpen01
         )
@@ -784,183 +887,633 @@ private struct LiveCaptionsCanvasView: View {
     }
 }
 
-// MARK: - 3. Interactive Camera Crop Modal
+// MARK: - 3. Standalone Camera Crop Window
 
-public struct CameraCropModalView: View {
+public struct StandaloneCameraCropWindowView: View {
     @Bindable var session: ProjectSession
-    @State private var draftCrop: Rect01
+    let onCloseWindow: () -> Void
 
-    public init(session: ProjectSession) {
+    @State private var uncroppedWebcamImage: NSImage?
+    @State private var webcamPixelSize: CGSize = CGSize(width: 1920, height: 1080)
+    @State private var draftCrop01: Rect01
+    @State private var dragStartCrop01: Rect01?
+
+    public init(session: ProjectSession, onCloseWindow: @escaping () -> Void) {
         self.session = session
-        self._draftCrop = State(initialValue: session.document.camera.cropRect01)
+        self.onCloseWindow = onCloseWindow
+        self._draftCrop01 = State(initialValue: session.document.camera.cropRect01)
+    }
+
+    private var sourcePixelWidth: Double {
+        max(640.0, Double(webcamPixelSize.width))
+    }
+
+    private var sourcePixelHeight: Double {
+        max(360.0, Double(webcamPixelSize.height))
     }
 
     public var body: some View {
         ZStack {
-            Color.black.opacity(0.66)
+            // Brighter Studio Slate Base + Soft Ambient Image Bleed
+            Color(red: 0.19, green: 0.19, blue: 0.23)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.easeOut(duration: 0.14)) {
-                        session.isShowingCameraCropModal = false
-                    }
-                }
 
-            VStack(spacing: 18) {
-                HStack {
-                    Label("Crop camera", systemImage: "crop")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.95))
-                    Spacer()
-                    Button {
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            session.isShowingCameraCropModal = false
-                        }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                    .buttonStyle(.plain)
-                }
+            if let img = uncroppedWebcamImage {
+                Image(nsImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 75)
+                    .opacity(0.24)
+                    .ignoresSafeArea()
+            }
 
-                // Live Interactive Camera Crop Frame
-                ZStack {
-                    GradedWebcamPortraitView(
-                        preset: session.document.camera.colorGradePreset,
-                        intensity: session.document.camera.colorGradeIntensity,
-                        sharpen01: session.document.camera.sharpen01,
-                        mirror: session.document.camera.mirror,
-                        cropRect01: .full,
-                        enableFaceTracking: false,
-                        isCutoutMode: false
-                    )
-                    .frame(width: 280, height: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay {
-                        GeometryReader { geo in
-                            let w = geo.size.width
-                            let h = geo.size.height
-                            let rectX = CGFloat(draftCrop.x) * w
-                            let rectY = CGFloat(draftCrop.y) * h
-                            let rectW = CGFloat(draftCrop.width) * w
-                            let rectH = CGFloat(draftCrop.height) * h
-
-                            ZStack(alignment: .topLeading) {
-                                Color.black.opacity(0.45)
-                                    .mask(
-                                        ZStack {
-                                            Rectangle()
-                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                .frame(width: rectW, height: rectH)
-                                                .position(x: rectX + rectW * 0.5, y: rectY + rectH * 0.5)
-                                                .blendMode(.destinationOut)
-                                        }
-                                        .compositingGroup()
-                                    )
-
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(Color(red: 0.58, green: 0.48, blue: 1.0), lineWidth: 2.0)
-                                    .frame(width: rectW, height: rectH)
-                                    .position(x: rectX + rectW * 0.5, y: rectY + rectH * 0.5)
-                                    .gesture(
-                                        DragGesture()
-                                            .onChanged { value in
-                                                let dx = Double(value.translation.width / max(1, w))
-                                                let dy = Double(value.translation.height / max(1, h))
-                                                let nx = max(0.0, min(1.0 - draftCrop.width, session.document.camera.cropRect01.x + dx))
-                                                let ny = max(0.0, min(1.0 - draftCrop.height, session.document.camera.cropRect01.y + dy))
-                                                draftCrop.x = nx
-                                                draftCrop.y = ny
-                                            }
-                                    )
-                            }
-                        }
-                    }
-                }
-
-                // Zoom / Crop Scale Slider
+            VStack(spacing: 0) {
+                // Top Unified Header Bar (`Size [1920] × [1080]  [Select... ⌄]  Position [0] [0]  [Reset]  [⌨]`)
                 HStack(spacing: 12) {
-                    Text("Crop zoom")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.85))
+                    Spacer()
+                        .frame(width: 68) // Space for native macOS traffic lights `🔴 🟡 🟢`
 
-                    Slider(
-                        value: Binding(
-                            get: { 1.0 / max(0.35, draftCrop.width) },
-                            set: { zoom in
-                                let span = max(0.35, min(1.0, 1.0 / max(1.0, zoom)))
-                                let cx = draftCrop.center.x
-                                let cy = draftCrop.center.y
-                                draftCrop = Rect01(
-                                    x: max(0.0, min(1.0 - span, cx - span * 0.5)),
-                                    y: max(0.0, min(1.0 - span, cy - span * 0.5)),
-                                    width: span,
-                                    height: span
-                                )
+                    Spacer()
+
+                    // Size W × H
+                    HStack(spacing: 6) {
+                        Text("Size")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.45))
+
+                        cropDimensionBadge("\(Int(round(draftCrop01.width * sourcePixelWidth)))")
+                        Text("×")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.45))
+                        cropDimensionBadge("\(Int(round(draftCrop01.height * sourcePixelHeight)))")
+                    }
+
+                    // Select Aspect Ratio Preset Menu
+                    Menu {
+                        Button("Full Original") {
+                            withAnimation(.spring(response: 0.22, dampingFraction: 0.86)) {
+                                draftCrop01 = .full
                             }
-                        ),
-                        in: 1.0...2.5
-                    )
-                    .tint(Color(red: 0.48, green: 0.36, blue: 0.98))
-
-                    Button("Reset") {
-                        draftCrop = .full
+                        }
+                        Divider()
+                        Button("16:9 Widescreen") { applyAspectCrop(ratio: 16.0 / 9.0) }
+                        Button("4:3 Classic") { applyAspectCrop(ratio: 4.0 / 3.0) }
+                        Button("1:1 Square") { applyAspectCrop(ratio: 1.0) }
+                        Button("3:4 Portrait") { applyAspectCrop(ratio: 3.0 / 4.0) }
+                        Button("9:16 Vertical") { applyAspectCrop(ratio: 9.0 / 16.0) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sidebar.left")
+                                .font(.system(size: 12))
+                            Text("Select…")
+                                .font(.system(size: 12, weight: .regular))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.55))
+                        }
+                        .foregroundStyle(.white.opacity(0.92))
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.75))
-                }
+                    .fixedSize()
 
-                HStack(spacing: 10) {
+                    // Position X, Y
+                    HStack(spacing: 6) {
+                        Text("Position")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.45))
+
+                        cropDimensionBadge("\(Int(round(draftCrop01.x * sourcePixelWidth)))")
+                        cropDimensionBadge("\(Int(round(draftCrop01.y * sourcePixelHeight)))")
+                    }
+
+                    // Reset Button
                     Button {
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            session.isShowingCameraCropModal = false
+                        withAnimation(.spring(response: 0.22, dampingFraction: 0.86)) {
+                            draftCrop01 = .full
                         }
                     } label: {
-                        Text("Cancel")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.88))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.06))
-                            )
+                        HStack(spacing: 6) {
+                            Image(systemName: "crop")
+                                .font(.system(size: 11.5, weight: .medium))
+                            Text("Reset")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(.white.opacity(draftCrop01 == .full ? 0.42 : 0.94))
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
 
+                    Spacer()
+
+                    Image(systemName: "keyboard")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.65))
+                        .frame(width: 30, height: 30)
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 54)
+
+                // Center Interactive Crop Area with Rule-of-Thirds Grid & 8 Handles
+                GeometryReader { geo in
+                    let fitted = fitSourceFrame(in: geo.size)
+                    let cropRect = CGRect(
+                        x: fitted.minX + CGFloat(draftCrop01.x) * fitted.width,
+                        y: fitted.minY + CGFloat(draftCrop01.y) * fitted.height,
+                        width: max(24, CGFloat(draftCrop01.width) * fitted.width),
+                        height: max(24, CGFloat(draftCrop01.height) * fitted.height)
+                    )
+
+                    ZStack(alignment: .topLeading) {
+                        Group {
+                            if let img = uncroppedWebcamImage {
+                                Image(nsImage: img)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .scaleEffect(x: session.document.camera.mirror ? 1.0 : -1.0, y: 1.0)
+                            } else {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(red: 0.12, green: 0.12, blue: 0.16))
+                            }
+                        }
+                        .frame(width: fitted.width, height: fitted.height)
+                        .position(x: fitted.midX, y: fitted.midY)
+
+                        // Dimmed Outside Mask
+                        Path { path in
+                            path.addRect(fitted)
+                            path.addRect(cropRect)
+                        }
+                        .fill(Color.black.opacity(0.58), style: FillStyle(eoFill: true))
+                        .allowsHitTesting(false)
+
+                        // Interactive Crop Box + Rule of Thirds Grid + 8 Circular Handles
+                        ZStack {
+                            Canvas { context, size in
+                                let strokeStyle = StrokeStyle(lineWidth: 1, dash: [4, 4])
+                                for i in 1...2 {
+                                    let frac = CGFloat(i) / 3.0
+                                    var vPath = Path()
+                                    vPath.move(to: CGPoint(x: size.width * frac, y: 0))
+                                    vPath.addLine(to: CGPoint(x: size.width * frac, y: size.height))
+                                    context.stroke(vPath, with: .color(.white.opacity(0.32)), style: strokeStyle)
+
+                                    var hPath = Path()
+                                    hPath.move(to: CGPoint(x: 0, y: size.height * frac))
+                                    hPath.addLine(to: CGPoint(x: size.width, y: size.height * frac))
+                                    context.stroke(hPath, with: .color(.white.opacity(0.32)), style: strokeStyle)
+                                }
+                            }
+                            .allowsHitTesting(false)
+
+                            Rectangle()
+                                .strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5)
+                                .background(Color.white.opacity(0.001))
+                                .contentShape(Rectangle())
+                                .gesture(
+                                    DragGesture(minimumDistance: 1, coordinateSpace: .named("cameraCropModalSpace"))
+                                        .onChanged { value in
+                                            if dragStartCrop01 == nil {
+                                                dragStartCrop01 = draftCrop01
+                                            }
+                                            guard let start = dragStartCrop01 else { return }
+                                            let dx = Double(value.translation.width / max(1, fitted.width))
+                                            let dy = Double(value.translation.height / max(1, fitted.height))
+                                            draftCrop01 = Rect01(
+                                                x: max(0.0, min(1.0 - start.width, start.x + dx)),
+                                                y: max(0.0, min(1.0 - start.height, start.y + dy)),
+                                                width: start.width,
+                                                height: start.height
+                                            )
+                                        }
+                                        .onEnded { _ in
+                                            dragStartCrop01 = nil
+                                        }
+                                )
+
+                            // 8 Circular Handles (4 Corners + 4 Mid-Edges)
+                            cameraCropHandle(fitted: fitted, xMode: -1, yMode: -1)
+                                .position(x: 0, y: 0)
+                            cameraCropHandle(fitted: fitted, xMode: 0, yMode: -1)
+                                .position(x: cropRect.width * 0.5, y: 0)
+                            cameraCropHandle(fitted: fitted, xMode: 1, yMode: -1)
+                                .position(x: cropRect.width, y: 0)
+
+                            cameraCropHandle(fitted: fitted, xMode: -1, yMode: 0)
+                                .position(x: 0, y: cropRect.height * 0.5)
+                            cameraCropHandle(fitted: fitted, xMode: 1, yMode: 0)
+                                .position(x: cropRect.width, y: cropRect.height * 0.5)
+
+                            cameraCropHandle(fitted: fitted, xMode: -1, yMode: 1)
+                                .position(x: 0, y: cropRect.height)
+                            cameraCropHandle(fitted: fitted, xMode: 0, yMode: 1)
+                                .position(x: cropRect.width * 0.5, y: cropRect.height)
+                            cameraCropHandle(fitted: fitted, xMode: 1, yMode: 1)
+                                .position(x: cropRect.width, y: cropRect.height)
+                        }
+                        .frame(width: cropRect.width, height: cropRect.height)
+                        .position(x: cropRect.midX, y: cropRect.midY)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .coordinateSpace(name: "cameraCropModalSpace")
+                }
+                .padding(.horizontal, 24)
+
+                // Bottom Confirm / Discard Buttons
+                HStack(spacing: 12) {
                     Button {
                         session.mutate { doc in
-                            doc.camera.cropRect01 = draftCrop.clamped()
+                            doc.camera.cropRect01 = draftCrop01.clamped()
                         }
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            session.isShowingCameraCropModal = false
-                        }
+                        onCloseWindow()
                     } label: {
-                        Text("Apply crop")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: 6) {
+                            Text("Confirm changes")
+                                .font(.system(size: 13, weight: .medium))
+                            Image(systemName: "return")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .frame(height: 36)
+                        .background(
+                            Color(red: 0.36, green: 0.22, blue: 0.98),
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
+
+                    Button {
+                        onCloseWindow()
+                    } label: {
+                        Text("Discard changes")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.88))
+                            .padding(.horizontal, 18)
                             .frame(height: 36)
                             .background(
+                                Color.white.opacity(0.07),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color(red: 0.38, green: 0.26, blue: 0.96))
+                                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
                 }
+                .padding(.vertical, 18)
             }
-            .padding(22)
-            .frame(width: 340)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(red: 0.09, green: 0.09, blue: 0.12))
-            )
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            draftCrop01 = session.document.camera.cropRect01
+            if let extracted = await session.extractRawWebcamFrameNSImage() {
+                uncroppedWebcamImage = extracted.image
+                webcamPixelSize = extracted.pixelSize
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cropDimensionBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .regular).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.94))
+            .frame(minWidth: 46)
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.6), radius: 28, y: 12)
+    }
+
+    @ViewBuilder
+    private func cameraCropHandle(fitted: CGRect, xMode: Int, yMode: Int) -> some View {
+        Circle()
+            .fill(Color(red: 0.16, green: 0.16, blue: 0.20))
+            .frame(width: 11, height: 11)
+            .overlay(Circle().stroke(Color.white, lineWidth: 1.8))
+            .shadow(color: .black.opacity(0.45), radius: 2)
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .named("cameraCropModalSpace"))
+                    .onChanged { value in
+                        if dragStartCrop01 == nil {
+                            dragStartCrop01 = draftCrop01
+                        }
+                        guard let start = dragStartCrop01 else { return }
+                        let dx = Double(value.translation.width / max(1, fitted.width))
+                        let dy = Double(value.translation.height / max(1, fitted.height))
+
+                        var nx = start.x
+                        var ny = start.y
+                        var nw = start.width
+                        var nh = start.height
+
+                        if xMode < 0 {
+                            let clampedDx = max(-start.x, min(start.width - 0.08, dx))
+                            nx = start.x + clampedDx
+                            nw = start.width - clampedDx
+                        } else if xMode > 0 {
+                            nw = max(0.08, min(1.0 - start.x, start.width + dx))
+                        }
+
+                        if yMode < 0 {
+                            let clampedDy = max(-start.y, min(start.height - 0.08, dy))
+                            ny = start.y + clampedDy
+                            nh = start.height - clampedDy
+                        } else if yMode > 0 {
+                            nh = max(0.08, min(1.0 - start.y, start.height + dy))
+                        }
+
+                        draftCrop01 = Rect01(x: nx, y: ny, width: nw, height: nh).clamped()
+                    }
+                    .onEnded { _ in
+                        dragStartCrop01 = nil
+                    }
+            )
+    }
+
+    private func fitSourceFrame(in container: CGSize) -> CGRect {
+        let aspect = max(0.2, sourcePixelWidth / max(1.0, sourcePixelHeight))
+        let availW = max(120, container.width - 12)
+        let availH = max(120, container.height - 12)
+        var w = availW
+        var h = w / aspect
+        if h > availH {
+            h = availH
+            w = h * aspect
+        }
+        return CGRect(
+            x: (container.width - w) * 0.5,
+            y: (container.height - h) * 0.5,
+            width: w,
+            height: h
+        )
+    }
+
+    private func applyAspectCrop(ratio: Double) {
+        let srcAspect = sourcePixelWidth / max(1.0, sourcePixelHeight)
+        var newW = 1.0
+        var newH = srcAspect / ratio
+        if newH > 1.0 {
+            newH = 1.0
+            newW = ratio / srcAspect
+        }
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.86)) {
+            draftCrop01 = Rect01(
+                x: (1.0 - newW) * 0.5,
+                y: (1.0 - newH) * 0.5,
+                width: newW,
+                height: newH
+            ).clamped()
+        }
+    }
+}
+
+// MARK: - 4. Standalone "Color preset studio" Window
+
+public struct StandaloneColorPresetStudioWindowView: View {
+    @Bindable var session: ProjectSession
+    let onCloseWindow: () -> Void
+
+    @State private var presetName: String = "My preset"
+    @State private var warmth: Double = 0.0
+    @State private var backgroundPop: Double = 0.20
+    @State private var contrast: Double = 0.25
+    @State private var colorIntensity: Double = 0.20
+    @State private var sourceWebcamCIImage: CIImage?
+
+    public init(session: ProjectSession, onCloseWindow: @escaping () -> Void) {
+        self.session = session
+        self.onCloseWindow = onCloseWindow
+    }
+
+    private var draftPreset: CustomCameraColorPreset {
+        CustomCameraColorPreset(
+            name: presetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "My preset" : presetName,
+            warmth: warmth,
+            backgroundPop: backgroundPop,
+            contrast: contrast,
+            colorIntensity: colorIntensity
+        )
+    }
+
+    private var liveGradedPreviewImage: NSImage {
+        let preset = draftPreset
+        if let rawCI = sourceWebcamCIImage {
+            let graded = LocalOnDeviceMediaIntelligence.applyCustomColorPreset(to: rawCI, preset: preset)
+            if let cg = GradedWebcamPortraitView.sharedCIContext.createCGImage(graded, from: rawCI.extent) {
+                return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            }
+        }
+        return GradedWebcamPortraitView.cachedGradedCustomPresetImage(customPreset: preset)
+    }
+
+    public var body: some View {
+        let previewNSImage = liveGradedPreviewImage
+
+        ZStack {
+            // Brighter Studio Slate Base + Soft Ambient Image Bleed
+            Color(red: 0.19, green: 0.19, blue: 0.23)
+                .ignoresSafeArea()
+
+            Image(nsImage: previewNSImage)
+                .resizable()
+                .scaledToFill()
+                .blur(radius: 80)
+                .opacity(0.24)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Top Centered Window Title ("Color preset studio")
+                HStack {
+                    Spacer()
+                    Text("Color preset studio")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.88))
+                    Spacer()
+                }
+                .frame(height: 44)
+
+                // Main Split Area: Left Live 16:9 Camera Preview + Right Controls Column
+                HStack(alignment: .center, spacing: 28) {
+                    // Left: Large Live Graded Camera Preview
+                    GeometryReader { geo in
+                        let aspect: CGFloat = 16.0 / 9.0
+                        let availW = max(200, geo.size.width)
+                        let availH = max(160, geo.size.height)
+                        let w = min(availW, availH * aspect)
+                        let h = w / aspect
+
+                        Image(nsImage: previewNSImage)
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFill()
+                            .scaleEffect(x: session.document.camera.mirror ? 1.0 : -1.0, y: 1.0)
+                            .frame(width: w, height: h)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
+                            .position(x: geo.size.width * 0.5, y: geo.size.height * 0.5)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Right: Preset Name & 4 Grading Sliders + Create / Cancel Buttons
+                    VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Preset name")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+
+                            TextField("My preset", text: $presetName)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13.5, weight: .regular))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .frame(height: 36)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.white.opacity(0.05))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                        }
+
+                        studioSliderRow(title: "Warmth", value: $warmth, range: -1.0...1.0, defaultValue: 0.0)
+                        studioSliderRow(title: "Background pop", value: $backgroundPop, range: 0.0...1.0, defaultValue: 0.20)
+                        studioSliderRow(title: "Contrast", value: $contrast, range: -1.0...1.0, defaultValue: 0.25)
+                        studioSliderRow(title: "Color intensity", value: $colorIntensity, range: -1.0...1.0, defaultValue: 0.20)
+
+                        Spacer()
+
+                        VStack(spacing: 10) {
+                            Button {
+                                let created = draftPreset
+                                session.mutate { doc in
+                                    doc.camera.customColorPresets.append(created)
+                                    doc.camera.selectedCustomColorPresetID = created.id
+                                    doc.camera.colorGradeIntensity = 1.0
+                                }
+                                onCloseWindow()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text("Create preset")
+                                        .font(.system(size: 13.5, weight: .medium))
+                                    Image(systemName: "return")
+                                        .font(.system(size: 11, weight: .semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 38)
+                                .background(
+                                    Color(red: 0.36, green: 0.22, blue: 0.98),
+                                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .keyboardShortcut(.defaultAction)
+
+                            Button {
+                                onCloseWindow()
+                            } label: {
+                                Text("Cancel")
+                                    .font(.system(size: 13.5, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 38)
+                                    .background(
+                                        Color.white.opacity(0.07),
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .keyboardShortcut(.cancelAction)
+                        }
+                    }
+                    .frame(width: 280)
+                    .padding(.vertical, 8)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 22)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            if let cgImg = await session.extractRawWebcamFrameCGImage() {
+                sourceWebcamCIImage = CIImage(cgImage: cgImg)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func studioSliderRow(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        defaultValue: Double
+    ) -> some View {
+        let isAtDefault = abs(value.wrappedValue - defaultValue) < 0.005
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.white.opacity(0.92))
+
+            HStack(spacing: 12) {
+                Slider(value: value, in: range)
+                    .tint(Color(red: 0.44, green: 0.32, blue: 0.98))
+
+                Button {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        value.wrappedValue = defaultValue
+                    }
+                } label: {
+                    Text("Reset")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.white.opacity(isAtDefault ? 0.25 : 0.72))
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.white.opacity(0.03))
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isAtDefault)
+            }
+        }
+    }
+}
+
+public struct CameraCropModalView: View {
+    @Bindable var session: ProjectSession
+    public init(session: ProjectSession) {
+        self.session = session
+    }
+    public var body: some View {
+        StandaloneCameraCropWindowView(session: session) {
+            session.isShowingCameraCropModal = false
         }
     }
 }

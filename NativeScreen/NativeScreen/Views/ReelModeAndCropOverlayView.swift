@@ -519,8 +519,8 @@ public struct StandaloneCropWindowView: View {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
                     .background(
-                        Color(red: 0.40, green: 0.28, blue: 0.98),
-                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        Color(red: 0.36, green: 0.22, blue: 0.98),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                     )
                 }
                 .buttonStyle(.plain)
@@ -548,7 +548,19 @@ public struct StandaloneCropWindowView: View {
             }
             .padding(.vertical, 18)
         }
-        .background(Color(red: 0.14, green: 0.14, blue: 0.17))
+        .background {
+            ZStack {
+                Color(red: 0.19, green: 0.19, blue: 0.23)
+                if let img = uncroppedScreenImage {
+                    Image(nsImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .blur(radius: 75)
+                        .opacity(0.22)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .preferredColorScheme(.dark)
         .task {
             draftCrop01 = session.document.canvas.cropRect01

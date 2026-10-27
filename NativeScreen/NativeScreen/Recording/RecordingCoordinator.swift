@@ -2917,10 +2917,10 @@ public struct WindowAndAreaPickerOverlayView: View {
 
                 ZStack {
                     RoundedRectangle(cornerRadius: win.borderRadius, style: .continuous)
-                        .fill(Color.indigo.opacity(0.24))
+                        .fill(Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.24))
                         .overlay(
                             RoundedRectangle(cornerRadius: win.borderRadius, style: .continuous)
-                                .strokeBorder(Color.indigo.opacity(0.95), lineWidth: 2.5)
+                                .strokeBorder(Color(red: 0.44, green: 0.30, blue: 1.0).opacity(0.95), lineWidth: 2.5)
                         )
 
                     // Center Card (App Icon + App Name + Exact Size + Resize Menu + Start Recording)
@@ -2976,7 +2976,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 10)
-                            .background(Color.indigo, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .background(Color(red: 0.36, green: 0.22, blue: 0.98), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
                         }
                         .buttonStyle(.plain)
@@ -2997,8 +2997,8 @@ public struct WindowAndAreaPickerOverlayView: View {
             else if coordinator.selectedMode == .display, coordinator.hoveredDisplayID == screenDisplayID {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.indigo, lineWidth: 4)
-                        .background(Color.indigo.opacity(0.10))
+                        .strokeBorder(Color(red: 0.44, green: 0.30, blue: 1.0), lineWidth: 4)
+                        .background(Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.10))
 
                     VStack(spacing: 12) {
                         Image(systemName: "display")
@@ -3023,7 +3023,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 10)
-                            .background(Color.indigo, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .background(Color(red: 0.36, green: 0.22, blue: 0.98), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -3049,7 +3049,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
                         .foregroundStyle(.white)
-                        .background(Color.indigo.opacity(0.12))
+                        .background(Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.12))
 
                     VStack(spacing: 10) {
                         Text("\(Int(localRect.width)) × \(Int(localRect.height))")
@@ -3076,7 +3076,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
-                                .background(Color.indigo, in: Capsule())
+                                .background(Color(red: 0.36, green: 0.22, blue: 0.98), in: Capsule())
                                 .foregroundStyle(.white)
                         }
                         .buttonStyle(.plain)

@@ -503,10 +503,11 @@ public enum LocalOnDeviceMediaIntelligence {
 
     // MARK: - 2. On-Device Camera Color Grading Looks
 
-    /// Applies any of the 12 built-in filmic looks (or a custom `.cube` LUT) + Sharpen on the GPU via CoreImage.
+    /// Applies any of the 12 built-in filmic looks (or a user-created `CustomCameraColorPreset`) + Sharpen on the GPU via CoreImage.
     public static func applyCameraGradeAndSharpen(
         to image: CIImage,
         preset: CameraColorGradePreset,
+        customPreset: CustomCameraColorPreset? = nil,
         intensity: Double,
         sharpen01: Double
     ) -> CIImage {
@@ -514,7 +515,17 @@ public enum LocalOnDeviceMediaIntelligence {
         var current = image
 
         let clampedIntensity = max(0.0, min(1.0, intensity))
-        if preset != .original && clampedIntensity > 0.005 {
+        if let custom = customPreset, clampedIntensity > 0.005 {
+            let graded = applyCustomColorPreset(to: current, preset: custom).cropped(to: baseExtent)
+            if clampedIntensity >= 0.995 {
+                current = graded
+            } else {
+                let faded = graded.applyingFilter("CIColorMatrix", parameters: [
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(clampedIntensity))
+                ])
+                current = faded.composited(over: current).cropped(to: baseExtent)
+            }
+        } else if preset != .original && clampedIntensity > 0.005 {
             let graded = applyBuiltInLook(to: current, preset: preset).cropped(to: baseExtent)
             if clampedIntensity >= 0.995 {
                 current = graded
@@ -535,6 +546,35 @@ public enum LocalOnDeviceMediaIntelligence {
         }
 
         return current
+    }
+
+    public static func applyCustomColorPreset(to input: CIImage, preset: CustomCameraColorPreset) -> CIImage {
+        let baseExtent = input.extent
+        var img = input
+        // 1. Warmth (-1.0 .. 1.0 -> 8000K cool .. 5000K warm)
+        if abs(preset.warmth) > 0.005 {
+            let targetTemp = 6500.0 - preset.warmth * 1600.0
+            let targetTint = preset.warmth * 6.0
+            img = img.applyingFilter("CITemperatureAndTint", parameters: [
+                "inputNeutral": CIVector(x: 6500, y: 0),
+                "inputTargetNeutral": CIVector(x: CGFloat(targetTemp), y: CGFloat(targetTint))
+            ])
+        }
+        // 2. Contrast & Color intensity (Saturation / Vibrance) + Background pop
+        let contrastVal = max(0.75, min(1.45, 1.0 + preset.contrast * 0.32 + preset.backgroundPop * 0.08))
+        let satVal = max(0.55, min(1.45, 1.0 + preset.colorIntensity * 0.35))
+        let brightVal = preset.backgroundPop * 0.018
+        img = img.applyingFilter("CIColorControls", parameters: [
+            kCIInputContrastKey: contrastVal,
+            kCIInputSaturationKey: satVal,
+            kCIInputBrightnessKey: brightVal
+        ])
+        if abs(preset.colorIntensity) > 0.01 || preset.backgroundPop > 0.01 {
+            img = img.applyingFilter("CIVibrance", parameters: [
+                "inputAmount": preset.colorIntensity * 0.32 + preset.backgroundPop * 0.14
+            ])
+        }
+        return img.cropped(to: baseExtent)
     }
 
     private static func applyBuiltInLook(to input: CIImage, preset: CameraColorGradePreset) -> CIImage {
@@ -702,8 +742,13 @@ public enum LocalOnDeviceMediaIntelligence {
         return Point01(x: Double(box.midX), y: Double(box.midY))
     }
 
-    /// Segments the foreground person from the webcam background 100% locally on-device for `Camera cutout` mode.
-    public static func applyOnDevicePersonCutout(to image: CIImage) -> CIImage {
+    /// Segments the foreground person from the webcam background 100% locally on-device for `Camera cutout` mode,
+    /// applying configurable `edgeSoftness` (`0.0 ... 1.0`) and `edgeInset` (`0.0 ... 1.0`).
+    public static func applyOnDevicePersonCutout(
+        to image: CIImage,
+        edgeSoftness: Double = 0.20,
+        edgeInset: Double = 0.0
+    ) -> CIImage {
         if #available(macOS 12.0, *) {
             let request = VNGeneratePersonSegmentationRequest()
             request.qualityLevel = .balanced
@@ -714,10 +759,25 @@ public enum LocalOnDeviceMediaIntelligence {
                 let rawMask = CIImage(cvPixelBuffer: maskBuffer)
                 let scaleX = image.extent.width / max(1.0, rawMask.extent.width)
                 let scaleY = image.extent.height / max(1.0, rawMask.extent.height)
-                let scaledMask = rawMask
+                var scaledMask = rawMask
                     .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
                     .transformed(by: CGAffineTransform(translationX: image.extent.minX, y: image.extent.minY))
                     .cropped(to: image.extent)
+
+                if edgeInset > 0.01 {
+                    let radius = max(1.0, min(12.0, edgeInset * 10.0))
+                    scaledMask = scaledMask
+                        .clampedToExtent()
+                        .applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: radius])
+                        .cropped(to: image.extent)
+                }
+                if edgeSoftness > 0.01 {
+                    let blurRadius = max(0.5, min(14.0, edgeSoftness * 10.0))
+                    scaledMask = scaledMask
+                        .clampedToExtent()
+                        .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blurRadius])
+                        .cropped(to: image.extent)
+                }
 
                 let clearBg = CIImage(color: .clear).cropped(to: image.extent)
                 if let blend = CIFilter(name: "CIBlendWithMask", parameters: [

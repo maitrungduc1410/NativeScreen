@@ -18,6 +18,8 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
     private var editorWindowsBySessionID: [UUID: NSWindow] = [:]
     private var cropWindowsBySessionID: [UUID: NSWindow] = [:]
+    private var cameraCropWindowsBySessionID: [UUID: NSWindow] = [:]
+    private var colorPresetWindowsBySessionID: [UUID: NSWindow] = [:]
     private let recentsDefaultsKey = "NativeScreen.RecentProjects"
 
     private override init() {
@@ -210,7 +212,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         cropWin.title = "Crop — \(session.document.name)"
         cropWin.titleVisibility = .hidden
         cropWin.titlebarAppearsTransparent = true
-        cropWin.backgroundColor = NSColor(red: 0.14, green: 0.14, blue: 0.17, alpha: 1.0)
+        cropWin.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
         cropWin.isMovableByWindowBackground = true
 
         let toolbar = NSToolbar(identifier: "NativeScreenCropToolbar-\(session.id.uuidString)")
@@ -245,21 +247,157 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         }
     }
 
+    // MARK: - Standalone Movable Camera Crop Window (`NSWindow`)
+
+    public func presentCameraCropWindow(for session: ProjectSession) {
+        session.isPlaying = false
+
+        if let existingWin = cameraCropWindowsBySessionID[session.id] {
+            existingWin.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let camCropView = StandaloneCameraCropWindowView(session: session) { [weak self] in
+            self?.closeCameraCropWindow(for: session.id)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+
+        let hostingController = NSHostingController(rootView: camCropView)
+
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 640),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        win.isReleasedWhenClosed = false
+        win.contentViewController = hostingController
+        win.minSize = NSSize(width: 720, height: 520)
+        win.title = "Crop camera — \(session.document.name)"
+        win.titleVisibility = .hidden
+        win.titlebarAppearsTransparent = true
+        win.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
+        win.isMovableByWindowBackground = true
+
+        let toolbar = NSToolbar(identifier: "NativeScreenCameraCropToolbar-\(session.id.uuidString)")
+        toolbar.showsBaselineSeparator = false
+        win.toolbar = toolbar
+        win.toolbarStyle = .unified
+
+        win.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+        win.standardWindowButton(.zoomButton)?.isEnabled = false
+        win.delegate = self
+
+        if let parentEditorWin = editorWindowsBySessionID[session.id] {
+            let pf = parentEditorWin.frame
+            let cw: CGFloat = 920
+            let ch: CGFloat = 640
+            let x = pf.midX - cw * 0.5
+            let y = pf.midY - ch * 0.5
+            win.setFrame(NSRect(x: x, y: y, width: cw, height: ch), display: false)
+        } else {
+            win.center()
+        }
+
+        cameraCropWindowsBySessionID[session.id] = win
+        win.makeKeyAndOrderFront(nil)
+    }
+
+    public func closeCameraCropWindow(for sessionID: UUID) {
+        if let win = cameraCropWindowsBySessionID.removeValue(forKey: sessionID) {
+            win.delegate = nil
+            win.orderOut(nil)
+        }
+    }
+
+    // MARK: - Standalone Movable "Color preset studio" Window (`NSWindow`)
+
+    public func presentColorPresetStudioWindow(for session: ProjectSession) {
+        session.isPlaying = false
+
+        if let existingWin = colorPresetWindowsBySessionID[session.id] {
+            existingWin.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let studioView = StandaloneColorPresetStudioWindowView(session: session) { [weak self] in
+            self?.closeColorPresetStudioWindow(for: session.id)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+
+        let hostingController = NSHostingController(rootView: studioView)
+
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 610),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        win.isReleasedWhenClosed = false
+        win.contentViewController = hostingController
+        win.minSize = NSSize(width: 780, height: 540)
+        win.title = "Color preset studio"
+        win.titleVisibility = .hidden
+        win.titlebarAppearsTransparent = true
+        win.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
+        win.isMovableByWindowBackground = true
+
+        let toolbar = NSToolbar(identifier: "NativeScreenColorPresetToolbar-\(session.id.uuidString)")
+        toolbar.showsBaselineSeparator = false
+        win.toolbar = toolbar
+        win.toolbarStyle = .unified
+
+        win.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+        win.standardWindowButton(.zoomButton)?.isEnabled = false
+        win.delegate = self
+
+        if let parentEditorWin = editorWindowsBySessionID[session.id] {
+            let pf = parentEditorWin.frame
+            let cw: CGFloat = 920
+            let ch: CGFloat = 610
+            let x = pf.midX - cw * 0.5
+            let y = pf.midY - ch * 0.5
+            win.setFrame(NSRect(x: x, y: y, width: cw, height: ch), display: false)
+        } else {
+            win.center()
+        }
+
+        colorPresetWindowsBySessionID[session.id] = win
+        win.makeKeyAndOrderFront(nil)
+    }
+
+    public func closeColorPresetStudioWindow(for sessionID: UUID) {
+        if let win = colorPresetWindowsBySessionID.removeValue(forKey: sessionID) {
+            win.delegate = nil
+            win.orderOut(nil)
+        }
+    }
+
     // MARK: - NSWindowDelegate
 
     public func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow else { return }
 
-        // If the standalone Crop window is closed via its red traffic light button
+        // If a standalone Studio/Crop window is closed via its red traffic light button
         if let (cropSessionID, _) = cropWindowsBySessionID.first(where: { $0.value === closingWindow }) {
             cropWindowsBySessionID.removeValue(forKey: cropSessionID)
             return
         }
+        if let (camCropSessionID, _) = cameraCropWindowsBySessionID.first(where: { $0.value === closingWindow }) {
+            cameraCropWindowsBySessionID.removeValue(forKey: camCropSessionID)
+            return
+        }
+        if let (presetSessionID, _) = colorPresetWindowsBySessionID.first(where: { $0.value === closingWindow }) {
+            colorPresetWindowsBySessionID.removeValue(forKey: presetSessionID)
+            return
+        }
 
-        // If a Project Editor window is closed, also automatically close its associated Crop window!
+        // If a Project Editor window is closed, also automatically close its associated Crop / Studio windows!
         if let (sessionID, _) = editorWindowsBySessionID.first(where: { $0.value === closingWindow }) {
             editorWindowsBySessionID.removeValue(forKey: sessionID)
             closeCropWindow(for: sessionID)
+            closeCameraCropWindow(for: sessionID)
+            closeColorPresetStudioWindow(for: sessionID)
             if let session = sessionsByID[sessionID] {
                 session.isPlaying = false
                 try? session.saveNow()

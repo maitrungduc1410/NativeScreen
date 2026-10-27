@@ -28,6 +28,7 @@ public struct InspectorSidebarView: View {
     @State private var hoveredScreenAnimPreset: String? = nil
     @State private var hoveredCursorAnimPreset: String? = nil
     @State private var selectedAudioGenre: String = "Lo-Fi"
+    @State private var webcamThumbnailRevision: Int = 0
     @State private var lastRememberedIdleMs: Double = 2000.0
     @State private var lastRememberedLoopMs: Double = 1000.0
     @State private var lastRememberedShakeThreshold: Double = 4.0
@@ -1768,14 +1769,26 @@ public struct InspectorSidebarView: View {
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.white.opacity(0.92))
 
-                        FlowLayoutWrapRow(spacing: 6) {
-                            ForEach(MicrophoneAudioPreset.allCases) { preset in
-                                inspectorPillOptionButton(
-                                    title: preset.label,
-                                    isSelected: session.document.audio.microphoneAudioPreset == preset
-                                ) {
-                                    session.mutate { $0.audio.microphoneAudioPreset = preset }
+                        ScrollViewReader { scrollProxy in
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(MicrophoneAudioPreset.allCases) { preset in
+                                        inspectorPillOptionButton(
+                                            title: preset.label,
+                                            isSelected: session.document.audio.microphoneAudioPreset == preset
+                                        ) {
+                                            session.mutate { $0.audio.microphoneAudioPreset = preset }
+                                            withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                                                scrollProxy.scrollTo(preset.id, anchor: .center)
+                                            }
+                                        }
+                                        .id(preset.id)
+                                    }
                                 }
+                                .padding(.vertical, 1)
+                            }
+                            .onAppear {
+                                scrollProxy.scrollTo(session.document.audio.microphoneAudioPreset.id, anchor: .center)
                             }
                         }
 
@@ -2144,19 +2157,19 @@ public struct InspectorSidebarView: View {
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.white.opacity(0.92))
 
-                        HStack(spacing: 8) {
-                            ForEach([("Left", 0.0), ("Center", 0.5), ("Right", 1.0)], id: \.0) { label, xVal in
-                                inspectorPillOptionButton(
-                                    title: label,
-                                    isSelected: abs(cam.cutoutPositionX01 - xVal) < 0.1
-                                ) {
+                        CameraCutoutPositionDotBarPicker(
+                            positionX01: Binding(
+                                get: { cam.cutoutPositionX01 },
+                                set: { xVal in
                                     withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
                                         session.mutate { $0.camera.cutoutPositionX01 = xVal }
                                     }
                                 }
-                            }
-                        }
+                            )
+                        )
                     }
+
+                    inspectorDivider
 
                     coalescedSlider(
                         title: "Camera Size",
@@ -2166,6 +2179,101 @@ public struct InspectorSidebarView: View {
                         ),
                         range: 0.20...0.95,
                         defaultValue: 0.56
+                    )
+
+                    inspectorCollapsibleSection(
+                        title: "Camera size during zoom",
+                        icon: "magnifyingglass.circle",
+                        isExpanded: $isCameraSizeDuringZoomExpanded
+                    ) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            inspectorToggleRow(
+                                title: "Make smaller during zoom",
+                                icon: nil,
+                                description: "When zooming in, the camera will shrink to avoid covering the recording itself.",
+                                isOn: Binding(
+                                    get: { cam.makeSmallerDuringZoom },
+                                    set: { v in session.mutate { $0.camera.makeSmallerDuringZoom = v } }
+                                )
+                            )
+
+                            if cam.makeSmallerDuringZoom {
+                                coalescedSlider(
+                                    title: "Size during zoom",
+                                    value: Binding(
+                                        get: { cam.scaleWhenZoomed },
+                                        set: { v in session.mutate { $0.camera.scaleWhenZoomed = v } }
+                                    ),
+                                    range: 0.25...0.85,
+                                    defaultValue: 0.66
+                                )
+                            }
+                        }
+                    }
+
+                    inspectorDivider
+
+                    // `Edge softness` & `Edge inset` with 3D Cube Icon Badges
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.white.opacity(0.06))
+                                    .frame(width: 24, height: 22)
+                                Image(systemName: "cube.transparent")
+                                    .font(.system(size: 11.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.75))
+                            }
+                            Text("Edge softness")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+                        }
+
+                        coalescedSliderRowOnly(
+                            value: Binding(
+                                get: { cam.cutoutEdgeSoftness },
+                                set: { v in session.mutate { $0.camera.cutoutEdgeSoftness = v } }
+                            ),
+                            range: 0.0...1.0,
+                            defaultValue: 0.20
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.white.opacity(0.06))
+                                    .frame(width: 24, height: 22)
+                                Image(systemName: "cube.transparent")
+                                    .font(.system(size: 11.5, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.75))
+                            }
+                            Text("Edge inset")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+                        }
+
+                        coalescedSliderRowOnly(
+                            value: Binding(
+                                get: { cam.cutoutEdgeInset },
+                                set: { v in session.mutate { $0.camera.cutoutEdgeInset = v } }
+                            ),
+                            range: 0.0...1.0,
+                            defaultValue: 0.0
+                        )
+                    }
+
+                    inspectorDivider
+
+                    inspectorToggleRow(
+                        title: "Avoid empty area",
+                        icon: nil,
+                        description: "Will try to avoid showing too much empty space around the recording",
+                        isOn: Binding(
+                            get: { cam.cutoutAvoidEmptyArea },
+                            set: { v in session.mutate { $0.camera.cutoutAvoidEmptyArea = v } }
+                        )
                     )
                 }
 
@@ -2217,11 +2325,12 @@ public struct InspectorSidebarView: View {
 
     @ViewBuilder
     private var cameraStyleInspector: some View {
+        let _ = webcamThumbnailRevision
         let cam = session.document.camera
         let hasCrop = (cam.cropRect01 != .full)
 
         VStack(alignment: .leading, spacing: 22) {
-            // 1. `Color grading` 7x2 Thumbnail Grid (`Original` + 12 Filmic Looks + `+` Custom `.cube` LUT Button)
+            // 1. `Color grading` 7x2 Thumbnail Grid (`Original` + 12 Filmic Looks + Custom Presets + `+` Menu Button)
             VStack(alignment: .leading, spacing: 10) {
                 Text("Color grading")
                     .font(.system(size: 13, weight: .regular))
@@ -2232,9 +2341,12 @@ public struct InspectorSidebarView: View {
                     spacing: 6
                 ) {
                     ForEach(CameraColorGradePreset.allCases) { preset in
-                        let isSelected = (cam.colorGradePreset == preset)
+                        let isSelected = (cam.selectedCustomColorPresetID == nil && cam.colorGradePreset == preset)
                         Button {
-                            session.mutate { $0.camera.colorGradePreset = preset }
+                            session.mutate {
+                                $0.camera.selectedCustomColorPresetID = nil
+                                $0.camera.colorGradePreset = preset
+                            }
                         } label: {
                             Image(
                                 nsImage: GradedWebcamPortraitView.cachedGradedPortraitImage(
@@ -2259,15 +2371,50 @@ public struct InspectorSidebarView: View {
                         .help(preset.rawValue)
                     }
 
-                    // `+` Button to load custom `.cube` 3D LUT file
-                    Button {
-                        let panel = NSOpenPanel()
-                        panel.title = "Choose a 3D LUT (.cube) file"
-                        panel.allowsMultipleSelection = false
-                        if panel.runModal() == .OK, let url = panel.url {
+                    ForEach(cam.customColorPresets) { custom in
+                        let isSelected = (cam.selectedCustomColorPresetID == custom.id)
+                        Button {
                             session.mutate {
-                                $0.camera.customLUTRelativePath = url.lastPathComponent
-                                $0.camera.colorGradePreset = .cinema
+                                $0.camera.selectedCustomColorPresetID = custom.id
+                            }
+                        } label: {
+                            Image(
+                                nsImage: GradedWebcamPortraitView.cachedGradedCustomPresetImage(
+                                    customPreset: custom
+                                )
+                            )
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 36, height: 36)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(
+                                        isSelected ? Color.white.opacity(0.95) : Color.white.opacity(0.10),
+                                        lineWidth: isSelected ? 1.5 : 1.0
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help(custom.name)
+                    }
+
+                    // `+` Menu Button (`Create your color preset...` & `Load your LUT file...`)
+                    Menu {
+                        Button("Create your color preset...") {
+                            ProjectWorkspaceStore.shared.presentColorPresetStudioWindow(for: session)
+                        }
+
+                        Button("Load your LUT file...") {
+                            let panel = NSOpenPanel()
+                            panel.title = "Choose a 3D LUT (.cube) file"
+                            panel.allowsMultipleSelection = false
+                            if panel.runModal() == .OK, let url = panel.url {
+                                session.mutate {
+                                    $0.camera.customLUTRelativePath = url.lastPathComponent
+                                    $0.camera.selectedCustomColorPresetID = nil
+                                    $0.camera.colorGradePreset = .cinema
+                                }
                             }
                         }
                     } label: {
@@ -2275,18 +2422,17 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .fill(Color.white.opacity(0.04))
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1.0)
+                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1.0)
                             Image(systemName: "plus")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.85))
+                                .font(.system(size: 13.5, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.88))
                         }
                         .frame(width: 36, height: 36)
                     }
                     .buttonStyle(.plain)
-                    .help("Load your LUT (.cube) file...")
                 }
 
-                if cam.colorGradePreset != .original {
+                if cam.colorGradePreset != .original || cam.selectedCustomColorPresetID != nil {
                     coalescedSlider(
                         title: "Color grading intensity",
                         value: Binding(
@@ -2323,7 +2469,7 @@ public struct InspectorSidebarView: View {
 
             inspectorDivider
 
-            // 3. `Crop` (`crop` + `"Crop camera"` / `"Edit crop"` + `"Reset"`)
+            // 3. `Crop` (`crop` + `"Crop camera"` / `"Edit crop"` + `"Reset"` — Opens Standalone Camera Crop Window)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "crop")
@@ -2336,10 +2482,7 @@ public struct InspectorSidebarView: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        session.isPlaying = false
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            session.isShowingCameraCropModal = true
-                        }
+                        ProjectWorkspaceStore.shared.presentCameraCropWindow(for: session)
                     } label: {
                         Text(hasCrop ? "Edit crop" : "Crop camera")
                             .font(.system(size: 13, weight: .regular))
@@ -2433,6 +2576,13 @@ public struct InspectorSidebarView: View {
                         range: -200.0...200.0,
                         defaultValue: 0.0
                     )
+                }
+            }
+        }
+        .onAppear {
+            if let url = session.webcamVideoFileURL {
+                GradedWebcamPortraitView.preloadFirstFrameIfNeeded(from: url) {
+                    webcamThumbnailRevision &+= 1
                 }
             }
         }
@@ -2682,55 +2832,71 @@ public struct InspectorSidebarView: View {
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.white.opacity(0.92))
 
-                FlowLayoutWrapRow(spacing: 6) {
-                    inspectorPillOptionButton(
-                        title: "Local (Apple Speech)",
-                        isSelected: cap.localModelVariant == "system"
-                    ) {
-                        session.mutate { $0.captions.localModelVariant = "system" }
-                    }
-
-                    // On-Device Whisper Button with Checkmark Badge & Instant Tooltip when downloaded!
-                    Button {
-                        if whisperManager.isModelInstalled(selectedWhisperTier) {
-                            session.mutate { $0.captions.localModelVariant = "whisper" }
-                        } else {
-                            whisperManager.promptUserAndStartDownload(for: selectedWhisperTier) {
-                                session.mutate { $0.captions.localModelVariant = "whisper" }
+                ScrollViewReader { methodScrollProxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            inspectorPillOptionButton(
+                                title: "Local (Apple Speech)",
+                                isSelected: cap.localModelVariant == "system"
+                            ) {
+                                session.mutate { $0.captions.localModelVariant = "system" }
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                                    methodScrollProxy.scrollTo("system", anchor: .center)
+                                }
                             }
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Text("On-Device Whisper")
-                                .font(.system(size: 12.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(cap.localModelVariant != "system" ? 0.98 : 0.72))
-                                .lineLimit(1)
+                            .id("system")
 
-                            if anyWhisperInstalled {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.48))
+                            // On-Device Whisper Button with Checkmark Badge & Instant Tooltip when downloaded!
+                            Button {
+                                if whisperManager.isModelInstalled(selectedWhisperTier) {
+                                    session.mutate { $0.captions.localModelVariant = "whisper" }
+                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                                        methodScrollProxy.scrollTo("whisper", anchor: .center)
+                                    }
+                                } else {
+                                    whisperManager.promptUserAndStartDownload(for: selectedWhisperTier) {
+                                        session.mutate { $0.captions.localModelVariant = "whisper" }
+                                        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                                            methodScrollProxy.scrollTo("whisper", anchor: .center)
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Text("On-Device Whisper")
+                                        .font(.system(size: 12.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(cap.localModelVariant != "system" ? 0.98 : 0.72))
+                                        .lineLimit(1)
+
+                                    if anyWhisperInstalled {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.48))
+                                    }
+                                }
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 12)
+                                .frame(height: 34)
+                                .background(
+                                    HoverMagnetBackgroundRepresentable(
+                                        tooltip: whisperManager.installedTooltipSummary
+                                            ?? "Click to download open-source OpenAI Whisper model (\(selectedWhisperTier.fileName), \(selectedWhisperTier.sizeDescription)) locally",
+                                        shortcutBadge: nil,
+                                        edge: .top,
+                                        cornerRadius: 8,
+                                        isActive: cap.localModelVariant != "system",
+                                        isDisabled: false,
+                                        isRailTab: false,
+                                        hasActiveBorder: true,
+                                        onViewReady: { _ in }
+                                    )
+                                )
                             }
+                            .buttonStyle(.plain)
+                            .id("whisper")
                         }
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 12)
-                        .frame(height: 34)
-                        .background(
-                            HoverMagnetBackgroundRepresentable(
-                                tooltip: whisperManager.installedTooltipSummary
-                                    ?? "Click to download open-source OpenAI Whisper model (\(selectedWhisperTier.fileName), \(selectedWhisperTier.sizeDescription)) locally",
-                                shortcutBadge: nil,
-                                edge: .top,
-                                cornerRadius: 8,
-                                isActive: cap.localModelVariant != "system",
-                                isDisabled: false,
-                                isRailTab: false,
-                                hasActiveBorder: true,
-                                onViewReady: { _ in }
-                            )
-                        )
+                        .padding(.vertical, 1)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 Text(
@@ -2888,7 +3054,7 @@ public struct InspectorSidebarView: View {
                 }
             }
 
-            // Language Picker
+            // Language Picker (Export-FPS-style compact pill with smooth width interpolation when selecting short/long language names!)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Language")
                     .font(.system(size: 13, weight: .regular))
@@ -2897,32 +3063,39 @@ public struct InspectorSidebarView: View {
                 Menu {
                     ForEach(locales.prefix(35)) { loc in
                         Button(loc.displayName) {
-                            session.mutate { $0.captions.transcriptLocale = loc.id }
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                                session.mutate { $0.captions.transcriptLocale = loc.id }
+                            }
                         }
                     }
                 } label: {
-                    HStack {
-                        let currentName = locales.first(where: { $0.id == cap.transcriptLocale })?.displayName ?? cap.transcriptLocale
+                    let currentName = locales.first(where: { $0.id == cap.transcriptLocale })?.displayName ?? cap.transcriptLocale
+                    HStack(spacing: 6) {
                         Text(currentName)
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .font(.system(size: 13.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.95))
+                            .lineLimit(1)
+                            .contentTransition(.interpolate)
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.65))
+                            .padding(.leading, 2)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 14)
                     .frame(height: 36)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .fill(Color.white.opacity(0.04))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                     )
                 }
-                .menuStyle(.borderlessButton)
+                .buttonStyle(.plain)
+                .fixedSize()
+                .animation(.spring(response: 0.24, dampingFraction: 0.84), value: cap.transcriptLocale)
             }
 
             // Keyterms / Prompt
@@ -3449,6 +3622,58 @@ public struct InspectorSidebarView: View {
                 }
             }
             .frame(height: 112)
+        }
+    }
+
+    /// Horizontal 3-Dot `Camera Position` Picker for `Camera cutout` Mode (`Left: 0.0`, `Center: 0.5`, `Right: 1.0` & 3 1:1!)
+    private struct CameraCutoutPositionDotBarPicker: View {
+        @Binding var positionX01: Double
+
+        private let xStops: [Double] = [0.0, 0.5, 1.0]
+
+        var body: some View {
+            GeometryReader { geo in
+                let w = geo.size.width
+                let h = geo.size.height
+                let padX: CGFloat = 22
+                let innerW = max(10, w - padX * 2)
+                let cy = h * 0.5
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.03))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+
+                    ForEach(xStops, id: \.self) { stopX in
+                        let isSelected = (abs(positionX01 - stopX) < 0.18)
+                        let cx = padX + CGFloat(stopX) * innerW
+
+                        Button {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                positionX01 = stopX
+                            }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        isSelected
+                                            ? Color(red: 0.59, green: 0.48, blue: 0.98)
+                                            : Color.white.opacity(0.08)
+                                    )
+                                    .frame(width: 20, height: 20)
+
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 4.5, height: 4.5)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .position(x: cx, y: cy)
+                    }
+                }
+            }
+            .frame(height: 44)
         }
     }
 

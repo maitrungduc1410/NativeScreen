@@ -1259,6 +1259,32 @@ public final class ProjectSession: Identifiable {
         return NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
     }
 
+    public func extractRawWebcamFrameCGImage() async -> CGImage? {
+        guard let url = webcamVideoFileURL, FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let asset = AVURLAsset(url: url)
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        gen.requestedTimeToleranceBefore = CMTime(seconds: 0.15, preferredTimescale: 600)
+        gen.requestedTimeToleranceAfter = CMTime(seconds: 0.15, preferredTimescale: 600)
+        let cmTime = CMTime(seconds: max(0.05, currentSourceTimeMs / 1000.0), preferredTimescale: 600)
+        if let (cgImg, _) = try? await gen.image(at: cmTime) {
+            return cgImg
+        }
+        if let (cgImg0, _) = try? await gen.image(at: CMTime(seconds: 0.1, preferredTimescale: 600)) {
+            return cgImg0
+        }
+        return nil
+    }
+
+    public func extractRawWebcamFrameNSImage() async -> (image: NSImage, pixelSize: CGSize)? {
+        if let cgImg = await extractRawWebcamFrameCGImage() {
+            let size = CGSize(width: cgImg.width, height: cgImg.height)
+            return (NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height)), size)
+        }
+        let fallback = GradedWebcamPortraitView.cachedGradedPortraitImage(preset: .original, intensity: 1.0, sharpen01: 0.0)
+        return (fallback, CGSize(width: 1920, height: 1080))
+    }
+
     public func renderCurrentCompositedCGImage(targetHeight: Double = 1440.0) async -> CGImage? {
         guard let compositor = MetalFrameCompositor() else { return nil }
         let sourceMs = currentSourceTimeMs

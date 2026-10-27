@@ -591,6 +591,31 @@ public enum CameraShape: String, Codable, CaseIterable, Sendable {
     case rectangle = "rectangle"
 }
 
+public struct CustomCameraColorPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var warmth: Double
+    public var backgroundPop: Double
+    public var contrast: Double
+    public var colorIntensity: Double
+
+    public init(
+        id: String = UUID().uuidString,
+        name: String = "My preset",
+        warmth: Double = 0.0,
+        backgroundPop: Double = 0.20,
+        contrast: Double = 0.25,
+        colorIntensity: Double = 0.20
+    ) {
+        self.id = id
+        self.name = name
+        self.warmth = warmth
+        self.backgroundPop = backgroundPop
+        self.contrast = contrast
+        self.colorIntensity = colorIntensity
+    }
+}
+
 public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
     public var enabled: Bool
     public var layoutMode: CameraLayoutMode
@@ -610,8 +635,13 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
     public var splitFlip: Bool
     public var splitEnablePadding: Bool
     public var cutoutPositionX01: Double
+    public var cutoutEdgeSoftness: Double
+    public var cutoutEdgeInset: Double
+    public var cutoutAvoidEmptyArea: Bool
     public var colorGradePreset: CameraColorGradePreset
     public var customLUTRelativePath: String?
+    public var customColorPresets: [CustomCameraColorPreset]
+    public var selectedCustomColorPresetID: String?
     public var colorGradeIntensity: Double
     public var sharpen01: Double
     public var cropRect01: Rect01
@@ -636,9 +666,14 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         splitScreenRatio01: Double = 0.50,
         splitFlip: Bool = false,
         splitEnablePadding: Bool = false,
-        cutoutPositionX01: Double = 1.0,
+        cutoutPositionX01: Double = 0.0,
+        cutoutEdgeSoftness: Double = 0.20,
+        cutoutEdgeInset: Double = 0.0,
+        cutoutAvoidEmptyArea: Bool = false,
         colorGradePreset: CameraColorGradePreset = .original,
         customLUTRelativePath: String? = nil,
+        customColorPresets: [CustomCameraColorPreset] = [],
+        selectedCustomColorPresetID: String? = nil,
         colorGradeIntensity: Double = 1.0,
         sharpen01: Double = 0.0,
         cropRect01: Rect01 = .full,
@@ -663,8 +698,13 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         self.splitFlip = splitFlip
         self.splitEnablePadding = splitEnablePadding
         self.cutoutPositionX01 = cutoutPositionX01
+        self.cutoutEdgeSoftness = cutoutEdgeSoftness
+        self.cutoutEdgeInset = cutoutEdgeInset
+        self.cutoutAvoidEmptyArea = cutoutAvoidEmptyArea
         self.colorGradePreset = colorGradePreset
         self.customLUTRelativePath = customLUTRelativePath
+        self.customColorPresets = customColorPresets
+        self.selectedCustomColorPresetID = selectedCustomColorPresetID
         self.colorGradeIntensity = colorGradeIntensity
         self.sharpen01 = sharpen01
         self.cropRect01 = cropRect01
@@ -677,7 +717,8 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         case makeSmallerDuringZoom, scaleWhenZoomed, shape, borderRadiusRatio
         case shadowIntensity, backgroundBlur, aiPersonCutout, hideDuringSilenceMs
         case splitScreenRatio01, splitFlip, splitEnablePadding, cutoutPositionX01
-        case colorGradePreset, customLUTRelativePath, colorGradeIntensity
+        case cutoutEdgeSoftness, cutoutEdgeInset, cutoutAvoidEmptyArea
+        case colorGradePreset, customLUTRelativePath, customColorPresets, selectedCustomColorPresetID, colorGradeIntensity
         case sharpen01, cropRect01, enableFaceTracking, delayAdjustmentMs
     }
 
@@ -700,9 +741,14 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         self.splitScreenRatio01 = try container.decodeIfPresent(Double.self, forKey: .splitScreenRatio01) ?? 0.50
         self.splitFlip = try container.decodeIfPresent(Bool.self, forKey: .splitFlip) ?? false
         self.splitEnablePadding = try container.decodeIfPresent(Bool.self, forKey: .splitEnablePadding) ?? false
-        self.cutoutPositionX01 = try container.decodeIfPresent(Double.self, forKey: .cutoutPositionX01) ?? 1.0
+        self.cutoutPositionX01 = try container.decodeIfPresent(Double.self, forKey: .cutoutPositionX01) ?? 0.0
+        self.cutoutEdgeSoftness = try container.decodeIfPresent(Double.self, forKey: .cutoutEdgeSoftness) ?? 0.20
+        self.cutoutEdgeInset = try container.decodeIfPresent(Double.self, forKey: .cutoutEdgeInset) ?? 0.0
+        self.cutoutAvoidEmptyArea = try container.decodeIfPresent(Bool.self, forKey: .cutoutAvoidEmptyArea) ?? false
         self.colorGradePreset = try container.decodeIfPresent(CameraColorGradePreset.self, forKey: .colorGradePreset) ?? .original
         self.customLUTRelativePath = try container.decodeIfPresent(String.self, forKey: .customLUTRelativePath)
+        self.customColorPresets = try container.decodeIfPresent([CustomCameraColorPreset].self, forKey: .customColorPresets) ?? []
+        self.selectedCustomColorPresetID = try container.decodeIfPresent(String.self, forKey: .selectedCustomColorPresetID)
         self.colorGradeIntensity = try container.decodeIfPresent(Double.self, forKey: .colorGradeIntensity) ?? 1.0
         self.sharpen01 = try container.decodeIfPresent(Double.self, forKey: .sharpen01) ?? 0.0
         self.cropRect01 = try container.decodeIfPresent(Rect01.self, forKey: .cropRect01) ?? .full
