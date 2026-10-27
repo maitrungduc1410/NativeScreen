@@ -167,7 +167,9 @@ public final class RecordingCoordinator {
     public var showCameraPreview: Bool = true {
         didSet { updateFloatingCameraPreviewWindow() }
     }
-    public var cameraMaxResolution: CameraMaxResolutionOption = .p1080
+    public var cameraMaxResolution: CameraMaxResolutionOption = .p1080 {
+        didSet { updateFloatingCameraPreviewWindow() }
+    }
 
     // Microphone Recording State ( & 10)
     public var captureMicrophone: Bool = false {
@@ -558,15 +560,37 @@ public final class RecordingCoordinator {
     // MARK: - Floating Live Camera Preview Window & Live HUD Microphone Meter
 
     private func updateFloatingCameraPreviewWindow() {
-        let shouldShow = (isHUDVisible || isRecording || isCountingDown)
-            && selectedCameraDeviceID != nil
-            && showCameraPreview
+        let isActiveContext = (isHUDVisible || isRecording || isCountingDown)
 
-        guard shouldShow, let camID = selectedCameraDeviceID else {
-            floatingCameraPreviewView?.stopSession()
+        guard isActiveContext, let camID = selectedCameraDeviceID else {
+            WarmCameraCaptureController.shared.setPreviewSurfaceHandler(nil)
+            WarmCameraCaptureController.shared.stopSession()
             floatingCameraPreviewView = nil
             floatingCameraPreviewPanel?.orderOut(nil)
             floatingCameraPreviewPanel = nil
+            return
+        }
+
+        // Request camera authorization if needed and keep the hardware camera session warm across HUD -> Countdown -> Recording!
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        if authStatus == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                guard granted else { return }
+                Task { @MainActor [weak self] in
+                    self?.updateFloatingCameraPreviewWindow()
+                }
+            }
+            return
+        }
+
+        WarmCameraCaptureController.shared.ensureWarmSession(
+            deviceID: camID,
+            maxResolution: cameraMaxResolution
+        )
+
+        guard showCameraPreview else {
+            WarmCameraCaptureController.shared.setPreviewSurfaceHandler(nil)
+            floatingCameraPreviewPanel?.orderOut(nil)
             return
         }
 
@@ -599,7 +623,11 @@ public final class RecordingCoordinator {
             floatingCameraPreviewPanel = panel
         }
 
-        floatingCameraPreviewView?.configureSession(for: camID)
+        WarmCameraCaptureController.shared.setPreviewSurfaceHandler { [weak self] ioSurface in
+            Task { @MainActor [weak self] in
+                self?.floatingCameraPreviewView?.displayCapturedSurface(ioSurface)
+            }
+        }
         floatingCameraPreviewPanel?.orderFrontRegardless()
     }
 
@@ -962,16 +990,7 @@ public final class RecordingCoordinator {
                 ? recordingDir.appendingPathComponent("microphone.m4a")
                 : nil
 
-            // Stop the standalone pre-recording camera preview AVCaptureSession synchronously before starting ScreenCaptureEngine
-            // so the two AVCaptureSessions never compete for exclusive access to the same hardware camera device!
-            await floatingCameraPreviewView?.stopSessionAndWait()
-
             let engine = ScreenCaptureEngine()
-            engine.onWebcamFrameCaptured = { [weak self] ioSurface in
-                Task { @MainActor [weak self] in
-                    self?.floatingCameraPreviewView?.displayCapturedSurface(ioSurface)
-                }
-            }
             let telemetry = TelemetryRecorder(
                 telemetryDirectoryURL: telemetryDir,
                 captureLogicalBounds: logicalBounds
@@ -1111,6 +1130,7 @@ public final class RecordingCoordinator {
 
     private func restorePostRecordingSystemState() {
         hideRecordedAreaHighlightOverlay()
+        updateFloatingCameraPreviewWindow()
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
         }
@@ -2994,16 +3014,12 @@ public struct WindowAndAreaPickerOverlayView: View {
 // MARK: - Pure AppKit Floating Live Camera Preview Bubble (`Show camera preview` in HUD)
 
 private final class LiveCameraPreviewHostNSView: NSView {
-    private var currentDeviceID: String?
-    private var session: AVCaptureSession?
     private let shadowContainerLayer = CALayer()
     private let clipLayer = CALayer()
     private let recordedFrameLayer = CALayer()
-    private var previewLayer: AVCaptureVideoPreviewLayer?
     private let borderLayer = CAShapeLayer()
     private let cornerRadius: CGFloat = 42.0
     private let insetMargin: CGFloat = 14.0
-    private let sessionQueue = DispatchQueue(label: "com.nativescreen.hud.camPreview", qos: .userInteractive)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -3056,65 +3072,9 @@ private final class LiveCameraPreviewHostNSView: NSView {
         shadowContainerLayer.shadowPath = roundedPath
         clipLayer.frame = CGRect(origin: .zero, size: innerRect.size)
         recordedFrameLayer.frame = clipLayer.bounds
-        previewLayer?.frame = clipLayer.bounds
         borderLayer.frame = clipLayer.bounds
         borderLayer.path = roundedPath
         CATransaction.commit()
-    }
-
-    func configureSession(for deviceID: String) {
-        guard currentDeviceID != deviceID || session == nil else { return }
-        currentDeviceID = deviceID
-
-        let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
-        if authStatus == .notDetermined {
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                guard granted else { return }
-                Task { @MainActor [weak self] in
-                    self?.currentDeviceID = nil
-                    self?.configureSession(for: deviceID)
-                }
-            }
-            return
-        }
-
-        stopSession()
-
-        guard let device = AVCaptureDevice(uniqueID: deviceID) ?? AVCaptureDevice.default(for: .video),
-              let input = try? AVCaptureDeviceInput(device: device) else {
-            return
-        }
-
-        let newSession = AVCaptureSession()
-        newSession.beginConfiguration()
-        if newSession.canSetSessionPreset(.high) {
-            newSession.sessionPreset = .high
-        }
-        if newSession.canAddInput(input) {
-            newSession.addInput(input)
-        }
-        newSession.commitConfiguration()
-        ScreenCaptureEngine.configureHighestFrameRateFormat(on: device, maxHeight: 1080)
-
-        // Create and attach `AVCaptureVideoPreviewLayer` BEFORE calling `startRunning` so `AVCaptureSession_Tundra`'s internal
-        // connections/outputs array is NEVER mutated while `startRunning` is enumerating it on `sessionQueue`!
-        let pLayer = AVCaptureVideoPreviewLayer(session: newSession)
-        pLayer.videoGravity = .resizeAspectFill
-        pLayer.frame = clipLayer.bounds
-        if let conn = pLayer.connection, conn.isVideoMirroringSupported {
-            conn.automaticallyAdjustsVideoMirroring = false
-            conn.isVideoMirrored = true
-        }
-        clipLayer.addSublayer(pLayer)
-
-        self.session = newSession
-        self.previewLayer = pLayer
-        needsLayout = true
-
-        let sessionToStart = newSession
-        sessionQueue.async {
-            sessionToStart.startRunning()
-        }
     }
 
     func displayCapturedSurface(_ ioSurface: IOSurfaceRef) {
@@ -3122,38 +3082,6 @@ private final class LiveCameraPreviewHostNSView: NSView {
         CATransaction.setDisableActions(true)
         recordedFrameLayer.contents = ioSurface
         CATransaction.commit()
-    }
-
-    func stopSession() {
-        if let existing = session {
-            session = nil
-            sessionQueue.async {
-                existing.stopRunning()
-            }
-        }
-        previewLayer?.removeFromSuperlayer()
-        previewLayer = nil
-    }
-
-    func stopSessionAndWait() async {
-        previewLayer?.removeFromSuperlayer()
-        previewLayer = nil
-        guard let existing = session else { return }
-        session = nil
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            sessionQueue.async {
-                existing.stopRunning()
-                cont.resume()
-            }
-        }
-    }
-
-    deinit {
-        if let existing = session {
-            sessionQueue.async {
-                existing.stopRunning()
-            }
-        }
     }
 }
 
