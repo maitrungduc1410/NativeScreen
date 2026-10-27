@@ -396,8 +396,6 @@ public final class RecordingCoordinator {
 
     private var currentDesiredPanelSize: NSSize {
         if let hosting = hudPanel?.contentView {
-            hosting.needsLayout = true
-            hosting.layoutSubtreeIfNeeded()
             let fittingW = ceil(hosting.fittingSize.width)
             if fittingW >= 248 {
                 return NSSize(width: fittingW, height: Self.barHeight)
@@ -964,11 +962,16 @@ public final class RecordingCoordinator {
                 ? recordingDir.appendingPathComponent("microphone.m4a")
                 : nil
 
-            // Stop the standalone pre-recording camera preview AVCaptureSession before starting ScreenCaptureEngine
+            // Stop the standalone pre-recording camera preview AVCaptureSession synchronously before starting ScreenCaptureEngine
             // so the two AVCaptureSessions never compete for exclusive access to the same hardware camera device!
-            floatingCameraPreviewView?.stopSession()
+            await floatingCameraPreviewView?.stopSessionAndWait()
 
             let engine = ScreenCaptureEngine()
+            engine.onWebcamFrameCaptured = { [weak self] cgImg in
+                Task { @MainActor [weak self] in
+                    self?.floatingCameraPreviewView?.displayCapturedFrame(cgImg)
+                }
+            }
             let telemetry = TelemetryRecorder(
                 telemetryDirectoryURL: telemetryDir,
                 captureLogicalBounds: logicalBounds
@@ -1005,10 +1008,6 @@ public final class RecordingCoordinator {
             self.pauseStartUptime = nil
             self.accumulatedPausedSeconds = 0
             self.recordingElapsedSeconds = 0.0
-
-            if let sharedSession = engine.activeCaptureSession {
-                floatingCameraPreviewView?.attachExternalSession(sharedSession)
-            }
 
             updateHUDPanelFrameForCurrentState(animated: true)
             updateRecordedAreaHighlightOverlay()
@@ -2999,10 +2998,12 @@ private final class LiveCameraPreviewHostNSView: NSView {
     private var session: AVCaptureSession?
     private let shadowContainerLayer = CALayer()
     private let clipLayer = CALayer()
+    private let recordedFrameLayer = CALayer()
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private let borderLayer = CAShapeLayer()
     private let cornerRadius: CGFloat = 42.0
     private let insetMargin: CGFloat = 14.0
+    private let sessionQueue = DispatchQueue(label: "com.nativescreen.hud.camPreview", qos: .userInteractive)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -3024,6 +3025,10 @@ private final class LiveCameraPreviewHostNSView: NSView {
         clipLayer.cornerCurve = .continuous
         clipLayer.masksToBounds = true
         shadowContainerLayer.addSublayer(clipLayer)
+
+        recordedFrameLayer.contentsGravity = .resizeAspectFill
+        recordedFrameLayer.setAffineTransform(CGAffineTransform(scaleX: -1.0, y: 1.0))
+        clipLayer.addSublayer(recordedFrameLayer)
 
         // 3. Subtle 1px inner border
         borderLayer.fillColor = nil
@@ -3050,6 +3055,7 @@ private final class LiveCameraPreviewHostNSView: NSView {
         )
         shadowContainerLayer.shadowPath = roundedPath
         clipLayer.frame = CGRect(origin: .zero, size: innerRect.size)
+        recordedFrameLayer.frame = clipLayer.bounds
         previewLayer?.frame = clipLayer.bounds
         borderLayer.frame = clipLayer.bounds
         borderLayer.path = roundedPath
@@ -3089,6 +3095,8 @@ private final class LiveCameraPreviewHostNSView: NSView {
         }
         newSession.commitConfiguration()
 
+        // Create and attach `AVCaptureVideoPreviewLayer` BEFORE calling `startRunning` so `AVCaptureSession_Tundra`'s internal
+        // connections/outputs array is NEVER mutated while `startRunning` is enumerating it on `sessionQueue`!
         let pLayer = AVCaptureVideoPreviewLayer(session: newSession)
         pLayer.videoGravity = .resizeAspectFill
         pLayer.frame = clipLayer.bounds
@@ -3102,29 +3110,23 @@ private final class LiveCameraPreviewHostNSView: NSView {
         self.previewLayer = pLayer
         needsLayout = true
 
-        DispatchQueue.global(qos: .userInteractive).async {
-            newSession.startRunning()
+        let sessionToStart = newSession
+        sessionQueue.async {
+            sessionToStart.startRunning()
         }
     }
 
-    func attachExternalSession(_ externalSession: AVCaptureSession) {
-        stopSession()
-        let pLayer = AVCaptureVideoPreviewLayer(session: externalSession)
-        pLayer.videoGravity = .resizeAspectFill
-        pLayer.frame = clipLayer.bounds
-        if let conn = pLayer.connection, conn.isVideoMirroringSupported {
-            conn.automaticallyAdjustsVideoMirroring = false
-            conn.isVideoMirrored = true
-        }
-        clipLayer.addSublayer(pLayer)
-        self.previewLayer = pLayer
-        needsLayout = true
+    func displayCapturedFrame(_ cgImage: CGImage) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        recordedFrameLayer.contents = cgImage
+        CATransaction.commit()
     }
 
     func stopSession() {
         if let existing = session {
             session = nil
-            DispatchQueue.global(qos: .userInteractive).async {
+            sessionQueue.async {
                 existing.stopRunning()
             }
         }
@@ -3132,9 +3134,22 @@ private final class LiveCameraPreviewHostNSView: NSView {
         previewLayer = nil
     }
 
+    func stopSessionAndWait() async {
+        previewLayer?.removeFromSuperlayer()
+        previewLayer = nil
+        guard let existing = session else { return }
+        session = nil
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            sessionQueue.async {
+                existing.stopRunning()
+                cont.resume()
+            }
+        }
+    }
+
     deinit {
         if let existing = session {
-            DispatchQueue.global(qos: .userInteractive).async {
+            sessionQueue.async {
                 existing.stopRunning()
             }
         }

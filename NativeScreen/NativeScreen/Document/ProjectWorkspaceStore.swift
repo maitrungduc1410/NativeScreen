@@ -77,12 +77,9 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         }
 
         let editorView = ProjectEditorWindowView(session: session)
-            .ignoresSafeArea()
+            .ignoresSafeArea(.container, edges: .top)
             .frame(minWidth: 1180, minHeight: 740)
         let hostingController = NSHostingController(rootView: editorView)
-        if #available(macOS 13.0, *) {
-            hostingController.safeAreaRegions = []
-        }
         hostingController.sizingOptions = [.minSize]
 
         // Default every newly opened project Editor window to fill the active monitor's `visibleFrame` (maximized full screen)!
@@ -123,6 +120,16 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
     public func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
         return [.autoHideToolbar, .autoHideMenuBar, .fullScreen]
+    }
+
+    public func windowWillEnterFullScreen(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        window.toolbar?.isVisible = false
+    }
+
+    public func windowDidExitFullScreen(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        window.toolbar?.isVisible = true
     }
 
     // MARK: - Standalone Movable Crop Window (`NSWindow` tied to Project Session)

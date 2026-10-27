@@ -489,8 +489,8 @@ public struct ProjectEditorWindowView: View {
                         }
                         .padding(.leading, 14)
 
-                        // Center: Timecode + 3 Transport Buttons with Hover Highlight & Top Tooltips
-                        HStack(spacing: 12) {
+                    // Center: Playhead + 3 Transport Buttons with Hover Highlight & Top Tooltips
+                    HStack(spacing: 12) {
                             LivePlayheadTimecodeTextView(session: session)
 
                             InstantTooltipButton(
@@ -572,6 +572,7 @@ public struct ProjectEditorWindowView: View {
                     .background(Color(red: 0.03, green: 0.03, blue: 0.04))
                     .zIndex(70)
                 }
+                .frame(minWidth: 680, maxWidth: .infinity, minHeight: 340, maxHeight: .infinity)
                 .zIndex(1)
 
                 InspectorSidebarView(session: session)
@@ -582,8 +583,9 @@ public struct ProjectEditorWindowView: View {
 
             // 3. BOTTOM MULTI-TRACK NLE TIMELINE
             MultiTrackTimelineView(session: session)
-                .frame(height: 255)
+                .frame(height: 245)
             }
+            .frame(minWidth: 1180, minHeight: 740)
             .allowsHitTesting(!isModalOverlayActive)
             .environment(\.isTooltipAndHoverBlocked, isModalOverlayActive)
 

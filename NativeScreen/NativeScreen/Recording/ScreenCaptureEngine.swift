@@ -3,6 +3,7 @@ import AVFoundation
 import ScreenCaptureKit
 import CoreMedia
 import CoreVideo
+import CoreImage
 
 /// Native macOS Screen & Audio Capture Engine powered by `ScreenCaptureKit` + `AVAssetWriter` (VideoToolbox hardware encoding).
 /// Excludes the system cursor (`showsCursor = false`) and NativeScreen's own HUD windows from the captured video stream.
@@ -36,6 +37,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
     public private(set) var recordedDurationMs: Double = 0.0
     public var onFirstVideoFrameArrived: ((TimeInterval) -> Void)?
+
+    public var onWebcamFrameCaptured: (@Sendable (CGImage) -> Void)?
 
     public func setPaused(_ paused: Bool) {
         videoQueue.async {
@@ -252,17 +255,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         session.commitConfiguration()
         self.avCaptureSession = session
-        if let vOut = session.outputs.compactMap({ $0 as? AVCaptureVideoDataOutput }).first {
-            // Also attach a live preview layer if the floating camera preview window is open during recording!
-            _ = vOut
-        }
         avDeviceQueue.async {
             session.startRunning()
         }
-    }
-
-    public var activeCaptureSession: AVCaptureSession? {
-        avCaptureSession
     }
 
     public func stopCapture() async {
@@ -411,6 +406,15 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         guard pts.isValid else { return }
 
         if output is AVCaptureVideoDataOutput {
+            // Forward live frame to the floating camera preview window if open (100% thread-safe, no AVCaptureVideoPreviewLayer mutation race!)
+            if let callback = onWebcamFrameCaptured,
+               let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                let ciImg = CIImage(cvPixelBuffer: pb)
+                if let cgImg = Self.sharedPreviewCIContext.createCGImage(ciImg, from: ciImg.extent) {
+                    callback(cgImg)
+                }
+            }
+
             guard let wWriter = webcamWriter, wWriter.status == .writing,
                   let wInput = webcamVideoInput else { return }
             if !isWebcamSessionStarted {
@@ -436,6 +440,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             }
         }
     }
+
+    private static let sharedPreviewCIContext = CIContext(options: [.useSoftwareRenderer: false])
 
     private static func adjustSampleBufferTime(_ sampleBuffer: CMSampleBuffer, bySubtracting offset: CMTime) -> CMSampleBuffer? {
         guard offset.isValid, CMTimeGetSeconds(offset) > 0.0001 else {
