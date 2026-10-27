@@ -97,6 +97,17 @@ public final class HardwareVideoExporter {
             case .webLow: return 0.0038
             }
         }
+
+        /// Constant-quality factor (`0.0 ... 1.0`) for Apple Silicon Hardware `VTCompressionSession` (`kVTCompressionPropertyKey_Quality`),
+        /// calibrated to CRF levels (`14`, `24`, `30`, `42`) with full I-frame sharpness (~550–1000 KB keyframes at 4K)!
+        public var vtHardwareQuality: Double {
+            switch self {
+            case .studio: return 0.87
+            case .socialMedia: return 0.72
+            case .web: return 0.58
+            case .webLow: return 0.42
+            }
+        }
     }
 
     public enum MP4CodecOption: String, CaseIterable, Identifiable, Codable {
@@ -527,7 +538,7 @@ public final class HardwareVideoExporter {
         /// Must exceed the 14-frame internal lookahead buffer of Apple's software H.264 `VTCompressionSession`!
         private let maxInFlightFrames: Int = 28
 
-        init?(width: Int, height: Int, codecType: CMVideoCodecType, useHardware: Bool, bitrate: Int, fps: Int, label: String) {
+        init?(width: Int, height: Int, codecType: CMVideoCodecType, useHardware: Bool, quality: Double, bitrate: Int, fps: Int, label: String) {
             self.workQueue = DispatchQueue(label: label, qos: .userInitiated)
 
             let spec: [String: Any] = useHardware
@@ -561,11 +572,19 @@ public final class HardwareVideoExporter {
             if codecType == kCMVideoCodecType_H264 {
                 VTSessionSetProperty(s, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
             }
-            VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber)
-            let bytesPerSecLimit = max(100_000, Int(Double(bitrate) / 8.0 * 1.15))
-            VTSessionSetProperty(s, key: kVTCompressionPropertyKey_DataRateLimits, value: [bytesPerSecLimit, 1] as CFArray)
+            if useHardware {
+                // Crucial: Use pure Constant-Quality (`kVTCompressionPropertyKey_Quality`) without `DataRateLimits` on the Hardware Media Engine!
+                // Setting `DataRateLimits` or a tight `AverageBitRate` on VideoToolbox starves the first I-frame (~105 KB instead of ~600+ KB),
+                // causing blurry text and dark macroblocking across the entire GOP!
+                VTSessionSetProperty(s, key: kVTCompressionPropertyKey_Quality, value: quality as CFNumber)
+            } else {
+                VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber)
+            }
             VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: (fps * 2) as CFNumber)
             VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2.0 as CFNumber)
+            VTSessionSetProperty(s, key: kVTCompressionPropertyKey_ColorPrimaries, value: kCVImageBufferColorPrimaries_ITU_R_709_2)
+            VTSessionSetProperty(s, key: kVTCompressionPropertyKey_TransferFunction, value: kCVImageBufferTransferFunction_ITU_R_709_2)
+            VTSessionSetProperty(s, key: kVTCompressionPropertyKey_YCbCrMatrix, value: kCVImageBufferYCbCrMatrix_ITU_R_709_2)
             VTCompressionSessionPrepareToEncodeFrames(s)
         }
 
@@ -718,6 +737,7 @@ public final class HardwareVideoExporter {
                         session: session,
                         outputURL: outputURL,
                         codecOption: .h264,
+                        compression: config.compression,
                         bitrate: h264Bitrate,
                         outputSize: outputSize,
                         fps: config.fps,
@@ -728,6 +748,7 @@ public final class HardwareVideoExporter {
                         session: session,
                         outputURL: hevcURL,
                         codecOption: .h265,
+                        compression: config.compression,
                         bitrate: hevcBitrate,
                         outputSize: outputSize,
                         fps: config.fps,
@@ -752,6 +773,7 @@ public final class HardwareVideoExporter {
                     session: session,
                     outputURL: outputURL,
                     codecOption: effectiveCodec,
+                    compression: config.compression,
                     bitrate: bitrate,
                     outputSize: outputSize,
                     fps: config.fps,
@@ -772,6 +794,7 @@ public final class HardwareVideoExporter {
         session: ProjectSession,
         outputURL: URL,
         codecOption: MP4CodecOption,
+        compression: ExportCompression,
         bitrate: Int,
         outputSize: CGSize,
         fps: Int,
@@ -786,8 +809,8 @@ public final class HardwareVideoExporter {
         let targetH = Int(outputSize.height)
         try? FileManager.default.removeItem(at: outputURL)
 
-        // Calibrate target bitrate so static + dynamic screen UI produces the exact ~26MB–42MB range as the CRF 14
-        let calibratedBitrate = max(600_000, Int(round(Double(bitrate) * 0.56)))
+        let hwQuality = compression.vtHardwareQuality
+        let swBitrate = max(600_000, Int(round(Double(bitrate) * 0.65)))
         let cmCodec: CMVideoCodecType = (codecOption == .h265) ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264
 
         guard let hwWorker = VTParallelCompressionWorker(
@@ -795,7 +818,8 @@ public final class HardwareVideoExporter {
             height: targetH,
             codecType: cmCodec,
             useHardware: true,
-            bitrate: calibratedBitrate,
+            quality: hwQuality,
+            bitrate: swBitrate,
             fps: fps,
             label: "com.nativescreen.export.vt.hw"
         ) else {
@@ -808,7 +832,8 @@ public final class HardwareVideoExporter {
             height: targetH,
             codecType: kCMVideoCodecType_H264,
             useHardware: false,
-            bitrate: calibratedBitrate,
+            quality: hwQuality,
+            bitrate: swBitrate,
             fps: fps,
             label: "com.nativescreen.export.vt.sw"
         ) : nil

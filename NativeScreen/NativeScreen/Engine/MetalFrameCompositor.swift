@@ -163,7 +163,15 @@ public final class MetalFrameCompositor {
 
         let scaleX = screenFrameRect.width / max(1.0, maskedScreen.extent.width)
         let scaleY = screenFrameRect.height / max(1.0, maskedScreen.extent.height)
-        var scaledScreen = maskedScreen.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+        var scaledScreen: CIImage
+        if abs(scaleX - scaleY) < 0.002 && scaleX < 0.99 {
+            scaledScreen = maskedScreen.applyingFilter("CILanczosScaleTransform", parameters: [
+                kCIInputScaleKey: scaleX,
+                kCIInputAspectRatioKey: 1.0
+            ])
+        } else {
+            scaledScreen = maskedScreen.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+        }
 
         let scaledRadius = CGFloat(doc.frameStyle.borderRadius) * (outputSize.height / 900.0)
         scaledScreen = applyRoundedCorners(
