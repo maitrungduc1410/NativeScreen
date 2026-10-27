@@ -481,6 +481,10 @@ public struct MultiTrackTimelineView: View {
     @ViewBuilder
     private func clipLaneView(contentWidth: CGFloat, totalTimelineMs: Double, minorTickStepSec: Double) -> some View {
         ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: clipRowHeight)
+                .contentShape(Rectangle())
+
             ForEach(session.timeMapper.mappedSlices, id: \.slice.id) { mapped in
                 let xStart = CGFloat(mapped.timelineStartMs / totalTimelineMs) * contentWidth
                 let blockW = max(12.0, CGFloat((mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs) * contentWidth)
@@ -575,6 +579,10 @@ public struct MultiTrackTimelineView: View {
             : nil
 
         ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: zoomRowHeight)
+                .contentShape(Rectangle())
+
             // Empty-Track Prompt when no zooms exist and not hovering
             if session.document.timeline.zooms.isEmpty && addPreview == nil {
                 Text("Click or drag to add zoom on cursor")
@@ -765,6 +773,10 @@ public struct MultiTrackTimelineView: View {
             : nil
 
         ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: maskRowHeight)
+                .contentShape(Rectangle())
+
             // Hover `+` Ghost Add-Mask Preview Block ( `Screenshot_2026-10-26_at_2.29.54_PM.png` 1:1!)
             if let preview = addPreview {
                 let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
@@ -944,6 +956,9 @@ public struct MultiTrackTimelineView: View {
         totalTimelineMs: Double
     ) -> some View {
         ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: 19)
+
             ForEach(suggestions) { suggestion in
                 if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: suggestion.sourceStartMs, sourceEndMs: suggestion.sourceEndMs) {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
@@ -977,6 +992,8 @@ public struct MultiTrackTimelineView: View {
 
         ZStack(alignment: .leading) {
             Color.clear
+                .frame(width: contentWidth, height: maskRowHeight)
+                .contentShape(Rectangle())
 
             // Hover `+` preview block on empty areas of the Shortcuts track (click to insert a custom shortcut!)
             if !session.isSplitModeActive,
