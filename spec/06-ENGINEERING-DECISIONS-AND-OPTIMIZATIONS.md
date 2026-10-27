@@ -238,3 +238,22 @@ then timeline segment dragging/resizing drops to ~20–30fps on the main thread.
    - Show edge resize handle capsules (`3 pt` width, `9 pt` vertical inset, `6.5 pt` horizontal inset on standard segments; adaptively scaled down to `2.4 pt` width and `>= 2.2 pt` inset on minimum-width segments) **only on hover or active edge resize** (`isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight`) with no minimum segment width cutoff (`segWidth >= 10 pt` and adaptive `edgeHitWidth = min(13, max(5.5, segWidth * 0.34))` plus `-3 pt` hit slop), ensuring even a minimum-duration segment always exposes left-resize, center-move, and right-resize zones. Dim sibling segments on the same track (`opacity = 0.30`) when a segment editor is open, and clear any active segment selection (`clearTimelineSelection()`) when clicking empty timeline space or pressing `Escape`.
    - **Important SwiftUI `ZStack(alignment: .leading)` Coordinate Anchor Invariant**: Every timeline track lane `ZStack` whose children are positioned via `.offset(x:)` **MUST** include a full-width `Color.clear.frame(width: contentWidth, height: rowHeight).contentShape(Rectangle())` anchor child inside the `ZStack`. Without a full-width child inside the `ZStack`, SwiftUI sizes the inner `ZStack` to the widest non-offset child (a single segment's width) and centers that narrow `ZStack` inside the outer `.frame(width: contentWidth)`, shifting all `.offset(x:)` segment coordinates, `.onContinuousHover(coordinateSpace: .local)`, and `DragGesture` hit-testing by `(contentWidth - maxSegmentWidth) / 2`!
 
+---
+
+## 13. ADR-13: 100% On-Device Camera, Microphone, Filmic Color Grading, Captions & Transcript-Driven Video Cutting
+
+### Problem
+Users need studio-grade webcam layouts (`Camera overlay`, `Split screen`, `Camera cutout`), 12 filmic color-grading looks + sharpen + crop + face tracking, microphone audio presets (`Off`, `Standard`, `Loud`, `Noise reduction`, `Podcast`), animated word-timed captions, and text-based video editing (`Edit by transcript` with filler-word and pause removal) **without** sending any video or audio to external cloud servers.
+
+### Solution
+1. **Multi-Track Capture (`ScreenCaptureEngine`) & Floating Live Camera Bubble**:
+   - Capture the display/window via `ScreenCaptureKit` (`display.mp4`) while simultaneously running an `AVCaptureSession` on a dedicated `avDeviceQueue` to record the selected webcam (`webcam.mp4`) and microphone (`microphone.m4a`) with pause-offset timestamp synchronization (`adjustSampleBufferTime`).
+   - Display a borderless, non-activating `DraggableHUDPanel` with `sharingType = .none` for `Show camera preview` and a live horizontal audio level meter along the bottom edge of the active microphone HUD button.
+2. **12 GPU Filmic Camera Looks, Vision Face Tracking & Person Cutout (`LocalOnDeviceMediaIntelligence`)**:
+   - Implement the 12 filmic camera looks (`Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`) + `CISharpenLuminance` via cached GPU CoreImage pipelines, and use macOS `Vision` (`VNDetectFaceRectanglesRequest` and `VNGeneratePersonSegmentationRequest`) 100% on-device.
+   - Dynamically scale the webcam PiP during active zoom segments (`1.0 - (1.0 - scaleWhenZoomed) * zoomProgress01`) so the webcam shrinks smoothly when the main screen zooms in.
+3. **On-Device Speech Recognition (`SFSpeechRecognizer`) & Non-Destructive Transcript Slice Cutting**:
+   - Set `requiresOnDeviceRecognition = true` on `SFSpeechURLRecognitionRequest` so transcription runs strictly on the local Apple Neural Engine with zero cloud traffic.
+   - Cutting words or tightening pauses (`>= 800ms` trimmed down to a `200ms` natural breath) in `Edit by transcript` splits or trims `document.timeline.slices` non-destructively inside a single `mutate` block, keeping cut words visible as strikethrough tokens that can be restored in one click (`Restore` or `⌘Z`).
+
+

@@ -12,6 +12,12 @@ public struct InspectorSidebarView: View {
     @State private var isAdvancedCursorSectionExpanded: Bool = false
     @State private var isAdvancedShadowSectionExpanded: Bool = false
     @State private var isAdvancedZoomSegmentExpanded: Bool = false
+    @State private var isCameraSizeDuringZoomExpanded: Bool = false
+    @State private var isAdvancedCameraStyleExpanded: Bool = false
+    @State private var isRegenerateTranscriptExpanded: Bool = false
+    @State private var editingTranscriptWordId: String? = nil
+    @State private var editingTranscriptDraftText: String = ""
+    @State private var selectedTranscriptWordId: String? = nil
     @State private var wallpaperCategory: String = "macOS"
     @State private var gradientHueShift: Double = 0.5
     @State private var isHoveringImageDropZone: Bool = false
@@ -80,6 +86,14 @@ public struct InspectorSidebarView: View {
                             backgroundInspector
                         case .cursor:
                             cursorInspector
+                        case .cameraLayout:
+                            cameraLayoutInspector
+                        case .cameraStyle:
+                            cameraStyleInspector
+                        case .captions:
+                            captionsInspector
+                        case .transcript:
+                            transcriptEditorInspector
                         case .zoom:
                             zoomInspector
                         case .masks:
@@ -1728,8 +1742,110 @@ public struct InspectorSidebarView: View {
 
     @ViewBuilder
     private var audioAndSliceInspector: some View {
+        let isCameraVisibleAndMicMuted = session.document.camera.enabled && session.document.audio.muteMicrophone
+
         VStack(alignment: .leading, spacing: 24) {
-            // 1. System audio section
+            // 1. Microphone Section
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Microphone")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.45))
+
+                inspectorToggleRow(
+                    title: "Mute microphone",
+                    icon: nil,
+                    description: nil,
+                    isOn: Binding(
+                        get: { session.document.audio.muteMicrophone },
+                        set: { v in session.mutate { $0.audio.muteMicrophone = v } }
+                    )
+                )
+
+                if !session.document.audio.muteMicrophone {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Microphone audio mode")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        FlowLayoutWrapRow(spacing: 6) {
+                            ForEach(MicrophoneAudioPreset.allCases) { preset in
+                                inspectorPillOptionButton(
+                                    title: preset.label,
+                                    isSelected: session.document.audio.microphoneAudioPreset == preset
+                                ) {
+                                    session.mutate { $0.audio.microphoneAudioPreset = preset }
+                                }
+                            }
+                        }
+
+                        Text(session.document.audio.microphoneAudioPreset.descriptionText)
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.42))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if isCameraVisibleAndMicMuted {
+                    // Exact Warning Card + `Hide camera` Button from
+                    VStack(alignment: .leading, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.96, green: 0.67, blue: 0.25))
+
+                        Text("Your selfie camera video is still visible, but it will be muted. Consider hiding it in camera settings.")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(Color(red: 0.92, green: 0.64, blue: 0.28))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color(red: 0.24, green: 0.18, blue: 0.11).opacity(0.55))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color(red: 0.56, green: 0.42, blue: 0.24).opacity(0.55), lineWidth: 1)
+                    )
+
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            session.mutate { $0.camera.enabled = false }
+                        }
+                    } label: {
+                        Text("Hide camera")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: "speaker.slash.fill")
+                            .font(.system(size: 12.5, weight: .semibold))
+                        Text("Microphone is muted.")
+                            .font(.system(size: 12.5, weight: .regular))
+                    }
+                    .foregroundStyle(Color(red: 0.92, green: 0.64, blue: 0.28))
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(red: 0.24, green: 0.18, blue: 0.11).opacity(0.45))
+                    )
+                }
+            }
+
+            inspectorDivider
+
+            // 2. System audio section
             VStack(alignment: .leading, spacing: 14) {
                 Text("System audio")
                     .font(.system(size: 12.5, weight: .medium))
@@ -1745,22 +1861,26 @@ public struct InspectorSidebarView: View {
                     )
                 )
 
-                if !session.document.audio.muteSystemAudio {
-                    coalescedSlider(
-                        title: "System audio volume",
-                        value: Binding(
-                            get: { session.document.audio.systemAudioVolume },
-                            set: { v in session.mutate { $0.audio.systemAudioVolume = v } }
-                        ),
-                        range: 0...1.5,
-                        defaultValue: 1.0
+                if session.document.audio.muteSystemAudio {
+                    HStack(spacing: 8) {
+                        Image(systemName: "speaker.slash.fill")
+                            .font(.system(size: 12.5, weight: .semibold))
+                        Text("System audio is muted.")
+                            .font(.system(size: 12.5, weight: .regular))
+                    }
+                    .foregroundStyle(Color(red: 0.92, green: 0.64, blue: 0.28))
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(red: 0.24, green: 0.18, blue: 0.11).opacity(0.45))
                     )
                 }
             }
 
             inspectorDivider
 
-            // 2. Background audio section
+            // 3. Background audio section
             VStack(alignment: .leading, spacing: 14) {
                 Text("Background audio")
                     .font(.system(size: 12.5, weight: .medium))
@@ -1791,36 +1911,1353 @@ public struct InspectorSidebarView: View {
 
                 inspectorDivider
 
+                if let selectedTrack = session.document.audio.backgroundMusic.relativePath {
+                    inspectorToggleRow(
+                        title: "Mute background audio",
+                        icon: nil,
+                        description: nil,
+                        isOn: Binding(
+                            get: { session.document.audio.backgroundMusic.muted },
+                            set: { v in session.mutate { $0.audio.backgroundMusic.muted = v } }
+                        )
+                    )
+
+                    if !session.document.audio.backgroundMusic.muted {
+                        coalescedSlider(
+                            title: "Background audio volume",
+                            value: Binding(
+                                get: { session.document.audio.backgroundMusic.volume },
+                                set: { v in session.mutate { $0.audio.backgroundMusic.volume = v } }
+                            ),
+                            range: 0.0...1.0,
+                            defaultValue: 0.08
+                        )
+                    }
+
+                    Button {
+                        session.mutate { $0.audio.backgroundMusic.relativePath = nil }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "hifispeaker.badge.minus")
+                                .font(.system(size: 13.5, weight: .medium))
+                            Text("Remove \(selectedTrack)")
+                                .font(.system(size: 13, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(.white.opacity(0.88))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        let panel = NSOpenPanel()
+                        panel.allowedContentTypes = [.audio]
+                        panel.allowsMultipleSelection = false
+                        if panel.runModal() == .OK, let url = panel.url {
+                            session.mutate {
+                                $0.audio.backgroundMusic.relativePath = url.lastPathComponent
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "hifispeaker.and.homepodmini.badge.plus")
+                                .font(.system(size: 13.5, weight: .medium))
+                            Text("Add background audio")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color.white.opacity(0.035))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    // MARK: - 5B. Camera Layout Inspector
+
+    @ViewBuilder
+    private var cameraLayoutInspector: some View {
+        let cam = session.document.camera
+        let isHidden = !cam.enabled
+
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. `Hide camera` Toggle (`eye.slash`)
+            inspectorToggleRow(
+                title: "Hide camera",
+                icon: "eye.slash",
+                description: nil,
+                isOn: Binding(
+                    get: { isHidden },
+                    set: { hide in
+                        session.mutate { $0.camera.enabled = !hide }
+                    }
+                )
+            )
+
+            if !isHidden {
+                inspectorDivider
+
+                // 2. `Default layout` Cards (`Camera overlay` | `Split screen` | `Camera cutout` & 5!)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Default layout")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+
+                    HStack(spacing: 8) {
+                        ForEach(CameraLayoutMode.allCases) { mode in
+                            cameraLayoutThumbnailCard(
+                                mode: mode,
+                                isSelected: cam.layoutMode == mode
+                            ) {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    session.mutate { $0.camera.layoutMode = mode }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                inspectorDivider
+
+                // 3. `Camera Position` 8-Point Perimeter Dot Grid ( & 5!)
+                if cam.layoutMode == .overlay {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Camera Position")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        CameraPerimeterPositionGridPicker(
+                            position01: Binding(
+                                get: { cam.position01 },
+                                set: { pt in
+                                    session.mutate { $0.camera.position01 = pt }
+                                }
+                            )
+                        )
+                    }
+
+                    inspectorDivider
+
+                    // 4. `Camera aspect ratio` (`16:9` | `4:3` | `1:1` | `3:4` | `9:16` & 5!)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Camera aspect ratio")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        HStack(spacing: 6) {
+                            ForEach(CameraAspectRatioPreset.allCases) { preset in
+                                inspectorPillOptionButton(
+                                    title: preset.rawValue,
+                                    isSelected: cam.aspectRatioPreset == preset,
+                                    horizontalPadding: 11
+                                ) {
+                                    session.mutate { $0.camera.aspectRatioPreset = preset }
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. `Camera Size` Slider + Reset
+                    coalescedSlider(
+                        title: "Camera Size",
+                        value: Binding(
+                            get: { cam.sizeRatio },
+                            set: { v in session.mutate { $0.camera.sizeRatio = v } }
+                        ),
+                        range: 0.15...0.75,
+                        defaultValue: 0.56
+                    )
+
+                    // 6. `Camera size during zoom` Collapsible Section (`magnifyingglass.circle` & 5!)
+                    inspectorCollapsibleSection(
+                        title: "Camera size during zoom",
+                        icon: "magnifyingglass.circle",
+                        isExpanded: $isCameraSizeDuringZoomExpanded
+                    ) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            inspectorToggleRow(
+                                title: "Make smaller during zoom",
+                                icon: nil,
+                                description: "When zooming in, the camera will shrink to avoid covering the recording itself.",
+                                isOn: Binding(
+                                    get: { cam.makeSmallerDuringZoom },
+                                    set: { v in session.mutate { $0.camera.makeSmallerDuringZoom = v } }
+                                )
+                            )
+
+                            if cam.makeSmallerDuringZoom {
+                                coalescedSlider(
+                                    title: "Size during zoom",
+                                    value: Binding(
+                                        get: { cam.scaleWhenZoomed },
+                                        set: { v in session.mutate { $0.camera.scaleWhenZoomed = v } }
+                                    ),
+                                    range: 0.25...0.85,
+                                    defaultValue: 0.66
+                                )
+                            }
+                        }
+                    }
+                } else if cam.layoutMode == .splitScreen {
+                    coalescedSlider(
+                        title: "Split ratio",
+                        value: Binding(
+                            get: { cam.splitScreenRatio01 },
+                            set: { v in session.mutate { $0.camera.splitScreenRatio01 = v } }
+                        ),
+                        range: 0.25...0.75,
+                        defaultValue: 0.50
+                    )
+
+                    inspectorToggleRow(
+                        title: "Flip",
+                        icon: nil,
+                        description: "If enabled, the layout will be flipped.",
+                        isOn: Binding(
+                            get: { cam.splitFlip },
+                            set: { v in session.mutate { $0.camera.splitFlip = v } }
+                        )
+                    )
+                } else if cam.layoutMode == .cutout {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Camera Position")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        HStack(spacing: 8) {
+                            ForEach([("Left", 0.0), ("Center", 0.5), ("Right", 1.0)], id: \.0) { label, xVal in
+                                inspectorPillOptionButton(
+                                    title: label,
+                                    isSelected: abs(cam.cutoutPositionX01 - xVal) < 0.1
+                                ) {
+                                    session.mutate { $0.camera.cutoutPositionX01 = xVal }
+                                }
+                            }
+                        }
+                    }
+
+                    coalescedSlider(
+                        title: "Camera Size",
+                        value: Binding(
+                            get: { cam.sizeRatio },
+                            set: { v in session.mutate { $0.camera.sizeRatio = v } }
+                        ),
+                        range: 0.20...0.95,
+                        defaultValue: 0.56
+                    )
+                }
+
+                inspectorDivider
+
+                // 7. `Camera rounded corners` & `Hide during silence`
+                if cam.layoutMode != .cutout {
+                    coalescedSlider(
+                        title: "Camera rounded corners",
+                        value: Binding(
+                            get: { cam.borderRadiusRatio },
+                            set: { v in session.mutate { $0.camera.borderRadiusRatio = v } }
+                        ),
+                        range: 0.0...0.50,
+                        defaultValue: 0.22
+                    )
+
+                    inspectorDivider
+                }
+
+                inspectorToggleRow(
+                    title: "Hide during silence",
+                    icon: "person.wave.2.fill",
+                    description: "Hide the camera during silence.",
+                    isOn: Binding(
+                        get: { cam.hideDuringSilenceMs != nil },
+                        set: { enabled in
+                            session.mutate { $0.camera.hideDuringSilenceMs = enabled ? 5000.0 : nil }
+                        }
+                    )
+                )
+
+                if let minSil = cam.hideDuringSilenceMs {
+                    coalescedSlider(
+                        title: "Minimum silence duration (\(String(format: "%.1fs", minSil / 1000.0)))",
+                        value: Binding(
+                            get: { minSil },
+                            set: { v in session.mutate { $0.camera.hideDuringSilenceMs = v } }
+                        ),
+                        range: 2000.0...15000.0,
+                        defaultValue: 5000.0
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - 5C. Camera Style Inspector
+
+    @ViewBuilder
+    private var cameraStyleInspector: some View {
+        let cam = session.document.camera
+        let hasCrop = (cam.cropRect01 != .full)
+
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. `Color grading` 7x2 Thumbnail Grid (`Original` + 12 Filmic Looks + `+` Custom `.cube` LUT Button)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Color grading")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7),
+                    spacing: 6
+                ) {
+                    ForEach(CameraColorGradePreset.allCases) { preset in
+                        let isSelected = (cam.colorGradePreset == preset)
+                        Button {
+                            session.mutate { $0.camera.colorGradePreset = preset }
+                        } label: {
+                            Image(
+                                nsImage: GradedWebcamPortraitView.cachedGradedPortraitImage(
+                                    preset: preset,
+                                    intensity: 1.0,
+                                    sharpen01: 0.0
+                                )
+                            )
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 36, height: 36)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(
+                                        isSelected ? Color.white.opacity(0.95) : Color.white.opacity(0.10),
+                                        lineWidth: isSelected ? 1.5 : 1.0
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help(preset.rawValue)
+                    }
+
+                    // `+` Button to load custom `.cube` 3D LUT file
+                    Button {
+                        let panel = NSOpenPanel()
+                        panel.title = "Choose a 3D LUT (.cube) file"
+                        panel.allowsMultipleSelection = false
+                        if panel.runModal() == .OK, let url = panel.url {
+                            session.mutate {
+                                $0.camera.customLUTRelativePath = url.lastPathComponent
+                                $0.camera.colorGradePreset = .cinema
+                            }
+                        }
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1.0)
+                            Image(systemName: "plus")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
+                        .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Load your LUT (.cube) file...")
+                }
+
+                if cam.colorGradePreset != .original {
+                    coalescedSlider(
+                        title: "Color grading intensity",
+                        value: Binding(
+                            get: { cam.colorGradeIntensity },
+                            set: { v in session.mutate { $0.camera.colorGradeIntensity = v } }
+                        ),
+                        range: 0.0...1.0,
+                        defaultValue: 1.0
+                    )
+                    .padding(.top, 4)
+                }
+            }
+
+            // 2. `Sharpen` (`circle.hexagongrid`)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "circle.hexagongrid")
+                        .font(.system(size: 13.5, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.88))
+                    Text("Sharpen")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+
+                coalescedSliderRowOnly(
+                    value: Binding(
+                        get: { cam.sharpen01 },
+                        set: { v in session.mutate { $0.camera.sharpen01 = v } }
+                    ),
+                    range: 0.0...1.0,
+                    defaultValue: 0.0
+                )
+            }
+
+            inspectorDivider
+
+            // 3. `Crop` (`crop` + `"Crop camera"` / `"Edit crop"` + `"Reset"`)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "crop")
+                        .font(.system(size: 13.5, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.88))
+                    Text("Crop")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        session.isPlaying = false
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            session.isShowingCameraCropModal = true
+                        }
+                    } label: {
+                        Text(hasCrop ? "Edit crop" : "Crop camera")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    if hasCrop {
+                        Button {
+                            session.mutate { $0.camera.cropRect01 = .full }
+                        } label: {
+                            Text("Reset")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .padding(.horizontal, 14)
+                                .frame(height: 36)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.white.opacity(0.04))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            inspectorDivider
+
+            // 4. `Mirror horizontally` & `Face tracking` (100% On-Device Vision)
+            inspectorToggleRow(
+                title: "Mirror horizontally",
+                icon: nil,
+                description: nil,
+                isOn: Binding(
+                    get: { cam.mirror },
+                    set: { v in session.mutate { $0.camera.mirror = v } }
+                )
+            )
+
+            inspectorToggleRow(
+                title: "Face tracking",
+                icon: "person.fill.viewfinder",
+                description: "NativeScreen will adjust the camera picture to center it on your face. Done locally, no data is sent to the server.",
+                isOn: Binding(
+                    get: { cam.enableFaceTracking },
+                    set: { v in session.mutate { $0.camera.enableFaceTracking = v } }
+                )
+            )
+
+            inspectorDivider
+
+            // 5. `Advanced` (`Camera delay` -200ms ... +200ms)
+            inspectorCollapsibleSection(
+                title: "Advanced",
+                isExpanded: $isAdvancedCameraStyleExpanded
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform.and.person.filled")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text("Camera delay (\(Int(round(cam.delayAdjustmentMs))) ms)")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+                    }
+
+                    Text("If your lips look out of sync with your voice, raise it when they move after the words, lower it when they move before.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    coalescedSliderRowOnly(
+                        value: Binding(
+                            get: { cam.delayAdjustmentMs },
+                            set: { v in session.mutate { $0.camera.delayAdjustmentMs = (v / 5.0).rounded() * 5.0 } }
+                        ),
+                        range: -200.0...200.0,
+                        defaultValue: 0.0
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - 5D. Captions Inspector
+
+    @ViewBuilder
+    private var captionsInspector: some View {
+        let cap = session.document.captions
+        let hasTranscript = !cap.segments.isEmpty
+
+        VStack(alignment: .leading, spacing: 22) {
+            if hasTranscript {
+                // 1. `Captions` Header + `Disable captions` Toggle
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Captions")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.45))
+
+                    inspectorToggleRow(
+                        title: "Disable captions",
+                        icon: nil,
+                        description: nil,
+                        isOn: Binding(
+                            get: { !cap.enabled },
+                            set: { disabled in
+                                session.mutate { $0.captions.enabled = !disabled }
+                            }
+                        )
+                    )
+                }
+
+                if cap.enabled {
+                    // 2. `Caption size` Slider + Reset (`0.02 ... 0.125`, default `0.045`)
+                    coalescedSlider(
+                        title: "Caption size",
+                        value: Binding(
+                            get: { cap.fontSizeRatio },
+                            set: { v in session.mutate { $0.captions.fontSizeRatio = v } }
+                        ),
+                        range: 0.02...0.10,
+                        defaultValue: 0.045
+                    )
+
+                    // 3. `Font style` (`Sans-serif` | `Serif` | `Mono`)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Font style")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        HStack(spacing: 6) {
+                            ForEach(CaptionFontStyle.allCases) { style in
+                                inspectorPillOptionButton(
+                                    title: style.label,
+                                    isSelected: cap.fontStyle == style
+                                ) {
+                                    session.mutate { $0.captions.fontStyle = style }
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. `Word reveal` (`Line by line` | `Word by word`)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Word reveal")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        HStack(spacing: 6) {
+                            ForEach(CaptionWordsReveal.allCases) { mode in
+                                inspectorPillOptionButton(
+                                    title: mode.label,
+                                    isSelected: cap.wordsReveal == mode
+                                ) {
+                                    session.mutate { $0.captions.wordsReveal = mode }
+                                }
+                            }
+                        }
+
+                        Text(cap.wordsReveal.descriptionText)
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.42))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // 5. `Line growth` (`Full line` | `Expanding` | `Centered`)
+                    if cap.wordsReveal == .lineByLine {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Line growth")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+
+                            HStack(spacing: 6) {
+                                ForEach(CaptionLineGrowth.allCases) { growth in
+                                    inspectorPillOptionButton(
+                                        title: growth.label,
+                                        isSelected: cap.lineGrowth == growth
+                                    ) {
+                                        session.mutate { $0.captions.lineGrowth = growth }
+                                    }
+                                }
+                            }
+
+                            Text(cap.lineGrowth.descriptionText)
+                                .font(.system(size: 12.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.42))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        // 6. `Word animation` (`Appear` | `Fade in` | `Slide in`)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Word animation")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+
+                            HStack(spacing: 6) {
+                                ForEach(CaptionWordAnimation.allCases) { anim in
+                                    inspectorPillOptionButton(
+                                        title: anim.label,
+                                        isSelected: cap.wordAnimation == anim
+                                    ) {
+                                        session.mutate { $0.captions.wordAnimation = anim }
+                                    }
+                                }
+                            }
+
+                            Text(cap.wordAnimation.descriptionText)
+                                .font(.system(size: 12.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.42))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    // 7. `Color` (`Dark` | `Light`)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Color")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        HStack(spacing: 6) {
+                            ForEach(CaptionColorTheme.allCases) { theme in
+                                inspectorPillOptionButton(
+                                    title: theme.label,
+                                    isSelected: cap.colorTheme == theme
+                                ) {
+                                    session.mutate {
+                                        $0.captions.colorTheme = theme
+                                        $0.captions.textColor = (theme == .dark) ? "#FFFFFF" : "#000000"
+                                        $0.captions.backgroundColor = (theme == .dark) ? "#000000CC" : "#FFFFFFE6"
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 8. `Caption position` (`Bottom` | `Center`)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Caption position")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        let isCenteredY = abs(cap.position01.y - 0.50) < 0.15
+                        HStack(spacing: 6) {
+                            inspectorPillOptionButton(
+                                title: "Bottom",
+                                isSelected: !isCenteredY
+                            ) {
+                                session.mutate { $0.captions.position01 = Point01(x: 0.5, y: 0.88) }
+                            }
+
+                            inspectorPillOptionButton(
+                                title: "Center",
+                                isSelected: isCenteredY
+                            ) {
+                                session.mutate { $0.captions.position01 = Point01(x: 0.5, y: 0.50) }
+                            }
+                        }
+                    }
+                }
+
+                // 9. `Export transcript` (.srt) Button
                 Button {
-                    let panel = NSOpenPanel()
-                    panel.allowedContentTypes = [.audio]
-                    panel.allowsMultipleSelection = false
-                    if panel.runModal() == .OK, let url = panel.url {
-                        session.mutate {
-                            $0.audio.backgroundMusic.relativePath = url.lastPathComponent
+                    session.exportTranscriptAsSRT()
+                } label: {
+                    Text("Export transcript")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.90))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+
+                inspectorDivider
+
+                // 10. `Re-Generate transcript` (100% Local On-Device!)
+                inspectorCollapsibleSection(
+                    title: "Re-Generate transcript",
+                    isExpanded: $isRegenerateTranscriptExpanded
+                ) {
+                    localTranscriptGeneratorControls(isRegenerating: true)
+                }
+            } else {
+                // Initial Generate Transcript View (100% Local On-Device!)
+                Text("Generate transcript")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.45))
+
+                localTranscriptGeneratorControls(isRegenerating: false)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func localTranscriptGeneratorControls(isRegenerating: Bool) -> some View {
+        let cap = session.document.captions
+        let locales = LocalOnDeviceMediaIntelligence.supportedLocales()
+
+        VStack(alignment: .leading, spacing: 14) {
+            if isRegenerating {
+                Text("When re-generating transcript, previous transcript (and all changes you made to it) will be lost.")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(Color(red: 0.92, green: 0.64, blue: 0.28))
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(red: 0.24, green: 0.18, blue: 0.11).opacity(0.45))
+                    )
+            }
+
+            // Local Method Selection (`Local` Apple Speech vs `Whisper` On-Device)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Transcript method")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                HStack(spacing: 6) {
+                    inspectorPillOptionButton(
+                        title: "Local (Apple Speech)",
+                        isSelected: cap.localModelVariant == "system"
+                    ) {
+                        session.mutate { $0.captions.localModelVariant = "system" }
+                    }
+
+                    inspectorPillOptionButton(
+                        title: "On-Device Whisper",
+                        isSelected: cap.localModelVariant != "system"
+                    ) {
+                        session.mutate { $0.captions.localModelVariant = "whisper" }
+                    }
+                }
+
+                Text("Transcript will be generated 100% locally on your Mac using on-device neural speech recognition. No audio or data is ever sent to any server.")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Language Picker
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Language")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                Menu {
+                    ForEach(locales.prefix(35)) { loc in
+                        Button(loc.displayName) {
+                            session.mutate { $0.captions.transcriptLocale = loc.id }
                         }
                     }
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "hifispeaker.and.homepodmini.badge.plus")
-                            .font(.system(size: 13.5, weight: .medium))
-                        Text("Add background audio")
-                            .font(.system(size: 13, weight: .medium))
+                    HStack {
+                        let currentName = locales.first(where: { $0.id == cap.transcriptLocale })?.displayName ?? cap.transcriptLocale
+                        Text(currentName)
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.45))
                     }
-                    .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                    )
+                }
+                .menuStyle(.borderlessButton)
+            }
+
+            // Keyterms / Prompt
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Keyterms")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                Text("Comma-separated list of custom words or product names in your recording.")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.42))
+
+                TextField(
+                    "e.g. NativeScreen, Swift, Metal",
+                    text: Binding(
+                        get: { cap.customPrompt },
+                        set: { v in session.mutate { $0.captions.customPrompt = v } }
+                    )
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5, weight: .regular))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                )
+            }
+
+            Button {
+                session.generateLocalOnDeviceTranscript()
+            } label: {
+                HStack(spacing: 8) {
+                    if session.isGeneratingTranscript {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "waveform.badge.magnifyingglass")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    Text(session.isGeneratingTranscript ? "Generating on device…" : "Generate transcript")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color(red: 0.36, green: 0.24, blue: 0.96))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isGeneratingTranscript)
+        }
+    }
+
+    // MARK: - 5E. Edit by Transcript Inspector
+
+    @ViewBuilder
+    private var transcriptEditorInspector: some View {
+        let cap = session.document.captions
+        let segments = cap.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
+
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Edit by transcript")
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.white.opacity(0.45))
+
+            if segments.isEmpty {
+                Text("Edit your video by editing its text: delete words to cut them out, remove filler words and long pauses in one click.")
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Generate a transcript first to get started.")
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.42))
+
+                Button {
+                    session.generateLocalOnDeviceTranscript()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform.badge.magnifyingglass")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Generate transcript")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
                     .background(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(Color.white.opacity(0.035))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .fill(Color(red: 0.36, green: 0.24, blue: 0.96))
                     )
                 }
                 .buttonStyle(.plain)
+            } else {
+                // 1. One-Click Action Bar: `Remove N filler words` & `Tighten N pauses`
+                let fillerCount = session.presentFillerWordSegments.count
+                let pauseCount = session.tightenablePauseRangesMs.count
+
+                if fillerCount > 0 || pauseCount > 0 {
+                    HStack(spacing: 8) {
+                        if fillerCount > 0 {
+                            Button {
+                                session.removeAllFillerWordsFromTranscript()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "waveform.badge.minus")
+                                        .font(.system(size: 12, weight: .medium))
+                                    Text("Remove \(fillerCount) filler \(fillerCount == 1 ? "word" : "words")")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundStyle(.white.opacity(0.92))
+                                .padding(.horizontal, 10)
+                                .frame(height: 32)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.white.opacity(0.05))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .help("Cut every detected filled pause (\"um\", \"uh\"...) out of the video")
+                        }
+
+                        if pauseCount > 0 {
+                            Button {
+                                session.tightenAllPausesInTranscript()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "timeline.selection")
+                                        .font(.system(size: 12, weight: .medium))
+                                    Text("Tighten \(pauseCount) \(pauseCount == 1 ? "pause" : "pauses")")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundStyle(.white.opacity(0.92))
+                                .padding(.horizontal, 10)
+                                .frame(height: 32)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.white.opacity(0.05))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .help("Shorten every long pause, keeping a natural breath on each side")
+                        }
+                    }
+                }
+
+                // 2. Interactive Word & Pause Token Flow
+                let currentSourceMs = session.currentSourceTimeMs
+                FlowLayoutWrapRow(spacing: 5) {
+                    ForEach(Array(segments.enumerated()), id: \.element.id) { idx, seg in
+                        let isPresentInVideo = session.isSourceRangePresentInSlices(startMs: seg.sourceStartMs, endMs: seg.sourceEndMs)
+                        let isSpokenNow = (currentSourceMs >= seg.sourceStartMs && currentSourceMs <= seg.sourceEndMs + 80.0)
+                        let isSelected = (selectedTranscriptWordId == seg.id)
+                        let isFiller = LocalOnDeviceMediaIntelligence.isFillerWord(seg.text)
+
+                        if (isPresentInVideo || cap.showDeletedTextInTranscript) && (!seg.isHidden || cap.showHiddenWordsInTranscript) {
+                            Button {
+                                selectedTranscriptWordId = (selectedTranscriptWordId == seg.id) ? nil : seg.id
+                                if let tMs = session.timeMapper.timelineTime(forSourceMs: seg.sourceStartMs + 10.0) {
+                                    session.isPlaying = false
+                                    session.seek(toTimelineMs: tMs)
+                                }
+                            } label: {
+                                Text(seg.text)
+                                    .font(.system(size: 13, weight: isSpokenNow ? .semibold : .regular))
+                                    .strikethrough(!isPresentInVideo || seg.isHidden, color: .white.opacity(0.55))
+                                    .underline(isFiller && isPresentInVideo, pattern: .dot, color: Color(red: 0.58, green: 0.46, blue: 1.0))
+                                    .foregroundStyle(
+                                        !isPresentInVideo
+                                            ? Color.red.opacity(0.65)
+                                            : (seg.isHidden ? .white.opacity(0.42) : .white.opacity(0.95))
+                                    )
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2.5)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                            .fill(
+                                                isSelected
+                                                    ? Color(red: 0.38, green: 0.26, blue: 0.96).opacity(0.48)
+                                                    : (isSpokenNow ? Color(red: 0.38, green: 0.26, blue: 0.96).opacity(0.26) : Color.clear)
+                                            )
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        // Render `··· 1.3s` Pause Pill between words when gap >= 800ms
+                        if idx + 1 < segments.count {
+                            let nextSeg = segments[idx + 1]
+                            let gapMs = nextSeg.sourceStartMs - seg.sourceEndMs
+                            if gapMs >= 800.0 {
+                                let isGapPresent = session.isSourceRangePresentInSlices(startMs: seg.sourceEndMs + 100.0, endMs: nextSeg.sourceStartMs - 100.0)
+                                if isGapPresent || cap.showDeletedTextInTranscript {
+                                    Button {
+                                        if isGapPresent {
+                                            session.cutTranscriptRangeFromVideo(
+                                                startMs: seg.sourceEndMs + 100.0,
+                                                endMs: nextSeg.sourceStartMs - 100.0
+                                            )
+                                        } else {
+                                            session.restoreTranscriptRangeToVideo(
+                                                startMs: seg.sourceEndMs,
+                                                endMs: nextSeg.sourceStartMs
+                                            )
+                                        }
+                                    } label: {
+                                        Text(String(format: "··· %.1fs", gapMs / 1000.0))
+                                            .font(.system(size: 11, weight: .medium).monospacedDigit())
+                                            .strikethrough(!isGapPresent, color: .white.opacity(0.5))
+                                            .foregroundStyle(.white.opacity(isGapPresent ? 0.55 : 0.32))
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 2)
+                                            .background(
+                                                Capsule()
+                                                    .fill(Color.white.opacity(0.06))
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(
+                                        isGapPresent
+                                            ? "Pause — click to tighten to a natural breath"
+                                            : "Tightened pause — click to restore"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.025))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
+
+                // 3. Selected Word Action Bar
+                if let selId = selectedTranscriptWordId,
+                   let selSeg = segments.first(where: { $0.id == selId }) {
+                    let isPresent = session.isSourceRangePresentInSlices(startMs: selSeg.sourceStartMs, endMs: selSeg.sourceEndMs)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            TextField(
+                                "Word",
+                                text: Binding(
+                                    get: { selSeg.text },
+                                    set: { newVal in session.updateCaptionWordText(id: selSeg.id, newText: newVal) }
+                                )
+                            )
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .frame(height: 32)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.white.opacity(0.05))
+                            )
+
+                            if isPresent {
+                                Button {
+                                    session.cutTranscriptRangeFromVideo(
+                                        startMs: max(0.0, selSeg.sourceStartMs - 25.0),
+                                        endMs: min(session.metadata.durationMs, selSeg.sourceEndMs + 25.0)
+                                    )
+                                } label: {
+                                    Label("Cut video", systemImage: "scissors")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.92))
+                                        .padding(.horizontal, 10)
+                                        .frame(height: 32)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                .fill(Color.red.opacity(0.22))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Button {
+                                session.toggleCaptionWordHidden(id: selSeg.id)
+                            } label: {
+                                Label(selSeg.isHidden ? "Unhide" : "Cut transcript", systemImage: "text.badge.minus")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.88))
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 32)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .fill(Color.white.opacity(0.06))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+
+                            if !isPresent || selSeg.isHidden {
+                                Button {
+                                    session.restoreTranscriptRangeToVideo(
+                                        startMs: max(0.0, selSeg.sourceStartMs - 25.0),
+                                        endMs: min(session.metadata.durationMs, selSeg.sourceEndMs + 25.0),
+                                        segmentId: selSeg.id
+                                    )
+                                } label: {
+                                    Label("Restore", systemImage: "arrow.uturn.backward")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                                        .padding(.horizontal, 10)
+                                        .frame(height: 32)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                .fill(Color.white.opacity(0.06))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                Text("Click any word to edit or cut — Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only.")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.38))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                inspectorDivider
+
+                // 4. `Show deleted text` & `Show hidden words` Toggles
+                inspectorToggleRow(
+                    title: "Show deleted text",
+                    icon: nil,
+                    description: "Keep cut words visible as strikethrough so they can be restored.",
+                    isOn: Binding(
+                        get: { cap.showDeletedTextInTranscript },
+                        set: { v in session.mutate { $0.captions.showDeletedTextInTranscript = v } }
+                    )
+                )
+
+                inspectorToggleRow(
+                    title: "Show hidden words",
+                    icon: nil,
+                    description: "Keep words hidden from captions visible here so they can be restored.",
+                    isOn: Binding(
+                        get: { cap.showHiddenWordsInTranscript },
+                        set: { v in session.mutate { $0.captions.showHiddenWordsInTranscript = v } }
+                    )
+                )
             }
+        }
+    }
+
+    // MARK: - Camera Layout Thumbnail Card & 8-Point Perimeter Dot Grid Helpers
+
+    @ViewBuilder
+    private func cameraLayoutThumbnailCard(
+        mode: CameraLayoutMode,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    // Wallpaper-tinted dark card background
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.14, green: 0.15, blue: 0.24),
+                            Color(red: 0.08, green: 0.09, blue: 0.14)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    switch mode {
+                    case .overlay:
+                        // White screen card + bottom-right dark person badge
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white)
+                            .padding(10)
+                            .overlay {
+                                Image(systemName: "display")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.black.opacity(0.85))
+                            }
+
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color(red: 0.09, green: 0.09, blue: 0.12))
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                            Image(systemName: "person")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.92))
+                        }
+                        .frame(width: 28, height: 26)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(5)
+
+                    case .splitScreen:
+                        // Left white screen half + right dark person half
+                        HStack(spacing: 0) {
+                            ZStack {
+                                Color.white
+                                Image(systemName: "display")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(.black.opacity(0.85))
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                            ZStack {
+                                Color(red: 0.07, green: 0.07, blue: 0.09)
+                                Image(systemName: "person")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
+                            }
+                            .frame(width: 34)
+                        }
+
+                    case .cutout:
+                        // White screen card + bottom-right cutout silhouette
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white)
+                            .padding(10)
+                            .overlay {
+                                Image(systemName: "display")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.black.opacity(0.85))
+                            }
+
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 24, weight: .regular))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black, radius: 1.5)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                            .offset(x: -4, y: 3)
+                    }
+                }
+                .frame(height: 68)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(isSelected ? Color.white.opacity(0.65) : Color.clear, lineWidth: 2.0)
+                        .padding(-3)
+                )
+
+                Text(mode.label)
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.85 : 0.45))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private struct CameraPerimeterPositionGridPicker: View {
+        @Binding var position01: Point01
+
+        private let points: [(x: Double, y: Double)] = [
+            (0.0, 0.0), (0.5, 0.0), (1.0, 0.0),
+            (0.0, 0.5),             (1.0, 0.5),
+            (0.0, 1.0), (0.5, 1.0), (1.0, 1.0)
+        ]
+
+        var body: some View {
+            GeometryReader { geo in
+                let w = geo.size.width
+                let h = geo.size.height
+                let padX: CGFloat = 22
+                let padY: CGFloat = 20
+                let innerW = max(10, w - padX * 2)
+                let innerH = max(10, h - padY * 2)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.03))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+
+                    ForEach(Array(points.enumerated()), id: \.offset) { _, pt in
+                        let isSelected = (hypot(position01.x - pt.x, position01.y - pt.y) < 0.18)
+                        let cx = padX + CGFloat(pt.x) * innerW
+                        let cy = padY + CGFloat(pt.y) * innerH
+
+                        Button {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                position01 = Point01(x: pt.x, y: pt.y)
+                            }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        isSelected
+                                            ? Color(red: 0.59, green: 0.48, blue: 0.98)
+                                            : Color.white.opacity(0.08)
+                                    )
+                                    .frame(width: 20, height: 20)
+
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 4.5, height: 4.5)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .position(x: cx, y: cy)
+                    }
+                }
+            }
+            .frame(height: 112)
         }
     }
 
@@ -2933,6 +4370,7 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private func inspectorCollapsibleSection<Content: View>(
         title: String,
+        icon: String? = nil,
         isExpanded: Binding<Bool>,
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -2942,7 +4380,12 @@ public struct InspectorSidebarView: View {
                     isExpanded.wrappedValue.toggle()
                 }
             } label: {
-                HStack {
+                HStack(spacing: 8) {
+                    if let icon {
+                        Image(systemName: icon)
+                            .font(.system(size: 13.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
                     Text(title)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white.opacity(0.92))
@@ -3484,3 +4927,50 @@ extension Color {
         return hexString(hue: nextHue, saturation: max(0.15, hsb.s), brightness: max(0.15, hsb.b))
     }
 }
+
+/// Wrapping horizontal flow layout for pills, word tokens, and pause badges.
+struct FlowLayoutWrapRow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxW = proposal.width ?? 300
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > maxW {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+        }
+        return CGSize(width: maxW, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(size)
+            )
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+        }
+    }
+}
+

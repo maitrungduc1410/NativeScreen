@@ -6,14 +6,24 @@ import CoreVideo
 
 /// Native macOS Screen & Audio Capture Engine powered by `ScreenCaptureKit` + `AVAssetWriter` (VideoToolbox hardware encoding).
 /// Excludes the system cursor (`showsCursor = false`) and NativeScreen's own HUD windows from the captured video stream.
-public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
+public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var systemAudioInput: AVAssetWriterInput?
 
+    // Optional Webcam + Microphone capture session & writers
+    private var avCaptureSession: AVCaptureSession?
+    private var webcamWriter: AVAssetWriter?
+    private var webcamVideoInput: AVAssetWriterInput?
+    private var isWebcamSessionStarted: Bool = false
+    private var microphoneWriter: AVAssetWriter?
+    private var microphoneAudioInput: AVAssetWriterInput?
+    private var isMicrophoneSessionStarted: Bool = false
+
     private let videoQueue = DispatchQueue(label: "com.nativescreen.capture.video", qos: .userInteractive)
     private let audioQueue = DispatchQueue(label: "com.nativescreen.capture.audio", qos: .userInteractive)
+    private let avDeviceQueue = DispatchQueue(label: "com.nativescreen.capture.avdevices", qos: .userInteractive)
 
     private var isWritingSessionStarted = false
     private var firstSampleTime: CMTime = .invalid
@@ -41,7 +51,12 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         pixelHeight: Int,
         sourceRect: CGRect?,
         captureSystemAudio: Bool,
-        outputVideoURL: URL
+        outputVideoURL: URL,
+        cameraDeviceID: String? = nil,
+        cameraMaxResolution: CameraMaxResolutionOption = .p1080,
+        outputWebcamURL: URL? = nil,
+        microphoneDeviceID: String? = nil,
+        outputMicrophoneURL: URL? = nil
     ) async throws {
         let config = SCStreamConfiguration()
         // VideoToolbox H.264/HEVC requires even dimensions
@@ -117,12 +132,161 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         self.stream = scStream
         try await scStream.startCapture()
+
+        if cameraDeviceID != nil || microphoneDeviceID != nil {
+            setupAndStartAVCaptureDevices(
+                cameraDeviceID: cameraDeviceID,
+                cameraMaxResolution: cameraMaxResolution,
+                outputWebcamURL: outputWebcamURL,
+                microphoneDeviceID: microphoneDeviceID,
+                outputMicrophoneURL: outputMicrophoneURL
+            )
+        }
+    }
+
+    private func setupAndStartAVCaptureDevices(
+        cameraDeviceID: String?,
+        cameraMaxResolution: CameraMaxResolutionOption,
+        outputWebcamURL: URL?,
+        microphoneDeviceID: String?,
+        outputMicrophoneURL: URL?
+    ) {
+        let session = AVCaptureSession()
+        session.beginConfiguration()
+        switch cameraMaxResolution {
+        case .p720:
+            if session.canSetSessionPreset(.hd1280x720) { session.sessionPreset = .hd1280x720 }
+        case .p1080:
+            if session.canSetSessionPreset(.hd1920x1080) { session.sessionPreset = .hd1920x1080 }
+        case .p4k:
+            if session.canSetSessionPreset(.hd4K3840x2160) {
+                session.sessionPreset = .hd4K3840x2160
+            } else if session.canSetSessionPreset(.hd1920x1080) {
+                session.sessionPreset = .hd1920x1080
+            }
+        }
+
+        // 1. Webcam Video Input & Writer
+        if let camID = cameraDeviceID,
+           let webcamURL = outputWebcamURL,
+           let camDevice = AVCaptureDevice(uniqueID: camID) ?? AVCaptureDevice.default(for: .video),
+           let camInput = try? AVCaptureDeviceInput(device: camDevice),
+           session.canAddInput(camInput) {
+            session.addInput(camInput)
+
+            let vOutput = AVCaptureVideoDataOutput()
+            vOutput.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+            ]
+            vOutput.setSampleBufferDelegate(self, queue: avDeviceQueue)
+            if session.canAddOutput(vOutput) {
+                session.addOutput(vOutput)
+            }
+
+            try? FileManager.default.removeItem(at: webcamURL)
+            if let wWriter = try? AVAssetWriter(outputURL: webcamURL, fileType: .mp4) {
+                let targetH: Int = (cameraMaxResolution == .p720) ? 720 : ((cameraMaxResolution == .p4k) ? 2160 : 1080)
+                let targetW: Int = (targetH * 16) / 9
+                let wSettings: [String: Any] = [
+                    AVVideoCodecKey: AVVideoCodecType.h264,
+                    AVVideoWidthKey: targetW,
+                    AVVideoHeightKey: targetH,
+                    AVVideoCompressionPropertiesKey: [
+                        AVVideoAverageBitRateKey: max(6_000_000, targetW * targetH * 3),
+                        AVVideoMaxKeyFrameIntervalKey: 30,
+                        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                    ]
+                ]
+                let wInput = AVAssetWriterInput(mediaType: .video, outputSettings: wSettings)
+                wInput.expectsMediaDataInRealTime = true
+                if wWriter.canAdd(wInput) {
+                    wWriter.add(wInput)
+                }
+                if wWriter.startWriting() {
+                    self.webcamWriter = wWriter
+                    self.webcamVideoInput = wInput
+                    self.isWebcamSessionStarted = false
+                }
+            }
+        }
+
+        // 2. Microphone Audio Input & Writer
+        if let micID = microphoneDeviceID,
+           let micURL = outputMicrophoneURL,
+           let micDevice = AVCaptureDevice(uniqueID: micID) ?? AVCaptureDevice.default(for: .audio),
+           let micInput = try? AVCaptureDeviceInput(device: micDevice),
+           session.canAddInput(micInput) {
+            session.addInput(micInput)
+
+            let aOutput = AVCaptureAudioDataOutput()
+            aOutput.setSampleBufferDelegate(self, queue: avDeviceQueue)
+            if session.canAddOutput(aOutput) {
+                session.addOutput(aOutput)
+            }
+
+            try? FileManager.default.removeItem(at: micURL)
+            if let mWriter = try? AVAssetWriter(outputURL: micURL, fileType: .m4a) {
+                let mSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 48_000,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderBitRateKey: 128_000
+                ]
+                let mInput = AVAssetWriterInput(mediaType: .audio, outputSettings: mSettings)
+                mInput.expectsMediaDataInRealTime = true
+                if mWriter.canAdd(mInput) {
+                    mWriter.add(mInput)
+                }
+                if mWriter.startWriting() {
+                    self.microphoneWriter = mWriter
+                    self.microphoneAudioInput = mInput
+                    self.isMicrophoneSessionStarted = false
+                }
+            }
+        }
+
+        session.commitConfiguration()
+        self.avCaptureSession = session
+        avDeviceQueue.async {
+            session.startRunning()
+        }
     }
 
     public func stopCapture() async {
         if let activeStream = stream {
             try? await activeStream.stopCapture()
             stream = nil
+        }
+
+        if let avSession = avCaptureSession {
+            avCaptureSession = nil
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                avDeviceQueue.async {
+                    avSession.stopRunning()
+                    let group = DispatchGroup()
+                    if let wWriter = self.webcamWriter {
+                        self.webcamVideoInput?.markAsFinished()
+                        if wWriter.status == .writing {
+                            group.enter()
+                            wWriter.finishWriting { group.leave() }
+                        }
+                        self.webcamWriter = nil
+                        self.webcamVideoInput = nil
+                    }
+                    if let mWriter = self.microphoneWriter {
+                        self.microphoneAudioInput?.markAsFinished()
+                        if mWriter.status == .writing {
+                            group.enter()
+                            mWriter.finishWriting { group.leave() }
+                        }
+                        self.microphoneWriter = nil
+                        self.microphoneAudioInput = nil
+                    }
+                    group.notify(queue: self.avDeviceQueue) {
+                        cont.resume()
+                    }
+                }
+            }
         }
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -218,6 +382,41 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         @unknown default:
             break
+        }
+    }
+
+    // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate & AVCaptureAudioDataOutputSampleBufferDelegate
+
+    public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard CMSampleBufferDataIsReady(sampleBuffer),
+              !isPausedInternal else {
+            return
+        }
+
+        let adjusted = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: accumulatedPausedTime) ?? sampleBuffer
+        let pts = CMSampleBufferGetPresentationTimeStamp(adjusted)
+        guard pts.isValid else { return }
+
+        if output is AVCaptureVideoDataOutput {
+            guard let wWriter = webcamWriter, wWriter.status == .writing,
+                  let wInput = webcamVideoInput else { return }
+            if !isWebcamSessionStarted {
+                wWriter.startSession(atSourceTime: pts)
+                isWebcamSessionStarted = true
+            }
+            if wInput.isReadyForMoreMediaData {
+                wInput.append(adjusted)
+            }
+        } else if output is AVCaptureAudioDataOutput {
+            guard let mWriter = microphoneWriter, mWriter.status == .writing,
+                  let mInput = microphoneAudioInput else { return }
+            if !isMicrophoneSessionStarted {
+                mWriter.startSession(atSourceTime: pts)
+                isMicrophoneSessionStarted = true
+            }
+            if mInput.isReadyForMoreMediaData {
+                mInput.append(adjusted)
+            }
         }
     }
 

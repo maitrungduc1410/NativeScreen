@@ -103,13 +103,13 @@
 ## Phase 3: Pro Visual Features (Webcam, Loupe, Device Mockups & Shortcuts)
 *Goal: Complete pro visual feature suite.*
 
-- [ ] **Webcam Overlay & Layouts:**
-  - [ ] Simultaneous webcam recording (`AVCaptureSession`) saved to `recording/webcam.mp4`.
-  - [ ] 3 Layout modes changeable along the timeline: `Camera Overlay (PiP)`, `Split Screen`, and `Full Camera`.
-  - [ ] Auto-shrink webcam bubble (`scaleWhenZoomed`) when the main screen zooms in.
-  - [ ] Circle / Squircle / Rounded Rectangle shapes, mirror toggle, border & drop shadow.
-  - [ ] **AI Person Cutout:** Real-time background removal / blur using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest` — 0MB model bloat!).
-  - [ ] Auto-hide webcam during silence.
+- [x] **Webcam Overlay, Layouts & Color Grading (`Camera Layout` & `Camera Style`):**
+  - [x] Simultaneous webcam recording (`AVCaptureSession`) saved to `recording/webcam.mp4` + live floating camera preview bubble (`Show camera preview` in HUD).
+  - [x] 3 Layout modes (`Camera overlay`, `Split screen`, and `Camera cutout`), 8-point perimeter `Camera Position` dot grid, `Camera aspect ratio` (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`), and `Camera Size` slider.
+  - [x] Auto-shrink webcam bubble (`Make smaller during zoom` / `scaleWhenZoomed`) when the main screen zooms in.
+  - [x] 13 built-in filmic color grading looks (`Original`, `Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`) + custom `.cube` 3D LUT loader, `Sharpen`, interactive `Crop camera` modal, `Mirror horizontally`, `Face tracking` (100% local via `Vision`), and `Camera delay` (`-200ms ... +200ms`).
+  - [x] **AI Person Cutout:** Real-time background removal using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest` — 0MB model bloat!).
+  - [x] Auto-hide webcam during silence (`Hide during silence`).
 - [x] **Optical Glass Loupe Zoom:**
   - [x] Alternative zoom presentation mode (`presentation: "loupe"`) with circular magnifying lens, bevel rim highlight, and adjustable loupe radius.
 - [x] **Keyboard Shortcuts 3D Keycaps & Multi-Track Editor:**
@@ -128,9 +128,10 @@
 - [ ] **AI Auto-Detect Sensitive Data (OCR):**
   - [ ] Scan video frames using macOS native `Vision` (`VNRecognizeTextRequest`) to automatically detect emails, API keys, tokens, IP addresses, or custom user phrases.
   - [ ] One-click generation of tracked Blur Masks on the timeline.
-- [ ] **AI Auto-Captions (Speech-to-Text):**
-  - [ ] On-device transcription using Apple `Speech` framework (`SFSpeechRecognizer`) or local Whisper Metal.
-  - [ ] Animated word-by-word / line-by-line caption overlay renderer with editable transcript.
+- [x] **AI Auto-Captions & Edit by Transcript (100% Local On-Device Speech-to-Text):**
+  - [x] On-device transcription using Apple `Speech` framework (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`) with language selector, custom `Keyterms` prompt, and `.srt` export.
+  - [x] Animated `Line by line` / `Word by word` caption overlay renderer with `Font style` (`Sans-serif`, `Serif`, `Mono`), `Line growth` (`Full line`, `Expanding`, `Centered`), `Word animation` (`Appear`, `Fade in`, `Slide in`), and `Color` (`Dark`, `Light`).
+  - [x] Interactive `Edit by transcript` inspector: one-click `Remove N filler words` (`"um"`, `"uh"`, ...), one-click `Tighten N pauses` (`··· 1.3s`), and per-word `Cut video`, `Cut transcript`, and `Restore`.
 - [ ] **Window Bounds Tracking:**
   - [ ] Dynamically adjust frame size if the recorded window was resized or moved during capture (`window.jsonl`).
 - [ ] **Speaker Notes / Teleprompter:**

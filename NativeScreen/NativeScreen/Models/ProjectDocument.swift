@@ -513,10 +513,76 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
 
 // MARK: - Camera / Webcam Config
 
-public enum CameraLayoutMode: String, Codable, CaseIterable, Sendable {
+public enum CameraLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case overlay = "overlay"
     case splitScreen = "split-screen"
     case cutout = "cutout"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .overlay: return "Camera overlay"
+        case .splitScreen: return "Split screen"
+        case .cutout: return "Camera cutout"
+        }
+    }
+}
+
+public enum CameraAspectRatioPreset: String, Codable, CaseIterable, Identifiable, Sendable {
+    case widescreen16x9 = "16:9"
+    case classic4x3 = "4:3"
+    case square1x1 = "1:1"
+    case portrait3x4 = "3:4"
+    case vertical9x16 = "9:16"
+
+    public var id: String { rawValue }
+
+    public var aspectValue: Double {
+        switch self {
+        case .widescreen16x9: return 16.0 / 9.0
+        case .classic4x3: return 4.0 / 3.0
+        case .square1x1: return 1.0
+        case .portrait3x4: return 3.0 / 4.0
+        case .vertical9x16: return 9.0 / 16.0
+        }
+    }
+}
+
+public enum CameraColorGradePreset: String, Codable, CaseIterable, Identifiable, Sendable {
+    case original = "Original"
+    case studio = "Studio"
+    case cinema = "Cinema"
+    case film = "Film"
+    case golden = "Golden"
+    case cream = "Cream"
+    case terra = "Terra"
+    case moody = "Moody"
+    case arctic = "Arctic"
+    case neon = "Neon"
+    case punch = "Punch"
+    case fade = "Fade"
+    case mono = "Mono"
+
+    public var id: String { rawValue }
+
+    public var descriptionText: String {
+        switch self {
+        case .original: return "Original ungraded camera feed"
+        case .studio: return "Evened-out skin, gentle filmic contrast, warm-vs-cool separation"
+        case .cinema: return "Shadows dive into teal while skin stays warm and full"
+        case .film: return "35mm print emulation with creamy shoulder and warm mids"
+        case .golden: return "Golden-hour amber warmth with honeyed highlights"
+        case .cream: return "Soft pastel portrait film with open shadows and milky highlights"
+        case .terra: return "Earthy terracotta warmth and muted sage greens"
+        case .moody: return "Deep atmospheric tonality with warm skin in cool shadows"
+        case .arctic: return "Bright crisp winter daylight with clean icy highlights"
+        case .neon: return "Late-night electric violet shadows with true warm skin"
+        case .punch: return "Vivid commercial contrast and disciplined color pop"
+        case .fade: return "Sun-bleached nostalgia with lifted blacks and softened highlights"
+        case .mono: return "Warm classic black & white with orange-filter skin luminance"
+        }
+    }
 }
 
 public enum CameraShape: String, Codable, CaseIterable, Sendable {
@@ -528,40 +594,120 @@ public enum CameraShape: String, Codable, CaseIterable, Sendable {
 public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
     public var enabled: Bool
     public var layoutMode: CameraLayoutMode
+    public var aspectRatioPreset: CameraAspectRatioPreset
     public var mirror: Bool
     public var position01: Point01
     public var sizeRatio: Double
+    public var makeSmallerDuringZoom: Bool
     public var scaleWhenZoomed: Double
     public var shape: CameraShape
     public var borderRadiusRatio: Double
     public var shadowIntensity: Double
     public var backgroundBlur: Double
     public var aiPersonCutout: Bool
+    public var hideDuringSilenceMs: Double?
+    public var splitScreenRatio01: Double
+    public var splitFlip: Bool
+    public var splitEnablePadding: Bool
+    public var cutoutPositionX01: Double
+    public var colorGradePreset: CameraColorGradePreset
+    public var customLUTRelativePath: String?
+    public var colorGradeIntensity: Double
+    public var sharpen01: Double
+    public var cropRect01: Rect01
+    public var enableFaceTracking: Bool
+    public var delayAdjustmentMs: Double
 
     public init(
-        enabled: Bool = false,
+        enabled: Bool = true,
         layoutMode: CameraLayoutMode = .overlay,
-        mirror: Bool = true,
-        position01: Point01 = Point01(x: 0.90, y: 0.86),
-        sizeRatio: Double = 0.22,
-        scaleWhenZoomed: Double = 0.80,
+        aspectRatioPreset: CameraAspectRatioPreset = .square1x1,
+        mirror: Bool = false,
+        position01: Point01 = Point01(x: 1.0, y: 1.0),
+        sizeRatio: Double = 0.56,
+        makeSmallerDuringZoom: Bool = true,
+        scaleWhenZoomed: Double = 0.66,
         shape: CameraShape = .squircle,
         borderRadiusRatio: Double = 0.22,
         shadowIntensity: Double = 0.35,
         backgroundBlur: Double = 0.0,
-        aiPersonCutout: Bool = false
+        aiPersonCutout: Bool = false,
+        hideDuringSilenceMs: Double? = nil,
+        splitScreenRatio01: Double = 0.50,
+        splitFlip: Bool = false,
+        splitEnablePadding: Bool = false,
+        cutoutPositionX01: Double = 1.0,
+        colorGradePreset: CameraColorGradePreset = .original,
+        customLUTRelativePath: String? = nil,
+        colorGradeIntensity: Double = 1.0,
+        sharpen01: Double = 0.0,
+        cropRect01: Rect01 = .full,
+        enableFaceTracking: Bool = false,
+        delayAdjustmentMs: Double = 0.0
     ) {
         self.enabled = enabled
         self.layoutMode = layoutMode
+        self.aspectRatioPreset = aspectRatioPreset
         self.mirror = mirror
         self.position01 = position01
         self.sizeRatio = sizeRatio
+        self.makeSmallerDuringZoom = makeSmallerDuringZoom
         self.scaleWhenZoomed = scaleWhenZoomed
         self.shape = shape
         self.borderRadiusRatio = borderRadiusRatio
         self.shadowIntensity = shadowIntensity
         self.backgroundBlur = backgroundBlur
         self.aiPersonCutout = aiPersonCutout
+        self.hideDuringSilenceMs = hideDuringSilenceMs
+        self.splitScreenRatio01 = splitScreenRatio01
+        self.splitFlip = splitFlip
+        self.splitEnablePadding = splitEnablePadding
+        self.cutoutPositionX01 = cutoutPositionX01
+        self.colorGradePreset = colorGradePreset
+        self.customLUTRelativePath = customLUTRelativePath
+        self.colorGradeIntensity = colorGradeIntensity
+        self.sharpen01 = sharpen01
+        self.cropRect01 = cropRect01
+        self.enableFaceTracking = enableFaceTracking
+        self.delayAdjustmentMs = delayAdjustmentMs
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled, layoutMode, aspectRatioPreset, mirror, position01, sizeRatio
+        case makeSmallerDuringZoom, scaleWhenZoomed, shape, borderRadiusRatio
+        case shadowIntensity, backgroundBlur, aiPersonCutout, hideDuringSilenceMs
+        case splitScreenRatio01, splitFlip, splitEnablePadding, cutoutPositionX01
+        case colorGradePreset, customLUTRelativePath, colorGradeIntensity
+        case sharpen01, cropRect01, enableFaceTracking, delayAdjustmentMs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        self.layoutMode = try container.decodeIfPresent(CameraLayoutMode.self, forKey: .layoutMode) ?? .overlay
+        self.aspectRatioPreset = try container.decodeIfPresent(CameraAspectRatioPreset.self, forKey: .aspectRatioPreset) ?? .square1x1
+        self.mirror = try container.decodeIfPresent(Bool.self, forKey: .mirror) ?? false
+        self.position01 = try container.decodeIfPresent(Point01.self, forKey: .position01) ?? Point01(x: 1.0, y: 1.0)
+        self.sizeRatio = try container.decodeIfPresent(Double.self, forKey: .sizeRatio) ?? 0.56
+        self.makeSmallerDuringZoom = try container.decodeIfPresent(Bool.self, forKey: .makeSmallerDuringZoom) ?? true
+        self.scaleWhenZoomed = try container.decodeIfPresent(Double.self, forKey: .scaleWhenZoomed) ?? 0.66
+        self.shape = try container.decodeIfPresent(CameraShape.self, forKey: .shape) ?? .squircle
+        self.borderRadiusRatio = try container.decodeIfPresent(Double.self, forKey: .borderRadiusRatio) ?? 0.22
+        self.shadowIntensity = try container.decodeIfPresent(Double.self, forKey: .shadowIntensity) ?? 0.35
+        self.backgroundBlur = try container.decodeIfPresent(Double.self, forKey: .backgroundBlur) ?? 0.0
+        self.aiPersonCutout = try container.decodeIfPresent(Bool.self, forKey: .aiPersonCutout) ?? false
+        self.hideDuringSilenceMs = try container.decodeIfPresent(Double.self, forKey: .hideDuringSilenceMs)
+        self.splitScreenRatio01 = try container.decodeIfPresent(Double.self, forKey: .splitScreenRatio01) ?? 0.50
+        self.splitFlip = try container.decodeIfPresent(Bool.self, forKey: .splitFlip) ?? false
+        self.splitEnablePadding = try container.decodeIfPresent(Bool.self, forKey: .splitEnablePadding) ?? false
+        self.cutoutPositionX01 = try container.decodeIfPresent(Double.self, forKey: .cutoutPositionX01) ?? 1.0
+        self.colorGradePreset = try container.decodeIfPresent(CameraColorGradePreset.self, forKey: .colorGradePreset) ?? .original
+        self.customLUTRelativePath = try container.decodeIfPresent(String.self, forKey: .customLUTRelativePath)
+        self.colorGradeIntensity = try container.decodeIfPresent(Double.self, forKey: .colorGradeIntensity) ?? 1.0
+        self.sharpen01 = try container.decodeIfPresent(Double.self, forKey: .sharpen01) ?? 0.0
+        self.cropRect01 = try container.decodeIfPresent(Rect01.self, forKey: .cropRect01) ?? .full
+        self.enableFaceTracking = try container.decodeIfPresent(Bool.self, forKey: .enableFaceTracking) ?? false
+        self.delayAdjustmentMs = try container.decodeIfPresent(Double.self, forKey: .delayAdjustmentMs) ?? 0.0
     }
 }
 
@@ -586,12 +732,61 @@ public struct MotionConfig: Codable, Equatable, Hashable, Sendable {
 public struct BackgroundMusicConfig: Codable, Equatable, Hashable, Sendable {
     public var relativePath: String?
     public var volume: Double
+    public var muted: Bool
     public var duckDuringSpeech: Bool
 
-    public init(relativePath: String? = nil, volume: Double = 0.08, duckDuringSpeech: Bool = true) {
+    public init(relativePath: String? = nil, volume: Double = 0.08, muted: Bool = false, duckDuringSpeech: Bool = true) {
         self.relativePath = relativePath
         self.volume = volume
+        self.muted = muted
         self.duckDuringSpeech = duckDuringSpeech
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case relativePath, volume, muted, duckDuringSpeech
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.relativePath = try container.decodeIfPresent(String.self, forKey: .relativePath)
+        self.volume = try container.decodeIfPresent(Double.self, forKey: .volume) ?? 0.08
+        self.muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
+        self.duckDuringSpeech = try container.decodeIfPresent(Bool.self, forKey: .duckDuringSpeech) ?? true
+    }
+}
+
+public enum MicrophoneAudioPreset: String, Codable, CaseIterable, Identifiable, Sendable {
+    case off = "channel-fix"
+    case standard = "voice"
+    case loud = "loud"
+    case noiseReduction = "noise-reduction"
+    case podcast = "podcast"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .off: return "Off"
+        case .standard: return "Standard"
+        case .loud: return "Loud"
+        case .noiseReduction: return "Noise reduction"
+        case .podcast: return "Podcast"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .off:
+            return "Plays your microphone as recorded."
+        case .standard:
+            return "Adjusts your voice to a consistent volume. Its character stays the same."
+        case .loud:
+            return "Boosts your voice to a consistent, loud volume."
+        case .noiseReduction:
+            return "Boosts your voice and reduces background noise and room echo."
+        case .podcast:
+            return "Gives your voice the depth and clarity of a studio recording. Done locally on device."
+        }
     }
 }
 
@@ -599,6 +794,7 @@ public struct AudioConfig: Codable, Equatable, Hashable, Sendable {
     public var masterVolume: Double
     public var microphoneVolume: Double
     public var muteMicrophone: Bool
+    public var microphoneAudioPreset: MicrophoneAudioPreset
     public var voiceEnhancement: Bool
     public var systemAudioVolume: Double
     public var muteSystemAudio: Bool
@@ -608,6 +804,7 @@ public struct AudioConfig: Codable, Equatable, Hashable, Sendable {
         masterVolume: Double = 1.0,
         microphoneVolume: Double = 1.0,
         muteMicrophone: Bool = false,
+        microphoneAudioPreset: MicrophoneAudioPreset = .standard,
         voiceEnhancement: Bool = true,
         systemAudioVolume: Double = 1.0,
         muteSystemAudio: Bool = false,
@@ -616,10 +813,135 @@ public struct AudioConfig: Codable, Equatable, Hashable, Sendable {
         self.masterVolume = masterVolume
         self.microphoneVolume = microphoneVolume
         self.muteMicrophone = muteMicrophone
+        self.microphoneAudioPreset = microphoneAudioPreset
         self.voiceEnhancement = voiceEnhancement
         self.systemAudioVolume = systemAudioVolume
         self.muteSystemAudio = muteSystemAudio
         self.backgroundMusic = backgroundMusic
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case masterVolume, microphoneVolume, muteMicrophone, microphoneAudioPreset
+        case voiceEnhancement, systemAudioVolume, muteSystemAudio, backgroundMusic
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.masterVolume = try container.decodeIfPresent(Double.self, forKey: .masterVolume) ?? 1.0
+        self.microphoneVolume = try container.decodeIfPresent(Double.self, forKey: .microphoneVolume) ?? 1.0
+        self.muteMicrophone = try container.decodeIfPresent(Bool.self, forKey: .muteMicrophone) ?? false
+        self.microphoneAudioPreset = try container.decodeIfPresent(MicrophoneAudioPreset.self, forKey: .microphoneAudioPreset) ?? .standard
+        self.voiceEnhancement = try container.decodeIfPresent(Bool.self, forKey: .voiceEnhancement) ?? true
+        self.systemAudioVolume = try container.decodeIfPresent(Double.self, forKey: .systemAudioVolume) ?? 1.0
+        self.muteSystemAudio = try container.decodeIfPresent(Bool.self, forKey: .muteSystemAudio) ?? false
+        self.backgroundMusic = try container.decodeIfPresent(BackgroundMusicConfig.self, forKey: .backgroundMusic) ?? BackgroundMusicConfig()
+    }
+}
+
+public enum CaptionFontStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case sansSerif = "sans-serif"
+    case serif = "serif"
+    case mono = "mono"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .sansSerif: return "Sans-serif"
+        case .serif: return "Serif"
+        case .mono: return "Mono"
+        }
+    }
+}
+
+public enum CaptionWordsReveal: String, Codable, CaseIterable, Identifiable, Sendable {
+    case lineByLine = "line-by-line"
+    case wordByWord = "word-by-word"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .lineByLine: return "Line by line"
+        case .wordByWord: return "Word by word"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .lineByLine:
+            return "Show whole caption lines as their words are spoken."
+        case .wordByWord:
+            return "Show one word at a time. Each spoken word pushes the previous one out."
+        }
+    }
+}
+
+public enum CaptionLineGrowth: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fullLine = "entire-line"
+    case expanding = "left-anchored"
+    case centered = "centered"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .fullLine: return "Full line"
+        case .expanding: return "Expanding"
+        case .centered: return "Centered"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .fullLine:
+            return "The line box appears at its full size right away."
+        case .expanding:
+            return "The line box grows from its left edge as words are spoken."
+        case .centered:
+            return "The line box grows while staying centered as words are spoken."
+        }
+    }
+}
+
+public enum CaptionWordAnimation: String, Codable, CaseIterable, Identifiable, Sendable {
+    case appear = "appear"
+    case fadeIn = "fade-in"
+    case slideIn = "slide-in"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .appear: return "Appear"
+        case .fadeIn: return "Fade in"
+        case .slideIn: return "Slide in"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .appear:
+            return "Words pop in as they are spoken."
+        case .fadeIn:
+            return "Upcoming words are shown dimmed and light up when spoken."
+        case .slideIn:
+            return "Words slide into place as they are spoken."
+        }
+    }
+}
+
+public enum CaptionColorTheme: String, Codable, CaseIterable, Identifiable, Sendable {
+    case dark = "dark"
+    case light = "light"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .dark: return "Dark"
+        case .light: return "Light"
+        }
     }
 }
 
@@ -628,12 +950,33 @@ public struct CaptionSegment: Codable, Equatable, Hashable, Identifiable, Sendab
     public var sourceStartMs: Double
     public var sourceEndMs: Double
     public var text: String
+    public var isHidden: Bool
 
-    public init(id: String = UUID().uuidString, sourceStartMs: Double, sourceEndMs: Double, text: String) {
+    public init(
+        id: String = UUID().uuidString,
+        sourceStartMs: Double,
+        sourceEndMs: Double,
+        text: String,
+        isHidden: Bool = false
+    ) {
         self.id = id
         self.sourceStartMs = sourceStartMs
         self.sourceEndMs = sourceEndMs
         self.text = text
+        self.isHidden = isHidden
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, sourceStartMs, sourceEndMs, text, isHidden
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.sourceStartMs = try container.decode(Double.self, forKey: .sourceStartMs)
+        self.sourceEndMs = try container.decode(Double.self, forKey: .sourceEndMs)
+        self.text = try container.decode(String.self, forKey: .text)
+        self.isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
     }
 }
 
@@ -780,11 +1123,21 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     public var shortcutKeyOverrides: [Int: CustomShortcutSegment]
     public var keystrokesPosition01: Point01
     public var fontFamily: String
+    public var fontStyle: CaptionFontStyle
     public var fontSizeRatio: Double
+    public var wordsReveal: CaptionWordsReveal
+    public var lineGrowth: CaptionLineGrowth
+    public var wordAnimation: CaptionWordAnimation
+    public var colorTheme: CaptionColorTheme
     public var textColor: String
     public var backgroundColor: String
     public var position01: Point01
     public var animationStyle: String
+    public var transcriptLocale: String
+    public var localModelVariant: String
+    public var customPrompt: String
+    public var showDeletedTextInTranscript: Bool
+    public var showHiddenWordsInTranscript: Bool
     public var segments: [CaptionSegment]
 
     public init(
@@ -802,11 +1155,21 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         shortcutKeyOverrides: [Int: CustomShortcutSegment] = [:],
         keystrokesPosition01: Point01 = Point01(x: 0.5, y: 0.90),
         fontFamily: String = "SF Pro Rounded",
+        fontStyle: CaptionFontStyle = .sansSerif,
         fontSizeRatio: Double = 0.045,
+        wordsReveal: CaptionWordsReveal = .lineByLine,
+        lineGrowth: CaptionLineGrowth = .expanding,
+        wordAnimation: CaptionWordAnimation = .appear,
+        colorTheme: CaptionColorTheme = .dark,
         textColor: String = "#FFFFFF",
         backgroundColor: String = "#000000CC",
         position01: Point01 = Point01(x: 0.5, y: 0.88),
         animationStyle: String = "word-by-word",
+        transcriptLocale: String = "en_US",
+        localModelVariant: String = "system",
+        customPrompt: String = "",
+        showDeletedTextInTranscript: Bool = true,
+        showHiddenWordsInTranscript: Bool = true,
         segments: [CaptionSegment] = []
     ) {
         self.enabled = enabled
@@ -823,11 +1186,21 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.shortcutKeyOverrides = shortcutKeyOverrides
         self.keystrokesPosition01 = keystrokesPosition01
         self.fontFamily = fontFamily
+        self.fontStyle = fontStyle
         self.fontSizeRatio = fontSizeRatio
+        self.wordsReveal = wordsReveal
+        self.lineGrowth = lineGrowth
+        self.wordAnimation = wordAnimation
+        self.colorTheme = colorTheme
         self.textColor = textColor
         self.backgroundColor = backgroundColor
         self.position01 = position01
         self.animationStyle = animationStyle
+        self.transcriptLocale = transcriptLocale
+        self.localModelVariant = localModelVariant
+        self.customPrompt = customPrompt
+        self.showDeletedTextInTranscript = showDeletedTextInTranscript
+        self.showHiddenWordsInTranscript = showHiddenWordsInTranscript
         self.segments = segments
     }
 
@@ -846,11 +1219,21 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         case shortcutKeyOverrides
         case keystrokesPosition01
         case fontFamily
+        case fontStyle
         case fontSizeRatio
+        case wordsReveal
+        case lineGrowth
+        case wordAnimation
+        case colorTheme
         case textColor
         case backgroundColor
         case position01
         case animationStyle
+        case transcriptLocale
+        case localModelVariant
+        case customPrompt
+        case showDeletedTextInTranscript
+        case showHiddenWordsInTranscript
         case segments
     }
 
@@ -871,11 +1254,21 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.shortcutKeyOverrides = try container.decodeIfPresent([Int: CustomShortcutSegment].self, forKey: .shortcutKeyOverrides) ?? [:]
         self.keystrokesPosition01 = try container.decodeIfPresent(Point01.self, forKey: .keystrokesPosition01) ?? Point01(x: 0.5, y: 0.90)
         self.fontFamily = try container.decodeIfPresent(String.self, forKey: .fontFamily) ?? "SF Pro Rounded"
+        self.fontStyle = try container.decodeIfPresent(CaptionFontStyle.self, forKey: .fontStyle) ?? .sansSerif
         self.fontSizeRatio = try container.decodeIfPresent(Double.self, forKey: .fontSizeRatio) ?? 0.045
+        self.wordsReveal = try container.decodeIfPresent(CaptionWordsReveal.self, forKey: .wordsReveal) ?? .lineByLine
+        self.lineGrowth = try container.decodeIfPresent(CaptionLineGrowth.self, forKey: .lineGrowth) ?? .expanding
+        self.wordAnimation = try container.decodeIfPresent(CaptionWordAnimation.self, forKey: .wordAnimation) ?? .appear
+        self.colorTheme = try container.decodeIfPresent(CaptionColorTheme.self, forKey: .colorTheme) ?? .dark
         self.textColor = try container.decodeIfPresent(String.self, forKey: .textColor) ?? "#FFFFFF"
         self.backgroundColor = try container.decodeIfPresent(String.self, forKey: .backgroundColor) ?? "#000000CC"
         self.position01 = try container.decodeIfPresent(Point01.self, forKey: .position01) ?? Point01(x: 0.5, y: 0.88)
         self.animationStyle = try container.decodeIfPresent(String.self, forKey: .animationStyle) ?? "word-by-word"
+        self.transcriptLocale = try container.decodeIfPresent(String.self, forKey: .transcriptLocale) ?? "en_US"
+        self.localModelVariant = try container.decodeIfPresent(String.self, forKey: .localModelVariant) ?? "system"
+        self.customPrompt = try container.decodeIfPresent(String.self, forKey: .customPrompt) ?? ""
+        self.showDeletedTextInTranscript = try container.decodeIfPresent(Bool.self, forKey: .showDeletedTextInTranscript) ?? true
+        self.showHiddenWordsInTranscript = try container.decodeIfPresent(Bool.self, forKey: .showHiddenWordsInTranscript) ?? true
         self.segments = try container.decodeIfPresent([CaptionSegment].self, forKey: .segments) ?? []
     }
 }

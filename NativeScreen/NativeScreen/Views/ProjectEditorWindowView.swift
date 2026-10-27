@@ -41,7 +41,7 @@ public struct ProjectEditorWindowView: View {
     }
 
     private var isModalOverlayActive: Bool {
-        isShowingCommandMenu || isShowingExportSheet || isExporting || session.isShowingStillFrameExportModal
+        isShowingCommandMenu || isShowingExportSheet || isExporting || session.isShowingStillFrameExportModal || session.isShowingCameraCropModal
     }
 
     public var body: some View {
@@ -645,6 +645,13 @@ public struct ProjectEditorWindowView: View {
                 .zIndex(600)
                 .transition(.opacity)
             }
+
+            // 7. CAMERA CROP MODAL OVERLAY
+            if session.isShowingCameraCropModal {
+                CameraCropModalView(session: session)
+                    .zIndex(580)
+                    .transition(.opacity)
+            }
         }
         .background(
             WindowTitlebarCleaner { centerY, rightX in
@@ -788,7 +795,13 @@ public struct ProjectEditorWindowView: View {
                 return event
             }
             switch event.keyCode {
-            case 53: // ESC: Exit Add Mask Mode, Split Mode, close open Segment Editor / clear selection, or return Sidebar to General
+            case 53: // ESC: Exit Camera Crop Modal, Add Mask Mode, Split Mode, close open Segment Editor / clear selection, or return Sidebar to General
+                if session.isShowingCameraCropModal {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        session.isShowingCameraCropModal = false
+                    }
+                    return nil
+                }
                 if session.pendingAddMaskType != nil {
                     session.cancelInteractiveMaskSelection()
                     return nil
@@ -912,6 +925,85 @@ public struct ProjectEditorWindowView: View {
                         session.cutZoomToClipboard(id: zId)
                         return nil
                     }
+                }
+                return event
+
+            case 4: // 'H' key: Toggle Hide Camera
+                if flags.isEmpty {
+                    session.mutate { $0.camera.enabled.toggle() }
+                    return nil
+                }
+                return event
+
+            case 18: // `⌘ 1` General (Background)
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .background
+                    return nil
+                }
+                return event
+
+            case 19: // `⌘ 2` Cursor
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .cursor
+                    return nil
+                }
+                return event
+
+            case 20: // `⌘ 3` Camera Layout
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .cameraLayout
+                    return nil
+                }
+                return event
+
+            case 21: // `⌘ 4` Camera Style
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .cameraStyle
+                    return nil
+                }
+                return event
+
+            case 23: // `⌘ 5` Captions
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .captions
+                    return nil
+                }
+                return event
+
+            case 22: // `⌘ 6` Edit by transcript
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .transcript
+                    return nil
+                }
+                return event
+
+            case 26: // `⌘ 7` Audio
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .audio
+                    return nil
+                }
+                return event
+
+            case 28: // `⌘ 8` Keyboard Shortcuts
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .shortcuts
+                    return nil
+                }
+                return event
+
+            case 25: // `⌘ 9` Animations (Zoom)
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .zoom
+                    return nil
                 }
                 return event
 
@@ -1168,6 +1260,7 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
 
         ZStack {
             MetalPreviewView(session: session, canvasAspect: aspect)
+            PreviewCameraAndCaptionsOverlayView(session: session, canvasSize: fittedSize)
             InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
             PreviewShortcutKeycapsOverlayView(session: session, canvasSize: fittedSize)
 

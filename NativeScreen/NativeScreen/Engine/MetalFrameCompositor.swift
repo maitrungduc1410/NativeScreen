@@ -367,8 +367,26 @@ public final class MetalFrameCompositor {
             )
         }
 
-        // --- PASS 6: 3D Keyboard Shortcut Keycaps Overlay (For Video/GIF/Still-Frame Export!) ---
+        // --- PASS 6: 3D Keyboard Shortcut Keycaps + Camera & Captions Overlay (For Video/GIF/Still-Frame Export!) ---
         if includeShortcutOverlay {
+            if doc.camera.enabled && session.hasRecordedCamera {
+                composite = renderWebcamOverlayForExport(
+                    over: composite,
+                    camCfg: doc.camera,
+                    currentZoomScale: cameraState.scale,
+                    canvasRect: canvasRect
+                )
+            }
+
+            if doc.captions.enabled && !doc.captions.segments.isEmpty {
+                composite = renderCaptionsOverlayForExport(
+                    over: composite,
+                    captionsConfig: doc.captions,
+                    sourceTimeMs: sourceTimeMs,
+                    canvasRect: canvasRect
+                )
+            }
+
             let activeShortcuts = session.activeShortcutClustersWithStyles(atSourceMs: sourceTimeMs)
             if !activeShortcuts.isEmpty {
                 composite = renderShortcutKeycapsOverlay(
@@ -1184,6 +1202,113 @@ public final class MetalFrameCompositor {
         let base = CIImage(color: CIColor(red: 0.06, green: 0.06, blue: 0.08, alpha: 1.0)).cropped(to: rect)
         syntheticScreenTexture = base
         return base
+    }
+
+    private func renderWebcamOverlayForExport(
+        over background: CIImage,
+        camCfg: CameraConfig,
+        currentZoomScale: Double,
+        canvasRect: CGRect
+    ) -> CIImage {
+        let zoomProgress01 = max(0.0, min(1.0, (currentZoomScale - 1.0) / 0.8))
+        let zoomScaleMultiplier: CGFloat = camCfg.makeSmallerDuringZoom
+            ? CGFloat(1.0 - (1.0 - camCfg.scaleWhenZoomed) * zoomProgress01)
+            : 1.0
+
+        let aspect = CGFloat(camCfg.aspectRatioPreset.aspectValue)
+        let baseRef = min(canvasRect.width, canvasRect.height)
+        let pipHeight = max(64.0, baseRef * CGFloat(camCfg.sizeRatio) * 0.58 * zoomScaleMultiplier)
+        let pipWidth = max(64.0, pipHeight * aspect)
+
+        let margin: CGFloat = max(16.0, baseRef * 0.035)
+        let availW = max(1.0, canvasRect.width - pipWidth - margin * 2.0)
+        let availH = max(1.0, canvasRect.height - pipHeight - margin * 2.0)
+
+        let originX = margin + CGFloat(max(0.0, min(1.0, camCfg.position01.x))) * availW
+        // Convert top-left `position01.y` (`0 = top, 1 = bottom`) to bottom-left CoreImage Y
+        let originY = margin + CGFloat(1.0 - max(0.0, min(1.0, camCfg.position01.y))) * availH
+
+        let gradedNSImg = GradedWebcamPortraitView.cachedGradedPortraitImage(
+            preset: camCfg.colorGradePreset,
+            intensity: camCfg.colorGradeIntensity,
+            sharpen01: camCfg.sharpen01,
+            isCutoutMode: camCfg.layoutMode == .cutout
+        )
+        guard let tiff = gradedNSImg.tiffRepresentation,
+              let rawCI = CIImage(data: tiff) else {
+            return background
+        }
+
+        let scaleX = pipWidth / max(1.0, rawCI.extent.width)
+        let scaleY = pipHeight / max(1.0, rawCI.extent.height)
+        let pipRect = CGRect(x: originX, y: originY, width: pipWidth, height: pipHeight)
+        let scaled = rawCI
+            .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+            .transformed(by: CGAffineTransform(translationX: originX, y: originY))
+            .cropped(to: pipRect)
+
+        let cornerRadius = min(pipWidth, pipHeight) * CGFloat(max(0.04, min(0.50, camCfg.borderRadiusRatio)))
+        if let mask = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+            "inputExtent": CIVector(cgRect: pipRect),
+            "inputRadius": cornerRadius,
+            "inputColor": CIColor.white
+        ])?.outputImage?.cropped(to: pipRect),
+           let masked = CIFilter(name: "CIBlendWithAlphaMask", parameters: [
+               kCIInputImageKey: scaled,
+               kCIInputBackgroundImageKey: CIImage.empty(),
+               kCIInputMaskImageKey: mask
+           ])?.outputImage?.cropped(to: pipRect) {
+            return masked.composited(over: background).cropped(to: canvasRect)
+        }
+
+        return scaled.composited(over: background).cropped(to: canvasRect)
+    }
+
+    private func renderCaptionsOverlayForExport(
+        over background: CIImage,
+        captionsConfig: CaptionsConfig,
+        sourceTimeMs: Double,
+        canvasRect: CGRect
+    ) -> CIImage {
+        let visible = captionsConfig.segments.filter { !$0.isHidden }.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        guard let activeWord = visible.last(where: { $0.sourceStartMs <= sourceTimeMs && sourceTimeMs <= $0.sourceEndMs + 450.0 }) else {
+            return background
+        }
+
+        let fontSize = max(18.0, canvasRect.height * CGFloat(captionsConfig.fontSizeRatio))
+        let text = activeWord.text
+        let nsFont = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+        let isDark = (captionsConfig.colorTheme == .dark)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: nsFont,
+            .foregroundColor: isDark ? NSColor.white : NSColor.black
+        ]
+        let textSize = (text as NSString).size(withAttributes: attrs)
+        let padX = fontSize * 0.72
+        let padY = fontSize * 0.38
+        let pillW = ceil(textSize.width + padX * 2.0)
+        let pillH = ceil(textSize.height + padY * 2.0)
+
+        let nsImg = NSImage(size: NSSize(width: pillW, height: pillH), flipped: false) { rect in
+            let bgColor = isDark
+                ? NSColor(white: 0.0, alpha: 0.82)
+                : NSColor(white: 1.0, alpha: 0.92)
+            bgColor.setFill()
+            let path = NSBezierPath(roundedRect: rect, xRadius: fontSize * 0.42, yRadius: fontSize * 0.42)
+            path.fill()
+            (text as NSString).draw(at: NSPoint(x: padX, y: padY), withAttributes: attrs)
+            return true
+        }
+
+        guard let tiff = nsImg.tiffRepresentation,
+              let pillCI = CIImage(data: tiff) else {
+            return background
+        }
+
+        let cx = canvasRect.width * CGFloat(max(0.15, min(0.85, captionsConfig.position01.x)))
+        let cy = canvasRect.height * CGFloat(1.0 - max(0.12, min(0.90, captionsConfig.position01.y)))
+        let placed = pillCI.transformed(by: CGAffineTransform(translationX: cx - pillW * 0.5, y: cy - pillH * 0.5))
+        return placed.composited(over: background).cropped(to: canvasRect)
     }
 }
 

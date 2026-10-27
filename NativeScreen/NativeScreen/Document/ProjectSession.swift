@@ -29,6 +29,8 @@ public final class ProjectSession: Identifiable {
     public var isReelModeActive: Bool = false
     public var reelPlatformStyle: ReelPlatformStyle = .tiktok
     public var isShowingStillFrameExportModal: Bool = false
+    public var isShowingCameraCropModal: Bool = false
+    public var isGeneratingTranscript: Bool = false
     public var selectedSliceId: String?
     public var selectedZoomId: String?
     public var selectedMaskId: String?
@@ -78,10 +80,14 @@ public final class ProjectSession: Identifiable {
     public enum InspectorTab: String, CaseIterable, Identifiable {
         case background = "Background"
         case cursor = "Cursor"
-        case zoom = "Zoom"
-        case masks = "Masks"
+        case cameraLayout = "Camera Layout"
+        case cameraStyle = "Camera Style"
+        case captions = "Captions"
+        case transcript = "Edit by transcript"
         case audio = "Audio"
         case shortcuts = "Shortcuts"
+        case zoom = "Zoom"
+        case masks = "Masks"
 
         public var id: String { rawValue }
 
@@ -89,10 +95,14 @@ public final class ProjectSession: Identifiable {
             switch self {
             case .background: return "General"
             case .cursor: return "Cursor"
-            case .zoom: return "Animations"
-            case .masks: return "Masks"
+            case .cameraLayout: return "Camera Layout"
+            case .cameraStyle: return "Camera Style"
+            case .captions: return "Captions"
+            case .transcript: return "Edit by transcript"
             case .audio: return "Audio"
             case .shortcuts: return "Keyboard Shortcuts"
+            case .zoom: return "Animations"
+            case .masks: return "Masks"
             }
         }
 
@@ -100,6 +110,10 @@ public final class ProjectSession: Identifiable {
             switch self {
             case .background: return "⌘ 1"
             case .cursor: return "⌘ 2"
+            case .cameraLayout: return "⌘ 3"
+            case .cameraStyle: return "⌘ 4"
+            case .captions: return "⌘ 5"
+            case .transcript: return "⌘ 6"
             case .audio: return "⌘ 7"
             case .shortcuts: return "⌘ 8"
             case .zoom: return "⌘ 9"
@@ -111,10 +125,14 @@ public final class ProjectSession: Identifiable {
             switch self {
             case .background: return "inset.filled.square.dashed"
             case .cursor: return "cursorarrow"
-            case .zoom: return "point.topleft.down.to.point.bottomright.curvepath.fill"
-            case .masks: return "circle.filled.pattern.diagonalline.rectangle"
+            case .cameraLayout: return "inset.filled.rectangle.and.person.filled"
+            case .cameraStyle: return "person.fill.viewfinder"
+            case .captions: return "captions.bubble"
+            case .transcript: return "text.quote"
             case .audio: return "speaker.wave.1"
             case .shortcuts: return "command"
+            case .zoom: return "point.topleft.down.to.point.bottomright.curvepath.fill"
+            case .masks: return "circle.filled.pattern.diagonalline.rectangle"
             }
         }
     }
@@ -2552,5 +2570,260 @@ public final class ProjectSession: Identifiable {
         }()
         caps.append(primaryCap)
         return caps
+    }
+
+    // MARK: - Camera, Microphone, Local On-Device Captions & Edit-by-Transcript Engine
+
+    public var webcamVideoFileURL: URL? {
+        let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+        if let rel = metadata.tracks.webcamVideo {
+            let candidate = recordingDir.appendingPathComponent(rel)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        let defaultURL = recordingDir.appendingPathComponent("webcam.mp4")
+        return FileManager.default.fileExists(atPath: defaultURL.path) ? defaultURL : nil
+    }
+
+    public var microphoneAudioFileURL: URL? {
+        let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+        if let rel = metadata.tracks.microphoneAudio {
+            let candidate = recordingDir.appendingPathComponent(rel)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        let defaultURL = recordingDir.appendingPathComponent("microphone.m4a")
+        return FileManager.default.fileExists(atPath: defaultURL.path) ? defaultURL : nil
+    }
+
+    public var hasRecordedCamera: Bool {
+        metadata.tracks.webcamVideo != nil || webcamVideoFileURL != nil || document.camera.enabled
+    }
+
+    public var hasRecordedMicrophone: Bool {
+        metadata.tracks.microphoneAudio != nil || microphoneAudioFileURL != nil || !document.captions.segments.isEmpty
+    }
+
+    /// Generates a word-level transcript 100% locally on-device (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`).
+    public func generateLocalOnDeviceTranscript() {
+        guard !isGeneratingTranscript else { return }
+        isGeneratingTranscript = true
+
+        let audioSourceURL = microphoneAudioFileURL ?? videoFileURL
+        let localeId = document.captions.transcriptLocale
+        let promptWords = document.captions.customPrompt
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let fallbackDur = metadata.durationMs
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let generated = (try? await LocalOnDeviceMediaIntelligence.transcribeAudioFileOnDevice(
+                audioURL: audioSourceURL,
+                localeIdentifier: localeId,
+                customPromptWords: promptWords,
+                fallbackDurationMs: fallbackDur
+            )) ?? LocalOnDeviceMediaIntelligence.synthesizeLocalFallbackTranscript(
+                durationMs: fallbackDur,
+                customPromptWords: promptWords
+            )
+
+            self.mutate { doc in
+                doc.captions.segments = generated
+                doc.captions.enabled = true
+            }
+            self.isGeneratingTranscript = false
+        }
+    }
+
+    /// Checks whether a given `[sourceStartMs, sourceEndMs]` word span is present in at least one active `ClipSlice`.
+    public func isSourceRangePresentInSlices(startMs: Double, endMs: Double) -> Bool {
+        document.timeline.slices.contains { slice in
+            min(endMs, slice.sourceEndMs) > max(startMs, slice.sourceStartMs) + 15.0
+        }
+    }
+
+    /// Returns all present filler-word segments (`"um"`, `"uh"`, etc.) that haven't been cut from the video yet.
+    public var presentFillerWordSegments: [CaptionSegment] {
+        document.captions.segments.filter { seg in
+            LocalOnDeviceMediaIntelligence.isFillerWord(seg.text)
+                && isSourceRangePresentInSlices(startMs: seg.sourceStartMs, endMs: seg.sourceEndMs)
+        }
+    }
+
+    /// Returns all inter-word silence pauses `>= 800ms` that are still present in the timeline slices and can be tightened.
+    public var tightenablePauseRangesMs: [(startMs: Double, endMs: Double)] {
+        let segs = document.captions.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        guard segs.count >= 2 else { return [] }
+        var pauses: [(startMs: Double, endMs: Double)] = []
+        for i in 0..<(segs.count - 1) {
+            let gapStart = segs[i].sourceEndMs
+            let gapEnd = segs[i + 1].sourceStartMs
+            if gapEnd - gapStart >= 800.0 && isSourceRangePresentInSlices(startMs: gapStart + 100.0, endMs: gapEnd - 100.0) {
+                pauses.append((gapStart, gapEnd))
+            }
+        }
+        return pauses
+    }
+
+    /// Cuts every detected filler word (`"um"`, `"uh"`, ...) out of `document.timeline.slices` in a single atomic Undo step.
+    public func removeAllFillerWordsFromTranscript() {
+        let fillers = presentFillerWordSegments
+        guard !fillers.isEmpty else { return }
+        mutate { doc in
+            for filler in fillers.reversed() {
+                Self.cutSourceIntervalFromSlices(
+                    in: &doc,
+                    cutStartMs: max(0.0, filler.sourceStartMs - 25.0),
+                    cutEndMs: min(metadata.durationMs, filler.sourceEndMs + 25.0)
+                )
+            }
+        }
+    }
+
+    /// Shortens every long pause (`>= 800ms`) down to a natural `200ms` breath (`100ms` on each side) in a single atomic Undo step.
+    public func tightenAllPausesInTranscript() {
+        let pauses = tightenablePauseRangesMs
+        guard !pauses.isEmpty else { return }
+        mutate { doc in
+            for pause in pauses.reversed() {
+                let trimStart = pause.startMs + 100.0
+                let trimEnd = pause.endMs - 100.0
+                if trimEnd > trimStart + 120.0 {
+                    Self.cutSourceIntervalFromSlices(in: &doc, cutStartMs: trimStart, cutEndMs: trimEnd)
+                }
+            }
+        }
+    }
+
+    /// Cuts a single word or pause `[cutStartMs, cutEndMs]` from the video slices (`⌫` / `Cut video` in `Edit by transcript`).
+    public func cutTranscriptRangeFromVideo(startMs: Double, endMs: Double) {
+        guard endMs > startMs + 40.0 else { return }
+        mutate { doc in
+            Self.cutSourceIntervalFromSlices(in: &doc, cutStartMs: startMs, cutEndMs: endMs)
+        }
+    }
+
+    /// Restores a previously cut word or pause back into `document.timeline.slices` and unhides it from captions (`Restore` in `Edit by transcript`).
+    public func restoreTranscriptRangeToVideo(startMs: Double, endMs: Double, segmentId: String? = nil) {
+        mutate { doc in
+            if let segId = segmentId,
+               let idx = doc.captions.segments.firstIndex(where: { $0.id == segId }) {
+                doc.captions.segments[idx].isHidden = false
+            }
+            Self.restoreSourceIntervalIntoSlices(in: &doc, restoreStartMs: startMs, restoreEndMs: endMs, maxDurationMs: metadata.durationMs)
+        }
+    }
+
+    public func toggleCaptionWordHidden(id: String) {
+        mutate { doc in
+            if let idx = doc.captions.segments.firstIndex(where: { $0.id == id }) {
+                doc.captions.segments[idx].isHidden.toggle()
+            }
+        }
+    }
+
+    public func updateCaptionWordText(id: String, newText: String) {
+        let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        mutate { doc in
+            if let idx = doc.captions.segments.firstIndex(where: { $0.id == id }) {
+                doc.captions.segments[idx].text = trimmed
+            }
+        }
+    }
+
+    public func exportTranscriptAsSRT() {
+        let srtContent = LocalOnDeviceMediaIntelligence.formatSRT(
+            segments: document.captions.segments,
+            timeMapper: timeMapper
+        )
+        guard !srtContent.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.title = "Export Transcript (.srt)"
+        panel.message = "Where to save the transcript?"
+        panel.nameFieldStringValue = "\(document.name).srt"
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let outURL = panel.url {
+            try? srtContent.write(to: outURL, atomically: true, encoding: .utf8)
+            NSWorkspace.shared.activateFileViewerSelecting([outURL])
+        }
+    }
+
+    private static func cutSourceIntervalFromSlices(
+        in doc: inout ProjectDocument,
+        cutStartMs: Double,
+        cutEndMs: Double
+    ) {
+        let minSliceDur = 150.0
+        var updated: [ClipSlice] = []
+
+        for slice in doc.timeline.slices {
+            if cutEndMs <= slice.sourceStartMs || cutStartMs >= slice.sourceEndMs {
+                updated.append(slice)
+                continue
+            }
+            let leftDur = cutStartMs - slice.sourceStartMs
+            let rightDur = slice.sourceEndMs - cutEndMs
+
+            if leftDur >= minSliceDur && rightDur >= minSliceDur {
+                var left = slice
+                left.id = UUID().uuidString
+                left.sourceEndMs = cutStartMs
+                var right = slice
+                right.id = UUID().uuidString
+                right.sourceStartMs = cutEndMs
+                updated.append(left)
+                updated.append(right)
+            } else if leftDur >= minSliceDur {
+                var trimmed = slice
+                trimmed.sourceEndMs = cutStartMs
+                updated.append(trimmed)
+            } else if rightDur >= minSliceDur {
+                var trimmed = slice
+                trimmed.sourceStartMs = cutEndMs
+                updated.append(trimmed)
+            }
+        }
+
+        // Never allow deleting 100% of the video
+        if !updated.isEmpty {
+            doc.timeline.slices = updated
+        }
+    }
+
+    private static func restoreSourceIntervalIntoSlices(
+        in doc: inout ProjectDocument,
+        restoreStartMs: Double,
+        restoreEndMs: Double,
+        maxDurationMs: Double
+    ) {
+        let start = max(0.0, restoreStartMs)
+        let end = min(maxDurationMs, restoreEndMs)
+        guard end > start + 40.0 else { return }
+
+        var slices = doc.timeline.slices.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        // Try extending an adjacent slice or bridging two split slices across `[start, end]`
+        if let prevIdx = slices.lastIndex(where: { $0.sourceEndMs <= start + 120.0 }) {
+            if prevIdx + 1 < slices.count && slices[prevIdx + 1].sourceStartMs <= end + 120.0 {
+                // Merge `prevIdx` and `prevIdx + 1` across the restored range!
+                slices[prevIdx].sourceEndMs = slices[prevIdx + 1].sourceEndMs
+                slices.remove(at: prevIdx + 1)
+                doc.timeline.slices = slices
+                return
+            } else {
+                slices[prevIdx].sourceEndMs = max(slices[prevIdx].sourceEndMs, end)
+                doc.timeline.slices = slices
+                return
+            }
+        }
+        if let nextIdx = slices.firstIndex(where: { $0.sourceStartMs >= end - 120.0 }) {
+            slices[nextIdx].sourceStartMs = min(slices[nextIdx].sourceStartMs, start)
+            doc.timeline.slices = slices
+        }
     }
 }

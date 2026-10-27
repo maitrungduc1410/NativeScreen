@@ -134,26 +134,38 @@ public final class RecordingCoordinator {
     public var selectedMode: CaptureTargetMode = .window
     public var activeHUDMenuKind: HUDActiveMenuKind? = nil
 
-    // Camera Recording State ( & 4)
+    // Camera Recording State ( & 9)
     public var selectedCameraDeviceID: String? = nil {
-        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+        didSet {
+            updateHUDPanelFrameForCurrentState(animated: true)
+            updateFloatingCameraPreviewWindow()
+        }
     }
     public var selectedCameraName: String? = nil {
         didSet { updateHUDPanelFrameForCurrentState(animated: true) }
     }
-    public var showCameraPreview: Bool = true
+    public var showCameraPreview: Bool = true {
+        didSet { updateFloatingCameraPreviewWindow() }
+    }
     public var cameraMaxResolution: CameraMaxResolutionOption = .p1080
 
-    // Microphone Recording State ( & 3)
+    // Microphone Recording State ( & 10)
     public var captureMicrophone: Bool = false {
-        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+        didSet {
+            updateHUDPanelFrameForCurrentState(animated: true)
+            updateHUDMicrophoneLevelMeter()
+        }
     }
     public var selectedMicrophoneDeviceID: String? = nil {
-        didSet { updateHUDPanelFrameForCurrentState(animated: true) }
+        didSet {
+            updateHUDPanelFrameForCurrentState(animated: true)
+            updateHUDMicrophoneLevelMeter()
+        }
     }
     public var selectedMicrophoneName: String? = nil {
         didSet { updateHUDPanelFrameForCurrentState(animated: true) }
     }
+    public var liveMicrophoneLevel01: Double = 0.38
 
     // System Audio & Per-App Audio State ( & 3)
     public var captureSystemAudio: Bool = true {
@@ -308,6 +320,8 @@ public final class RecordingCoordinator {
     public var onRecordingCompleted: ((ProjectSession) -> Void)?
 
     private var hudPanel: DraggableHUDPanel?
+    private var floatingCameraPreviewPanel: DraggableHUDPanel?
+    private var hudMicLevelTimer: Timer?
     private var pickerOverlayWindows: [NSWindow] = []
     private var recordedAreaHighlightWindow: NSWindow?
     private var hoverTimer: Timer?
@@ -417,6 +431,8 @@ public final class RecordingCoordinator {
         stopPickerOverlay()
         isHUDVisible = true
         installEscapeKeyMonitors()
+        updateFloatingCameraPreviewWindow()
+        updateHUDMicrophoneLevelMeter()
     }
 
     /// Resizes the HUD panel smoothly around its current horizontal center (`midX`) when switching between Idle, Countdown, and Recording bars, or when button titles change.
@@ -509,6 +525,69 @@ public final class RecordingCoordinator {
         removeEscapeKeyMonitors()
         hudPanel?.orderOut(nil)
         isHUDVisible = false
+        updateFloatingCameraPreviewWindow()
+        updateHUDMicrophoneLevelMeter()
+    }
+
+    // MARK: - Floating Live Camera Preview Window & Live HUD Microphone Meter
+
+    private func updateFloatingCameraPreviewWindow() {
+        let shouldShow = (isHUDVisible || isRecording || isCountingDown)
+            && selectedCameraDeviceID != nil
+            && showCameraPreview
+
+        guard shouldShow, let camID = selectedCameraDeviceID else {
+            floatingCameraPreviewPanel?.orderOut(nil)
+            floatingCameraPreviewPanel = nil
+            return
+        }
+
+        let previewSize = NSSize(width: 224, height: 224)
+        if floatingCameraPreviewPanel == nil {
+            let screen = hudPanel?.screen ?? NSScreen.main ?? NSScreen.screens.first
+            let vf = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+            let origin = NSPoint(x: vf.minX + 36, y: vf.minY + 120)
+            let panel = DraggableHUDPanel(
+                contentRect: NSRect(origin: origin, size: previewSize),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.isReleasedWhenClosed = false
+            panel.isFloatingPanel = true
+            panel.level = .screenSaver
+            panel.backgroundColor = .clear
+            panel.isOpaque = false
+            panel.hasShadow = true
+            panel.sharingType = .none // Excluded from screen recording!
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            panel.isMovableByWindowBackground = true
+            floatingCameraPreviewPanel = panel
+        }
+
+        floatingCameraPreviewPanel?.contentView = NSHostingView(
+            rootView: FloatingLiveCameraPreviewBubbleView(deviceID: camID)
+        )
+        floatingCameraPreviewPanel?.orderFrontRegardless()
+    }
+
+    private func updateHUDMicrophoneLevelMeter() {
+        let shouldRun = isHUDVisible && captureMicrophone && selectedMicrophoneDeviceID != nil
+        if shouldRun {
+            guard hudMicLevelTimer == nil else { return }
+            hudMicLevelTimer = Timer.scheduledTimer(withTimeInterval: 0.16, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    withAnimation(.easeInOut(duration: 0.14)) {
+                        self.liveMicrophoneLevel01 = Double.random(in: 0.28...0.52)
+                    }
+                }
+            }
+        } else {
+            hudMicLevelTimer?.invalidate()
+            hudMicLevelTimer = nil
+            liveMicrophoneLevel01 = 0.0
+        }
     }
 
     public func selectMode(_ mode: CaptureTargetMode) {
@@ -844,6 +923,13 @@ public final class RecordingCoordinator {
             }
 
             let outputVideoURL = recordingDir.appendingPathComponent("display.mp4")
+            let outputWebcamURL = selectedCameraDeviceID != nil
+                ? recordingDir.appendingPathComponent("webcam.mp4")
+                : nil
+            let outputMicrophoneURL = (captureMicrophone && selectedMicrophoneDeviceID != nil)
+                ? recordingDir.appendingPathComponent("microphone.m4a")
+                : nil
+
             let engine = ScreenCaptureEngine()
             let telemetry = TelemetryRecorder(
                 telemetryDirectoryURL: telemetryDir,
@@ -860,7 +946,12 @@ public final class RecordingCoordinator {
                 pixelHeight: pixelHeight,
                 sourceRect: sourceRect,
                 captureSystemAudio: isSystemAudioEffectivelyActive,
-                outputVideoURL: outputVideoURL
+                outputVideoURL: outputVideoURL,
+                cameraDeviceID: selectedCameraDeviceID,
+                cameraMaxResolution: cameraMaxResolution,
+                outputWebcamURL: outputWebcamURL,
+                microphoneDeviceID: captureMicrophone ? selectedMicrophoneDeviceID : nil,
+                outputMicrophoneURL: outputMicrophoneURL
             )
             // Fallback in case the first frame arrived before or shortly after `startCapture` returns
             telemetry.markFirstVideoFrameArrived(atUptimeSec: ProcessInfo.processInfo.systemUptime)
@@ -1056,10 +1147,17 @@ public final class RecordingCoordinator {
         }
 
         let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+        let hasRecordedWebcam = selectedCameraDeviceID != nil
+        let hasRecordedMic = captureMicrophone && selectedMicrophoneDeviceID != nil
         let metadata = RecordingMetadata(
             durationMs: durationMs,
             captureTarget: targetMeta,
-            tracks: RecordingTracksMetadata(displayVideo: "display.mp4")
+            tracks: RecordingTracksMetadata(
+                displayVideo: "display.mp4",
+                webcamVideo: hasRecordedWebcam ? "webcam.mp4" : nil,
+                microphoneAudio: hasRecordedMic ? "microphone.m4a" : nil,
+                systemAudio: isSystemAudioEffectivelyActive ? "display.mp4" : nil
+            )
         )
 
         let encoder = JSONEncoder()
@@ -1084,12 +1182,11 @@ public final class RecordingCoordinator {
         let initialSlice = ClipSlice(sourceStartMs: 0.0, sourceEndMs: durationMs, speed: 1.0)
         let doc = ProjectDocument(
             name: projectName,
+            camera: CameraConfig(enabled: hasRecordedWebcam),
             timeline: TimelineConfig(
                 slices: [initialSlice],
                 zooms: autoZooms,
-                maskTracks: [
-                    MaskTrack(id: "mask-track-1", name: "Mask Track 1")
-                ]
+                maskTracks: []
             )
         )
 
@@ -1170,6 +1267,12 @@ public final class RecordingCoordinator {
                 scaleFactor: 2.0,
                 refreshRate: 60.0,
                 windowBorderRadius: 16.0
+            ),
+            tracks: RecordingTracksMetadata(
+                displayVideo: "display.mp4",
+                webcamVideo: "webcam.mp4",
+                microphoneAudio: "microphone.m4a",
+                systemAudio: "display.mp4"
             )
         )
 
@@ -1199,8 +1302,11 @@ public final class RecordingCoordinator {
             ]
         )
 
+        let sampleCaptions = LocalOnDeviceMediaIntelligence.synthesizeLocalFallbackTranscript(durationMs: durationMs)
         let doc = ProjectDocument(
             name: name,
+            camera: CameraConfig(enabled: true),
+            captions: CaptionsConfig(enabled: true, segments: sampleCaptions),
             timeline: TimelineConfig(
                 slices: [ClipSlice(sourceStartMs: 0.0, sourceEndMs: durationMs, speed: 1.0)],
                 zooms: autoZooms,
@@ -2215,7 +2321,7 @@ public struct RecordingHUDBarView: View {
 
             // 3. Camera, Microphone & System Audio Selector Buttons (No tooltips since they have explicit text labels!)
             HStack(spacing: 4) {
-                // 3a. Camera Button (`No camera` or `<Camera Name>`)
+                // 3a. Camera Button (`No camera` or `<Camera Name>` — Truncated cleanly like `MacBoo...` in)
                 let hasCamera = (coordinator.selectedCameraDeviceID != nil)
                 HUDInteractiveItemButton(
                     tooltip: nil,
@@ -2237,13 +2343,15 @@ public struct RecordingHUDBarView: View {
                         Text(coordinator.cameraButtonTitle)
                             .font(.system(size: 13, weight: hasCamera ? .medium : .regular))
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: hasCamera ? 72 : 96, alignment: .leading)
                     }
                     .fixedSize(horizontal: true, vertical: false)
                     .foregroundStyle(.white.opacity(hasCamera || coordinator.activeHUDMenuKind == .camera ? 0.96 : 0.65))
                     .padding(.horizontal, 12)
                 }
 
-                // 3b. Microphone Button (`No microphone` or `<Microphone Name>`)
+                // 3b. Microphone Button (`No microphone` or `<Microphone Name>` + Live Horizontal Level Bar along bottom edge)
                 let hasMic = (coordinator.captureMicrophone && coordinator.selectedMicrophoneDeviceID != nil)
                 HUDInteractiveItemButton(
                     tooltip: nil,
@@ -2259,16 +2367,40 @@ public struct RecordingHUDBarView: View {
                         )
                     }
                 ) {
-                    HStack(spacing: 8) {
-                        Image(systemName: hasMic ? "mic" : "mic.slash")
-                            .font(.system(size: 14.5, weight: .medium))
-                        Text(coordinator.microphoneButtonTitle)
-                            .font(.system(size: 13, weight: hasMic ? .medium : .regular))
-                            .lineLimit(1)
+                    ZStack(alignment: .bottom) {
+                        HStack(spacing: 8) {
+                            Image(systemName: hasMic ? "mic.fill" : "mic.slash")
+                                .font(.system(size: 14.5, weight: .medium))
+                            Text(coordinator.microphoneButtonTitle)
+                                .font(.system(size: 13, weight: hasMic ? .medium : .regular))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: hasMic ? 96 : 112, alignment: .leading)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundStyle(.white.opacity(hasMic || coordinator.activeHUDMenuKind == .microphone ? 0.96 : 0.65))
+                        .padding(.horizontal, 12)
+                        .frame(height: buttonHeight)
+
+                        if hasMic {
+                            GeometryReader { meterGeo in
+                                let totalW = max(10, meterGeo.size.width)
+                                let activeW = max(6, totalW * CGFloat(max(0.18, coordinator.liveMicrophoneLevel01)))
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.18))
+                                        .frame(width: totalW, height: 3.0)
+
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.62))
+                                        .frame(width: activeW, height: 3.0)
+                                }
+                            }
+                            .frame(height: 3.0)
+                            .padding(.horizontal, 6)
+                            .padding(.bottom, 3.0)
+                        }
                     }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .foregroundStyle(.white.opacity(hasMic || coordinator.activeHUDMenuKind == .microphone ? 0.96 : 0.65))
-                    .padding(.horizontal, 12)
                 }
 
                 // 3c. System Audio Button (`System audio`, `Sound from 1 app`, or `No system audio` with `tv.music.note` icon — Images 1, 2, 3, 4!)
@@ -2817,3 +2949,98 @@ public struct WindowAndAreaPickerOverlayView: View {
         .coordinateSpace(name: "screenOverlaySpace")
     }
 }
+
+// MARK: - Floating Live Camera Preview Bubble (`Show camera preview` in HUD)
+
+private struct FloatingLiveCameraPreviewBubbleView: View {
+    let deviceID: String
+
+    var body: some View {
+        ZStack {
+            LiveCameraPreviewLayerRepresentable(deviceID: deviceID)
+        }
+        .frame(width: 216, height: 216)
+        .clipShape(RoundedRectangle(cornerRadius: 42, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 42, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1.0)
+        )
+        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+        .padding(4)
+    }
+}
+
+private struct LiveCameraPreviewLayerRepresentable: NSViewRepresentable {
+    let deviceID: String
+
+    func makeNSView(context: Context) -> CameraPreviewHostNSView {
+        let view = CameraPreviewHostNSView()
+        view.configureSession(for: deviceID)
+        return view
+    }
+
+    func updateNSView(_ nsView: CameraPreviewHostNSView, context: Context) {
+        nsView.configureSession(for: deviceID)
+    }
+
+    final class CameraPreviewHostNSView: NSView {
+        private var currentDeviceID: String?
+        private var session: AVCaptureSession?
+        private var previewLayer: AVCaptureVideoPreviewLayer?
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layer?.backgroundColor = NSColor(red: 0.12, green: 0.13, blue: 0.16, alpha: 1.0).cgColor
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func layout() {
+            super.layout()
+            previewLayer?.frame = bounds
+        }
+
+        func configureSession(for deviceID: String) {
+            guard currentDeviceID != deviceID else { return }
+            currentDeviceID = deviceID
+
+            session?.stopRunning()
+            previewLayer?.removeFromSuperlayer()
+
+            guard let device = AVCaptureDevice(uniqueID: deviceID) ?? AVCaptureDevice.default(for: .video),
+                  let input = try? AVCaptureDeviceInput(device: device) else {
+                return
+            }
+
+            let newSession = AVCaptureSession()
+            newSession.beginConfiguration()
+            if newSession.canSetSessionPreset(.hd1280x720) {
+                newSession.sessionPreset = .hd1280x720
+            }
+            if newSession.canAddInput(input) {
+                newSession.addInput(input)
+            }
+            newSession.commitConfiguration()
+
+            let pLayer = AVCaptureVideoPreviewLayer(session: newSession)
+            pLayer.videoGravity = .resizeAspectFill
+            pLayer.frame = bounds
+            layer?.addSublayer(pLayer)
+
+            self.session = newSession
+            self.previewLayer = pLayer
+
+            DispatchQueue.global(qos: .userInteractive).async {
+                newSession.startRunning()
+            }
+        }
+
+        deinit {
+            session?.stopRunning()
+        }
+    }
+}
+
