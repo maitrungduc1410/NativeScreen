@@ -290,7 +290,8 @@ public final class MetalFrameCompositor {
             && !session.isPlaying
             && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
         let zoomScale = suppressZoomForMaskEditing ? 1.0 : CGFloat(max(1.0, cameraState.scale))
-        if zoomScale > 1.002 && !cameraState.isLoupeMode {
+        let hasCenterOffset = hypot(cameraState.center01.x - 0.5, cameraState.center01.y - 0.5) > 0.0005
+        if !suppressZoomForMaskEditing && !cameraState.isLoupeMode && (zoomScale > 1.0005 || hasCenterOffset) {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
             let zoomInterp01 = min(1.0, max(0.0, (zoomScale - 1.0) / 0.5))
@@ -314,58 +315,68 @@ public final class MetalFrameCompositor {
                 .cropped(to: zoomedMargin)
         }
 
-        // --- PASS 5: True 1-Frame Shutter Motion Blur ---
-        // Compares the current camera state (`sourceTimeMs`) with the camera state 1 frame earlier (`sourceTimeMs - 16.67ms`).
-        // - Translational pan blur (`CIMotionBlur`) ONLY fires when the camera center actually translates across pixels (`panPixelsPerFrame > 1.8`).
-        // - Radial zoom blur (`CIZoomBlur`) ONLY fires during the fast impulse of a zoom change (`scalePixelsPerFrame > 1.8`).
-        // - As soon as per-frame displacement drops below 1.8px (`rf.isStatic`), blur is 0.0 so the image settles crystal-clear!
-        if !suppressZoomForMaskEditing && !cameraState.isLoupeMode && doc.motion.motionBlurIntensity > 0.02 {
-            let prevCam = session.trajectorySolver.evaluate(atSourceMs: max(0.0, sourceTimeMs - 16.67)).camera
+        // --- PASS 5: Exact Shutter-Trail Motion Blur ---
+        // 1. Suppress motion blur inside any Instant Zoom snap window.
+        // 2. Compute `rectNow` (at `sourceTimeMs`) and `rectPrev` (at `sourceTimeMs - 16.67ms`) in canvas pixel coordinates,
+        //    then interpolate `rectBefore = lerp(rectNow, rectPrev, blurStrength)` (`wo(now, before, strength)`).
+        // 3. If all 4 edges moved by `< 1.0px` (`To(rectNow, rectBefore, 1.0)`), the frame is 100% static -> zero blur!
+        //    Otherwise, run `LiquidGlassLoupeShaderRenderer.applyScreenTrailMotionBlur` (linear-light premultiplied trail integration + 4x4 Bayer phase dither).
+        let isInInstantSnapWindow = doc.timeline.zooms.contains { z in
+            !z.disabled && z.instantAnimation && sourceTimeMs >= z.sourceStartMs && sourceTimeMs <= z.sourceEndMs + 50.0
+        }
+        if !suppressZoomForMaskEditing
+            && !isInInstantSnapWindow
+            && !cameraState.isLoupeMode
+            && doc.motion.motionBlurIntensity > 0.02
+            && sourceTimeMs > 8.0 {
+            let prevSourceMs = max(0.0, sourceTimeMs - 16.67)
+            let prevCam = session.trajectorySolver.evaluate(atSourceMs: prevSourceMs).camera
             let blurStrength = CGFloat(min(1.0, max(0.0, doc.motion.motionBlurIntensity)))
 
-            let dxPx = CGFloat(cameraState.center01.x - prevCam.center01.x) * outputSize.width * zoomScale
-            let dyPx = CGFloat(-(cameraState.center01.y - prevCam.center01.y)) * outputSize.height * zoomScale
-            let panPixelsPerFrame = hypot(dxPx, dyPx) * blurStrength
+            func zoomedScreenRectInCanvas(for cam: SpringTrajectorySolver.CameraFrameState) -> CGRect {
+                let s = CGFloat(max(1.0, cam.scale))
+                let hasOffset = hypot(cam.center01.x - 0.5, cam.center01.y - 0.5) > 0.0005
+                guard !cam.isLoupeMode && (s > 1.0005 || hasOffset) else {
+                    return screenFrameRect
+                }
+                let fx = screenFrameRect.minX + CGFloat(cam.center01.x) * screenFrameRect.width
+                let fy = screenFrameRect.minY + CGFloat(1.0 - cam.center01.y) * screenFrameRect.height
+                let zInterp = min(1.0, max(0.0, (s - 1.0) / 0.5))
+                let cx = isSplitScreenActive
+                    ? (screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zInterp)
+                    : canvasRect.midX
+                let cy = isSplitScreenActive
+                    ? (screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zInterp)
+                    : canvasRect.midY
 
-            let scaleDelta = abs(CGFloat(cameraState.scale - prevCam.scale))
-            let scalePixelsPerFrame = scaleDelta * min(outputSize.width, outputSize.height) * 0.22 * blurStrength
-
-            if panPixelsPerFrame > 1.8 {
-                let panBlurRadius = min(6.5, Double(panPixelsPerFrame * 0.36))
-                let angle = Double(atan2(dyPx, dxPx))
-                positionedScreen = positionedScreen
-                    .cropped(to: canvasRect)
-                    .clampedToExtent()
-                    .applyingFilter("CIMotionBlur", parameters: [
-                        kCIInputRadiusKey: panBlurRadius,
-                        kCIInputAngleKey: angle
-                    ])
-                    .cropped(to: canvasRect)
-            } else if scalePixelsPerFrame > 1.8 {
-                // `CIZoomBlur` is prohibitively slow in CoreImage (`~35ms`/frame); instead we use a fast 3-tap radial shutter blend
-                // along the zoom trajectory (`1.0 / (1.0 + stepAmount)`) which renders in `<0.4ms` on Metal at 120Hz!
-                let stepScale1 = max(0.94, 1.0 - CGFloat(scaleDelta * 0.35 * Double(blurStrength)))
-                let stepScale2 = max(0.88, 1.0 - CGFloat(scaleDelta * 0.70 * Double(blurStrength)))
-                let cx = canvasRect.midX
-                let cy = canvasRect.midY
-
-                let baseImg = positionedScreen.cropped(to: canvasRect)
-                let tap1 = baseImg
-                    .transformed(by: CGAffineTransform(translationX: cx, y: cy)
-                        .scaledBy(x: stepScale1, y: stepScale1)
-                        .translatedBy(x: -cx, y: -cy))
-                    .applyingFilter("CIColorMatrix", parameters: [
-                        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0.32)
-                    ])
-                let tap2 = baseImg
-                    .transformed(by: CGAffineTransform(translationX: cx, y: cy)
-                        .scaledBy(x: stepScale2, y: stepScale2)
-                        .translatedBy(x: -cx, y: -cy))
-                    .applyingFilter("CIColorMatrix", parameters: [
-                        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0.18)
-                    ])
-                positionedScreen = tap2.composited(over: tap1.composited(over: baseImg)).cropped(to: canvasRect)
+                let newMinX = (screenFrameRect.minX - fx) * s + cx
+                let newMinY = (screenFrameRect.minY - fy) * s + cy
+                return CGRect(
+                    x: newMinX,
+                    y: newMinY,
+                    width: screenFrameRect.width * s,
+                    height: screenFrameRect.height * s
+                )
             }
+
+            let rectNow = zoomedScreenRectInCanvas(for: cameraState)
+            let rectPrev = zoomedScreenRectInCanvas(for: prevCam)
+
+            // Exact `rf.trailStart(strength)`
+            let rectBefore = CGRect(
+                x: rectNow.minX + (rectPrev.minX - rectNow.minX) * blurStrength,
+                y: rectNow.minY + (rectPrev.minY - rectNow.minY) * blurStrength,
+                width: rectNow.width + (rectPrev.width - rectNow.width) * blurStrength,
+                height: rectNow.height + (rectPrev.height - rectNow.height) * blurStrength
+            )
+
+            positionedScreen = LiquidGlassLoupeShaderRenderer.applyScreenTrailMotionBlur(
+                to: positionedScreen,
+                canvasRect: canvasRect,
+                rectNow: rectNow,
+                rectBefore: rectBefore,
+                isExportQuality: includeShortcutOverlay || !session.isPlaying
+            )
         }
 
         composite = positionedScreen

@@ -643,19 +643,18 @@ public struct SpringTrajectorySolver: Sendable {
                     x: min(1.0, max(0.0, loupeCenterX)),
                     y: min(1.0, max(0.0, loupeCenterY))
                 )
-            } else if solvedScale > 1.0001 {
-                // Recover exact camera focus point `center01` from the interpolated screen rect `(rectX, rectY, rectW)`:
-                // Since `rectX = 0.5 - center01.x * solvedScale`, `center01.x = (0.5 - rectX) / solvedScale`!
+            } else {
+                // Recover exact camera focus point `center01` from the interpolated screen rect `(rectX, rectY, rectW)`
+                // even when `solvedScale == 1.0` so `rectX`/`rectY` settling after `rectW` reaches `1.0` is preserved smoothly
+                // without an artificial snap in `center01`!
                 var cx = (0.5 - rectX) / solvedScale
                 var cy = (0.5 - rectY) / solvedScale
-                if document.motion.avoidEmptyBoundsWhenZooming {
+                if document.motion.avoidEmptyBoundsWhenZooming && solvedScale > 1.0001 {
                     let halfSpan = 0.5 / solvedScale
                     cx = max(halfSpan, min(1.0 - halfSpan, cx))
                     cy = max(halfSpan, min(1.0 - halfSpan, cy))
                 }
                 solvedCenter01 = Point01(x: cx, y: cy)
-            } else {
-                solvedCenter01 = .center
             }
 
             let centerVelX = (solvedCenter01.x - prevCenter01.x) / dt

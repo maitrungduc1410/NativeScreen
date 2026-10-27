@@ -269,6 +269,11 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     session.isPlaying = false
                     view.isPaused = true
                     view.enableSetNeedsDisplay = true
+                    // Explicitly seek the hardware video decoder to the exact final frame so `lastDecodedFrame` settles
+                    // cleanly on the last frame when playback finishes!
+                    let finalSourceMs = session.currentSourceTimeMs
+                    lastSeekedSourceMs = -1.0
+                    seekDecoderCoalesced(toSourceMs: finalSourceMs, fastSkim: false)
                 } else {
                     session.playheadTimelineMs = nextTimelineMs
                 }
