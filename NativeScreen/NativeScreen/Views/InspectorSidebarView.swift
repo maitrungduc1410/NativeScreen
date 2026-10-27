@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// non-truncating responsive controls, and quick "Reset" buttons on sliders.
 public struct InspectorSidebarView: View {
     @Bindable var session: ProjectSession
+    @Bindable private var whisperManager = WhisperModelDownloadManager.shared
     @State private var systemWallpapers: [SystemWallpaperItem] = []
     @State private var wallpaperThumbnailRevision: Int = 0
     @State private var isRotationSectionExpanded: Bool = false
@@ -2669,8 +2670,12 @@ public struct InspectorSidebarView: View {
                     )
             }
 
-            // Local Method Selection (`Local` Apple Speech vs `Whisper` On-Device)
-            VStack(alignment: .leading, spacing: 8) {
+            // Local Method Selection (`Local` Apple Speech vs `Whisper` OpenAI On-Device with On-Demand Download & Checkmark!)
+            let selectedWhisperTier = WhisperModelTier(rawValue: cap.whisperModelTier) ?? .small
+            let isSelectedWhisperInstalled = whisperManager.isModelInstalled(selectedWhisperTier)
+            let anyWhisperInstalled = (whisperManager.anyInstalledTier != nil)
+
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Transcript method")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.white.opacity(0.92))
@@ -2683,18 +2688,200 @@ public struct InspectorSidebarView: View {
                         session.mutate { $0.captions.localModelVariant = "system" }
                     }
 
-                    inspectorPillOptionButton(
-                        title: "On-Device Whisper",
-                        isSelected: cap.localModelVariant != "system"
-                    ) {
-                        session.mutate { $0.captions.localModelVariant = "whisper" }
+                    // On-Device Whisper Button with Checkmark Badge & Instant Tooltip when downloaded!
+                    Button {
+                        if whisperManager.isModelInstalled(selectedWhisperTier) {
+                            session.mutate { $0.captions.localModelVariant = "whisper" }
+                        } else {
+                            whisperManager.promptUserAndStartDownload(for: selectedWhisperTier) {
+                                session.mutate { $0.captions.localModelVariant = "whisper" }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text("On-Device Whisper")
+                                .font(.system(size: 12.5, weight: .regular))
+                                .foregroundStyle(.white.opacity(cap.localModelVariant != "system" ? 0.98 : 0.72))
+
+                            if anyWhisperInstalled {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.48))
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background(
+                            HoverMagnetBackgroundRepresentable(
+                                tooltip: whisperManager.installedTooltipSummary
+                                    ?? "Click to download open-source OpenAI Whisper model (\(selectedWhisperTier.fileName), \(selectedWhisperTier.sizeDescription)) locally",
+                                shortcutBadge: nil,
+                                edge: .top,
+                                cornerRadius: 8,
+                                isActive: cap.localModelVariant != "system",
+                                isDisabled: false,
+                                isRailTab: false,
+                                hasActiveBorder: true,
+                                onViewReady: { _ in }
+                            )
+                        )
                     }
+                    .buttonStyle(.plain)
                 }
 
-                Text("Transcript will be generated 100% locally on your Mac using on-device neural speech recognition. No audio or data is ever sent to any server.")
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.42))
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    cap.localModelVariant == "system"
+                        ? "Transcript will be generated locally using Apple's native speech recognition engine. No data is sent to any server."
+                        : "Transcript will be generated using open-source OpenAI Whisper AI model on your Mac. No data is sent to any server."
+                )
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.white.opacity(0.42))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Whisper AI Model Tier Picker (`Base` 142MB | `Small` 466MB | `Medium` 1.5GB) & Live Download Progress Bar
+            if cap.localModelVariant != "system" || whisperManager.activeDownloadTier != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AI model to use")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+
+                    HStack(spacing: 6) {
+                        ForEach(WhisperModelTier.allCases) { tier in
+                            let isTierSelected = (selectedWhisperTier == tier)
+                            let isTierInstalled = whisperManager.isModelInstalled(tier)
+
+                            Button {
+                                session.mutate {
+                                    $0.captions.localModelVariant = "whisper"
+                                    $0.captions.whisperModelTier = tier.rawValue
+                                }
+                                if !isTierInstalled && whisperManager.activeDownloadTier == nil {
+                                    whisperManager.promptUserAndStartDownload(for: tier)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(tier.label)
+                                        .font(.system(size: 12.5, weight: .regular))
+                                        .foregroundStyle(.white.opacity(isTierSelected ? 0.98 : 0.72))
+
+                                    if isTierInstalled {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.48))
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .frame(height: 32)
+                                .background(
+                                    HoverMagnetBackgroundRepresentable(
+                                        tooltip: isTierInstalled
+                                            ? "Model Whisper \(tier.label) (\(tier.fileName)) is downloaded locally"
+                                            : "Click to download Whisper \(tier.label) (\(tier.fileName), \(tier.sizeDescription))",
+                                        shortcutBadge: nil,
+                                        edge: .top,
+                                        cornerRadius: 8,
+                                        isActive: isTierSelected,
+                                        isDisabled: false,
+                                        isRailTab: false,
+                                        hasActiveBorder: true,
+                                        onViewReady: { _ in }
+                                    )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    Text(selectedWhisperTier.descriptionText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Live Download Progress Card with Cancel Button!
+                    if let activeTier = whisperManager.activeDownloadTier {
+                        let pct = Int(round(whisperManager.downloadProgress01 * 100.0))
+                        let mbWritten = Double(whisperManager.downloadedBytes) / 1_048_576.0
+                        let mbTotal = Double(max(1, whisperManager.totalBytesExpected)) / 1_048_576.0
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                HStack(spacing: 6) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("Downloading Whisper \(activeTier.label) (\(activeTier.fileName))… \(pct)%")
+                                        .font(.system(size: 12, weight: .medium).monospacedDigit())
+                                        .foregroundStyle(.white.opacity(0.92))
+                                }
+                                Spacer()
+                                Button {
+                                    whisperManager.cancelActiveDownload()
+                                } label: {
+                                    Text("Cancel")
+                                        .font(.system(size: 11.5, weight: .medium))
+                                        .foregroundStyle(Color(red: 1.0, green: 0.42, blue: 0.38))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                .fill(Color.red.opacity(0.14))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            GeometryReader { geo in
+                                let fillW = max(6.0, geo.size.width * CGFloat(whisperManager.downloadProgress01))
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.12))
+                                        .frame(height: 6)
+
+                                    Capsule()
+                                        .fill(Color(red: 0.44, green: 0.32, blue: 0.98))
+                                        .frame(width: fillW, height: 6)
+                                }
+                            }
+                            .frame(height: 6)
+
+                            Text(String(format: "%.1f MB of %.1f MB", mbWritten, mbTotal))
+                                .font(.system(size: 11, weight: .regular).monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.45))
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                    } else if !isSelectedWhisperInstalled {
+                        Button {
+                            whisperManager.promptUserAndStartDownload(for: selectedWhisperTier)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                Text("Download Whisper \(selectedWhisperTier.label) (\(selectedWhisperTier.sizeDescription))")
+                                    .font(.system(size: 12.5, weight: .medium))
+                            }
+                            .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
 
             // Language Picker

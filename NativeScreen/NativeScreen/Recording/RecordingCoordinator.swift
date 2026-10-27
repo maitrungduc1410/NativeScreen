@@ -9,20 +9,33 @@ import AVFoundation
 /// while still allowing normal clicks on buttons, and persists its global multi-monitor position.
 private final class DraggableHUDPanel: NSPanel {
     var onPanelMoved: ((NSPoint) -> Void)?
+    var isDragEnabled: (() -> Bool)?
 
     private var mouseDownScreenPoint: NSPoint = .zero
     private var mouseDownWindowOrigin: NSPoint = .zero
     private var isDraggingWindow: Bool = false
+    private var isTrackingLeftClick: Bool = false
 
     override func sendEvent(_ event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
+            if isDragEnabled?() == false {
+                isTrackingLeftClick = false
+                isDraggingWindow = false
+                super.sendEvent(event)
+                return
+            }
             mouseDownScreenPoint = NSEvent.mouseLocation
             mouseDownWindowOrigin = frame.origin
             isDraggingWindow = false
+            isTrackingLeftClick = true
             super.sendEvent(event)
 
         case .leftMouseDragged:
+            guard isTrackingLeftClick, isDragEnabled?() != false else {
+                super.sendEvent(event)
+                return
+            }
             let current = NSEvent.mouseLocation
             let dx = current.x - mouseDownScreenPoint.x
             let dy = current.y - mouseDownScreenPoint.y
@@ -38,6 +51,7 @@ private final class DraggableHUDPanel: NSPanel {
             super.sendEvent(event)
 
         case .leftMouseUp:
+            isTrackingLeftClick = false
             if isDraggingWindow {
                 isDraggingWindow = false
                 onPanelMoved?(frame.origin)
@@ -132,7 +146,13 @@ public final class RecordingCoordinator {
     public var isPickingTarget: Bool = false
     public var recordingElapsedSeconds: TimeInterval = 0.0
     public var selectedMode: CaptureTargetMode = .window
-    public var activeHUDMenuKind: HUDActiveMenuKind? = nil
+    public var activeHUDMenuKind: HUDActiveMenuKind? = nil {
+        didSet {
+            if activeHUDMenuKind == nil {
+                lastHUDMenuClosedUptime = ProcessInfo.processInfo.systemUptime
+            }
+        }
+    }
 
     // Camera Recording State ( & 9)
     public var selectedCameraDeviceID: String? = nil {
@@ -321,7 +341,9 @@ public final class RecordingCoordinator {
 
     private var hudPanel: DraggableHUDPanel?
     private var floatingCameraPreviewPanel: DraggableHUDPanel?
+    private var floatingCameraPreviewView: LiveCameraPreviewHostNSView?
     private var hudMicLevelTimer: Timer?
+    private var lastHUDMenuClosedUptime: TimeInterval = 0
     private var pickerOverlayWindows: [NSWindow] = []
     private var recordedAreaHighlightWindow: NSWindow?
     private var hoverTimer: Timer?
@@ -409,7 +431,13 @@ public final class RecordingCoordinator {
             panel.hasShadow = true
             panel.sharingType = .none // Exclude Recording HUD from all screen recordings (ScreenCaptureKit / CGWindowList)
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            panel.isMovableByWindowBackground = true
+            panel.isMovableByWindowBackground = false
+            panel.isDragEnabled = { [weak self] in
+                guard let self = self else { return true }
+                if self.activeHUDMenuKind != nil { return false }
+                let sinceMenuClose = ProcessInfo.processInfo.systemUptime - self.lastHUDMenuClosedUptime
+                return sinceMenuClose > 0.15
+            }
             panel.onPanelMoved = { [weak self] newOrigin in
                 self?.saveHUDPanelOrigin(newOrigin)
             }
@@ -537,6 +565,8 @@ public final class RecordingCoordinator {
             && showCameraPreview
 
         guard shouldShow, let camID = selectedCameraDeviceID else {
+            floatingCameraPreviewView?.stopSession()
+            floatingCameraPreviewView = nil
             floatingCameraPreviewPanel?.orderOut(nil)
             floatingCameraPreviewPanel = nil
             return
@@ -558,16 +588,20 @@ public final class RecordingCoordinator {
             panel.level = .screenSaver
             panel.backgroundColor = .clear
             panel.isOpaque = false
-            panel.hasShadow = true
+            // Crucial: Set `hasShadow = false` on the borderless window and draw the soft rounded drop shadow inside `LiveCameraPreviewHostNSView`
+            // so macOS WindowServer never renders a rectangular black shadow box around the squircle corners!
+            panel.hasShadow = false
             panel.sharingType = .none // Excluded from screen recording!
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            panel.isMovableByWindowBackground = true
+            panel.isMovableByWindowBackground = false
+
+            let hostView = LiveCameraPreviewHostNSView(frame: NSRect(origin: .zero, size: previewSize))
+            panel.contentView = hostView
+            floatingCameraPreviewView = hostView
             floatingCameraPreviewPanel = panel
         }
 
-        floatingCameraPreviewPanel?.contentView = NSHostingView(
-            rootView: FloatingLiveCameraPreviewBubbleView(deviceID: camID)
-        )
+        floatingCameraPreviewView?.configureSession(for: camID)
         floatingCameraPreviewPanel?.orderFrontRegardless()
     }
 
@@ -2950,96 +2984,137 @@ public struct WindowAndAreaPickerOverlayView: View {
     }
 }
 
-// MARK: - Floating Live Camera Preview Bubble (`Show camera preview` in HUD)
+// MARK: - Pure AppKit Floating Live Camera Preview Bubble (`Show camera preview` in HUD)
 
-private struct FloatingLiveCameraPreviewBubbleView: View {
-    let deviceID: String
+private final class LiveCameraPreviewHostNSView: NSView {
+    private var currentDeviceID: String?
+    private var session: AVCaptureSession?
+    private let shadowContainerLayer = CALayer()
+    private let clipLayer = CALayer()
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private let borderLayer = CAShapeLayer()
+    private let cornerRadius: CGFloat = 42.0
+    private let insetMargin: CGFloat = 14.0
 
-    var body: some View {
-        ZStack {
-            LiveCameraPreviewLayerRepresentable(deviceID: deviceID)
-        }
-        .frame(width: 216, height: 216)
-        .clipShape(RoundedRectangle(cornerRadius: 42, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 42, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1.0)
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.masksToBounds = false
+
+        // 1. Outer shadow container layer (casts a smooth, rounded drop shadow with ZERO rectangular window border!)
+        shadowContainerLayer.shadowColor = NSColor.black.cgColor
+        shadowContainerLayer.shadowOpacity = 0.42
+        shadowContainerLayer.shadowRadius = 10.0
+        shadowContainerLayer.shadowOffset = CGSize(width: 0, height: -4)
+        shadowContainerLayer.masksToBounds = false
+        layer?.addSublayer(shadowContainerLayer)
+
+        // 2. Inner squircle-clipped camera container
+        clipLayer.backgroundColor = NSColor(red: 0.12, green: 0.13, blue: 0.16, alpha: 1.0).cgColor
+        clipLayer.cornerRadius = cornerRadius
+        clipLayer.cornerCurve = .continuous
+        clipLayer.masksToBounds = true
+        shadowContainerLayer.addSublayer(clipLayer)
+
+        // 3. Subtle 1px inner border
+        borderLayer.fillColor = nil
+        borderLayer.strokeColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        borderLayer.lineWidth = 1.0
+        shadowContainerLayer.addSublayer(borderLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let innerRect = bounds.insetBy(dx: insetMargin, dy: insetMargin)
+        shadowContainerLayer.frame = innerRect
+        let roundedPath = CGPath(
+            roundedRect: CGRect(origin: .zero, size: innerRect.size),
+            cornerWidth: cornerRadius,
+            cornerHeight: cornerRadius,
+            transform: nil
         )
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
-        .padding(4)
-    }
-}
-
-private struct LiveCameraPreviewLayerRepresentable: NSViewRepresentable {
-    let deviceID: String
-
-    func makeNSView(context: Context) -> CameraPreviewHostNSView {
-        let view = CameraPreviewHostNSView()
-        view.configureSession(for: deviceID)
-        return view
+        shadowContainerLayer.shadowPath = roundedPath
+        clipLayer.frame = CGRect(origin: .zero, size: innerRect.size)
+        previewLayer?.frame = clipLayer.bounds
+        borderLayer.frame = clipLayer.bounds
+        borderLayer.path = roundedPath
+        CATransaction.commit()
     }
 
-    func updateNSView(_ nsView: CameraPreviewHostNSView, context: Context) {
-        nsView.configureSession(for: deviceID)
+    func configureSession(for deviceID: String) {
+        guard currentDeviceID != deviceID || session == nil else { return }
+        currentDeviceID = deviceID
+
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        if authStatus == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                guard granted else { return }
+                Task { @MainActor [weak self] in
+                    self?.currentDeviceID = nil
+                    self?.configureSession(for: deviceID)
+                }
+            }
+            return
+        }
+
+        stopSession()
+
+        guard let device = AVCaptureDevice(uniqueID: deviceID) ?? AVCaptureDevice.default(for: .video),
+              let input = try? AVCaptureDeviceInput(device: device) else {
+            return
+        }
+
+        let newSession = AVCaptureSession()
+        newSession.beginConfiguration()
+        if newSession.canSetSessionPreset(.high) {
+            newSession.sessionPreset = .high
+        }
+        if newSession.canAddInput(input) {
+            newSession.addInput(input)
+        }
+        newSession.commitConfiguration()
+
+        let pLayer = AVCaptureVideoPreviewLayer(session: newSession)
+        pLayer.videoGravity = .resizeAspectFill
+        pLayer.frame = clipLayer.bounds
+        if let conn = pLayer.connection, conn.isVideoMirroringSupported {
+            conn.automaticallyAdjustsVideoMirroring = false
+            conn.isVideoMirrored = true
+        }
+        clipLayer.addSublayer(pLayer)
+
+        self.session = newSession
+        self.previewLayer = pLayer
+        needsLayout = true
+
+        DispatchQueue.global(qos: .userInteractive).async {
+            newSession.startRunning()
+        }
     }
 
-    final class CameraPreviewHostNSView: NSView {
-        private var currentDeviceID: String?
-        private var session: AVCaptureSession?
-        private var previewLayer: AVCaptureVideoPreviewLayer?
-
-        override init(frame frameRect: NSRect) {
-            super.init(frame: frameRect)
-            wantsLayer = true
-            layer?.backgroundColor = NSColor(red: 0.12, green: 0.13, blue: 0.16, alpha: 1.0).cgColor
-        }
-
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
-
-        override func layout() {
-            super.layout()
-            previewLayer?.frame = bounds
-        }
-
-        func configureSession(for deviceID: String) {
-            guard currentDeviceID != deviceID else { return }
-            currentDeviceID = deviceID
-
-            session?.stopRunning()
-            previewLayer?.removeFromSuperlayer()
-
-            guard let device = AVCaptureDevice(uniqueID: deviceID) ?? AVCaptureDevice.default(for: .video),
-                  let input = try? AVCaptureDeviceInput(device: device) else {
-                return
-            }
-
-            let newSession = AVCaptureSession()
-            newSession.beginConfiguration()
-            if newSession.canSetSessionPreset(.hd1280x720) {
-                newSession.sessionPreset = .hd1280x720
-            }
-            if newSession.canAddInput(input) {
-                newSession.addInput(input)
-            }
-            newSession.commitConfiguration()
-
-            let pLayer = AVCaptureVideoPreviewLayer(session: newSession)
-            pLayer.videoGravity = .resizeAspectFill
-            pLayer.frame = bounds
-            layer?.addSublayer(pLayer)
-
-            self.session = newSession
-            self.previewLayer = pLayer
-
+    func stopSession() {
+        if let existing = session {
+            session = nil
             DispatchQueue.global(qos: .userInteractive).async {
-                newSession.startRunning()
+                existing.stopRunning()
             }
         }
+        previewLayer?.removeFromSuperlayer()
+        previewLayer = nil
+    }
 
-        deinit {
-            session?.stopRunning()
+    deinit {
+        if let existing = session {
+            DispatchQueue.global(qos: .userInteractive).async {
+                existing.stopRunning()
+            }
         }
     }
 }

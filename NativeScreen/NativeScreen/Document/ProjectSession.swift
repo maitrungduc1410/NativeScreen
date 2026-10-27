@@ -2606,9 +2606,19 @@ public final class ProjectSession: Identifiable {
         metadata.tracks.microphoneAudio != nil || microphoneAudioFileURL != nil || !document.captions.segments.isEmpty
     }
 
-    /// Generates a word-level transcript 100% locally on-device (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`).
+    /// Generates a word-level transcript 100% locally on-device (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true` or local OpenAI Whisper model).
     public func generateLocalOnDeviceTranscript() {
         guard !isGeneratingTranscript else { return }
+
+        if document.captions.localModelVariant == "whisper" {
+            let tier = WhisperModelTier(rawValue: document.captions.whisperModelTier) ?? .small
+            let manager = WhisperModelDownloadManager.shared
+            if !manager.isModelInstalled(tier) {
+                manager.promptUserAndStartDownload(for: tier)
+                return
+            }
+        }
+
         isGeneratingTranscript = true
 
         let audioSourceURL = microphoneAudioFileURL ?? videoFileURL

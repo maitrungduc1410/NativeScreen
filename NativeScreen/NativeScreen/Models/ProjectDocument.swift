@@ -1135,6 +1135,7 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     public var animationStyle: String
     public var transcriptLocale: String
     public var localModelVariant: String
+    public var whisperModelTier: String
     public var customPrompt: String
     public var showDeletedTextInTranscript: Bool
     public var showHiddenWordsInTranscript: Bool
@@ -1167,6 +1168,7 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         animationStyle: String = "word-by-word",
         transcriptLocale: String = "en_US",
         localModelVariant: String = "system",
+        whisperModelTier: String = "small",
         customPrompt: String = "",
         showDeletedTextInTranscript: Bool = true,
         showHiddenWordsInTranscript: Bool = true,
@@ -1198,6 +1200,7 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.animationStyle = animationStyle
         self.transcriptLocale = transcriptLocale
         self.localModelVariant = localModelVariant
+        self.whisperModelTier = whisperModelTier
         self.customPrompt = customPrompt
         self.showDeletedTextInTranscript = showDeletedTextInTranscript
         self.showHiddenWordsInTranscript = showHiddenWordsInTranscript
@@ -1231,6 +1234,7 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         case animationStyle
         case transcriptLocale
         case localModelVariant
+        case whisperModelTier
         case customPrompt
         case showDeletedTextInTranscript
         case showHiddenWordsInTranscript
@@ -1266,6 +1270,7 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.animationStyle = try container.decodeIfPresent(String.self, forKey: .animationStyle) ?? "word-by-word"
         self.transcriptLocale = try container.decodeIfPresent(String.self, forKey: .transcriptLocale) ?? "en_US"
         self.localModelVariant = try container.decodeIfPresent(String.self, forKey: .localModelVariant) ?? "system"
+        self.whisperModelTier = try container.decodeIfPresent(String.self, forKey: .whisperModelTier) ?? "small"
         self.customPrompt = try container.decodeIfPresent(String.self, forKey: .customPrompt) ?? ""
         self.showDeletedTextInTranscript = try container.decodeIfPresent(Bool.self, forKey: .showDeletedTextInTranscript) ?? true
         self.showHiddenWordsInTranscript = try container.decodeIfPresent(Bool.self, forKey: .showHiddenWordsInTranscript) ?? true
