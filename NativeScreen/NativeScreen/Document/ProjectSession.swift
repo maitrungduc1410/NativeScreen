@@ -49,20 +49,28 @@ public final class ProjectSession: Identifiable {
 
     // Cached NLE Mapper & 120Hz Spring Trajectory Solver
     public private(set) var timeMapper: NLETimeMapper
-    public private(set) var trajectorySolver: SpringTrajectorySolver
+    @ObservationIgnored public private(set) var trajectorySolver: SpringTrajectorySolver
 
-    private var lastMappedSlices: [ClipSlice]
-    private var lastSolverCursorConfig: CursorConfig
-    private var lastSolverMotionConfig: MotionConfig
-    private var lastSolverZooms: [ZoomBlock]
-    private var lastSolverZoomTrackHidden: Bool
+    @ObservationIgnored private var lastMappedSlices: [ClipSlice]
+    @ObservationIgnored private var lastSolverCursorConfig: CursorConfig
+    @ObservationIgnored private var lastSolverMotionConfig: MotionConfig
+    @ObservationIgnored private var lastSolverZooms: [ZoomBlock]
+    @ObservationIgnored private var lastSolverZoomTrackHidden: Bool
+
+    @ObservationIgnored private var cachedTypingSuggestions: [TypingSuggestionRange]?
+    @ObservationIgnored private var lastTypingSuggestionsSlices: [ClipSlice]?
+    @ObservationIgnored private var lastDismissedTypingStarts: [Int]?
+
+    @ObservationIgnored private var cachedDetectedShortcuts: [ShortcutPressCluster]?
+    @ObservationIgnored private var lastShortcutCaptionsConfig: CaptionsConfig?
+    @ObservationIgnored private var lastShortcutSlices: [ClipSlice]?
 
     // Value-Type Snapshot Undo/Redo Stack
     private var undoStack: [ProjectDocument] = []
     private var redoStack: [ProjectDocument] = []
-    private var interactiveEditSnapshot: ProjectDocument?
+    @ObservationIgnored private var interactiveEditSnapshot: ProjectDocument?
     private let maxUndoDepth = 150
-    private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
 
     // Incrementing token used to notify the Metal preview view (`MTKView.needsDisplay = true`) on any state/scrub/skim change
     public var renderRevision: UInt64 = 0
@@ -316,13 +324,14 @@ public final class ProjectSession: Identifiable {
             timeMapper = NLETimeMapper(slices: document.timeline.slices)
         }
 
-        let needsSpringRebuild = forceSpringRebuild
-            || document.cursor != lastSolverCursorConfig
+        let cursorChanged = forceSpringRebuild || document.cursor != lastSolverCursorConfig
+        let needsSpringRebuild = cursorChanged
             || document.motion != lastSolverMotionConfig
             || document.timeline.zooms != lastSolverZooms
             || document.timeline.isZoomTrackHidden != lastSolverZoomTrackHidden
 
         if needsSpringRebuild {
+            let reusableCursorStates = cursorChanged ? nil : trajectorySolver.cursorStates
             lastSolverCursorConfig = document.cursor
             lastSolverMotionConfig = document.motion
             lastSolverZooms = document.timeline.zooms
@@ -331,7 +340,8 @@ public final class ProjectSession: Identifiable {
                 durationMs: metadata.durationMs,
                 cursorEvents: cursorEvents,
                 clickEvents: clickEvents,
-                document: document
+                document: document,
+                reusingCursorStates: reusableCursorStates
             )
         }
 
@@ -1591,6 +1601,12 @@ public final class ProjectSession: Identifiable {
     /// that haven't been dismissed and lie inside a normal-speed (`~1x`) ClipSlice.
     public var activeTypingSuggestions: [TypingSuggestionRange] {
         guard !keyEvents.isEmpty else { return [] }
+        if let cached = cachedTypingSuggestions,
+           lastTypingSuggestionsSlices == document.timeline.slices,
+           lastDismissedTypingStarts == document.timeline.dismissedTypingSuggestionStarts {
+            return cached
+        }
+
         let maxGapMs = 500.0
         let minDurationMs = 1500.0
         let minRatePerSec = 2.0
@@ -1644,6 +1660,9 @@ public final class ProjectSession: Identifiable {
                 )
             }
         }
+        lastTypingSuggestionsSlices = document.timeline.slices
+        lastDismissedTypingStarts = document.timeline.dismissedTypingSuggestionStarts
+        cachedTypingSuggestions = results
         return results
     }
 
@@ -1738,6 +1757,12 @@ public final class ProjectSession: Identifiable {
 
     /// Computes all visible/hidden shortcut clusters across all shortcut tracks.
     public var detectedShortcutClusters: [ShortcutPressCluster] {
+        if let cached = cachedDetectedShortcuts,
+           lastShortcutCaptionsConfig == document.captions,
+           lastShortcutSlices == document.timeline.slices {
+            return cached
+        }
+
         let primaryTrackId = document.captions.shortcutTracks.first?.id ?? "default-shortcuts-track"
         let deletedTelemetrySet = Set(document.captions.deletedShortcutStartMs)
         let timingOverrides = document.captions.shortcutTimingOverrides
@@ -1926,7 +1951,11 @@ public final class ProjectSession: Identifiable {
             }
         }
 
-        return sanitized.sorted { $0.displayStartMs < $1.displayStartMs }
+        let result = sanitized.sorted { $0.displayStartMs < $1.displayStartMs }
+        lastShortcutCaptionsConfig = document.captions
+        lastShortcutSlices = document.timeline.slices
+        cachedDetectedShortcuts = result
+        return result
     }
 
     public func shortcutClusters(forTrackId trackId: String) -> [ShortcutPressCluster] {

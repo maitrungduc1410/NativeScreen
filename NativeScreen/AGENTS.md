@@ -29,3 +29,6 @@ xcodebuild -project NativeScreen.xcodeproj -scheme NativeScreen -configuration D
    - Always configure `MTKView` with `isPaused = true` and `enableSetNeedsDisplay = true` when video playback is not actively running. Trigger redraws via `mtkView.needsDisplay = true` when `ProjectDocument` or playhead time changes.
 3. **Multi-Project Support:**
    - Users must be able to open multiple `.nativescreen` bundles simultaneously in independent Editor windows. Avoid global singletons for editor state; scope all editing, playback, and undo state to an observable `ProjectSession` per window.
+4. **Keep `spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md` Updated:**
+   - Before modifying `Engine/` (`SpringTrajectorySolver`, `MetalFrameCompositor`, `HardwareVideoExporter`), `Recording/`, or complex AppKit/SwiftUI views (`InstantTooltipView`, `MultiTrackTimelineView`), read [`../spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`](../spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md) and [`../spec/platforms/macos-metal-videotoolbox.md`](../spec/platforms/macos-metal-videotoolbox.md).
+   - Whenever you add a new optimization, fix a performance bottleneck, or refine an algorithm/shader, **always update `../spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`** (in plain prose) in the same commit so the architectural knowledge base stays 100% current.

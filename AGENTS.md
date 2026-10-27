@@ -10,12 +10,14 @@ Before implementing features or modifying data structures, consult the specifica
 - [`spec/03-CINEMATIC-ENGINE-AND-MATH.md`](./spec/03-CINEMATIC-ENGINE-AND-MATH.md) — 120Hz Spring Physics Solver, Auto-Zoom click clustering, and 6-Pass GPU Compositor pipeline.
 - [`spec/04-UI-UX-AND-LEGAL-GUIDELINES.md`](./spec/04-UI-UX-AND-LEGAL-GUIDELINES.md) — "80% OS Native + 20% Custom Pro" UI guidelines, Window Picker Z-order overlay, and copyright & asset rules.
 - [`spec/05-FEATURE-CHECKLIST.md`](./spec/05-FEATURE-CHECKLIST.md) — Master feature checklist ordered by priority.
+- [`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`](./spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md) — Architectural Decision Records (ADRs), root-cause analyses, mathematical trade-offs, and performance optimizations across the engine and UI.
+- [`spec/platforms/macos-metal-videotoolbox.md`](./spec/platforms/macos-metal-videotoolbox.md) & [`spec/platforms/windows-d3d11-mediafoundation.md`](./spec/platforms/windows-d3d11-mediafoundation.md) — Platform-specific GPU compositor, hardware video decode/encode, and windowing blueprints.
 
 ## 2. Core Engineering Rules (All Platforms)
 
-1. **Checklist Tracking:**
-   - Whenever you complete and verify a feature from [`spec/05-FEATURE-CHECKLIST.md`](./spec/05-FEATURE-CHECKLIST.md), immediately mark its checkbox `[x]` in `spec/05-FEATURE-CHECKLIST.md`.
-   - New features requested mid-development should be added to `spec/05-FEATURE-CHECKLIST.md` as well.
+1. **Checklist & Engineering Decisions (`spec/05` & `spec/06`) Maintenance:**
+   - Whenever you complete and verify a feature from [`spec/05-FEATURE-CHECKLIST.md`](./spec/05-FEATURE-CHECKLIST.md), immediately mark its checkbox `[x]` in `spec/05-FEATURE-CHECKLIST.md`. New features requested mid-development should be added there as well.
+   - **MANDATORY ADR UPDATES:** Whenever you introduce a non-trivial performance optimization, fix a subtle mathematical/rendering/timing bug, or make an architectural decision, you **MUST** update [`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`](./spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md) (and [`spec/03-CINEMATIC-ENGINE-AND-MATH.md`](./spec/03-CINEMATIC-ENGINE-AND-MATH.md) or `spec/platforms/*.md` when applicable) so future AI agents and contributors never regress those optimizations. Write specs, comments and commit messages in terms of this project only; do not name other products.
 2. **Cross-Platform `.nativescreen` Compatibility:**
    - Never break the `.nativescreen` bundle layout (`project.json`, `assets/`, `recording/metadata.json`, `recording/telemetry/*.jsonl`).
    - All spatial coordinates in `project.json` and `telemetry/*.jsonl` MUST be normalized `[0.0, 1.0]`.

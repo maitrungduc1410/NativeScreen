@@ -307,11 +307,14 @@ public struct MultiTrackTimelineView: View {
                                         .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
                                             switch phase {
                                             case .active(let pt):
+                                                guard !session.isDraggingTimelineSegment && NSEvent.pressedMouseButtons == 0 else { return }
                                                 let localTrackX = pt.x - trackHorizontalInset
                                                 let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
                                                 session.setHoverSkimTimelineMs(frac * totalTimelineMs)
                                             case .ended:
-                                                session.setHoverSkimTimelineMs(nil)
+                                                if !session.isDraggingTimelineSegment {
+                                                    session.setHoverSkimTimelineMs(nil)
+                                                }
                                             }
                                         }
                                         .simultaneousGesture(
@@ -606,9 +609,10 @@ public struct MultiTrackTimelineView: View {
                             )
 
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.innerEdgeGlow, lineWidth: 7.0)
-                            .blur(radius: 4.5)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .strokeBorder(palette.innerEdgeGlow.opacity(0.45), lineWidth: 3.5)
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(palette.innerEdgeGlow.opacity(0.22), lineWidth: 7.0)
 
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(palette.ringBorder.opacity(0.82), lineWidth: 1.0)
@@ -679,9 +683,10 @@ public struct MultiTrackTimelineView: View {
                             session.selectZoom(zoom.id)
                             session.beginInteractiveEdit()
                         },
-                        onMoveBody: { desiredTimelineStartMs, _ in
-                            let clampedTimelineStart = max(0.0, min(totalTimelineMs - timelineDurationMs, desiredTimelineStartMs))
-                            let clampedTimelineEnd = clampedTimelineStart + timelineDurationMs
+                        onMoveBody: { desiredTimelineStartMs, constantTimelineDurMs in
+                            let durMs = max(250.0, constantTimelineDurMs)
+                            let clampedTimelineStart = max(0.0, min(totalTimelineMs - durMs, desiredTimelineStartMs))
+                            let clampedTimelineEnd = clampedTimelineStart + durMs
                             let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
                             let newSrcEnd = max(newSrcStart + 250.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
                             session.moveZoom(id: zoom.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
@@ -797,9 +802,10 @@ public struct MultiTrackTimelineView: View {
                             )
 
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.innerEdgeGlow, lineWidth: 7.0)
-                            .blur(radius: 4.5)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .strokeBorder(palette.innerEdgeGlow.opacity(0.45), lineWidth: 3.5)
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(palette.innerEdgeGlow.opacity(0.22), lineWidth: 7.0)
 
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(palette.ringBorder.opacity(0.82), lineWidth: 1.0)
@@ -1693,9 +1699,10 @@ private struct TimelineInteractiveSegmentView: View {
                     )
 
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(palette.innerEdgeGlow, lineWidth: 7.0)
-                    .blur(radius: 4.5)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .strokeBorder(palette.innerEdgeGlow.opacity(0.45), lineWidth: 3.5)
+
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(palette.innerEdgeGlow.opacity(0.22), lineWidth: 7.0)
             }
             // When `isDimmed` (e.g. Zoom = `1x` or disabled), the `shadeBody` multiplies body opacity by `disabledOpacity = Xm = 0.50`!
             .opacity(isDimmed ? 0.50 : 1.0)
@@ -1760,15 +1767,14 @@ private struct TimelineInteractiveSegmentView: View {
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
+                guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
                 // Crucial: because `.offset(x: xOffset)` is applied AFTER `.onContinuousHover(coordinateSpace: .local)`,
                 // SwiftUI passes `pt.x` in the parent `ZStack` coordinate space (`xOffset .. xOffset + segWidth`).
                 // Subtracting `xOffset` gives the true `[0 .. segWidth]` local coordinate!
                 let localX = (pt.x >= xOffset - 2 && pt.x <= xOffset + segWidth + 2) ? (pt.x - xOffset) : pt.x
                 lastHoverLocalX = max(0, min(segWidth, localX))
                 if !isHovered {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHovered = true
-                    }
+                    isHovered = true
                 }
                 if isSplitMode {
                     NSCursor.crosshair.set()
@@ -1780,12 +1786,9 @@ private struct TimelineInteractiveSegmentView: View {
                     }
                 }
             case .ended:
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isHovered = false
-                }
-                if activeDragMode == nil {
-                    NSCursor.arrow.set()
-                }
+                guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
+                isHovered = false
+                NSCursor.arrow.set()
             }
         }
         .offset(x: xOffset, y: verticalDragOffset)
@@ -2358,11 +2361,10 @@ private struct ShortcutTimelineSegmentView: View {
         .onContinuousHover(coordinateSpace: .local) { phase in
             switch phase {
             case .active(let pt):
+                guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
                 let localX = (pt.x >= xOffset - 2 && pt.x <= xOffset + segWidth + 2) ? (pt.x - xOffset) : pt.x
                 if !isHovered {
-                    withAnimation(.easeOut(duration: 0.12)) {
-                        isHovered = true
-                    }
+                    isHovered = true
                 }
                 if segWidth >= 32 && (localX <= edgeHitWidth || localX >= segWidth - edgeHitWidth) {
                     NSCursor.resizeLeftRight.set()
@@ -2370,12 +2372,9 @@ private struct ShortcutTimelineSegmentView: View {
                     NSCursor.arrow.set()
                 }
             case .ended:
-                withAnimation(.easeOut(duration: 0.12)) {
-                    isHovered = false
-                }
-                if activeDragMode == nil {
-                    NSCursor.arrow.set()
-                }
+                guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
+                isHovered = false
+                NSCursor.arrow.set()
             }
         }
         .offset(x: xOffset, y: verticalDragOffset)

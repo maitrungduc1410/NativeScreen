@@ -212,3 +212,27 @@ During 60/120Hz video preview playback, two UI interactions previously caused fr
    - Scale estimated MP4 bitrate sub-linearly with resolution and frame rate:
      $$\text{bitrate} = \text{bpp}_{\text{ref}} \cdot (1920 \times 1080) \cdot 60 \cdot \left(\frac{W \cdot H}{1920 \times 1080}\right)^{0.78} \cdot \left(\frac{\text{fps}}{60}\right)^{0.57}$$
    - During export, yield to the main RunLoop (`Task.sleep(for: .milliseconds(1))`) every `80 ms` so the live elapsed timer, remaining ETA countdown, Dock progress bar, and instant `Stop export` button stay silky-smooth at 60fps.
+
+---
+
+## 12. ADR-12: Incremental Camera-Only 120Hz Spring Rebuild & Zero-Blur Timeline Segment Dragging
+
+### Problem
+Moving or resizing a Zoom segment on the NLE timeline fires mouse drag updates at 60–120Hz. If every drag pixel:
+1. Re-solves the entire 120Hz Cursor Trajectory (`cursorStates`) from scratch even when `document.cursor` has not changed,
+2. Recomputes `CursorMovesGroup.timeWeightedCenter01` inside the 120Hz camera integration loop on every `8.33 ms` step instead of once per group,
+3. Integrates 4 Loupe springs (`32` substeps/step) even when the project contains no Loupe zoom segments, and integrates settled springs (`current == target && velocity == 0`) without an early-out,
+4. Re-scans `keyEvents` for typing suggestions and shortcut clusters on every SwiftUI view evaluation, and
+5. Uses an offscreen Gaussian `.blur()` filter inside each timeline segment view or allows `.onContinuousHover` to scrub the ghost playhead during active drags,
+then timeline segment dragging/resizing drops to ~20–30fps on the main thread.
+
+### Solution
+1. **Cursor Trajectory Reuse (`reusingCursorStates`)**:
+   - When only `document.timeline.zooms` or `document.motion` changes (`document.cursor == lastSolverCursorConfig`), pass the existing solved `cursorStates` into `SpringTrajectorySolver` to skip 100% of cursor physics, binary searches, and click/drag interval scans.
+2. **Up-Front `ResolvedFocusGroup` Centroids, Settled Spring Fast-Path & Conditional Loupe Integration**:
+   - Compute each `CursorMovesGroup`'s time-weighted centroid once when partitioning groups (`buildMovesGroupsForZoom` using $O(\log N)$ binary search on `cursorEvents`).
+   - Precompute $\omega_0 = \sqrt{k/m}$ and $c_{\text{crit}} = 2\sqrt{km}$ outside the 120Hz loop, early-exit `stepClampedSpring` in $O(1)$ whenever $|x_{\text{target}} - x| < 0.0004 \land |v| < 0.0004$, and skip the 4 Loupe springs entirely when `!hasAnyLoupeZoom`.
+3. **Memoized Telemetry Derivations & Zero-Blur Segment Views**:
+   - Cache `activeTypingSuggestions` and `detectedShortcutClusters` on `ProjectSession` (invalidated only when `slices`, `dismissedTypingSuggestionStarts`, or `captions` change).
+   - Render timeline segment inner edge glows using layered vector `strokeBorder`s (zero offscreen Gaussian `.blur()` allocation during width resize) and suspend `.onContinuousHover` skimming while `isDraggingTimelineSegment` or mouse buttons are pressed.
+
