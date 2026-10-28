@@ -748,7 +748,8 @@ public struct SpringTrajectorySolver: Sendable {
         spring: PrecomputedSpring,
         dt: Double
     ) -> (value: Double, velocity: Double) {
-        let precision = 0.0004
+        // spring precision
+        let precision = 0.002
         if abs(target - current) < precision && abs(velocity) < precision {
             return (target, 0.0)
         }
@@ -977,11 +978,15 @@ public enum AutoZoomClusterGenerator {
         let clusterGapMs = 2500.0     // `fillGap` merge threshold
         let holdAfterTypingMs = 1500.0
         let minZoomDurationMs = 2200.0
+        // `Ve` tail margin:
+        // Every auto-generated zoom ends at least 800ms before `durationMs` so the camera spring (`stiffness: 170, damping: 50, mass: 3.0`,
+        // settle time ~750ms) has 100% finished settling to rest before the end of the recording!
+        let maxAutoZoomEndMs = max(600.0, durationMs - 800.0)
 
         var blocks: [ZoomBlock] = []
 
         var clusterStart = max(0.0, downClicks[0].t - leadInMs)
-        var clusterEnd = min(durationMs - 500.0, downClicks[0].t + holdAfterClickMs)
+        var clusterEnd = min(maxAutoZoomEndMs, downClicks[0].t + holdAfterClickMs)
         var centerAccumX = downClicks[0].x
         var centerAccumY = downClicks[0].y
         var clickCount = 1
@@ -992,7 +997,7 @@ public enum AutoZoomClusterGenerator {
             let timeDelta = click.t - prevClick.t
 
             if timeDelta <= clusterGapMs {
-                clusterEnd = min(durationMs - 500.0, max(clusterEnd, click.t + holdAfterClickMs))
+                clusterEnd = min(maxAutoZoomEndMs, max(clusterEnd, click.t + holdAfterClickMs))
                 centerAccumX += click.x
                 centerAccumY += click.y
                 clickCount += 1
@@ -1002,10 +1007,10 @@ public enum AutoZoomClusterGenerator {
                     endMs: clusterEnd,
                     keys: keys,
                     holdMs: holdAfterTypingMs,
-                    maxDurationMs: durationMs
+                    maxDurationMs: maxAutoZoomEndMs
                 )
                 if clusterEnd - clusterStart < minZoomDurationMs {
-                    clusterEnd = min(durationMs, clusterStart + minZoomDurationMs)
+                    clusterEnd = min(maxAutoZoomEndMs, clusterStart + minZoomDurationMs)
                 }
 
                 blocks.append(
@@ -1022,7 +1027,7 @@ public enum AutoZoomClusterGenerator {
                 )
 
                 clusterStart = max(clusterEnd + 250.0, click.t - leadInMs)
-                clusterEnd = min(durationMs - 500.0, click.t + holdAfterClickMs)
+                clusterEnd = min(maxAutoZoomEndMs, click.t + holdAfterClickMs)
                 centerAccumX = click.x
                 centerAccumY = click.y
                 clickCount = 1
@@ -1034,10 +1039,10 @@ public enum AutoZoomClusterGenerator {
             endMs: clusterEnd,
             keys: keys,
             holdMs: holdAfterTypingMs,
-            maxDurationMs: durationMs
+            maxDurationMs: maxAutoZoomEndMs
         )
         if clusterEnd - clusterStart < minZoomDurationMs {
-            clusterEnd = min(durationMs, clusterStart + minZoomDurationMs)
+            clusterEnd = min(maxAutoZoomEndMs, clusterStart + minZoomDurationMs)
         }
 
         if clusterEnd > clusterStart + 400.0 {

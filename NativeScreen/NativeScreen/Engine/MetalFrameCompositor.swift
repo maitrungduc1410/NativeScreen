@@ -324,7 +324,14 @@ public final class MetalFrameCompositor {
         let isInInstantSnapWindow = doc.timeline.zooms.contains { z in
             !z.disabled && z.instantAnimation && sourceTimeMs >= z.sourceStartMs && sourceTimeMs <= z.sourceEndMs + 50.0
         }
+        // 4. At the final settled frame of the timeline (`playheadTimelineMs >= totalTimelineDurationMs - 16.67` while paused),
+        //    the playback head is stationary so shutter motion blur is 0.0.
+        let isPausedAtTimelineEnd = !includeShortcutOverlay
+            && !session.isPlaying
+            && session.hoverSkimTimelineMs == nil
+            && session.playheadTimelineMs >= session.timeMapper.totalTimelineDurationMs - 16.7
         if !suppressZoomForMaskEditing
+            && !isPausedAtTimelineEnd
             && !isInInstantSnapWindow
             && !cameraState.isLoupeMode
             && doc.motion.motionBlurIntensity > 0.02
