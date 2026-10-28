@@ -66,7 +66,7 @@
 ### 1.6. Native Hardware Export Pipeline (Zero FFmpeg)
 - [x] Hardware-accelerated exporter using `AVAssetImageGenerator` -> `MetalFrameCompositor` (all 6 passes including 3D Shortcut Keycaps) -> `AVAssetWriter` (`VideoToolbox` H.264, HEVC, Both, and Apple ProRes `422 LT`, `422`, `422 HQ`, `4444`) & `ImageIO` animated `GIF`.
 - [x] 2-column Export Settings modal (`Format: MP4 | ProRes | GIF`, `Frame rate`, `Resolution: 720p | 1080p | 4K` with dynamic pixel dimensions, `Compression: Studio | Social Media | Web | Web (Low)`, collapsible `Advanced` Codec picker, and non-linear bits-per-pixel file size range & duration estimation).
-- [ ] Multi-track audio mixdown (Recorded System Audio + Microphone + Slice speed mapping) via `AVAudioEngine` / `AVMutableComposition`.
+- [x] Multi-track audio mixdown (Recorded System Audio + Microphone + Voiceover tracks + Slice speed mapping) via `AVMutableComposition` & `AVAssetReaderAudioMixOutput`.
 - [x] Full-window dark Export Progress overlay (`Exporting video • 33% ⓘ`, purple progress bar, live elapsed & ETA countdown `00:04 • 00:06 left`, macOS Dock progress bar, and instant `Stop export` cancellation with partial file cleanup) + `Export to File` or `Export to Clipboard`.
 
 ---
@@ -83,17 +83,17 @@
   - [x] Loop cursor position back to start (`loopBackToStartMs`) for seamless looping videos/GIFs.
   - [x] Click effect styles (`None`, `Circle`, `Ripple`) & bundled click sound effects (`Magic Mouse™`, `MX Master™`) with volume & live preview.
   - [x] Capture and render actual macOS cursor shapes (`arrow`, `pointer`, `ibeam`, `crosshair`, `openhand`, `closedhand`).
-- [ ] **Audio Enhancements:**
+- [x] **Audio Enhancements:**
   - [x] Catmull-Rom cubic spline + max-reduction mipmap pyramid audio waveform visualization on the timeline.
-  - [ ] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
-  - [ ] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
-  - [ ] Post-recording Voiceover recording directly onto the timeline.
+  - [x] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
+  - [x] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
+  - [x] Post-recording Voiceover recording & audio file upload directly onto the timeline (`Voiceovers` track + `Close Voiceover editor` with `Independent` / `Synchronized` attach modes and `Hide & Mute original recording`).
 - [x] **Canvas Crop Tool:** Interactive crop modal & overlay to trim unwanted margins of the recorded screen/window.
 - [x] **Reel Mode Safe-Zone Overlay:** Interactive TikTok, Instagram Reels & YouTube Shorts safe-zone preview overlay.
 - [x] **Extract Current Frame:** Dedicated `Export still frames` modal (`PNG` / `JPEG` squircle toggles, resolution up to `4K`, live preview) and instant `Copy current frame to clipboard`.
 - [x] **Command Menu (`⌘K`):** Global searchable command palette (`CommandMenuOverlayView`) with keyboard navigation across all editor actions.
 - [x] **Pure AppKit Zero-Lag Tooltips:** Borderless floating `NSPanel` rendered via `PureAppKitTooltipCalloutView` (`< 0.02ms` draw time, zero `NSHostingView` overhead during 120Hz playback).
-- [ ] **Presets System:** Save and apply reusable style presets (Background + Padding + Shadow + Cursor + Zoom settings).
+- [x] **Presets System:** Save, rename, set default for new projects, and apply reusable style presets (`✨ Presets ⌄` popover in top header bar + `ProjectPresetsStore`).
 - [x] **Quick Export & GIF Export:**
   - [x] High-quality animated GIF export (`High quality` & `Disable loop` options).
   - [x] Instant `Export to clipboard` directly from the Export modal.
@@ -105,7 +105,7 @@
 
 - [x] **Webcam Overlay, Layouts & Color Grading (`Camera Layout` & `Camera Style`):**
   - [x] Simultaneous webcam recording (`AVCaptureSession`) saved to `recording/webcam.mp4` + live floating camera preview bubble (`Show camera preview` in HUD).
-  - [x] 3 Layout modes (`Camera overlay`, `Split screen`, and `Camera cutout`), 8-point perimeter `Camera Position` dot grid, `Camera aspect ratio` (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`), and `Camera Size` slider.
+  - [x] 3 Default Layout modes (`Camera overlay`, `Split screen`, and `Camera cutout`) + dedicated `Layouts` timeline track & Quick Dock buttons with 5 per-segment layout types (`Camera overlay`, `Split screen`, `Camera cutout`, `Fullscreen camera`, `Only screen`), 8-point perimeter `Camera Position` dot grid, `Camera aspect ratio` (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`), and `Camera Size` slider.
   - [x] Auto-shrink webcam bubble (`Make smaller during zoom` / `scaleWhenZoomed`) when the main screen zooms in.
   - [x] 13 built-in filmic color grading looks (`Original`, `Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`) + custom `.cube` 3D LUT loader, `Sharpen`, interactive `Crop camera` modal, `Mirror horizontally`, `Face tracking` (100% local via `Vision`), and `Camera delay` (`-200ms ... +200ms`).
   - [x] **AI Person Cutout:** Real-time background removal using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest` — 0MB model bloat!).
@@ -116,18 +116,17 @@
   - [x] Render 3D bevel keycaps (`⌘`, `⇧`, `⌥`, `⌃`, `Space`, `⌫`, etc.) both on the live Preview Canvas and baked directly into exported videos/GIFs (`Pass 6` in `MetalFrameCompositor`).
   - [x] Prose-typing suppression filter (ignores normal typing words/code even when `Show single key shortcuts` is enabled).
   - [x] Dedicated `Close Shortcut editor` Inspector panel on segment click with live keyboard shortcut recording (`Record shortcut keys…`), 4-edge positioning (`Bottom`, `Top`, `Left` vertical stack, `Right` vertical stack), `Horizontal / Vertical offset` sliders (to avoid captions), `Default / Solid / Gradient` keycap color picker, multi-track support, and permanent deletion (`Remove shortcut`).
-- [ ] **Device Mockups & iOS Recording:**
-  - [ ] Record connected iPhone/iPad screen via `AVCaptureSession` CoreMediaIO.
-  - [ ] Clean vector/3D-rendered device bezels (iPhone, iPad, MacBook frames) with auto-orientation support.
+- [x] **Device Mockups (`Use device mockup`):**
+  - [x] High-DPI vector metallic device bezels (`MacBook Pro 16"`, `MacBook Air 15"`, `iPhone 16 Pro`, `iPad Pro 13"`) with `Perfect` / `Flexible` sizing modes and hardware color finishes (`Space Black`, `Silver`, `Midnight`, `Starlight`, `Black Titanium`, `Natural Titanium`, `Desert Titanium`, `White Titanium`).
 
 ---
 
 ## Phase 4: On-Device AI & Automation
 *Goal: Smart automation using native Apple Silicon Neural Engine (ANE).*
 
-- [ ] **AI Auto-Detect Sensitive Data (OCR):**
-  - [ ] Scan video frames using macOS native `Vision` (`VNRecognizeTextRequest`) to automatically detect emails, API keys, tokens, IP addresses, or custom user phrases.
-  - [ ] One-click generation of tracked Blur Masks on the timeline.
+- [x] **AI Auto-Detect Sensitive Data (OCR) & Hide Faces:**
+  - [x] Scan video frames using macOS native `Vision` (`VNRecognizeTextRequest` and `VNDetectFaceRectanglesRequest`) to automatically detect emails, phone numbers, card numbers, API keys/tokens, custom user phrases (`Custom phrases`), and faces on screen.
+  - [x] One-click generation of tracked Blur Masks on the timeline (`Hide sensitive data` & `Hide faces` in Background Inspector).
 - [x] **AI Auto-Captions & Edit by Transcript (100% Local On-Device Speech-to-Text):**
   - [x] On-device transcription using Apple `Speech` framework (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`) with language selector, custom `Keyterms` prompt, and `.srt` export.
   - [x] Animated `Line by line` / `Word by word` caption overlay renderer with `Font style` (`Sans-serif`, `Serif`, `Mono`), `Line growth` (`Full line`, `Expanding`, `Centered`), `Word animation` (`Appear`, `Fade in`, `Slide in`), and `Color` (`Dark`, `Light`).

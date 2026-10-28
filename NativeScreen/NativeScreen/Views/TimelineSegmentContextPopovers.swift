@@ -435,6 +435,129 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
     }
 
+    // MARK: - 3c. Present Camera Layout Segment Context Menu
+
+    public func presentCameraLayoutContextMenu(
+        session: ProjectSession,
+        layoutId: String,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        guard let seg = session.document.timeline.cameraLayouts.first(where: { $0.id == layoutId }) else { return }
+
+        let menu = NSMenu(title: "Camera Layout Context Menu")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        for type in CameraTimelineLayoutType.allCases {
+            let item = makeCommandItem(title: type.label, keyEquivalent: "", modifiers: []) {
+                session.mutate { doc in
+                    if let idx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == layoutId }) {
+                        doc.timeline.cameraLayouts[idx].layoutType = type
+                    }
+                }
+            }
+            item.state = (seg.layoutType == type) ? .on : .off
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeCommandItem(title: "Split layout at current time", keyEquivalent: "c", modifiers: []) {
+            session.splitCameraLayout(id: layoutId, atSourceMs: session.currentSourceTimeMs)
+        })
+
+        menu.addItem(makeCommandItem(title: "Duplicate", keyEquivalent: "d", modifiers: [.command]) {
+            session.duplicateCameraLayout(id: layoutId)
+        })
+
+        menu.addItem(makeCommandItem(title: seg.disabled ? "Enable" : "Disable", keyEquivalent: "d", modifiers: []) {
+            session.toggleCameraLayoutDisabled(id: layoutId)
+        })
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeDestructiveCommandItem(title: "Remove", symbolName: "delete.left") {
+            session.deleteCameraLayout(id: layoutId)
+        })
+
+        menu.addItem(makeDestructiveCommandItem(title: "Remove all layouts", symbolName: "trash") {
+            session.deleteAllCameraLayouts()
+        })
+
+        activeMenu = menu
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
+    }
+
+    // MARK: - 3d. Present Voiceover Segment Context Menu
+
+    public func presentVoiceoverContextMenu(
+        session: ProjectSession,
+        voiceoverId: String,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        guard let vo = session.document.timeline.voiceovers.first(where: { $0.id == voiceoverId }) else { return }
+
+        let menu = NSMenu(title: "Voiceover Context Menu")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        let sliderItem = NSMenuItem()
+        let sliderView = NSHostingView(
+            rootView: MenuEmbeddedSliderRowView(
+                title: "Voiceover volume",
+                initialValue: vo.volume,
+                range: 0.0...1.0,
+                step: 0.01,
+                formatValue: { "\(Int(round($0 * 100)))%" },
+                onEditingChanged: { editing in
+                    if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
+                },
+                onValueChanged: { newVal in
+                    session.mutate { doc in
+                        if let idx = doc.timeline.voiceovers.firstIndex(where: { $0.id == voiceoverId }) {
+                            doc.timeline.voiceovers[idx].volume = max(0.0, min(1.0, newVal))
+                        }
+                    }
+                }
+            )
+        )
+        sliderView.sizingOptions = []
+        sliderView.autoresizingMask = [.width]
+        sliderView.frame = NSRect(x: 0, y: 0, width: 264, height: 54)
+        sliderItem.view = sliderView
+        menu.addItem(sliderItem)
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeCommandItem(title: vo.disabled ? "Enable" : "Disable", keyEquivalent: "d", modifiers: []) {
+            session.toggleVoiceoverDisabled(id: voiceoverId)
+        })
+
+        menu.addItem(makeCommandItem(title: "Record new voiceover…", keyEquivalent: "", modifiers: []) {
+            session.startVoiceoverRecording()
+        })
+
+        menu.addItem(makeCommandItem(title: "Upload voiceover audio file…", keyEquivalent: "", modifiers: []) {
+            session.promptImportVoiceoverAudioFile()
+        })
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeDestructiveCommandItem(title: "Remove voiceover", symbolName: "delete.left") {
+            session.deleteVoiceover(id: voiceoverId)
+        })
+
+        menu.addItem(makeDestructiveCommandItem(title: "Remove all voiceovers", symbolName: "trash") {
+            session.deleteAllVoiceovers()
+        })
+
+        syncCustomItemViewWidths(in: menu, minimumWidth: 264)
+        activeMenu = menu
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
+    }
+
     /// Ensures all custom `NSMenuItem.view` rows (`PaletteRow`, `SliderRow`) span 100% of the final `NSMenu` width
     /// with zero leftover space on the right!
     private func syncCustomItemViewWidths(in menu: NSMenu, minimumWidth: CGFloat) {

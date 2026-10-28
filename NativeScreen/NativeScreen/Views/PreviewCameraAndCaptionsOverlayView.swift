@@ -17,19 +17,48 @@ public struct PreviewCameraAndCaptionsOverlayView: View {
 
     public var body: some View {
         let sourceMs = session.currentSourceTimeMs
-        let camCfg = session.document.camera
+        let rawCamCfg = session.document.camera
+        let activeLayoutSeg = session.activeCameraLayoutSegment(atSourceMs: sourceMs)
+        let isFullscreenCamera = (activeLayoutSeg?.layoutType == .fullscreenCamera)
+        let isScreenOnly = (activeLayoutSeg?.layoutType == .screenOnly)
+        let isHiddenByVoiceover = session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: sourceMs)
+
+        let effectiveCamCfg: CameraConfig = {
+            var c = rawCamCfg
+            if let seg = activeLayoutSeg {
+                switch seg.layoutType {
+                case .cameraOverlay:
+                    c.layoutMode = .overlay
+                    if let pos = seg.overlayPosition01 {
+                        c.position01 = pos
+                    }
+                case .splitScreen:
+                    c.layoutMode = .splitScreen
+                case .cutoutCamera:
+                    c.layoutMode = .cutout
+                    if let x01 = seg.cutoutPositionX01 {
+                        c.cutoutPositionX01 = x01
+                    }
+                case .fullscreenCamera, .screenOnly:
+                    break
+                }
+            }
+            return c
+        }()
+
         let capCfg = session.document.captions
         let cameraState = session.trajectorySolver.evaluate(atSourceMs: sourceMs).camera
 
         ZStack {
-            // A. Selfie Camera Overlay (`Camera overlay` | `Split screen` | `Camera cutout`)
-            if camCfg.enabled && session.hasRecordedCamera {
+            // A. Selfie Camera Overlay (`Camera overlay` | `Split screen` | `Camera cutout` | `Fullscreen camera`)
+            if rawCamCfg.enabled && session.hasRecordedCamera && !isScreenOnly && !isHiddenByVoiceover {
                 let isSilentHidden = session.isCameraHiddenDuringSilence(atSourceMs: sourceMs)
 
                 if !isSilentHidden {
                     WebcamPipCanvasView(
                         session: session,
-                        camCfg: camCfg,
+                        camCfg: effectiveCamCfg,
+                        isFullscreenCamera: isFullscreenCamera,
                         currentZoomScale: cameraState.scale,
                         canvasSize: canvasSize
                     )
@@ -51,11 +80,12 @@ public struct PreviewCameraAndCaptionsOverlayView: View {
     }
 }
 
-// MARK: - Selfie Camera Renderer (`Camera overlay`, `Split screen`, `Camera cutout` + 12 Filmic Color Grades + Mirror + Crop + Face Tracking)
+// MARK: - Selfie Camera Renderer (`Camera overlay`, `Split screen`, `Camera cutout`, `Fullscreen camera` + 12 Filmic Color Grades + Mirror + Crop + Face Tracking)
 
 private struct WebcamPipCanvasView: View {
     let session: ProjectSession
     let camCfg: CameraConfig
+    var isFullscreenCamera: Bool = false
     let currentZoomScale: Double
     let canvasSize: CGSize
 
@@ -86,6 +116,9 @@ private struct WebcamPipCanvasView: View {
         // and during active zoom (`zoomProgress01 > 0`) it smoothly transitions toward its corner overlay variant (`getCameraOverlayVariant`).
         let splitZoomedSide = max(84.0, baseRef * 0.34)
         let pipWidth: CGFloat = {
+            if isFullscreenCamera {
+                return canvasSize.width
+            }
             if camCfg.layoutMode == .splitScreen {
                 let t = CGFloat(zoomProgress01)
                 return splitGeo.cameraRect.width + (splitZoomedSide - splitGeo.cameraRect.width) * t
@@ -93,6 +126,9 @@ private struct WebcamPipCanvasView: View {
             return overlayWidth
         }()
         let pipHeight: CGFloat = {
+            if isFullscreenCamera {
+                return canvasSize.height
+            }
             if camCfg.layoutMode == .splitScreen {
                 let t = CGFloat(zoomProgress01)
                 return splitGeo.cameraRect.height + (splitZoomedSide - splitGeo.cameraRect.height) * t
@@ -105,6 +141,9 @@ private struct WebcamPipCanvasView: View {
         let availH = max(1.0, canvasSize.height - pipHeight - margin * 2.0)
 
         let posX: CGFloat = {
+            if isFullscreenCamera {
+                return canvasSize.width * 0.5
+            }
             switch camCfg.layoutMode {
             case .overlay:
                 return margin + CGFloat(max(0.0, min(1.0, camCfg.position01.x))) * availW + pipWidth * 0.5
@@ -121,6 +160,9 @@ private struct WebcamPipCanvasView: View {
         }()
 
         let posY: CGFloat = {
+            if isFullscreenCamera {
+                return canvasSize.height * 0.5
+            }
             switch camCfg.layoutMode {
             case .overlay:
                 return margin + CGFloat(max(0.0, min(1.0, camCfg.position01.y))) * availH + pipHeight * 0.5
@@ -138,6 +180,9 @@ private struct WebcamPipCanvasView: View {
         }()
 
         let effectiveCornerRadius: CGFloat = {
+            if isFullscreenCamera {
+                return 0.0
+            }
             switch camCfg.layoutMode {
             case .cutout:
                 return pipWidth * 0.36
@@ -153,7 +198,7 @@ private struct WebcamPipCanvasView: View {
                 return min(pipWidth, pipHeight) * CGFloat(max(0.0, min(0.50, camCfg.borderRadiusRatio)))
             }
         }()
-        let isFullscreenSplitUnzoomed = (camCfg.layoutMode == .splitScreen && !splitGeo.hasPadding && zoomProgress01 < 0.02)
+        let isFullscreenSplitUnzoomed = isFullscreenCamera || (camCfg.layoutMode == .splitScreen && !splitGeo.hasPadding && zoomProgress01 < 0.02)
 
         let activeCustomPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
             camCfg.customColorPresets.first(where: { $0.id == id })
@@ -173,7 +218,7 @@ private struct WebcamPipCanvasView: View {
                     mirror: camCfg.mirror,
                     cropRect01: camCfg.cropRect01,
                     enableFaceTracking: camCfg.enableFaceTracking,
-                    isCutoutMode: camCfg.layoutMode == .cutout,
+                    isCutoutMode: !isFullscreenCamera && camCfg.layoutMode == .cutout,
                     cutoutEdgeSoftness: camCfg.cutoutEdgeSoftness,
                     cutoutEdgeInset: camCfg.cutoutEdgeInset
                 )
@@ -186,7 +231,7 @@ private struct WebcamPipCanvasView: View {
                     mirror: camCfg.mirror,
                     cropRect01: camCfg.cropRect01,
                     enableFaceTracking: camCfg.enableFaceTracking,
-                    isCutoutMode: camCfg.layoutMode == .cutout,
+                    isCutoutMode: !isFullscreenCamera && camCfg.layoutMode == .cutout,
                     webcamVideoURL: nil
                 )
             }
@@ -214,6 +259,7 @@ private struct WebcamPipCanvasView: View {
             y: 6
         )
         .position(x: posX, y: posY)
+        .animation(.spring(response: 0.25, dampingFraction: 0.82), value: isFullscreenCamera)
         .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.cutoutPositionX01)
         .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.position01)
         .animation(.spring(response: 0.25, dampingFraction: 0.82), value: camCfg.layoutMode)

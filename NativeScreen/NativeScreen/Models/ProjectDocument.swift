@@ -247,6 +247,9 @@ public struct BackgroundConfig: Codable, Equatable, Hashable, Sendable {
     public var systemWallpaperName: String?
     public var blurRadius: Double
     public var noiseIntensity: Double
+    public var hideSensitiveData: Bool
+    public var sensitiveDataCustomPhrases: [String]
+    public var hideFaces: Bool
 
     public init(
         type: BackgroundType = .mesh,
@@ -256,7 +259,10 @@ public struct BackgroundConfig: Codable, Equatable, Hashable, Sendable {
         wallpaperRelativePath: String? = nil,
         systemWallpaperName: String? = nil,
         blurRadius: Double = 0.0,
-        noiseIntensity: Double = 0.02
+        noiseIntensity: Double = 0.02,
+        hideSensitiveData: Bool = false,
+        sensitiveDataCustomPhrases: [String] = [],
+        hideFaces: Bool = false
     ) {
         self.type = type
         self.solidColor = solidColor
@@ -266,6 +272,29 @@ public struct BackgroundConfig: Codable, Equatable, Hashable, Sendable {
         self.systemWallpaperName = systemWallpaperName
         self.blurRadius = blurRadius
         self.noiseIntensity = noiseIntensity
+        self.hideSensitiveData = hideSensitiveData
+        self.sensitiveDataCustomPhrases = sensitiveDataCustomPhrases
+        self.hideFaces = hideFaces
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type, solidColor, gradient, meshPresetId, wallpaperRelativePath, systemWallpaperName
+        case blurRadius, noiseIntensity, hideSensitiveData, sensitiveDataCustomPhrases, hideFaces
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try container.decodeIfPresent(BackgroundType.self, forKey: .type) ?? .mesh
+        self.solidColor = try container.decodeIfPresent(String.self, forKey: .solidColor) ?? "#1E1E2E"
+        self.gradient = try container.decodeIfPresent(GradientConfig.self, forKey: .gradient) ?? GradientConfig()
+        self.meshPresetId = try container.decodeIfPresent(String.self, forKey: .meshPresetId)
+        self.wallpaperRelativePath = try container.decodeIfPresent(String.self, forKey: .wallpaperRelativePath)
+        self.systemWallpaperName = try container.decodeIfPresent(String.self, forKey: .systemWallpaperName)
+        self.blurRadius = try container.decodeIfPresent(Double.self, forKey: .blurRadius) ?? 0.0
+        self.noiseIntensity = try container.decodeIfPresent(Double.self, forKey: .noiseIntensity) ?? 0.02
+        self.hideSensitiveData = try container.decodeIfPresent(Bool.self, forKey: .hideSensitiveData) ?? false
+        self.sensitiveDataCustomPhrases = try container.decodeIfPresent([String].self, forKey: .sensitiveDataCustomPhrases) ?? []
+        self.hideFaces = try container.decodeIfPresent(Bool.self, forKey: .hideFaces) ?? false
     }
 }
 
@@ -324,13 +353,64 @@ public struct FrameShadowConfig: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+public enum DeviceFrameMatchMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case perfect = "perfect"
+    case flexible = "flexible"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .perfect: return "Perfect"
+        case .flexible: return "Flexible"
+        }
+    }
+
+    public var iconName: String {
+        switch self {
+        case .perfect: return "iphone"
+        case .flexible: return "iphone.sizes"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .perfect:
+            return "Show only device frames that precisely match your recording size."
+        case .flexible:
+            return "Show all device frames, even those that don't precisely match your recording size."
+        }
+    }
+}
+
 public struct DeviceMockupConfig: Codable, Equatable, Hashable, Sendable {
     public var enabled: Bool
     public var deviceId: String?
+    public var matchMode: DeviceFrameMatchMode
+    public var colorVariantId: String
 
-    public init(enabled: Bool = false, deviceId: String? = nil) {
+    public init(
+        enabled: Bool = false,
+        deviceId: String? = "macbook-pro-16",
+        matchMode: DeviceFrameMatchMode = .flexible,
+        colorVariantId: String = "space-black"
+    ) {
         self.enabled = enabled
         self.deviceId = deviceId
+        self.matchMode = matchMode
+        self.colorVariantId = colorVariantId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled, deviceId, matchMode, colorVariantId
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        self.deviceId = try container.decodeIfPresent(String.self, forKey: .deviceId) ?? "macbook-pro-16"
+        self.matchMode = try container.decodeIfPresent(DeviceFrameMatchMode.self, forKey: .matchMode) ?? .flexible
+        self.colorVariantId = try container.decodeIfPresent(String.self, forKey: .colorVariantId) ?? "space-black"
     }
 }
 
@@ -1501,6 +1581,8 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var cornerRadius: Double
     public var keyframes: [MaskKeyframe]
     public var disabled: Bool
+    public var isAutoSensitiveMask: Bool
+    public var isAutoFaceMask: Bool
 
     public init(
         id: String = UUID().uuidString,
@@ -1511,7 +1593,9 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
         intensity: Double = 36.0,
         cornerRadius: Double = 10.0,
         keyframes: [MaskKeyframe],
-        disabled: Bool = false
+        disabled: Bool = false,
+        isAutoSensitiveMask: Bool = false,
+        isAutoFaceMask: Bool = false
     ) {
         self.id = id
         self.sourceStartMs = sourceStartMs
@@ -1522,6 +1606,28 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.cornerRadius = cornerRadius
         self.keyframes = keyframes
         self.disabled = disabled
+        self.isAutoSensitiveMask = isAutoSensitiveMask
+        self.isAutoFaceMask = isAutoFaceMask
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, sourceStartMs, sourceEndMs, type, style, intensity, cornerRadius, keyframes, disabled
+        case isAutoSensitiveMask, isAutoFaceMask
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.sourceStartMs = try container.decode(Double.self, forKey: .sourceStartMs)
+        self.sourceEndMs = try container.decode(Double.self, forKey: .sourceEndMs)
+        self.type = try container.decodeIfPresent(MaskType.self, forKey: .type) ?? .blur
+        self.style = try container.decodeIfPresent(MaskStyle.self, forKey: .style) ?? .gaussian
+        self.intensity = try container.decodeIfPresent(Double.self, forKey: .intensity) ?? 36.0
+        self.cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? 10.0
+        self.keyframes = try container.decodeIfPresent([MaskKeyframe].self, forKey: .keyframes) ?? []
+        self.disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
+        self.isAutoSensitiveMask = try container.decodeIfPresent(Bool.self, forKey: .isAutoSensitiveMask) ?? false
+        self.isAutoFaceMask = try container.decodeIfPresent(Bool.self, forKey: .isAutoFaceMask) ?? false
     }
 
     /// Interpolates the mask rectangle at the given `sourceMs` across keyframes.
@@ -1598,11 +1704,174 @@ public struct MaskTrack: Codable, Equatable, Hashable, Identifiable, Sendable {
     }
 }
 
+// MARK: - Camera Layouts Track & Voiceovers Track Models
+
+public enum CameraTimelineLayoutType: String, Codable, CaseIterable, Identifiable, Sendable {
+    case cameraOverlay = "camera-overlay"
+    case splitScreen = "split-screen"
+    case cutoutCamera = "cutout-camera"
+    case fullscreenCamera = "fullscreen-camera"
+    case screenOnly = "screen-only"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .cameraOverlay: return "Camera overlay"
+        case .splitScreen: return "Split screen"
+        case .cutoutCamera: return "Camera cutout"
+        case .fullscreenCamera: return "Fullscreen camera"
+        case .screenOnly: return "Only screen"
+        }
+    }
+
+    public var timelineSubtitle: String {
+        switch self {
+        case .cameraOverlay: return "Camera overlay"
+        case .splitScreen: return "Split screen"
+        case .cutoutCamera: return "Camera cutout"
+        case .fullscreenCamera: return "Fullscreen"
+        case .screenOnly: return "Screen only"
+        }
+    }
+
+    public var quickDockIcon: String {
+        switch self {
+        case .cameraOverlay: return "inset.filled.rectangle.and.person.filled"
+        case .splitScreen: return "rectangle.split.2x1.fill"
+        case .cutoutCamera: return "person.crop.rectangle.stack"
+        case .fullscreenCamera: return "person.crop.rectangle.fill"
+        case .screenOnly: return "display"
+        }
+    }
+}
+
+public struct CameraLayoutSegment: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var sourceStartMs: Double
+    public var sourceEndMs: Double
+    public var layoutType: CameraTimelineLayoutType
+    public var overlayPosition01: Point01?
+    public var cutoutPositionX01: Double?
+    public var disabled: Bool
+
+    public init(
+        id: String = UUID().uuidString,
+        sourceStartMs: Double,
+        sourceEndMs: Double,
+        layoutType: CameraTimelineLayoutType = .cameraOverlay,
+        overlayPosition01: Point01? = nil,
+        cutoutPositionX01: Double? = nil,
+        disabled: Bool = false
+    ) {
+        self.id = id
+        self.sourceStartMs = sourceStartMs
+        self.sourceEndMs = sourceEndMs
+        self.layoutType = layoutType
+        self.overlayPosition01 = overlayPosition01
+        self.cutoutPositionX01 = cutoutPositionX01
+        self.disabled = disabled
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, sourceStartMs, sourceEndMs, layoutType, overlayPosition01, cutoutPositionX01, disabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.sourceStartMs = try container.decode(Double.self, forKey: .sourceStartMs)
+        self.sourceEndMs = try container.decode(Double.self, forKey: .sourceEndMs)
+        self.layoutType = try container.decodeIfPresent(CameraTimelineLayoutType.self, forKey: .layoutType) ?? .cameraOverlay
+        self.overlayPosition01 = try container.decodeIfPresent(Point01.self, forKey: .overlayPosition01)
+        self.cutoutPositionX01 = try container.decodeIfPresent(Double.self, forKey: .cutoutPositionX01)
+        self.disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
+    }
+}
+
+public enum VoiceoverAttachMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case independent = "first-frame"
+    case synchronized = "all-frames"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .independent: return "Independent"
+        case .synchronized: return "Synchronized"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .independent:
+            return "Voiceover plays independently of the recording, even if the recording speed is changed or parts of the recording are cut out."
+        case .synchronized:
+            return "Voiceover plays along with the recording. Voiceover automatically adjusts to the recording speed and is cut out if parts of the recording are cut out."
+        }
+    }
+}
+
+public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var sourceStartMs: Double
+    public var durationMs: Double
+    public var relativePath: String
+    public var volume: Double
+    public var attachMode: VoiceoverAttachMode
+    public var hideRecording: Bool
+    public var disabled: Bool
+
+    public var sourceEndMs: Double {
+        sourceStartMs + max(200.0, durationMs)
+    }
+
+    public init(
+        id: String = UUID().uuidString,
+        sourceStartMs: Double,
+        durationMs: Double,
+        relativePath: String,
+        volume: Double = 1.0,
+        attachMode: VoiceoverAttachMode = .synchronized,
+        hideRecording: Bool = false,
+        disabled: Bool = false
+    ) {
+        self.id = id
+        self.sourceStartMs = sourceStartMs
+        self.durationMs = max(200.0, durationMs)
+        self.relativePath = relativePath
+        self.volume = max(0.0, min(1.0, volume))
+        self.attachMode = attachMode
+        self.hideRecording = hideRecording
+        self.disabled = disabled
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, sourceStartMs, durationMs, relativePath, volume, attachMode, hideRecording, disabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.sourceStartMs = try container.decode(Double.self, forKey: .sourceStartMs)
+        self.durationMs = max(200.0, try container.decodeIfPresent(Double.self, forKey: .durationMs) ?? 2000.0)
+        self.relativePath = try container.decodeIfPresent(String.self, forKey: .relativePath) ?? ""
+        self.volume = max(0.0, min(1.0, try container.decodeIfPresent(Double.self, forKey: .volume) ?? 1.0))
+        self.attachMode = try container.decodeIfPresent(VoiceoverAttachMode.self, forKey: .attachMode) ?? .synchronized
+        self.hideRecording = try container.decodeIfPresent(Bool.self, forKey: .hideRecording) ?? false
+        self.disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
+    }
+}
+
 public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
     public var slices: [ClipSlice]
     public var zooms: [ZoomBlock]
     public var isZoomTrackHidden: Bool
+    public var cameraLayouts: [CameraLayoutSegment]
+    public var isCameraLayoutsTrackHidden: Bool
     public var maskTracks: [MaskTrack]
+    public var voiceovers: [VoiceoverSegment]
+    public var isVoiceoversTrackHidden: Bool
     public var isShortcutsTrackHidden: Bool
     public var dismissedTypingSuggestionStarts: [Int]
 
@@ -1610,20 +1879,29 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         slices: [ClipSlice] = [],
         zooms: [ZoomBlock] = [],
         isZoomTrackHidden: Bool = false,
+        cameraLayouts: [CameraLayoutSegment] = [],
+        isCameraLayoutsTrackHidden: Bool = false,
         maskTracks: [MaskTrack] = [],
+        voiceovers: [VoiceoverSegment] = [],
+        isVoiceoversTrackHidden: Bool = false,
         isShortcutsTrackHidden: Bool = false,
         dismissedTypingSuggestionStarts: [Int] = []
     ) {
         self.slices = slices
         self.zooms = zooms
         self.isZoomTrackHidden = isZoomTrackHidden
+        self.cameraLayouts = cameraLayouts
+        self.isCameraLayoutsTrackHidden = isCameraLayoutsTrackHidden
         self.maskTracks = maskTracks
+        self.voiceovers = voiceovers
+        self.isVoiceoversTrackHidden = isVoiceoversTrackHidden
         self.isShortcutsTrackHidden = isShortcutsTrackHidden
         self.dismissedTypingSuggestionStarts = dismissedTypingSuggestionStarts
     }
 
     enum CodingKeys: String, CodingKey {
-        case slices, zooms, isZoomTrackHidden, maskTracks, isShortcutsTrackHidden, dismissedTypingSuggestionStarts
+        case slices, zooms, isZoomTrackHidden, cameraLayouts, isCameraLayoutsTrackHidden
+        case maskTracks, voiceovers, isVoiceoversTrackHidden, isShortcutsTrackHidden, dismissedTypingSuggestionStarts
     }
 
     public init(from decoder: Decoder) throws {
@@ -1631,7 +1909,11 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         self.slices = try container.decodeIfPresent([ClipSlice].self, forKey: .slices) ?? []
         self.zooms = try container.decodeIfPresent([ZoomBlock].self, forKey: .zooms) ?? []
         self.isZoomTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isZoomTrackHidden) ?? false
+        self.cameraLayouts = try container.decodeIfPresent([CameraLayoutSegment].self, forKey: .cameraLayouts) ?? []
+        self.isCameraLayoutsTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isCameraLayoutsTrackHidden) ?? false
         self.maskTracks = try container.decodeIfPresent([MaskTrack].self, forKey: .maskTracks) ?? []
+        self.voiceovers = try container.decodeIfPresent([VoiceoverSegment].self, forKey: .voiceovers) ?? []
+        self.isVoiceoversTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isVoiceoversTrackHidden) ?? false
         self.isShortcutsTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isShortcutsTrackHidden) ?? false
         self.dismissedTypingSuggestionStarts = try container.decodeIfPresent([Int].self, forKey: .dismissedTypingSuggestionStarts) ?? []
     }

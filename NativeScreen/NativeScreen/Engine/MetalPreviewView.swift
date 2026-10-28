@@ -61,10 +61,11 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         private var lastCanvasAspect: Double = -1.0
         private var lastFrameTickUptime: TimeInterval = 0
 
-        // Video frame decoder for recorded `.mp4` / `.m3u8` + synchronized Microphone `.m4a` audio player
+        // Video frame decoder for recorded `.mp4` / `.m3u8` + synchronized Microphone `.m4a` & Voiceover audio players
         private var player: AVPlayer?
         private var micPlayer: AVPlayer?
         private var loadedMicURL: URL?
+        private var voiceoverPlayersByID: [String: AVPlayer] = [:]
         private var videoOutput: AVPlayerItemVideoOutput?
         private var playerItemStatusObserver: NSKeyValueObservation?
         private var loadedVideoURL: URL?
@@ -99,6 +100,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             } else {
                 if let micPlayer = micPlayer, micPlayer.rate != 0 {
                     micPlayer.pause()
+                }
+                for voPlayer in voiceoverPlayersByID.values where voPlayer.rate != 0 {
+                    voPlayer.pause()
                 }
                 let animatingBg = compositor?.isAnimatingBackgroundTransition ?? false
                 if !animatingBg && !mtkView.isPaused {
@@ -298,9 +302,10 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 let activeSlice = session.currentActiveSlice
                 let sliceSpeed = activeSlice?.speed ?? 1.0
                 let masterVol = session.document.audio.masterVolume
+                let isMutedByVO = session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: sourceMs)
                 let sliceVol = (activeSlice?.muted == true || session.document.audio.muteSystemAudio) ? 0.0 : (activeSlice?.systemAudioVolume ?? 1.0)
                 let effectiveVolume = Float(min(2.0, max(0.0, sliceVol * session.document.audio.systemAudioVolume * masterVol)))
-                let micVol = (activeSlice?.muted == true || session.document.audio.muteMicrophone) ? 0.0 : (session.document.audio.microphoneVolume * masterVol)
+                let micVol = (activeSlice?.muted == true || session.document.audio.muteMicrophone || isMutedByVO) ? 0.0 : (session.document.audio.microphoneVolume * masterVol)
                 let effectiveMicVolume = Float(min(2.0, max(0.0, micVol)))
                 let desiredRate = Float(session.previewPlaybackRate * sliceSpeed)
                 if session.isPlaying, let player = player {
@@ -316,6 +321,37 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                         if abs(micPlayer.rate - desiredRate) > 0.05 || micDriftMs > 180.0 {
                             micPlayer.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
                             micPlayer.rate = desiredRate
+                        }
+                    }
+
+                    // Synchronize any active `VoiceoverSegment`s (`voiceoverPlayersByID`)!
+                    let activeVOs = session.activeVoiceovers(atSourceMs: sourceMs)
+                    let activeVOIDs = Set(activeVOs.map(\.id))
+                    for (voId, voPlayer) in voiceoverPlayersByID where !activeVOIDs.contains(voId) {
+                        if voPlayer.rate != 0 {
+                            voPlayer.pause()
+                        }
+                    }
+                    for vo in activeVOs {
+                        let voURL = session.packageURL.appendingPathComponent(vo.relativePath)
+                        guard FileManager.default.fileExists(atPath: voURL.path) else { continue }
+                        let voPlayer: AVPlayer = {
+                            if let existing = voiceoverPlayersByID[vo.id] {
+                                return existing
+                            }
+                            let p = AVPlayer(url: voURL)
+                            voiceoverPlayersByID[vo.id] = p
+                            return p
+                        }()
+                        let voOffsetSec = max(0.0, (sourceMs - vo.sourceStartMs) / 1000.0)
+                        let voRate = Float(session.previewPlaybackRate * (vo.attachMode == .synchronized ? sliceSpeed : 1.0))
+                        let voVol = Float(min(1.0, max(0.0, vo.volume * masterVol)))
+                        voPlayer.isMuted = (voVol <= 0.001)
+                        voPlayer.volume = voVol
+                        let curSec = max(0.0, CMTimeGetSeconds(voPlayer.currentTime()))
+                        if abs(voPlayer.rate - voRate) > 0.05 || abs(curSec - voOffsetSec) > 0.22 {
+                            voPlayer.seek(to: CMTime(seconds: voOffsetSec, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+                            voPlayer.rate = voRate
                         }
                     }
 
@@ -339,6 +375,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     }
                     if let micPlayer = micPlayer, micPlayer.rate != 0 {
                         micPlayer.pause()
+                    }
+                    for voPlayer in voiceoverPlayersByID.values where voPlayer.rate != 0 {
+                        voPlayer.pause()
                     }
                 }
 

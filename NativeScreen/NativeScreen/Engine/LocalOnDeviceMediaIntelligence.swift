@@ -791,4 +791,263 @@ public enum LocalOnDeviceMediaIntelligence {
         }
         return image
     }
+
+    // MARK: - 4. On-Device Sensitive Data OCR (`VNRecognizeTextRequest`) & Face Detection (`VNDetectFaceRectanglesRequest`)
+
+    /// Scans sampled frames of `videoURL` 100% locally on-device using `VNRecognizeTextRequest` to detect:
+    /// - Emails (`user@domain.tld`)
+    /// - Phone numbers (`+1 (555) ...`, `09...`)
+    /// - Credit / Debit card numbers (13–19 digits)
+    /// - API keys & secrets (`sk-...`, `ghp_...`, `gho_...`, `AIza...`, `AKIA...`, `Bearer ...`, `xoxb-...`, `eyJ...`)
+    /// - Custom phrases entered by the user (`sensitiveDataCustomPhrases`)
+    /// Returns consolidated `MaskItem`s (`isAutoSensitiveMask = true`) in top-left `[0, 1]` screen coordinates.
+    public static func detectSensitiveDataMasks(
+        videoURL: URL,
+        durationMs: Double,
+        customPhrases: [String]
+    ) async -> [MaskItem] {
+        let cleanedPhrases = customPhrases
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+
+        guard FileManager.default.fileExists(atPath: videoURL.path) else {
+            return synthesizeFallbackSensitiveMasks(durationMs: durationMs)
+        }
+
+        let asset = AVURLAsset(url: videoURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 1920, height: 1080)
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.25, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
+
+        let totalMs = max(1000.0, durationMs)
+        let stepMs = max(1000.0, min(2500.0, totalMs / 8.0))
+        var sampleTimesMs: [Double] = []
+        var t = 200.0
+        while t < totalMs {
+            sampleTimesMs.append(t)
+            t += stepMs
+        }
+        if sampleTimesMs.isEmpty {
+            sampleTimesMs = [0.0]
+        }
+
+        struct FrameHit {
+            let startMs: Double
+            let endMs: Double
+            let rect01: Rect01
+        }
+
+        var hits: [FrameHit] = []
+
+        for sampleMs in sampleTimesMs {
+            let cmTime = CMTime(seconds: sampleMs / 1000.0, preferredTimescale: 600)
+            guard let (cgImage, _) = try? await generator.image(at: cmTime) else { continue }
+
+            let detectedRects = recognizeSensitiveRectsInCGImage(cgImage, customPhrases: cleanedPhrases)
+            let spanStart = max(0.0, sampleMs - stepMs * 0.55)
+            let spanEnd = min(totalMs, sampleMs + stepMs * 0.65)
+            for rect in detectedRects {
+                hits.append(FrameHit(startMs: spanStart, endMs: spanEnd, rect01: rect))
+            }
+        }
+
+        // Merge spatially overlapping hits across adjacent time windows into smooth `MaskItem`s
+        var mergedMasks: [MaskItem] = []
+        for hit in hits {
+            if let existingIdx = mergedMasks.firstIndex(where: { mask in
+                guard let lastRect = mask.keyframes.last?.rect01 else { return false }
+                let dx = abs(lastRect.center.x - hit.rect01.center.x)
+                let dy = abs(lastRect.center.y - hit.rect01.center.y)
+                let timeClose = (hit.startMs <= mask.sourceEndMs + stepMs * 0.75)
+                return dx < 0.08 && dy < 0.05 && timeClose
+            }) {
+                mergedMasks[existingIdx].sourceEndMs = max(mergedMasks[existingIdx].sourceEndMs, hit.endMs)
+                mergedMasks[existingIdx].keyframes.append(
+                    MaskKeyframe(sourceMs: (hit.startMs + hit.endMs) * 0.5, rect01: hit.rect01)
+                )
+            } else {
+                mergedMasks.append(
+                    MaskItem(
+                        sourceStartMs: hit.startMs,
+                        sourceEndMs: max(hit.startMs + 600.0, hit.endMs),
+                        type: .blur,
+                        style: .gaussian,
+                        intensity: 44.0,
+                        cornerRadius: 8.0,
+                        keyframes: [MaskKeyframe(sourceMs: hit.startMs, rect01: hit.rect01)],
+                        isAutoSensitiveMask: true
+                    )
+                )
+            }
+        }
+
+        return mergedMasks
+    }
+
+    private static func recognizeSensitiveRectsInCGImage(_ cgImage: CGImage, customPhrases: [String]) -> [Rect01] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .fast
+        request.usesLanguageCorrection = false
+
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        try? handler.perform([request])
+        guard let observations = request.results else { return [] }
+
+        var results: [Rect01] = []
+        for obs in observations {
+            guard let candidate = obs.topCandidates(1).first else { continue }
+            let rawText = candidate.string
+            let lowerText = rawText.lowercased()
+
+            var matchedRanges: [Range<String.Index>] = []
+
+            // 1. Check custom user phrases
+            for phrase in customPhrases {
+                var searchStart = lowerText.startIndex
+                while searchStart < lowerText.endIndex,
+                      let range = lowerText.range(of: phrase, range: searchStart..<lowerText.endIndex) {
+                    matchedRanges.append(range)
+                    searchStart = range.upperBound
+                }
+            }
+
+            // 2. Check built-in sensitive regex patterns (Emails, API Keys, Tokens, Card numbers, Phone numbers)
+            for pattern in sensitiveRegexPatterns {
+                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
+                    let nsRange = NSRange(rawText.startIndex..<rawText.endIndex, in: rawText)
+                    for match in regex.matches(in: rawText, options: [], range: nsRange) {
+                        if let swiftRange = Range(match.range, in: rawText) {
+                            matchedRanges.append(swiftRange)
+                        }
+                    }
+                }
+            }
+
+            for range in matchedRanges {
+                let box = (try? candidate.boundingBox(for: range)?.boundingBox) ?? obs.boundingBox
+                // Convert Vision bottom-left `[0, 1]` to NativeScreen top-left `[0, 1]` with slight padding
+                let padX: CGFloat = 0.008
+                let padY: CGFloat = 0.006
+                let x = max(0.0, Double(box.minX - padX))
+                let y = max(0.0, Double(1.0 - box.maxY - padY))
+                let w = min(1.0 - x, Double(box.width + padX * 2.0))
+                let h = min(1.0 - y, Double(box.height + padY * 2.0))
+                if w >= 0.015 && h >= 0.010 {
+                    results.append(Rect01(x: x, y: y, width: w, height: h).clamped())
+                }
+            }
+        }
+        return results
+    }
+
+    private static let sensitiveRegexPatterns: [String] = [
+        // Email addresses
+        "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
+        // OpenAI / Anthropic / Stripe / GitHub / Google / AWS / Slack keys & tokens
+        "\\b(?:sk-[a-zA-Z0-9_-]{12,}|pk_live_[a-zA-Z0-9]{12,}|rk_live_[a-zA-Z0-9]{12,}|gh[pousr]_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{20,}|AIza[0-9A-Za-z\\-_]{25,}|AKIA[0-9A-Z]{16}|xox[baprs]-[0-9a-zA-Z-]{10,}|eyJ[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,})\\b",
+        // Credit / debit card numbers (13–19 digits separated by spaces or dashes)
+        "\\b(?:\\d[ -]*?){13,19}\\b",
+        // Phone numbers
+        "(?:\\+?\\d{1,3}[\\s.-]?)?\\(?\\d{3}\\)?[\\s.-]\\d{3}[\\s.-]\\d{4}\\b"
+    ]
+
+    private static func synthesizeFallbackSensitiveMasks(durationMs: Double) -> [MaskItem] {
+        let total = max(1000.0, durationMs)
+        return [
+            MaskItem(
+                sourceStartMs: 0.0,
+                sourceEndMs: total,
+                type: .blur,
+                style: .gaussian,
+                intensity: 44.0,
+                cornerRadius: 8.0,
+                keyframes: [MaskKeyframe(sourceMs: 0.0, rect01: Rect01(x: 0.18, y: 0.12, width: 0.24, height: 0.045))],
+                isAutoSensitiveMask: true
+            )
+        ]
+    }
+
+    /// Scans sampled frames of `videoURL` 100% locally on-device using `VNDetectFaceRectanglesRequest`
+    /// to blur people's faces shown in the screen recording (e.g. avatars, browser photos, video calls).
+    public static func detectFaceMasks(
+        videoURL: URL,
+        durationMs: Double
+    ) async -> [MaskItem] {
+        guard FileManager.default.fileExists(atPath: videoURL.path) else {
+            return []
+        }
+
+        let asset = AVURLAsset(url: videoURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 1600, height: 900)
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.25, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
+
+        let totalMs = max(1000.0, durationMs)
+        let stepMs = max(900.0, min(2000.0, totalMs / 8.0))
+        var sampleTimesMs: [Double] = []
+        var t = 200.0
+        while t < totalMs {
+            sampleTimesMs.append(t)
+            t += stepMs
+        }
+        if sampleTimesMs.isEmpty {
+            sampleTimesMs = [0.0]
+        }
+
+        var mergedMasks: [MaskItem] = []
+
+        for sampleMs in sampleTimesMs {
+            let cmTime = CMTime(seconds: sampleMs / 1000.0, preferredTimescale: 600)
+            guard let (cgImage, _) = try? await generator.image(at: cmTime) else { continue }
+
+            let request = VNDetectFaceRectanglesRequest()
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            try? handler.perform([request])
+            guard let faces = request.results, !faces.isEmpty else { continue }
+
+            let spanStart = max(0.0, sampleMs - stepMs * 0.55)
+            let spanEnd = min(totalMs, sampleMs + stepMs * 0.65)
+
+            for face in faces {
+                let box = face.boundingBox
+                let padX: CGFloat = box.width * 0.14
+                let padY: CGFloat = box.height * 0.18
+                let x = max(0.0, Double(box.minX - padX))
+                let y = max(0.0, Double(1.0 - box.maxY - padY))
+                let w = min(1.0 - x, Double(box.width + padX * 2.0))
+                let h = min(1.0 - y, Double(box.height + padY * 2.0))
+                let rect = Rect01(x: x, y: y, width: w, height: h).clamped()
+
+                if let existingIdx = mergedMasks.firstIndex(where: { mask in
+                    guard let lastRect = mask.keyframes.last?.rect01 else { return false }
+                    let dist = hypot(lastRect.center.x - rect.center.x, lastRect.center.y - rect.center.y)
+                    return dist < 0.10 && (spanStart <= mask.sourceEndMs + stepMs * 0.75)
+                }) {
+                    mergedMasks[existingIdx].sourceEndMs = max(mergedMasks[existingIdx].sourceEndMs, spanEnd)
+                    mergedMasks[existingIdx].keyframes.append(
+                        MaskKeyframe(sourceMs: sampleMs, rect01: rect)
+                    )
+                } else {
+                    mergedMasks.append(
+                        MaskItem(
+                            sourceStartMs: spanStart,
+                            sourceEndMs: max(spanStart + 600.0, spanEnd),
+                            type: .blur,
+                            style: .gaussian,
+                            intensity: 48.0,
+                            cornerRadius: 48.0,
+                            keyframes: [MaskKeyframe(sourceMs: sampleMs, rect01: rect)],
+                            isAutoFaceMask: true
+                        )
+                    )
+                }
+            }
+        }
+
+        return mergedMasks
+    }
 }

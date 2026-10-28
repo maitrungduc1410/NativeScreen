@@ -447,3 +447,258 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
             .filter { fm.fileExists(atPath: $0.path) }
     }
 }
+
+// MARK: - Presets Store
+
+public struct ProjectPreset: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var canvas: CanvasConfig
+    public var background: BackgroundConfig
+    public var frameStyle: FrameStyleConfig
+    public var cursor: CursorConfig
+    public var camera: CameraConfig
+    public var motion: MotionConfig
+    public var audio: AudioConfig
+
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        canvas: CanvasConfig = CanvasConfig(),
+        background: BackgroundConfig = BackgroundConfig(),
+        frameStyle: FrameStyleConfig = FrameStyleConfig(),
+        cursor: CursorConfig = CursorConfig(),
+        camera: CameraConfig = CameraConfig(),
+        motion: MotionConfig = MotionConfig(),
+        audio: AudioConfig = AudioConfig()
+    ) {
+        self.id = id
+        self.name = name
+        self.canvas = canvas
+        self.background = background
+        self.frameStyle = frameStyle
+        self.cursor = cursor
+        self.camera = camera
+        self.motion = motion
+        self.audio = audio
+    }
+
+    public init(name: String, from doc: ProjectDocument) {
+        self.id = UUID().uuidString
+        self.name = name
+        self.canvas = doc.canvas
+        self.background = doc.background
+        self.frameStyle = doc.frameStyle
+        self.cursor = doc.cursor
+        self.camera = doc.camera
+        self.motion = doc.motion
+        self.audio = doc.audio
+    }
+
+    public func matchesDocument(_ doc: ProjectDocument) -> Bool {
+        var normCanvas = doc.canvas
+        normCanvas.cropRect01 = canvas.cropRect01
+        return canvas == normCanvas
+            && background.type == doc.background.type
+            && background.solidColor == doc.background.solidColor
+            && background.gradient == doc.background.gradient
+            && background.meshPresetId == doc.background.meshPresetId
+            && abs(background.blurRadius - doc.background.blurRadius) < 0.01
+            && frameStyle == doc.frameStyle
+            && cursor == doc.cursor
+            && camera.layoutMode == doc.camera.layoutMode
+            && camera.colorGradePreset == doc.camera.colorGradePreset
+            && abs(camera.sizeRatio - doc.camera.sizeRatio) < 0.01
+            && motion == doc.motion
+    }
+
+    public func apply(to doc: inout ProjectDocument) {
+        let existingCrop = doc.canvas.cropRect01
+        doc.canvas = canvas
+        doc.canvas.cropRect01 = existingCrop
+        doc.background = background
+        doc.frameStyle = frameStyle
+        doc.cursor = cursor
+        let existingCamEnabled = doc.camera.enabled
+        let existingCamCrop = doc.camera.cropRect01
+        doc.camera = camera
+        doc.camera.enabled = existingCamEnabled
+        doc.camera.cropRect01 = existingCamCrop
+        doc.motion = motion
+        doc.audio.microphoneAudioPreset = audio.microphoneAudioPreset
+    }
+}
+
+@Observable
+@MainActor
+public final class ProjectPresetsStore {
+    public static let shared = ProjectPresetsStore()
+
+    public var presets: [ProjectPreset] = []
+    public var defaultPresetId: String? = nil
+
+    private let defaultPresetDefaultsKey = "NativeScreen.DefaultPresetID"
+
+    public nonisolated static var presetsDirectoryURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        let dir = appSupport.appendingPathComponent("NativeScreen/Presets", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private init() {
+        self.defaultPresetId = UserDefaults.standard.string(forKey: defaultPresetDefaultsKey)
+        loadPresetsFromDisk()
+    }
+
+    public func fileURL(for preset: ProjectPreset) -> URL {
+        let safeFile = preset.name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = safeFile.isEmpty ? preset.id : safeFile
+        return Self.presetsDirectoryURL.appendingPathComponent("\(base).json")
+    }
+
+    public func loadPresetsFromDisk() {
+        let fm = FileManager.default
+        let dir = Self.presetsDirectoryURL
+        let urls = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil))?.filter {
+            $0.pathExtension.lowercased() == "json"
+        } ?? []
+
+        let decoder = JSONDecoder()
+        var loaded: [ProjectPreset] = []
+        for url in urls {
+            if let data = try? Data(contentsOf: url),
+               let p = try? decoder.decode(ProjectPreset.self, from: data) {
+                loaded.append(p)
+            }
+        }
+        if loaded.isEmpty {
+            let defaults = Self.seedBuiltInPresets()
+            for p in defaults {
+                savePresetToDisk(p)
+            }
+            loaded = defaults
+        }
+        loaded.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        self.presets = loaded
+    }
+
+    private static func seedBuiltInPresets() -> [ProjectPreset] {
+        let studioDefault = ProjectPreset(
+            id: "preset-default-studio",
+            name: "Default Studio",
+            canvas: CanvasConfig(aspectRatioMode: .preset, aspectRatioPreset: .widescreen16x9, paddingRatio: 0.10),
+            background: BackgroundConfig(type: .mesh, meshPresetId: "spring-aurora"),
+            frameStyle: FrameStyleConfig(borderRadius: 16.0, inset: FrameInsetConfig(enabled: true), shadow: FrameShadowConfig(enabled: true, isDirectional: true, intensity: 0.42)),
+            cursor: CursorConfig(scale: 1.6, themeId: "macos-tahoe"),
+            camera: CameraConfig(layoutMode: .overlay, colorGradePreset: .studio),
+            motion: MotionConfig(cameraSpring: .defaultCamera, motionBlurIntensity: 1.0)
+        )
+        let darkCinema = ProjectPreset(
+            id: "preset-macos-dark-cinema",
+            name: "macOS Dark Cinema",
+            canvas: CanvasConfig(aspectRatioMode: .preset, aspectRatioPreset: .widescreen16x9, paddingRatio: 0.12),
+            background: BackgroundConfig(
+                type: .gradient,
+                gradient: GradientConfig(stops: [
+                    GradientStopConfig(color: "#0F172A", location: 0.0),
+                    GradientStopConfig(color: "#1E1B4B", location: 1.0)
+                ])
+            ),
+            frameStyle: FrameStyleConfig(borderRadius: 20.0, inset: FrameInsetConfig(enabled: true, size: 1.5, opacity: 0.22), shadow: FrameShadowConfig(enabled: true, isDirectional: true, intensity: 0.58, blur: 44.0, distance: 26.0)),
+            cursor: CursorConfig(scale: 1.8, themeId: "macos-tahoe"),
+            camera: CameraConfig(layoutMode: .overlay, colorGradePreset: .cinema),
+            motion: MotionConfig(cameraSpring: .focusedCamera, motionBlurIntensity: 1.0)
+        )
+        let socialVertical = ProjectPreset(
+            id: "preset-social-vertical",
+            name: "Social Vertical 9:16",
+            canvas: CanvasConfig(aspectRatioMode: .preset, aspectRatioPreset: .vertical9x16, paddingRatio: 0.08),
+            background: BackgroundConfig(
+                type: .gradient,
+                gradient: GradientConfig(stops: [
+                    GradientStopConfig(color: "#4776E6", location: 0.0),
+                    GradientStopConfig(color: "#8E54E9", location: 1.0)
+                ])
+            ),
+            frameStyle: FrameStyleConfig(borderRadius: 18.0, inset: FrameInsetConfig(enabled: true), shadow: FrameShadowConfig(enabled: true, isDirectional: true, intensity: 0.48)),
+            cursor: CursorConfig(scale: 1.9, themeId: "macos-tahoe"),
+            camera: CameraConfig(layoutMode: .splitScreen, splitScreenRatio01: 0.50, colorGradePreset: .punch),
+            motion: MotionConfig(cameraSpring: .focusedCamera, motionBlurIntensity: 1.0)
+        )
+        return [studioDefault, darkCinema, socialVertical]
+    }
+
+    private func savePresetToDisk(_ preset: ProjectPreset) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let data = try? encoder.encode(preset) {
+            try? data.write(to: fileURL(for: preset), options: .atomic)
+        }
+    }
+
+    public func addPreset(name: String, from session: ProjectSession) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let preset = ProjectPreset(name: trimmed, from: session.document)
+        savePresetToDisk(preset)
+        presets.append(preset)
+        presets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        session.showToast("Preset created")
+    }
+
+    public func applyPreset(_ preset: ProjectPreset, to session: ProjectSession) {
+        session.mutate { doc in
+            preset.apply(to: &doc)
+        }
+        session.showToast("Preset applied")
+    }
+
+    public func syncPresetWithProject(_ preset: ProjectPreset, session: ProjectSession) {
+        guard let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        var updated = ProjectPreset(name: preset.name, from: session.document)
+        updated.id = preset.id
+        presets[idx] = updated
+        savePresetToDisk(updated)
+        session.showToast("Preset updated to match")
+    }
+
+    public func renamePreset(_ preset: ProjectPreset, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        let oldURL = fileURL(for: presets[idx])
+        try? FileManager.default.removeItem(at: oldURL)
+        presets[idx].name = trimmed
+        savePresetToDisk(presets[idx])
+        presets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    public func removePreset(_ preset: ProjectPreset) {
+        let url = fileURL(for: preset)
+        try? FileManager.default.removeItem(at: url)
+        presets.removeAll { $0.id == preset.id }
+        if defaultPresetId == preset.id {
+            defaultPresetId = nil
+            UserDefaults.standard.removeObject(forKey: defaultPresetDefaultsKey)
+        }
+    }
+
+    public func toggleDefaultPreset(_ preset: ProjectPreset) {
+        if defaultPresetId == preset.id {
+            defaultPresetId = nil
+            UserDefaults.standard.removeObject(forKey: defaultPresetDefaultsKey)
+        } else {
+            defaultPresetId = preset.id
+            UserDefaults.standard.set(preset.id, forKey: defaultPresetDefaultsKey)
+        }
+    }
+
+    public var defaultPreset: ProjectPreset? {
+        guard let defId = defaultPresetId else { return nil }
+        return presets.first(where: { $0.id == defId })
+    }
+}

@@ -1338,7 +1338,7 @@ public final class RecordingCoordinator {
 
         let projectName = targetMeta.appName ?? packageURL.deletingPathExtension().lastPathComponent
         let initialSlice = ClipSlice(sourceStartMs: 0.0, sourceEndMs: durationMs, speed: 1.0)
-        let doc = ProjectDocument(
+        var doc = ProjectDocument(
             name: projectName,
             camera: CameraConfig(enabled: hasRecordedWebcam),
             timeline: TimelineConfig(
@@ -1347,6 +1347,9 @@ public final class RecordingCoordinator {
                 maskTracks: []
             )
         )
+        if let defPreset = ProjectPresetsStore.shared.defaultPreset {
+            defPreset.apply(to: &doc)
+        }
 
         if let docData = try? encoder.encode(doc) {
             try? docData.write(to: packageURL.appendingPathComponent("project.json"), options: .atomic)

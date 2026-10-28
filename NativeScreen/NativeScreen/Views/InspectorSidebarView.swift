@@ -32,6 +32,8 @@ public struct InspectorSidebarView: View {
     @State private var lastRememberedIdleMs: Double = 2000.0
     @State private var lastRememberedLoopMs: Double = 1000.0
     @State private var lastRememberedShakeThreshold: Double = 4.0
+    @State private var isEditingSensitiveCustomPhrases: Bool = false
+    @State private var draftSensitiveCustomPhrases: String = ""
 
     public init(session: ProjectSession) {
         self.session = session
@@ -79,6 +81,12 @@ public struct InspectorSidebarView: View {
                     if let zoomId = session.selectedZoomId,
                        let zoom = session.document.timeline.zooms.first(where: { $0.id == zoomId }) {
                         zoomSegmentEditor(zoom: zoom)
+                    } else if let layoutId = session.selectedCameraLayoutId,
+                              let layoutSeg = session.document.timeline.cameraLayouts.first(where: { $0.id == layoutId }) {
+                        cameraLayoutSegmentEditor(segment: layoutSeg)
+                    } else if let voiceoverId = session.selectedVoiceoverId,
+                              let voSeg = session.document.timeline.voiceovers.first(where: { $0.id == voiceoverId }) {
+                        voiceoverSegmentEditor(voiceover: voSeg)
                     } else if let shortcutId = session.selectedShortcutId,
                               let cluster = session.detectedShortcutClusters.first(where: { $0.id == shortcutId }) {
                         shortcutSegmentEditor(cluster: cluster)
@@ -98,6 +106,8 @@ public struct InspectorSidebarView: View {
                             transcriptEditorInspector
                         case .zoom:
                             zoomInspector
+                        case .deviceFrame:
+                            deviceFrameInspector
                         case .masks:
                             masksInspector
                         case .audio:
@@ -753,6 +763,191 @@ public struct InspectorSidebarView: View {
                             defaultValue: 36.0
                         )
                     }
+                }
+            }
+
+            inspectorDivider
+
+            // 6. Hide sensitive data (OCR) & Hide faces
+            VStack(alignment: .leading, spacing: 16) {
+                inspectorToggleRow(
+                    title: "Hide sensitive data",
+                    icon: "lock.fill",
+                    description: "Covers emails, phone numbers, card numbers and keys shown in the recording",
+                    isOn: Binding(
+                        get: { session.document.background.hideSensitiveData },
+                        set: { enabled in
+                            withAnimation(.easeOut(duration: 0.16)) {
+                                session.setHideSensitiveData(enabled: enabled)
+                            }
+                        }
+                    )
+                )
+
+                if session.document.background.hideSensitiveData {
+                    if session.isScanningSensitiveData {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Scanning recording for sensitive data on device…")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.75))
+                        }
+                    }
+
+                    // Review Before Sharing Warning Card
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 12.5, weight: .semibold))
+                            Text("Review Before Sharing")
+                                .font(.system(size: 12.5, weight: .semibold))
+                        }
+                        .foregroundStyle(Color(red: 0.96, green: 0.67, blue: 0.25))
+
+                        Text("Some private details may still be visible in parts of your recording. Watch it in full before you share it.")
+                            .font(.system(size: 12.0, weight: .regular))
+                            .foregroundStyle(Color(red: 0.92, green: 0.64, blue: 0.28))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color(red: 0.24, green: 0.18, blue: 0.11).opacity(0.55))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color(red: 0.56, green: 0.42, blue: 0.24).opacity(0.55), lineWidth: 1)
+                    )
+
+                    let hasPhrases = !session.document.background.sensitiveDataCustomPhrases.isEmpty
+                    if !isEditingSensitiveCustomPhrases && !hasPhrases {
+                        Button {
+                            draftSensitiveCustomPhrases = session.document.background.sensitiveDataCustomPhrases.joined(separator: ", ")
+                            withAnimation(.easeOut(duration: 0.14)) {
+                                isEditingSensitiveCustomPhrases = true
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 12, weight: .medium))
+                                Text("Add custom phrases")
+                                    .font(.system(size: 12.5, weight: .medium))
+                            }
+                            .foregroundStyle(.white.opacity(0.90))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Custom phrases")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.92))
+
+                            Text("Names, clients or other words, separated by commas")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.42))
+
+                            TextField(
+                                "Jane Appleseed, Acme Inc.",
+                                text: Binding(
+                                    get: {
+                                        isEditingSensitiveCustomPhrases
+                                            ? draftSensitiveCustomPhrases
+                                            : session.document.background.sensitiveDataCustomPhrases.joined(separator: ", ")
+                                    },
+                                    set: { newVal in
+                                        draftSensitiveCustomPhrases = newVal
+                                        session.updateSensitiveDataCustomPhrases(newVal)
+                                    }
+                                )
+                            )
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .frame(height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                            )
+                            .onSubmit {
+                                session.updateSensitiveDataCustomPhrases(draftSensitiveCustomPhrases)
+                                if session.document.background.sensitiveDataCustomPhrases.isEmpty {
+                                    isEditingSensitiveCustomPhrases = false
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            inspectorDivider
+
+            VStack(alignment: .leading, spacing: 14) {
+                inspectorToggleRow(
+                    title: "Hide faces",
+                    icon: "face.dashed.fill",
+                    description: "Blurs people's faces shown in the recording, like avatars and video calls",
+                    isOn: Binding(
+                        get: { session.document.background.hideFaces },
+                        set: { enabled in
+                            withAnimation(.easeOut(duration: 0.16)) {
+                                session.setHideFaces(enabled: enabled)
+                            }
+                        }
+                    )
+                )
+
+                if session.document.background.hideFaces {
+                    if session.isScanningFaces {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Detecting faces in recording on device…")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.75))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 12.5, weight: .semibold))
+                            Text("Review Before Sharing")
+                                .font(.system(size: 12.5, weight: .semibold))
+                        }
+                        .foregroundStyle(Color(red: 0.96, green: 0.67, blue: 0.25))
+
+                        Text("Some private details may still be visible in parts of your recording. Watch it in full before you share it.")
+                            .font(.system(size: 12.0, weight: .regular))
+                            .foregroundStyle(Color(red: 0.92, green: 0.64, blue: 0.28))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color(red: 0.24, green: 0.18, blue: 0.11).opacity(0.55))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color(red: 0.56, green: 0.42, blue: 0.24).opacity(0.55), lineWidth: 1)
+                    )
                 }
             }
         }
@@ -1997,6 +2192,63 @@ public struct InspectorSidebarView: View {
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            inspectorDivider
+
+            // 4. Voiceovers Section
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Voiceovers")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.45))
+
+                HStack(spacing: 8) {
+                    Button {
+                        session.startVoiceoverRecording()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: session.isRecordingVoiceover ? "stop.circle.fill" : "record.circle")
+                                .font(.system(size: 13.5, weight: .semibold))
+                            Text(session.isRecordingVoiceover ? "Stop Recording" : "Record voiceover")
+                                .font(.system(size: 12.5, weight: .medium))
+                        }
+                        .foregroundStyle(session.isRecordingVoiceover ? Color.white : Color(red: 1.0, green: 0.45, blue: 0.45))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(session.isRecordingVoiceover ? Color.red : Color.red.opacity(0.14))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        session.promptImportVoiceoverAudioFile()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "waveform.badge.plus")
+                                .font(.system(size: 13.0, weight: .medium))
+                            Text("Upload audio…")
+                                .font(.system(size: 12.5, weight: .medium))
+                        }
+                        .foregroundStyle(.white.opacity(0.90))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                         )
                     }
@@ -4460,6 +4712,659 @@ public struct InspectorSidebarView: View {
         if let monitor = shortcutKeyRecorderMonitor {
             NSEvent.removeMonitor(monitor)
             shortcutKeyRecorderMonitor = nil
+        }
+    }
+
+    // MARK: - 7B. Dedicated Camera Layout Segment Editor
+
+    @ViewBuilder
+    private func cameraLayoutSegmentEditor(segment: CameraLayoutSegment) -> some View {
+        let segId = segment.id
+
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. `← Close Camera Layout editor` Button
+            Button {
+                withAnimation(.easeOut(duration: 0.14)) {
+                    session.selectedCameraLayoutId = nil
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Close Camera Layout editor")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            // 2. `Disable layout` Toggle
+            inspectorToggleRow(
+                title: "Disable layout",
+                icon: nil,
+                description: nil,
+                isOn: Binding(
+                    get: { segment.disabled },
+                    set: { _ in
+                        session.toggleCameraLayoutDisabled(id: segId)
+                    }
+                )
+            )
+
+            if !segment.disabled {
+                inspectorDivider
+
+                // 3. `Layout type` 5-Card Grid
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Layout type")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.92))
+
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+                        spacing: 10
+                    ) {
+                        ForEach(CameraTimelineLayoutType.allCases) { type in
+                            cameraTimelineLayoutThumbnailCard(
+                                type: type,
+                                isSelected: segment.layoutType == type
+                            ) {
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                    session.mutate { doc in
+                                        if let idx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == segId }) {
+                                            doc.timeline.cameraLayouts[idx].layoutType = type
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 4. Per-Segment `Camera Position` overrides
+                if segment.layoutType == .cameraOverlay {
+                    inspectorDivider
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Camera Position")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        CameraPerimeterPositionGridPicker(
+                            position01: Binding(
+                                get: { segment.overlayPosition01 ?? session.document.camera.position01 },
+                                set: { pt in
+                                    session.mutate { doc in
+                                        if let idx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == segId }) {
+                                            doc.timeline.cameraLayouts[idx].overlayPosition01 = pt
+                                        }
+                                    }
+                                }
+                            )
+                        )
+                    }
+                } else if segment.layoutType == .cutoutCamera {
+                    inspectorDivider
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Camera Position")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        CameraCutoutPositionDotBarPicker(
+                            positionX01: Binding(
+                                get: { segment.cutoutPositionX01 ?? session.document.camera.cutoutPositionX01 },
+                                set: { xVal in
+                                    session.mutate { doc in
+                                        if let idx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == segId }) {
+                                            doc.timeline.cameraLayouts[idx].cutoutPositionX01 = xVal
+                                        }
+                                    }
+                                }
+                            )
+                        )
+                    }
+                } else if segment.layoutType == .splitScreen {
+                    inspectorDivider
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Split ratio")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        SplitScreenRatioCardsPicker(
+                            ratio01: Binding(
+                                get: { session.document.camera.splitScreenRatio01 },
+                                set: { newRatio in
+                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                        session.mutate { $0.camera.splitScreenRatio01 = newRatio }
+                                    }
+                                }
+                            ),
+                            isFlipped: session.document.camera.splitFlip
+                        )
+                    }
+
+                    inspectorToggleRow(
+                        title: "Flip",
+                        icon: nil,
+                        description: "If enabled, the layout will be flipped.",
+                        isOn: Binding(
+                            get: { session.document.camera.splitFlip },
+                            set: { v in
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                    session.mutate { $0.camera.splitFlip = v }
+                                }
+                            }
+                        )
+                    )
+                }
+            }
+
+            inspectorDivider
+
+            // 5. `🗑 Remove layout` Button
+            Button {
+                session.deleteCameraLayout(id: segId)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .regular))
+                    Text("Remove layout")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.035))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func cameraTimelineLayoutThumbnailCard(
+        type: CameraTimelineLayoutType,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.14, green: 0.15, blue: 0.24),
+                            Color(red: 0.08, green: 0.09, blue: 0.14)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    switch type {
+                    case .cameraOverlay:
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white)
+                            .padding(10)
+                            .overlay {
+                                Image(systemName: "display")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.black.opacity(0.85))
+                            }
+
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color(red: 0.09, green: 0.09, blue: 0.12))
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                            Image(systemName: "person")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.92))
+                        }
+                        .frame(width: 28, height: 26)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(5)
+
+                    case .splitScreen:
+                        HStack(spacing: 0) {
+                            ZStack {
+                                Color.white
+                                Image(systemName: "display")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(.black.opacity(0.85))
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                            ZStack {
+                                Color(red: 0.07, green: 0.07, blue: 0.09)
+                                Image(systemName: "person")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
+                            }
+                            .frame(width: 34)
+                        }
+
+                    case .cutoutCamera:
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white)
+                            .padding(10)
+                            .overlay {
+                                Image(systemName: "display")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.black.opacity(0.85))
+                            }
+
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 24, weight: .regular))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black, radius: 1.5)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                            .offset(x: -4, y: 3)
+
+                    case .fullscreenCamera:
+                        Color(red: 0.07, green: 0.07, blue: 0.09)
+                        Image(systemName: "person")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                    case .screenOnly:
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white)
+                            .padding(10)
+                            .overlay {
+                                Image(systemName: "display")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.black.opacity(0.85))
+                            }
+                    }
+                }
+                .frame(height: 62)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(isSelected ? Color.white.opacity(0.65) : Color.clear, lineWidth: 2.0)
+                        .padding(-3)
+                )
+
+                Text(type.label)
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.88 : 0.45))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 7C. Dedicated Voiceover Segment Editor
+
+    @ViewBuilder
+    private func voiceoverSegmentEditor(voiceover: VoiceoverSegment) -> some View {
+        let voId = voiceover.id
+        let otherCount = session.document.timeline.voiceovers.filter { $0.id != voId }.count
+
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. `← Close Voiceover editor` Button
+            Button {
+                withAnimation(.easeOut(duration: 0.14)) {
+                    session.selectedVoiceoverId = nil
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Close Voiceover editor")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            // 2. `Voiceover volume` Slider (`0% ... 100%`) + `Apply to other voiceovers`
+            VStack(alignment: .leading, spacing: 10) {
+                coalescedSlider(
+                    title: "Voiceover volume",
+                    icon: "speaker.wave.2",
+                    value: Binding(
+                        get: { voiceover.volume },
+                        set: { v in
+                            session.mutate { doc in
+                                if let idx = doc.timeline.voiceovers.firstIndex(where: { $0.id == voId }) {
+                                    doc.timeline.voiceovers[idx].volume = v
+                                }
+                            }
+                        }
+                    ),
+                    range: 0.0...1.0,
+                    defaultValue: 1.0
+                )
+
+                if otherCount > 0 {
+                    Button {
+                        session.applyVoiceoverVolumeToAllOthers(fromId: voId)
+                    } label: {
+                        Text("Apply to other voiceovers")
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.90))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            inspectorDivider
+
+            // 3. `Attach to recording`
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Attach to recording")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+
+                HStack(spacing: 6) {
+                    ForEach(VoiceoverAttachMode.allCases) { mode in
+                        inspectorPillOptionButton(
+                            title: mode.label,
+                            isSelected: voiceover.attachMode == mode
+                        ) {
+                            session.mutate { doc in
+                                if let idx = doc.timeline.voiceovers.firstIndex(where: { $0.id == voId }) {
+                                    doc.timeline.voiceovers[idx].attachMode = mode
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text(voiceover.attachMode.descriptionText)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // 4. `Hide & Mute original recording`
+            inspectorToggleRow(
+                title: "Hide & Mute original recording",
+                icon: nil,
+                description: "When enabled, the original microphone and webcam recording will be hidden and muted while the voiceover is playing.",
+                isOn: Binding(
+                    get: { voiceover.hideRecording },
+                    set: { v in
+                        session.mutate { doc in
+                            if let idx = doc.timeline.voiceovers.firstIndex(where: { $0.id == voId }) {
+                                doc.timeline.voiceovers[idx].hideRecording = v
+                            }
+                        }
+                    }
+                )
+            )
+
+            inspectorDivider
+
+            // 5. `Disable` Toggle & `🗑 Remove voiceover` Button
+            inspectorToggleRow(
+                title: "Disable",
+                icon: nil,
+                description: nil,
+                isOn: Binding(
+                    get: { voiceover.disabled },
+                    set: { _ in
+                        session.toggleVoiceoverDisabled(id: voId)
+                    }
+                )
+            )
+
+            Button {
+                session.deleteVoiceover(id: voId)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .regular))
+                    Text("Remove voiceover")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.white.opacity(0.92))
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.035))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - 7D. Device Frame / Mockup Inspector
+
+    private struct DeviceFramePresetItem: Identifiable {
+        let id: String
+        let name: String
+        let icon: String
+        let aspectRatio: Double
+        let colors: [(id: String, name: String)]
+    }
+
+    private static let builtInDeviceFrames: [DeviceFramePresetItem] = [
+        DeviceFramePresetItem(
+            id: "macbook-pro-16",
+            name: "MacBook Pro 16\"",
+            icon: "laptopcomputer",
+            aspectRatio: 16.0 / 10.0,
+            colors: [("space-black", "Space Black"), ("silver", "Silver")]
+        ),
+        DeviceFramePresetItem(
+            id: "macbook-air-15",
+            name: "MacBook Air 15\"",
+            icon: "laptopcomputer",
+            aspectRatio: 16.0 / 10.0,
+            colors: [("midnight", "Midnight"), ("starlight", "Starlight"), ("silver", "Silver")]
+        ),
+        DeviceFramePresetItem(
+            id: "iphone-16-pro",
+            name: "iPhone 16 Pro",
+            icon: "iphone",
+            aspectRatio: 9.0 / 19.5,
+            colors: [
+                ("black-titanium", "Black Titanium"),
+                ("natural-titanium", "Natural Titanium"),
+                ("desert-titanium", "Desert Titanium"),
+                ("white-titanium", "White Titanium")
+            ]
+        ),
+        DeviceFramePresetItem(
+            id: "ipad-pro-13",
+            name: "iPad Pro 13\"",
+            icon: "ipad.landscape",
+            aspectRatio: 4.0 / 3.0,
+            colors: [("space-black", "Space Black"), ("silver", "Silver")]
+        )
+    ]
+
+    @ViewBuilder
+    private var deviceFrameInspector: some View {
+        let mockup = session.document.frameStyle.deviceMockup
+        let srcW = Double(max(640, session.metadata.captureTarget.pixelSize.width))
+        let srcH = Double(max(400, session.metadata.captureTarget.pixelSize.height))
+        let recordingAspect = srcW / srcH
+        let filteredDevices: [DeviceFramePresetItem] = {
+            if mockup.matchMode == .perfect {
+                let matches = Self.builtInDeviceFrames.filter { abs($0.aspectRatio - recordingAspect) < 0.28 }
+                return matches.isEmpty ? Self.builtInDeviceFrames : matches
+            }
+            return Self.builtInDeviceFrames
+        }()
+        let activeDevice = filteredDevices.first(where: { $0.id == mockup.deviceId }) ?? filteredDevices[0]
+
+        VStack(alignment: .leading, spacing: 22) {
+            // 1. `Device` Section
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Device")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.45))
+
+                inspectorToggleRow(
+                    title: "Use device mockup",
+                    icon: nil,
+                    description: "Wrap recording in device mockup.",
+                    isOn: Binding(
+                        get: { mockup.enabled },
+                        set: { v in
+                            withAnimation(.spring(response: 0.26, dampingFraction: 0.84)) {
+                                session.mutate {
+                                    $0.frameStyle.deviceMockup.enabled = v
+                                    if $0.frameStyle.deviceMockup.deviceId == nil {
+                                        $0.frameStyle.deviceMockup.deviceId = activeDevice.id
+                                    }
+                                }
+                            }
+                        }
+                    )
+                )
+            }
+
+            if mockup.enabled {
+                inspectorDivider
+
+                // 2. `Device frames`
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Device frames")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.45))
+
+                    HStack(spacing: 8) {
+                        ForEach(DeviceFrameMatchMode.allCases) { mode in
+                            segmentLargeOptionButton(
+                                title: mode.label,
+                                icon: mode.iconName,
+                                isSelected: mockup.matchMode == mode
+                            ) {
+                                session.mutate { $0.frameStyle.deviceMockup.matchMode = mode }
+                            }
+                        }
+                    }
+
+                    Text(mockup.matchMode.descriptionText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Device Model Cards
+                    VStack(spacing: 8) {
+                        ForEach(filteredDevices) { dev in
+                            let isSelected = (activeDevice.id == dev.id)
+                            Button {
+                                session.mutate {
+                                    $0.frameStyle.deviceMockup.deviceId = dev.id
+                                    if let firstColor = dev.colors.first?.id,
+                                       !dev.colors.contains(where: { $0.id == $0.id && $0.id == mockup.colorVariantId }) {
+                                        $0.frameStyle.deviceMockup.colorVariantId = firstColor
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: dev.icon)
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.72))
+                                        .frame(width: 22)
+
+                                    Text(dev.name)
+                                        .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                                        .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.80))
+
+                                    Spacer()
+
+                                    if isSelected {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 11.5, weight: .bold))
+                                            .foregroundStyle(Color(red: 0.60, green: 0.50, blue: 1.0))
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .frame(height: 38)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .fill(isSelected ? Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.22) : Color.white.opacity(0.035))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .strokeBorder(
+                                            isSelected ? Color(red: 0.48, green: 0.36, blue: 1.0) : Color.white.opacity(0.08),
+                                            lineWidth: isSelected ? 1.4 : 1.0
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    // Color Finish Variants
+                    if activeDevice.colors.count > 1 {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 7) {
+                                Image(systemName: "circle.lefthalf.filled.righthalf.striped.horizontal.inverse")
+                                    .font(.system(size: 13, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.85))
+                                Text("Finish")
+                                    .font(.system(size: 13, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.92))
+                            }
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(activeDevice.colors, id: \.id) { cVar in
+                                        inspectorPillOptionButton(
+                                            title: cVar.name,
+                                            isSelected: mockup.colorVariantId == cVar.id
+                                        ) {
+                                            session.mutate { $0.frameStyle.deviceMockup.colorVariantId = cVar.id }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+            }
         }
     }
 

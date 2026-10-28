@@ -21,6 +21,7 @@ public struct MultiTrackTimelineView: View {
     @State private var lastZoomForAnchor: Double = 1.0
     @State private var splitWigglePhase: Bool = false
     @State private var zoomTrackHoverX: CGFloat? = nil
+    @State private var cameraLayoutTrackHoverX: CGFloat? = nil
     @State private var maskTrackHoverX: [String: CGFloat] = [:]
     @State private var shortcutTrackHoverX: [String: CGFloat] = [:]
 
@@ -125,6 +126,8 @@ public struct MultiTrackTimelineView: View {
                         // B. VERTICALLY SCROLLABLE BODY (Fixed Left Labels + Horizontally Scrollable Track Lanes)
                         let typingSuggestions = session.activeTypingSuggestions
                         let hasTypingSuggestions = !typingSuggestions.isEmpty
+                        let hasCameraLayoutsTrack = !session.document.timeline.cameraLayouts.isEmpty
+                        let hasVoiceoversTrack = !session.document.timeline.voiceovers.isEmpty || session.isRecordingVoiceover
                         let hasShortcutsTrack = !session.document.captions.shortcutTracks.isEmpty
 
                         ScrollViewReader { verticalScrollProxy in
@@ -166,6 +169,28 @@ public struct MultiTrackTimelineView: View {
                                         .frame(width: labelColumnWidth, height: zoomRowHeight, alignment: .leading)
                                         .id("track_zoom")
 
+                                        if hasCameraLayoutsTrack {
+                                            let layoutsHidden = session.document.timeline.isCameraLayoutsTrackHidden
+                                            HStack(spacing: 6) {
+                                                Button {
+                                                    session.toggleCameraLayoutsTrackVisibility()
+                                                } label: {
+                                                    Image(systemName: layoutsHidden ? "eye.slash" : "eye")
+                                                        .font(.system(size: 10, weight: .medium))
+                                                        .foregroundStyle(Color.white.opacity(layoutsHidden ? 0.28 : 0.65))
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Text("Layouts")
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundStyle(Color.white.opacity(layoutsHidden ? 0.30 : 0.65))
+                                                    .lineLimit(1)
+                                            }
+                                            .padding(.leading, 14)
+                                            .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .id("track_camera_layouts")
+                                        }
+
                                         ForEach(session.document.timeline.maskTracks) { track in
                                             let maskHidden = track.isHidden
                                             HStack(spacing: 6) {
@@ -186,6 +211,28 @@ public struct MultiTrackTimelineView: View {
                                             .padding(.leading, 14)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                             .id("track_mask_\(track.id)")
+                                        }
+
+                                        if hasVoiceoversTrack {
+                                            let voHidden = session.document.timeline.isVoiceoversTrackHidden
+                                            HStack(spacing: 6) {
+                                                Button {
+                                                    session.toggleVoiceoversTrackVisibility()
+                                                } label: {
+                                                    Image(systemName: voHidden ? "eye.slash" : "eye")
+                                                        .font(.system(size: 10, weight: .medium))
+                                                        .foregroundStyle(Color.white.opacity(voHidden ? 0.28 : 0.65))
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Text("Voiceovers")
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundStyle(Color.white.opacity(voHidden ? 0.30 : 0.65))
+                                                    .lineLimit(1)
+                                            }
+                                            .padding(.leading, 14)
+                                            .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .id("track_voiceovers")
                                         }
 
                                         if hasShortcutsTrack {
@@ -258,11 +305,27 @@ public struct MultiTrackTimelineView: View {
                                                     totalTimelineMs: totalTimelineMs
                                                 )
 
+                                                // Lane 2B: Camera Layouts
+                                                if hasCameraLayoutsTrack {
+                                                    cameraLayoutsLaneView(
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                }
+
                                                 // Lane 3+: Dynamic Mask Tracks (`34pt` height)
                                                 ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
                                                     maskLaneView(
                                                         track: track,
                                                         trackIndex: trackIdx,
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                }
+
+                                                // Lane 3B: Voiceovers Track
+                                                if hasVoiceoversTrack {
+                                                    voiceoversLaneView(
                                                         contentWidth: contentWidth,
                                                         totalTimelineMs: totalTimelineMs
                                                     )
@@ -1119,6 +1182,291 @@ public struct MultiTrackTimelineView: View {
         return (tStart, tEnd, srcStart, srcEnd)
     }
 
+    // MARK: - 2B. Camera Layouts Track Lane
+
+    @ViewBuilder
+    private func cameraLayoutsLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
+        let isHidden = session.document.timeline.isCameraLayoutsTrackHidden
+        let isMousePressed = (NSEvent.pressedMouseButtons != 0)
+        let addPreview = (!session.isSplitModeActive && !session.isDraggingTimelineSegment && !isMousePressed && !isHidden)
+            ? hoverAddCameraLayoutSpan(contentWidth: contentWidth, totalTimelineMs: totalTimelineMs)
+            : nil
+
+        ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: maskRowHeight)
+                .contentShape(Rectangle())
+
+            if let preview = addPreview {
+                let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
+                let previewW = max(24.0, CGFloat((preview.tEndMs - preview.tStartMs) / totalTimelineMs) * contentWidth - 1.0)
+                let palette = SegmentShaderPalette.cameraLayout
+
+                Button {
+                    session.isPlaying = false
+                    session.seek(toTimelineMs: (preview.tStartMs + preview.tEndMs) * 0.5)
+                    session.addCameraLayoutInRange(
+                        sourceStartMs: preview.srcStartMs,
+                        sourceEndMs: preview.srcEndMs,
+                        type: .cameraOverlay
+                    )
+                } label: {
+                    ZStack {
+                        SegmentBodyCanvas(
+                            palette: palette,
+                            isSelected: false,
+                            isPlayed: false
+                        )
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.96))
+                    }
+                    .frame(width: previewW, height: maskRowHeight)
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .offset(x: previewX)
+                .transition(.opacity.animation(.easeOut(duration: 0.12)))
+                .zIndex(5)
+            }
+
+            ForEach(session.document.timeline.cameraLayouts) { seg in
+                if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: seg.sourceStartMs, sourceEndMs: seg.sourceEndMs) {
+                    let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                    let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
+                    let isSelected = (session.selectedCameraLayoutId == seg.id)
+                    let isOtherSelected = (session.selectedCameraLayoutId != nil && session.selectedCameraLayoutId != seg.id)
+                    let isPlayedNow = session.committedSourceTimeMs >= seg.sourceStartMs
+                        && session.committedSourceTimeMs <= seg.sourceEndMs
+
+                    TimelineInteractiveSegmentView(
+                        topTitle: "Layout",
+                        subtitleContent: .mask(text: seg.layoutType.timelineSubtitle),
+                        palette: .cameraLayout,
+                        isSelected: isSelected,
+                        isPlayed: isPlayedNow,
+                        isDimmed: isHidden || seg.disabled,
+                        isDimmedBySelection: isOtherSelected,
+                        isSplitMode: session.isSplitModeActive,
+                        xOffset: xStart,
+                        width: blockW,
+                        height: maskRowHeight,
+                        totalWidth: contentWidth,
+                        trackTotalDurationMs: totalTimelineMs,
+                        startMs: tStartMs,
+                        endMs: tEndMs,
+                        allowDragMove: true,
+                        allowVerticalTrackDrag: false,
+                        clipDecoration: nil,
+                        onClickAtLocalX: { localX in
+                            let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
+                            let clickedTimelineMs = session.hoverSkimTimelineMs
+                                ?? (tStartMs + frac * (tEndMs - tStartMs))
+                            session.isPlaying = false
+                            session.seek(toTimelineMs: clickedTimelineMs)
+                            if session.isSplitModeActive {
+                                let splitSourceMs = session.timeMapper.sourceTime(forTimelineMs: clickedTimelineMs).sourceMs
+                                session.splitCameraLayout(id: seg.id, atSourceMs: splitSourceMs)
+                            } else {
+                                session.selectCameraLayout(seg.id)
+                            }
+                        },
+                        onRightClick: { pointInView, parentView in
+                            session.selectCameraLayout(seg.id)
+                            NativeSegmentContextMenuPresenter.shared.presentCameraLayoutContextMenu(
+                                session: session,
+                                layoutId: seg.id,
+                                at: pointInView,
+                                in: parentView
+                            )
+                        },
+                        onBeginInteractive: {
+                            session.selectCameraLayout(seg.id)
+                            session.beginInteractiveEdit()
+                        },
+                        onMoveBody: { desiredTimelineStartMs, constantTimelineDurMs in
+                            let dur = max(250.0, constantTimelineDurMs)
+                            let clampedTimelineStart = max(0.0, min(totalTimelineMs - dur, desiredTimelineStartMs))
+                            let clampedTimelineEnd = clampedTimelineStart + dur
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
+                            let newSrcEnd = max(newSrcStart + 250.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
+                            session.moveCameraLayout(id: seg.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
+                        },
+                        onResizeRange: { newTimelineStart, newTimelineEnd in
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
+                            let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs
+                            session.resizeCameraLayout(id: seg.id, newStartMs: newSrcStart, newEndMs: newSrcEnd)
+                        },
+                        onMoveVerticalTracks: { _ in },
+                        onEndInteractive: {
+                            session.endInteractiveEdit()
+                        }
+                    )
+                }
+            }
+        }
+        .frame(width: contentWidth, height: maskRowHeight)
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let pt):
+                if session.isDraggingTimelineSegment || NSEvent.pressedMouseButtons != 0 {
+                    cameraLayoutTrackHoverX = nil
+                } else {
+                    cameraLayoutTrackHoverX = max(0.0, min(contentWidth, pt.x))
+                }
+            case .ended:
+                cameraLayoutTrackHoverX = nil
+            }
+        }
+    }
+
+    private func hoverAddCameraLayoutSpan(
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> (tStartMs: Double, tEndMs: Double, srcStartMs: Double, srcEndMs: Double)? {
+        guard let hoverX = cameraLayoutTrackHoverX, contentWidth > 10 else { return nil }
+        let hoverTimelineMs = Double(hoverX / contentWidth) * totalTimelineMs
+
+        var existingSpans: [(start: Double, end: Double)] = []
+        for seg in session.document.timeline.cameraLayouts {
+            if let (ts, te) = timelineSpan(forSourceStartMs: seg.sourceStartMs, sourceEndMs: seg.sourceEndMs) {
+                existingSpans.append((ts, te))
+            }
+        }
+        existingSpans.sort { $0.start < $1.start }
+
+        let marginMs = Double(4.0 / contentWidth) * totalTimelineMs
+        for span in existingSpans {
+            if hoverTimelineMs >= span.start - marginMs && hoverTimelineMs <= span.end + marginMs {
+                return nil
+            }
+        }
+
+        let availStart = existingSpans.last(where: { $0.end <= hoverTimelineMs })?.end ?? 0.0
+        let availEnd = existingSpans.first(where: { $0.start >= hoverTimelineMs })?.start ?? totalTimelineMs
+        guard availEnd - availStart >= 450.0 else { return nil }
+
+        let desiredDur = min(2800.0, availEnd - availStart)
+        let tStart = max(availStart, min(availEnd - desiredDur, hoverTimelineMs - desiredDur * 0.5))
+        let tEnd = min(availEnd, tStart + desiredDur)
+
+        let srcStart = session.timeMapper.sourceTime(forTimelineMs: tStart).sourceMs
+        let srcEnd = session.timeMapper.sourceTime(forTimelineMs: tEnd).sourceMs
+        guard srcEnd - srcStart >= 350.0 else { return nil }
+        return (tStart, tEnd, srcStart, srcEnd)
+    }
+
+    // MARK: - 3B. Voiceovers Track Lane
+
+    @ViewBuilder
+    private func voiceoversLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
+        let isHidden = session.document.timeline.isVoiceoversTrackHidden
+
+        ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: maskRowHeight)
+                .contentShape(Rectangle())
+
+            if session.document.timeline.voiceovers.isEmpty && session.isRecordingVoiceover {
+                let startMs = session.timeMapper.timelineTime(forSourceMs: session.voiceoverRecordingStartSourceMs) ?? 0.0
+                let curMs = max(startMs + 100.0, session.playheadTimelineMs)
+                let recX = CGFloat(startMs / totalTimelineMs) * contentWidth
+                let recW = max(24.0, CGFloat((curMs - startMs) / totalTimelineMs) * contentWidth)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 7, height: 7)
+                    Text("Recording voiceover…")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 10)
+                .frame(width: recW, height: maskRowHeight, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.red.opacity(0.32))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.red.opacity(0.85), lineWidth: 1.2)
+                )
+                .offset(x: recX)
+            }
+
+            ForEach(session.document.timeline.voiceovers) { vo in
+                if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: vo.sourceStartMs, sourceEndMs: vo.sourceEndMs) {
+                    let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                    let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
+                    let isSelected = (session.selectedVoiceoverId == vo.id)
+                    let isOtherSelected = (session.selectedVoiceoverId != nil && session.selectedVoiceoverId != vo.id)
+                    let isPlayedNow = session.committedSourceTimeMs >= vo.sourceStartMs
+                        && session.committedSourceTimeMs <= vo.sourceEndMs
+
+                    TimelineInteractiveSegmentView(
+                        topTitle: "Voiceover",
+                        subtitleContent: .mask(text: "Microphone \(Int(round(vo.volume * 100)))%"),
+                        palette: .mask,
+                        isSelected: isSelected,
+                        isPlayed: isPlayedNow,
+                        isDimmed: isHidden || vo.disabled || vo.volume <= 0.001,
+                        isDimmedBySelection: isOtherSelected,
+                        isSplitMode: false,
+                        xOffset: xStart,
+                        width: blockW,
+                        height: maskRowHeight,
+                        totalWidth: contentWidth,
+                        trackTotalDurationMs: totalTimelineMs,
+                        startMs: tStartMs,
+                        endMs: tEndMs,
+                        allowDragMove: true,
+                        allowVerticalTrackDrag: false,
+                        clipDecoration: nil,
+                        onClickAtLocalX: { localX in
+                            let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
+                            let clickedTimelineMs = session.hoverSkimTimelineMs
+                                ?? (tStartMs + frac * (tEndMs - tStartMs))
+                            session.isPlaying = false
+                            session.seek(toTimelineMs: clickedTimelineMs)
+                            session.selectVoiceover(vo.id)
+                        },
+                        onRightClick: { pointInView, parentView in
+                            session.selectVoiceover(vo.id)
+                            NativeSegmentContextMenuPresenter.shared.presentVoiceoverContextMenu(
+                                session: session,
+                                voiceoverId: vo.id,
+                                at: pointInView,
+                                in: parentView
+                            )
+                        },
+                        onBeginInteractive: {
+                            session.selectVoiceover(vo.id)
+                            session.beginInteractiveEdit()
+                        },
+                        onMoveBody: { desiredTimelineStartMs, constantTimelineDurMs in
+                            let dur = max(250.0, constantTimelineDurMs)
+                            let clampedTimelineStart = max(0.0, min(totalTimelineMs - dur, desiredTimelineStartMs))
+                            let clampedTimelineEnd = clampedTimelineStart + dur
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
+                            let newSrcEnd = max(newSrcStart + 250.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
+                            session.moveVoiceover(id: vo.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
+                        },
+                        onResizeRange: { newTimelineStart, newTimelineEnd in
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
+                            let newSrcEnd = max(newSrcStart + 300.0, session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs)
+                            session.moveVoiceover(id: vo.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
+                        },
+                        onMoveVerticalTracks: { _ in },
+                        onEndInteractive: {
+                            session.endInteractiveEdit()
+                        }
+                    )
+                }
+            }
+        }
+        .frame(width: contentWidth, height: maskRowHeight)
+    }
+
     private func timelineSpan(forSourceStartMs sourceStartMs: Double, sourceEndMs: Double) -> (Double, Double)? {
         var earliestTimelineMs: Double?
         var latestTimelineMs: Double?
@@ -1819,6 +2167,18 @@ private struct SegmentShaderPalette: Equatable {
         ringBorder: Color(red: 0.863, green: 0.651, blue: 0.753),
         playedRingBorder: Color(red: 0.718, green: 0.294, blue: 0.502),
         selectedOuterOutline: Color(red: 0.776, green: 0.365, blue: 0.569).opacity(0.80)
+    )
+
+    /// Camera Layout:
+    static let cameraLayout = SegmentShaderPalette(
+        fillTop: Color(red: 0.396, green: 0.341, blue: 0.369),
+        fillBottom: Color(red: 0.553, green: 0.486, blue: 0.518),
+        innerEdgeGlow: Color(red: 0.310, green: 0.267, blue: 0.290).opacity(0.80),
+        activeInnerEdgeGlow: Color(red: 0.310, green: 0.267, blue: 0.290).opacity(0.50),
+        playedInnerEdgeGlow: Color(red: 0.396, green: 0.341, blue: 0.369).opacity(0.50),
+        ringBorder: Color(red: 0.820, green: 0.784, blue: 0.804),
+        playedRingBorder: Color(red: 0.553, green: 0.486, blue: 0.518),
+        selectedOuterOutline: Color(red: 0.660, green: 0.596, blue: 0.627).opacity(0.80)
     )
 }
 

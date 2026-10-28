@@ -943,6 +943,25 @@ public final class HardwareVideoExporter {
                 throw NSError(domain: "NativeScreenExport", code: -6, userInfo: [NSLocalizedDescriptionKey: "Cannot configure MP4 passthrough muxer."])
             }
             muxWriter.add(muxInput)
+
+            // Multi-Track Audio Mixdown (`display.mp4` system audio + `microphone.m4a` + `voiceovers` + `backgroundMusic`)
+            let audioPipeline = await buildMultiTrackAudioReaderAndOutput(session: session)
+            var muxAudioInput: AVAssetWriterInput? = nil
+            if audioPipeline != nil {
+                let aSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 48_000,
+                    AVNumberOfChannelsKey: 2,
+                    AVEncoderBitRateKey: 160_000
+                ]
+                let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aSettings)
+                aInput.expectsMediaDataInRealTime = false
+                if muxWriter.canAdd(aInput) {
+                    muxWriter.add(aInput)
+                    muxAudioInput = aInput
+                }
+            }
+
             muxWriter.startWriting()
             muxWriter.startSession(atSourceTime: .zero)
 
@@ -953,8 +972,24 @@ public final class HardwareVideoExporter {
                 }
                 muxInput.append(sample)
             }
-
             muxInput.markAsFinished()
+
+            if let aInput = muxAudioInput, let (aReader, aOutput) = audioPipeline {
+                while aReader.status == .reading {
+                    try Task.checkCancellation()
+                    while !aInput.isReadyForMoreMediaData {
+                        try Task.checkCancellation()
+                        try await Task.sleep(for: .milliseconds(1))
+                    }
+                    if let aSample = aOutput.copyNextSampleBuffer() {
+                        aInput.append(aSample)
+                    } else {
+                        break
+                    }
+                }
+                aInput.markAsFinished()
+            }
+
             await muxWriter.finishWriting()
             onProgress(progressRange.1)
         } catch {
@@ -1010,6 +1045,27 @@ public final class HardwareVideoExporter {
             throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot configure ProRes video writer input."])
         }
         writer.add(writerInput)
+
+        let audioPipeline = await buildMultiTrackAudioReaderAndOutput(session: session)
+        var proResAudioInput: AVAssetWriterInput? = nil
+        if audioPipeline != nil {
+            let aSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: 48_000,
+                AVNumberOfChannelsKey: 2,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsNonInterleaved: false
+            ]
+            let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aSettings)
+            aInput.expectsMediaDataInRealTime = false
+            if writer.canAdd(aInput) {
+                writer.add(aInput)
+                proResAudioInput = aInput
+            }
+        }
+
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
 
@@ -1079,6 +1135,23 @@ public final class HardwareVideoExporter {
             try Task.checkCancellation()
             frameReader?.cancel()
             writerInput.markAsFinished()
+
+            if let aInput = proResAudioInput, let (aReader, aOutput) = audioPipeline {
+                while aReader.status == .reading {
+                    try Task.checkCancellation()
+                    while !aInput.isReadyForMoreMediaData {
+                        try Task.checkCancellation()
+                        try await Task.sleep(for: .milliseconds(1))
+                    }
+                    if let aSample = aOutput.copyNextSampleBuffer() {
+                        aInput.append(aSample)
+                    } else {
+                        break
+                    }
+                }
+                aInput.markAsFinished()
+            }
+
             await writer.finishWriting()
             onProgress(progressRange.1)
         } catch {
@@ -1087,6 +1160,157 @@ public final class HardwareVideoExporter {
             try? FileManager.default.removeItem(at: outputURL)
             throw error
         }
+    }
+
+    // MARK: - 4. Multi-Track NLE Audio Mixdown (`display.mp4` + `microphone.m4a` + `VoiceoverSegment`s + `BackgroundMusicConfig`)
+
+    @MainActor
+    private static func buildMultiTrackAudioReaderAndOutput(
+        session: ProjectSession
+    ) async -> (reader: AVAssetReader, output: AVAssetReaderAudioMixOutput)? {
+        let doc = session.document
+        let masterVol = Float(max(0.0, min(2.0, doc.audio.masterVolume)))
+        guard masterVol > 0.001 else { return nil }
+
+        let composition = AVMutableComposition()
+        var mixParams: [AVMutableAudioMixInputParameters] = []
+        let mappedSlices = session.timeMapper.mappedSlices
+        let totalTimelineSec = max(0.1, session.timeMapper.totalTimelineDurationMs / 1000.0)
+
+        // 1. System Audio Track (`display.mp4`) across edited `ClipSlice`s
+        if !doc.audio.muteSystemAudio && doc.audio.systemAudioVolume > 0.001 {
+            let sysURL = session.videoFileURL
+            if FileManager.default.fileExists(atPath: sysURL.path) {
+                let sysAsset = AVURLAsset(url: sysURL)
+                if let sysAudioTracks = try? await sysAsset.loadTracks(withMediaType: .audio),
+                   let srcSysTrack = sysAudioTracks.first,
+                   let compSysTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+                    let params = AVMutableAudioMixInputParameters(track: compSysTrack)
+                    var hasInsertedAny = false
+                    for mapped in mappedSlices {
+                        let slice = mapped.slice
+                        let sliceStartCM = CMTime(seconds: slice.sourceStartMs / 1000.0, preferredTimescale: 600)
+                        let sliceDurCM = CMTime(seconds: slice.sourceDurationMs / 1000.0, preferredTimescale: 600)
+                        let destStartCM = CMTime(seconds: mapped.timelineStartMs / 1000.0, preferredTimescale: 600)
+                        let destDurCM = CMTime(seconds: (mapped.timelineEndMs - mapped.timelineStartMs) / 1000.0, preferredTimescale: 600)
+                        if (try? compSysTrack.insertTimeRange(CMTimeRange(start: sliceStartCM, duration: sliceDurCM), of: srcSysTrack, at: destStartCM)) != nil {
+                            if abs(slice.speed - 1.0) > 0.01 {
+                                compSysTrack.scaleTimeRange(CMTimeRange(start: destStartCM, duration: sliceDurCM), toDuration: destDurCM)
+                            }
+                            let vol = slice.muted ? Float(0.0) : Float(min(1.0, max(0.0, slice.systemAudioVolume * doc.audio.systemAudioVolume * Double(masterVol))))
+                            params.setVolume(vol, at: destStartCM)
+                            hasInsertedAny = true
+                        }
+                    }
+                    if hasInsertedAny {
+                        mixParams.append(params)
+                    } else {
+                        composition.removeTrack(compSysTrack)
+                    }
+                }
+            }
+        }
+
+        // 2. Recorded Microphone Track (`microphone.m4a`) across edited `ClipSlice`s (respecting `VoiceoverSegment.hideRecording`)
+        if !doc.audio.muteMicrophone && doc.audio.microphoneVolume > 0.001,
+           let micURL = session.microphoneAudioFileURL,
+           FileManager.default.fileExists(atPath: micURL.path) {
+            let micAsset = AVURLAsset(url: micURL)
+            if let micTracks = try? await micAsset.loadTracks(withMediaType: .audio),
+               let srcMicTrack = micTracks.first,
+               let compMicTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+                let params = AVMutableAudioMixInputParameters(track: compMicTrack)
+                var hasInsertedAny = false
+                for mapped in mappedSlices {
+                    let slice = mapped.slice
+                    let sliceStartCM = CMTime(seconds: slice.sourceStartMs / 1000.0, preferredTimescale: 600)
+                    let sliceDurCM = CMTime(seconds: slice.sourceDurationMs / 1000.0, preferredTimescale: 600)
+                    let destStartCM = CMTime(seconds: mapped.timelineStartMs / 1000.0, preferredTimescale: 600)
+                    let destDurCM = CMTime(seconds: (mapped.timelineEndMs - mapped.timelineStartMs) / 1000.0, preferredTimescale: 600)
+                    if (try? compMicTrack.insertTimeRange(CMTimeRange(start: sliceStartCM, duration: sliceDurCM), of: srcMicTrack, at: destStartCM)) != nil {
+                        if abs(slice.speed - 1.0) > 0.01 {
+                            compMicTrack.scaleTimeRange(CMTimeRange(start: destStartCM, duration: sliceDurCM), toDuration: destDurCM)
+                        }
+                        let baseVol = slice.muted ? Float(0.0) : Float(min(1.0, max(0.0, doc.audio.microphoneVolume * Double(masterVol))))
+                        params.setVolume(baseVol, at: destStartCM)
+                        hasInsertedAny = true
+                    }
+                }
+                // Duck/mute original microphone during any active `VoiceoverSegment` with `hideRecording == true`
+                if !doc.timeline.isVoiceoversTrackHidden {
+                    for vo in doc.timeline.voiceovers where !vo.disabled && vo.hideRecording {
+                        if let tStart = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs),
+                           let tEnd = session.timeMapper.timelineTime(forSourceMs: vo.sourceEndMs),
+                           tEnd > tStart {
+                            params.setVolume(0.0, at: CMTime(seconds: tStart / 1000.0, preferredTimescale: 600))
+                            let baseVol = Float(min(1.0, max(0.0, doc.audio.microphoneVolume * Double(masterVol))))
+                            params.setVolume(baseVol, at: CMTime(seconds: tEnd / 1000.0, preferredTimescale: 600))
+                        }
+                    }
+                }
+                if hasInsertedAny {
+                    mixParams.append(params)
+                } else {
+                    composition.removeTrack(compMicTrack)
+                }
+            }
+        }
+
+        // 3. Voiceover Segments (`doc.timeline.voiceovers`)
+        if !doc.timeline.isVoiceoversTrackHidden {
+            for vo in doc.timeline.voiceovers where !vo.disabled && vo.volume > 0.001 {
+                let voURL = session.packageURL.appendingPathComponent(vo.relativePath)
+                guard FileManager.default.fileExists(atPath: voURL.path) else { continue }
+                let voAsset = AVURLAsset(url: voURL)
+                guard let voTracks = try? await voAsset.loadTracks(withMediaType: .audio),
+                      let srcVOTrack = voTracks.first,
+                      let compVOTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                    continue
+                }
+                let assetDur = (try? await voAsset.load(.duration)) ?? CMTime(seconds: vo.durationMs / 1000.0, preferredTimescale: 600)
+                let startTimelineMs = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs) ?? vo.sourceStartMs
+                let destStartCM = CMTime(seconds: max(0.0, startTimelineMs / 1000.0), preferredTimescale: 600)
+                let clipDurSec = min(CMTimeGetSeconds(assetDur), max(0.1, totalTimelineSec - CMTimeGetSeconds(destStartCM)))
+                guard clipDurSec > 0.05 else {
+                    composition.removeTrack(compVOTrack)
+                    continue
+                }
+                let insertRange = CMTimeRange(start: .zero, duration: CMTime(seconds: clipDurSec, preferredTimescale: 600))
+                if (try? compVOTrack.insertTimeRange(insertRange, of: srcVOTrack, at: destStartCM)) != nil {
+                    let params = AVMutableAudioMixInputParameters(track: compVOTrack)
+                    params.setVolume(Float(min(1.0, max(0.0, vo.volume * Double(masterVol)))), at: destStartCM)
+                    mixParams.append(params)
+                } else {
+                    composition.removeTrack(compVOTrack)
+                }
+            }
+        }
+
+        let audioTracks = composition.tracks(withMediaType: .audio)
+        guard !audioTracks.isEmpty,
+              let reader = try? AVAssetReader(asset: composition) else {
+            return nil
+        }
+
+        let pcmSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 48_000,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        let mixOutput = AVAssetReaderAudioMixOutput(audioTracks: audioTracks, audioSettings: pcmSettings)
+        let audioMix = AVMutableAudioMix()
+        audioMix.inputParameters = mixParams
+        mixOutput.audioMix = audioMix
+        mixOutput.alwaysCopiesSampleData = false
+
+        guard reader.canAdd(mixOutput) else { return nil }
+        reader.add(mixOutput)
+        guard reader.startReading() else { return nil }
+        return (reader, mixOutput)
     }
 
     @MainActor

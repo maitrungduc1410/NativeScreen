@@ -31,9 +31,17 @@ public final class ProjectSession: Identifiable {
     public var isShowingStillFrameExportModal: Bool = false
     public var isShowingCameraCropModal: Bool = false
     public var isGeneratingTranscript: Bool = false
+    public var isScanningSensitiveData: Bool = false
+    public var isScanningFaces: Bool = false
+    public var isRecordingVoiceover: Bool = false
+    public var voiceoverRecordingStartSourceMs: Double = 0.0
+    @ObservationIgnored private var activeVoiceoverRecorder: AVAudioRecorder?
+    @ObservationIgnored private var activeVoiceoverRelativePath: String?
     public var selectedSliceId: String?
     public var selectedZoomId: String?
+    public var selectedCameraLayoutId: String?
     public var selectedMaskId: String?
+    public var selectedVoiceoverId: String?
     public var selectedShortcutId: String?
     public var pendingAddMaskType: MaskType? = nil
     public var pendingAddMaskStyle: MaskStyle = .gaussian
@@ -58,6 +66,7 @@ public final class ProjectSession: Identifiable {
     // Clipboard for Zoom / Mask Copy & Cut (`⌘C` / `⌘X`)
     public var copiedZoomBlock: ZoomBlock?
     public var copiedMaskItem: MaskItem?
+    public var copiedCameraLayoutSegment: CameraLayoutSegment?
 
     // Cached NLE Mapper & 120Hz Spring Trajectory Solver
     public private(set) var timeMapper: NLETimeMapper
@@ -97,6 +106,7 @@ public final class ProjectSession: Identifiable {
         case audio = "Audio"
         case shortcuts = "Shortcuts"
         case zoom = "Zoom"
+        case deviceFrame = "Device Frame"
         case masks = "Masks"
 
         public var id: String { rawValue }
@@ -112,6 +122,7 @@ public final class ProjectSession: Identifiable {
             case .audio: return "Audio"
             case .shortcuts: return "Keyboard Shortcuts"
             case .zoom: return "Animations"
+            case .deviceFrame: return "Device Frame"
             case .masks: return "Masks"
             }
         }
@@ -127,6 +138,7 @@ public final class ProjectSession: Identifiable {
             case .audio: return "⌘ 7"
             case .shortcuts: return "⌘ 8"
             case .zoom: return "⌘ 9"
+            case .deviceFrame: return "⌘ 0"
             case .masks: return nil
             }
         }
@@ -142,6 +154,7 @@ public final class ProjectSession: Identifiable {
             case .audio: return "speaker.wave.1"
             case .shortcuts: return "command"
             case .zoom: return "point.topleft.down.to.point.bottomright.curvepath.fill"
+            case .deviceFrame: return "laptopcomputer.and.iphone"
             case .masks: return "circle.filled.pattern.diagonalline.rectangle"
             }
         }
@@ -531,7 +544,9 @@ public final class ProjectSession: Identifiable {
     public func selectSlice(_ id: String?) {
         selectedSliceId = id
         selectedZoomId = nil
+        selectedCameraLayoutId = nil
         selectedMaskId = nil
+        selectedVoiceoverId = nil
         selectedShortcutId = nil
         pendingAddMaskType = nil
         renderRevision &+= 1
@@ -540,7 +555,9 @@ public final class ProjectSession: Identifiable {
     public func selectZoom(_ id: String?) {
         selectedZoomId = id
         selectedSliceId = nil
+        selectedCameraLayoutId = nil
         selectedMaskId = nil
+        selectedVoiceoverId = nil
         selectedShortcutId = nil
         pendingAddMaskType = nil
         if id != nil {
@@ -549,13 +566,43 @@ public final class ProjectSession: Identifiable {
         renderRevision &+= 1
     }
 
+    public func selectCameraLayout(_ id: String?) {
+        selectedCameraLayoutId = id
+        selectedSliceId = nil
+        selectedZoomId = nil
+        selectedMaskId = nil
+        selectedVoiceoverId = nil
+        selectedShortcutId = nil
+        pendingAddMaskType = nil
+        if id != nil {
+            selectedInspectorTab = .cameraLayout
+        }
+        renderRevision &+= 1
+    }
+
     public func selectMask(_ id: String?) {
         selectedMaskId = id
         selectedSliceId = nil
         selectedZoomId = nil
+        selectedCameraLayoutId = nil
+        selectedVoiceoverId = nil
         selectedShortcutId = nil
         if id != nil {
             selectedInspectorTab = .masks
+        }
+        renderRevision &+= 1
+    }
+
+    public func selectVoiceover(_ id: String?) {
+        selectedVoiceoverId = id
+        selectedSliceId = nil
+        selectedZoomId = nil
+        selectedCameraLayoutId = nil
+        selectedMaskId = nil
+        selectedShortcutId = nil
+        pendingAddMaskType = nil
+        if id != nil {
+            selectedInspectorTab = .audio
         }
         renderRevision &+= 1
     }
@@ -564,7 +611,9 @@ public final class ProjectSession: Identifiable {
         selectedShortcutId = id
         selectedSliceId = nil
         selectedZoomId = nil
+        selectedCameraLayoutId = nil
         selectedMaskId = nil
+        selectedVoiceoverId = nil
         pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .shortcuts
@@ -575,7 +624,9 @@ public final class ProjectSession: Identifiable {
     public func clearTimelineSelection() {
         selectedSliceId = nil
         selectedZoomId = nil
+        selectedCameraLayoutId = nil
         selectedMaskId = nil
+        selectedVoiceoverId = nil
         selectedShortcutId = nil
         pendingAddMaskType = nil
         renderRevision &+= 1
@@ -585,6 +636,14 @@ public final class ProjectSession: Identifiable {
         if let shortcutId = selectedShortcutId,
            let cluster = detectedShortcutClusters.first(where: { $0.id == shortcutId }) {
             deleteShortcut(cluster)
+            return
+        }
+        if let voId = selectedVoiceoverId {
+            deleteVoiceover(id: voId)
+            return
+        }
+        if let layoutId = selectedCameraLayoutId {
+            deleteCameraLayout(id: layoutId)
             return
         }
         if let maskId = selectedMaskId {
@@ -1658,6 +1717,10 @@ public final class ProjectSession: Identifiable {
     /// Splits whichever item is currently selected at `currentSourceTimeMs` (or splits the Clip at Playhead) when pressing `C`.
     public func splitAtCurrentTimeShortcut() {
         let srcMs = currentSourceTimeMs
+        if let layoutId = selectedCameraLayoutId {
+            splitCameraLayout(id: layoutId, atSourceMs: srcMs)
+            return
+        }
         if let maskId = selectedMaskId {
             splitMask(id: maskId, atSourceMs: srcMs)
             return
@@ -1669,8 +1732,16 @@ public final class ProjectSession: Identifiable {
         splitSliceAtPlayhead()
     }
 
-    /// Toggles `disabled` on the selected Zoom or Mask when pressing `D`.
+    /// Toggles `disabled` on the selected Zoom, Camera Layout, Voiceover, or Mask when pressing `D`.
     public func toggleDisableSelectedShortcut() {
+        if let voId = selectedVoiceoverId {
+            toggleVoiceoverDisabled(id: voId)
+            return
+        }
+        if let layoutId = selectedCameraLayoutId {
+            toggleCameraLayoutDisabled(id: layoutId)
+            return
+        }
         if let maskId = selectedMaskId {
             toggleMaskDisabled(id: maskId)
             return
@@ -3063,5 +3134,533 @@ public final class ProjectSession: Identifiable {
             slices[nextIdx].sourceStartMs = min(slices[nextIdx].sourceStartMs, start)
             doc.timeline.slices = slices
         }
+    }
+
+    // MARK: - AI Sensitive Data OCR (`VNRecognizeTextRequest`) & Face Blur (`VNDetectFaceRectanglesRequest`)
+
+    public func setHideSensitiveData(enabled: Bool) {
+        mutate { doc in
+            doc.background.hideSensitiveData = enabled
+            if !enabled {
+                for tIdx in doc.timeline.maskTracks.indices {
+                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoSensitiveMask }
+                }
+            }
+        }
+        if enabled {
+            rescanSensitiveDataMasks()
+        }
+    }
+
+    public func updateSensitiveDataCustomPhrases(_ rawCommaString: String) {
+        let phrases = rawCommaString
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        mutate { doc in
+            doc.background.sensitiveDataCustomPhrases = phrases
+        }
+        if document.background.hideSensitiveData {
+            rescanSensitiveDataMasks()
+        }
+    }
+
+    public func rescanSensitiveDataMasks() {
+        guard !isScanningSensitiveData else { return }
+        isScanningSensitiveData = true
+        let url = videoFileURL
+        let durMs = metadata.durationMs
+        let phrases = document.background.sensitiveDataCustomPhrases
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let detected = await LocalOnDeviceMediaIntelligence.detectSensitiveDataMasks(
+                videoURL: url,
+                durationMs: durMs,
+                customPhrases: phrases
+            )
+            self.isScanningSensitiveData = false
+            guard self.document.background.hideSensitiveData else { return }
+
+            self.mutate { doc in
+                for tIdx in doc.timeline.maskTracks.indices {
+                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoSensitiveMask }
+                }
+                if !detected.isEmpty {
+                    let newTrack = MaskTrack(
+                        name: doc.timeline.maskTracks.isEmpty ? "Masks" : "Masks \(doc.timeline.maskTracks.count + 1)",
+                        isHidden: false,
+                        items: detected
+                    )
+                    doc.timeline.maskTracks.append(newTrack)
+                }
+            }
+        }
+    }
+
+    public func setHideFaces(enabled: Bool) {
+        mutate { doc in
+            doc.background.hideFaces = enabled
+            if !enabled {
+                for tIdx in doc.timeline.maskTracks.indices {
+                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoFaceMask }
+                }
+            }
+        }
+        if enabled {
+            rescanFaceMasks()
+        }
+    }
+
+    public func rescanFaceMasks() {
+        guard !isScanningFaces else { return }
+        isScanningFaces = true
+        let url = videoFileURL
+        let durMs = metadata.durationMs
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let detected = await LocalOnDeviceMediaIntelligence.detectFaceMasks(
+                videoURL: url,
+                durationMs: durMs
+            )
+            self.isScanningFaces = false
+            guard self.document.background.hideFaces else { return }
+
+            self.mutate { doc in
+                for tIdx in doc.timeline.maskTracks.indices {
+                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoFaceMask }
+                }
+                if !detected.isEmpty {
+                    let newTrack = MaskTrack(
+                        name: doc.timeline.maskTracks.isEmpty ? "Masks" : "Masks \(doc.timeline.maskTracks.count + 1)",
+                        isHidden: false,
+                        items: detected
+                    )
+                    doc.timeline.maskTracks.append(newTrack)
+                }
+            }
+        }
+    }
+
+    // MARK: - Camera Layouts Track Actions
+
+    public func activeCameraLayoutSegment(atSourceMs sourceMs: Double) -> CameraLayoutSegment? {
+        guard !document.timeline.isCameraLayoutsTrackHidden else { return nil }
+        return document.timeline.cameraLayouts.first { seg in
+            !seg.disabled && sourceMs >= seg.sourceStartMs && sourceMs <= seg.sourceEndMs
+        }
+    }
+
+    public func toggleCameraLayoutsTrackVisibility() {
+        mutate { doc in
+            doc.timeline.isCameraLayoutsTrackHidden.toggle()
+        }
+    }
+
+    public func addCameraLayoutAtPlayhead(type: CameraTimelineLayoutType = .cameraOverlay) {
+        let srcMs = committedSourceTimeMs
+        let maxDur = metadata.durationMs
+        let sorted = document.timeline.cameraLayouts.sorted { $0.sourceStartMs < $1.sourceStartMs }
+
+        if let containing = sorted.first(where: { srcMs >= $0.sourceStartMs && srcMs <= $0.sourceEndMs }) {
+            mutate { doc in
+                if let idx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == containing.id }) {
+                    doc.timeline.cameraLayouts[idx].layoutType = type
+                }
+            }
+            selectCameraLayout(containing.id)
+            scrollToTimelineTrack("track_camera_layouts")
+            return
+        }
+
+        let prevEnd = sorted.last(where: { $0.sourceEndMs <= srcMs })?.sourceEndMs ?? 0.0
+        let nextStart = sorted.first(where: { $0.sourceStartMs >= srcMs })?.sourceStartMs ?? maxDur
+        let availStart = prevEnd
+        let availEnd = nextStart
+        guard availEnd - availStart >= 400.0 else { return }
+
+        let desiredDur = min(3500.0, availEnd - availStart)
+        let startMs = max(availStart, min(availEnd - desiredDur, srcMs))
+        let endMs = min(availEnd, startMs + desiredDur)
+
+        let seg = CameraLayoutSegment(
+            sourceStartMs: startMs,
+            sourceEndMs: endMs,
+            layoutType: type,
+            overlayPosition01: document.camera.position01,
+            cutoutPositionX01: document.camera.cutoutPositionX01
+        )
+        mutate { doc in
+            doc.timeline.isCameraLayoutsTrackHidden = false
+            doc.timeline.cameraLayouts.append(seg)
+            doc.timeline.cameraLayouts.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+        selectCameraLayout(seg.id)
+        scrollToTimelineTrack("track_camera_layouts")
+    }
+
+    public func addCameraLayoutInRange(sourceStartMs: Double, sourceEndMs: Double, type: CameraTimelineLayoutType = .cameraOverlay) {
+        guard sourceEndMs - sourceStartMs >= 350.0 else { return }
+        let seg = CameraLayoutSegment(
+            sourceStartMs: sourceStartMs,
+            sourceEndMs: sourceEndMs,
+            layoutType: type,
+            overlayPosition01: document.camera.position01,
+            cutoutPositionX01: document.camera.cutoutPositionX01
+        )
+        mutate { doc in
+            doc.timeline.isCameraLayoutsTrackHidden = false
+            doc.timeline.cameraLayouts.append(seg)
+            doc.timeline.cameraLayouts.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+        selectCameraLayout(seg.id)
+        scrollToTimelineTrack("track_camera_layouts")
+    }
+
+    public func moveCameraLayout(id: String, desiredStartMs: Double, durationMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
+        let span = max(250.0, durationMs)
+
+        mutate { doc in
+            let sorted = doc.timeline.cameraLayouts.sorted { $0.sourceStartMs < $1.sourceStartMs }
+            guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
+
+            let lowerBound = sortedIdx > 0
+                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs)
+                : earliestSourceMs
+            let upperBound = sortedIdx + 1 < sorted.count
+                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs)
+                : latestSourceMs
+            guard upperBound - lowerBound >= span else { return }
+
+            let clampedStart = max(lowerBound, min(upperBound - span, desiredStartMs))
+            let clampedEnd = clampedStart + span
+
+            if let realIdx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == id }) {
+                doc.timeline.cameraLayouts[realIdx].sourceStartMs = clampedStart
+                doc.timeline.cameraLayouts[realIdx].sourceEndMs = clampedEnd
+            }
+            doc.timeline.cameraLayouts.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+    }
+
+    public func resizeCameraLayout(id: String, newStartMs: Double, newEndMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
+        let minDuration = 250.0
+
+        mutate { doc in
+            let sorted = doc.timeline.cameraLayouts.sorted { $0.sourceStartMs < $1.sourceStartMs }
+            guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
+
+            let lowerBound = sortedIdx > 0
+                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs)
+                : earliestSourceMs
+            let upperBound = sortedIdx + 1 < sorted.count
+                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs)
+                : latestSourceMs
+            guard upperBound - lowerBound >= minDuration else { return }
+
+            let current = sorted[sortedIdx]
+            let isResizingLeft = abs(newEndMs - current.sourceEndMs) < 0.5
+            let start: Double
+            let end: Double
+            if isResizingLeft {
+                end = current.sourceEndMs
+                start = max(lowerBound, min(end - minDuration, newStartMs))
+            } else {
+                start = current.sourceStartMs
+                end = max(start + minDuration, min(upperBound, newEndMs))
+            }
+
+            if let realIdx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == id }) {
+                doc.timeline.cameraLayouts[realIdx].sourceStartMs = start
+                doc.timeline.cameraLayouts[realIdx].sourceEndMs = end
+            }
+            doc.timeline.cameraLayouts.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+    }
+
+    public func splitCameraLayout(id: String, atSourceMs sourceMs: Double) {
+        guard let idx = document.timeline.cameraLayouts.firstIndex(where: { $0.id == id }) else { return }
+        let original = document.timeline.cameraLayouts[idx]
+        guard sourceMs > original.sourceStartMs + 200.0 && sourceMs < original.sourceEndMs - 200.0 else {
+            showToast("Can't cut item shorter than 0.2s", durationMs: 2000)
+            return
+        }
+        mutate { doc in
+            var firstHalf = original
+            firstHalf.id = UUID().uuidString
+            firstHalf.sourceEndMs = sourceMs
+
+            var secondHalf = original
+            secondHalf.id = UUID().uuidString
+            secondHalf.sourceStartMs = sourceMs
+
+            doc.timeline.cameraLayouts.replaceSubrange(idx...idx, with: [firstHalf, secondHalf])
+            selectedCameraLayoutId = secondHalf.id
+        }
+    }
+
+    public func duplicateCameraLayout(id: String) {
+        let maxDur = metadata.durationMs
+        mutate { doc in
+            let sorted = doc.timeline.cameraLayouts.sorted { $0.sourceStartMs < $1.sourceStartMs }
+            guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
+            let orig = sorted[sortedIdx]
+            let nextStart = (sortedIdx + 1 < sorted.count) ? sorted[sortedIdx + 1].sourceStartMs : maxDur
+            let availAfter = nextStart - orig.sourceEndMs
+
+            if availAfter >= 300.0 {
+                var copy = orig
+                copy.id = UUID().uuidString
+                copy.sourceStartMs = orig.sourceEndMs
+                copy.sourceEndMs = min(nextStart, orig.sourceEndMs + (orig.sourceEndMs - orig.sourceStartMs))
+                doc.timeline.cameraLayouts.append(copy)
+                doc.timeline.cameraLayouts.sort { $0.sourceStartMs < $1.sourceStartMs }
+                selectedCameraLayoutId = copy.id
+            } else if orig.sourceEndMs - orig.sourceStartMs >= 500.0 {
+                let mid = (orig.sourceStartMs + orig.sourceEndMs) * 0.5
+                if let realIdx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == id }) {
+                    doc.timeline.cameraLayouts[realIdx].sourceEndMs = mid
+                }
+                var copy = orig
+                copy.id = UUID().uuidString
+                copy.sourceStartMs = mid
+                copy.sourceEndMs = orig.sourceEndMs
+                doc.timeline.cameraLayouts.append(copy)
+                doc.timeline.cameraLayouts.sort { $0.sourceStartMs < $1.sourceStartMs }
+                selectedCameraLayoutId = copy.id
+            }
+        }
+    }
+
+    public func toggleCameraLayoutDisabled(id: String) {
+        mutate { doc in
+            if let idx = doc.timeline.cameraLayouts.firstIndex(where: { $0.id == id }) {
+                doc.timeline.cameraLayouts[idx].disabled.toggle()
+            }
+        }
+    }
+
+    public func deleteCameraLayout(id: String) {
+        mutate { doc in
+            doc.timeline.cameraLayouts.removeAll { $0.id == id }
+        }
+        if selectedCameraLayoutId == id {
+            selectedCameraLayoutId = nil
+        }
+    }
+
+    public func deleteAllCameraLayouts() {
+        mutate { doc in
+            doc.timeline.cameraLayouts.removeAll()
+        }
+        selectedCameraLayoutId = nil
+    }
+
+    // MARK: - Voiceovers Track & Live Voiceover Recording
+
+    public func activeVoiceovers(atSourceMs sourceMs: Double) -> [VoiceoverSegment] {
+        guard !document.timeline.isVoiceoversTrackHidden else { return [] }
+        return document.timeline.voiceovers.filter { vo in
+            !vo.disabled && sourceMs >= vo.sourceStartMs && sourceMs <= vo.sourceEndMs
+        }
+    }
+
+    public func isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs sourceMs: Double) -> Bool {
+        activeVoiceovers(atSourceMs: sourceMs).contains { $0.hideRecording }
+    }
+
+    public func toggleVoiceoversTrackVisibility() {
+        mutate { doc in
+            doc.timeline.isVoiceoversTrackHidden.toggle()
+        }
+    }
+
+    public func startVoiceoverRecording() {
+        guard !isRecordingVoiceover else {
+            stopVoiceoverRecording()
+            return
+        }
+
+        let assetsDir = packageURL.appendingPathComponent("assets", isDirectory: true)
+        try? FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        let voId = UUID().uuidString
+        let fileName = "voiceover-\(voId).m4a"
+        let relPath = "assets/\(fileName)"
+        let fileURL = packageURL.appendingPathComponent(relPath)
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 48_000,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+        ]
+
+        guard let recorder = try? AVAudioRecorder(url: fileURL, settings: settings) else {
+            showToast("Could not start microphone voiceover recording")
+            return
+        }
+        recorder.prepareToRecord()
+        guard recorder.record() else {
+            showToast("Could not start microphone voiceover recording")
+            return
+        }
+
+        activeVoiceoverRecorder = recorder
+        activeVoiceoverRelativePath = relPath
+        voiceoverRecordingStartSourceMs = committedSourceTimeMs
+        isRecordingVoiceover = true
+        if !isPlaying {
+            isPlaying = true
+        }
+        showToast("Recording voiceover… Click again to finish")
+    }
+
+    public func stopVoiceoverRecording() {
+        guard isRecordingVoiceover else { return }
+        isRecordingVoiceover = false
+        isPlaying = false
+
+        let durationSec = activeVoiceoverRecorder?.currentTime ?? 0.0
+        activeVoiceoverRecorder?.stop()
+        activeVoiceoverRecorder = nil
+
+        guard let relPath = activeVoiceoverRelativePath else { return }
+        activeVoiceoverRelativePath = nil
+
+        let recordedDurMs = max(1200.0, durationSec * 1000.0)
+        let startMs = max(0.0, min(metadata.durationMs - 400.0, voiceoverRecordingStartSourceMs))
+        let clampedDurMs = min(recordedDurMs, max(400.0, metadata.durationMs - startMs))
+
+        let newVO = VoiceoverSegment(
+            sourceStartMs: startMs,
+            durationMs: clampedDurMs,
+            relativePath: relPath,
+            volume: 1.0,
+            attachMode: .synchronized,
+            hideRecording: false,
+            disabled: false
+        )
+        mutate { doc in
+            doc.timeline.isVoiceoversTrackHidden = false
+            doc.timeline.voiceovers.append(newVO)
+            doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+        selectVoiceover(newVO.id)
+        scrollToTimelineTrack("track_voiceovers")
+        showToast("Voiceover added")
+    }
+
+    public func promptImportVoiceoverAudioFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Voiceover Audio File"
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let sourceURL = panel.url else { return }
+        importVoiceoverAudioFile(from: sourceURL)
+    }
+
+    public func importVoiceoverAudioFile(from sourceURL: URL) {
+        let assetsDir = packageURL.appendingPathComponent("assets", isDirectory: true)
+        try? FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        let ext = sourceURL.pathExtension.isEmpty ? "m4a" : sourceURL.pathExtension
+        let fileName = "voiceover-\(UUID().uuidString).\(ext)"
+        let relPath = "assets/\(fileName)"
+        let destURL = packageURL.appendingPathComponent(relPath)
+        try? FileManager.default.copyItem(at: sourceURL, to: destURL)
+
+        let startMs = committedSourceTimeMs
+        let maxDur = metadata.durationMs
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let asset = AVURLAsset(url: destURL)
+            let cmDur = (try? await asset.load(.duration)) ?? CMTime(seconds: 3.0, preferredTimescale: 600)
+            let rawDurMs = max(500.0, CMTimeGetSeconds(cmDur) * 1000.0)
+            let clampedStart = max(0.0, min(maxDur - 400.0, startMs))
+            let clampedDur = min(rawDurMs, max(400.0, maxDur - clampedStart))
+
+            let newVO = VoiceoverSegment(
+                sourceStartMs: clampedStart,
+                durationMs: clampedDur,
+                relativePath: relPath,
+                volume: 1.0,
+                attachMode: .synchronized,
+                hideRecording: false,
+                disabled: false
+            )
+            self.mutate { doc in
+                doc.timeline.isVoiceoversTrackHidden = false
+                doc.timeline.voiceovers.append(newVO)
+                doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
+            }
+            self.selectVoiceover(newVO.id)
+            self.scrollToTimelineTrack("track_voiceovers")
+            self.showToast("Voiceover added")
+        }
+    }
+
+    public func moveVoiceover(id: String, desiredStartMs: Double, durationMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
+        let span = max(250.0, durationMs)
+
+        mutate { doc in
+            let sorted = doc.timeline.voiceovers.sorted { $0.sourceStartMs < $1.sourceStartMs }
+            guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
+
+            let lowerBound = sortedIdx > 0
+                ? max(earliestSourceMs, sorted[sortedIdx - 1].sourceEndMs)
+                : earliestSourceMs
+            let upperBound = sortedIdx + 1 < sorted.count
+                ? min(latestSourceMs, sorted[sortedIdx + 1].sourceStartMs)
+                : latestSourceMs
+            guard upperBound - lowerBound >= span else { return }
+
+            let clampedStart = max(lowerBound, min(upperBound - span, desiredStartMs))
+            if let realIdx = doc.timeline.voiceovers.firstIndex(where: { $0.id == id }) {
+                doc.timeline.voiceovers[realIdx].sourceStartMs = clampedStart
+                doc.timeline.voiceovers[realIdx].durationMs = span
+            }
+            doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+    }
+
+    public func applyVoiceoverVolumeToAllOthers(fromId id: String) {
+        mutate { doc in
+            guard let src = doc.timeline.voiceovers.first(where: { $0.id == id }) else { return }
+            for idx in doc.timeline.voiceovers.indices {
+                doc.timeline.voiceovers[idx].volume = src.volume
+            }
+        }
+        showToast("Volume applied to all voiceovers")
+    }
+
+    public func toggleVoiceoverDisabled(id: String) {
+        mutate { doc in
+            if let idx = doc.timeline.voiceovers.firstIndex(where: { $0.id == id }) {
+                doc.timeline.voiceovers[idx].disabled.toggle()
+            }
+        }
+    }
+
+    public func deleteVoiceover(id: String) {
+        mutate { doc in
+            doc.timeline.voiceovers.removeAll { $0.id == id }
+        }
+        if selectedVoiceoverId == id {
+            selectedVoiceoverId = nil
+        }
+    }
+
+    public func deleteAllVoiceovers() {
+        mutate { doc in
+            doc.timeline.voiceovers.removeAll()
+        }
+        selectedVoiceoverId = nil
     }
 }

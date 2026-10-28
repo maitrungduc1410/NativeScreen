@@ -22,6 +22,7 @@ public struct ProjectEditorWindowView: View {
 
     @State private var isShowingExportSheet = false
     @State private var isShowingCommandMenu = false
+    @State private var isShowingPresetsPopover = false
     @State private var exportConfig = HardwareVideoExporter.ExportConfiguration()
     @State private var isExporting = false
     @State private var exportProgress: Double = 0.0
@@ -217,6 +218,38 @@ public struct ProjectEditorWindowView: View {
                                     .foregroundStyle(.white.opacity(0.90))
                             }
                             .keyboardShortcut("Z", modifiers: [.command, .shift])
+                        }
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 1, height: 18)
+
+                        // 2B. Presets Button
+                        Button {
+                            isShowingPresetsPopover.toggle()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 13.0, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.90))
+                                Text("Presets")
+                                    .font(.system(size: 13.0, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.92))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10.0, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.55))
+                            }
+                            .fixedSize()
+                            .padding(.horizontal, 12)
+                            .frame(height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(isShowingPresetsPopover ? Color.white.opacity(0.10) : Color.clear)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .popover(isPresented: $isShowingPresetsPopover, arrowEdge: .bottom) {
+                            PresetsPopoverView(session: session)
                         }
 
                         Rectangle()
@@ -422,6 +455,20 @@ public struct ProjectEditorWindowView: View {
                                         }
                                     }
 
+                                    // Group 1B: Camera Layouts
+                                    if session.hasRecordedCamera {
+                                        VStack(spacing: 0) {
+                                            ForEach(CameraTimelineLayoutType.allCases) { layoutType in
+                                                quickDockIconButton(
+                                                    icon: layoutType.quickDockIcon,
+                                                    tooltip: "\(layoutType.label) layout"
+                                                ) {
+                                                    session.addCameraLayoutAtPlayhead(type: layoutType)
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // Group 2: Masks
                                     VStack(spacing: 0) {
                                         quickDockIconButton(
@@ -441,12 +488,22 @@ public struct ProjectEditorWindowView: View {
                                         }
                                     }
 
-                                    // Group 3: Keyboard Shortcuts Track
-                                    quickDockIconButton(
-                                        icon: "command",
-                                        tooltip: "Add shortcut track"
-                                    ) {
-                                        session.addShortcutTrack()
+                                    // Group 3: Keyboard Shortcuts & Voiceover
+                                    VStack(spacing: 0) {
+                                        quickDockIconButton(
+                                            icon: "command",
+                                            tooltip: "Add shortcut track"
+                                        ) {
+                                            session.addShortcutTrack()
+                                        }
+
+                                        quickDockIconButton(
+                                            icon: session.isRecordingVoiceover ? "stop.circle.fill" : "mic.badge.plus",
+                                            tooltip: session.isRecordingVoiceover ? "Stop voiceover recording" : "Record voiceover",
+                                            isActive: session.isRecordingVoiceover
+                                        ) {
+                                            session.startVoiceoverRecording()
+                                        }
                                     }
                                 }
                                 .padding(6)
@@ -1079,6 +1136,14 @@ public struct ProjectEditorWindowView: View {
                 if flags == .command {
                     session.clearTimelineSelection()
                     session.selectedInspectorTab = .zoom
+                    return nil
+                }
+                return event
+
+            case 29: // `⌘ 0` Device Frame
+                if flags == .command {
+                    session.clearTimelineSelection()
+                    session.selectedInspectorTab = .deviceFrame
                     return nil
                 }
                 return event
@@ -2225,6 +2290,44 @@ private struct CommandMenuOverlayView: View {
             session.mutate { $0.captions.showSingleKeyShortcuts.toggle() }
         })
 
+        // 6B. Camera Layouts, Voiceovers & Device Mockups
+        items.append(EditorCommandItem(
+            id: "addCameraLayoutAtPlayhead",
+            group: "Camera Layout",
+            title: "Add camera layout at playhead",
+            icon: "inset.filled.rectangle.and.person.filled"
+        ) {
+            session.addCameraLayoutAtPlayhead(type: .cameraOverlay)
+        })
+
+        items.append(EditorCommandItem(
+            id: "recordVoiceover",
+            group: "Voiceover",
+            title: session.isRecordingVoiceover ? "Stop voiceover recording" : "Record voiceover...",
+            icon: "mic.badge.plus"
+        ) {
+            session.startVoiceoverRecording()
+        })
+
+        items.append(EditorCommandItem(
+            id: "importVoiceoverAudio",
+            group: "Voiceover",
+            title: "Upload voiceover audio file...",
+            icon: "waveform.badge.plus"
+        ) {
+            session.promptImportVoiceoverAudioFile()
+        })
+
+        items.append(EditorCommandItem(
+            id: "toggleDeviceMockup",
+            group: "Device",
+            title: session.document.frameStyle.deviceMockup.enabled ? "Disable device mockup" : "Use device mockup",
+            icon: "laptopcomputer.and.iphone"
+        ) {
+            session.mutate { $0.frameStyle.deviceMockup.enabled.toggle() }
+            session.selectedInspectorTab = .deviceFrame
+        })
+
         // 7. Export & Project
         items.append(EditorCommandItem(
             id: "exportVideo",
@@ -3175,6 +3278,202 @@ private struct ExportingFullOverlayView: View {
         .onReceive(clockTimer) { _ in
             nowUptimeMs = ProcessInfo.processInfo.systemUptime * 1000.0
         }
+    }
+}
+
+// MARK: - 7. Presets Popover
+
+private struct PresetsPopoverView: View {
+    @Bindable var session: ProjectSession
+    @Bindable private var store = ProjectPresetsStore.shared
+
+    @State private var newPresetName: String = ""
+    @State private var editingPresetId: String? = nil
+    @State private var editingPresetName: String = ""
+    @State private var hoveredPresetId: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if store.presets.isEmpty {
+                Text("Presets will help you re-use the same project settings across projects")
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .padding(.vertical, 8)
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 4) {
+                        ForEach(store.presets) { preset in
+                            presetRowView(preset: preset)
+                        }
+                    }
+                }
+                .frame(maxHeight: 280)
+
+                Text("Presets are not auto-updated. If you apply preset and then modify project settings - remember to update presets to reflect those changes.")
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Create new preset row
+            HStack(spacing: 8) {
+                TextField("New preset name...", text: $newPresetName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13.0, weight: .regular))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                    )
+                    .onSubmit {
+                        createNewPreset()
+                    }
+
+                Button {
+                    createNewPreset()
+                } label: {
+                    Text("Create new preset")
+                        .font(.system(size: 13.0, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color(red: 0.302, green: 0.184, blue: 0.961))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 18)
+        .frame(width: 420)
+        .background(Color(red: 0.08, green: 0.08, blue: 0.10))
+        .preferredColorScheme(.dark)
+    }
+
+    private func createNewPreset() {
+        let trimmed = newPresetName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        store.addPreset(name: trimmed, from: session)
+        newPresetName = ""
+    }
+
+    @ViewBuilder
+    private func presetRowView(preset: ProjectPreset) -> some View {
+        let isHovered = (hoveredPresetId == preset.id)
+        let matchesProject = preset.matchesDocument(session.document)
+        let isDefault = (store.defaultPresetId == preset.id)
+
+        HStack(spacing: 8) {
+            if editingPresetId == preset.id {
+                TextField("Preset name", text: $editingPresetName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13.0, weight: .medium))
+                    .foregroundStyle(.white)
+                    .onSubmit {
+                        store.renamePreset(preset, to: editingPresetName)
+                        editingPresetId = nil
+                    }
+            } else {
+                Button {
+                    store.applyPreset(preset, to: session)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(preset.name)
+                            .font(.system(size: 13.0, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.95))
+                            .lineLimit(1)
+
+                        Spacer(minLength: 4)
+
+                        if matchesProject {
+                            presetBadge("Matches project")
+                        }
+                        if isDefault {
+                            presetBadge("Default")
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Click to apply")
+            }
+
+            // Gear Options Menu
+            Menu {
+                Button("Rename...") {
+                    editingPresetName = preset.name
+                    editingPresetId = preset.id
+                }
+
+                Button {
+                    store.toggleDefaultPreset(preset)
+                } label: {
+                    if isDefault {
+                        Label("Use as default for new projects", systemImage: "checkmark")
+                    } else {
+                        Text("Use as default for new projects")
+                    }
+                }
+
+                if !matchesProject {
+                    Button("Update to match currently edited project") {
+                        store.syncPresetWithProject(preset, session: session)
+                    }
+                }
+
+                Divider()
+
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([store.fileURL(for: preset)])
+                }
+
+                Divider()
+
+                Button("Remove...", role: .destructive) {
+                    store.removePreset(preset)
+                }
+            } label: {
+                Image(systemName: "gear")
+                    .font(.system(size: 13.0, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Preset options...")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isHovered ? Color.white.opacity(0.07) : Color.clear)
+        )
+        .onHover { hovering in
+            hoveredPresetId = hovering ? preset.id : nil
+        }
+    }
+
+    @ViewBuilder
+    private func presetBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.0, weight: .medium))
+            .foregroundStyle(.white.opacity(0.58))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            )
     }
 }
 

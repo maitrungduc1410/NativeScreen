@@ -74,6 +74,14 @@ public final class MetalFrameCompositor {
     private var lastRoundedMaskCacheKey: RoundedMaskCacheKey?
     private var cachedRoundedMaskImage: CIImage?
 
+    private struct DeviceBezelCacheKey: Equatable {
+        let screenRect: CGRect
+        let canvasRect: CGRect
+        let mockupConfig: DeviceMockupConfig
+    }
+    private var lastDeviceBezelKey: DeviceBezelCacheKey?
+    private var cachedDeviceBezelImage: CIImage?
+
     // Pass 6 (3D Shortcut Keycap Sprite Cache) — avoids re-rasterizing keycap graphics on every frame!
     private var keycapSpriteCache: [String: CIImage] = [:]
 
@@ -159,9 +167,42 @@ public final class MetalFrameCompositor {
             maskedScreen = computed
         }
 
-        // --- PASS 3: Screen Rounded Corners, Drop Shadow & Camera Zoom/Pan Transform ---
+        // --- PASS 3: Screen Rounded Corners, Device Mockup Bezel, Drop Shadow & Camera Zoom/Pan Transform ---
+        let activeLayoutSeg = session.activeCameraLayoutSegment(atSourceMs: sourceTimeMs)
+        let isFullscreenCamera = (activeLayoutSeg?.layoutType == .fullscreenCamera)
+        let isScreenOnly = (activeLayoutSeg?.layoutType == .screenOnly)
+        let isHiddenByVoiceover = session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: sourceTimeMs)
+
+        let effectiveCameraConfig: CameraConfig = {
+            var c = doc.camera
+            if let seg = activeLayoutSeg {
+                switch seg.layoutType {
+                case .cameraOverlay:
+                    c.layoutMode = .overlay
+                    if let pos = seg.overlayPosition01 {
+                        c.position01 = pos
+                    }
+                case .splitScreen:
+                    c.layoutMode = .splitScreen
+                case .cutoutCamera:
+                    c.layoutMode = .cutout
+                    if let x01 = seg.cutoutPositionX01 {
+                        c.cutoutPositionX01 = x01
+                    }
+                case .fullscreenCamera, .screenOnly:
+                    break
+                }
+            }
+            return c
+        }()
+
         let isSplitScreenActive: Bool = {
-            guard doc.camera.enabled && session.hasRecordedCamera && doc.camera.layoutMode == .splitScreen else {
+            guard doc.camera.enabled
+                && session.hasRecordedCamera
+                && !isScreenOnly
+                && !isFullscreenCamera
+                && !isHiddenByVoiceover
+                && effectiveCameraConfig.layoutMode == .splitScreen else {
                 return false
             }
             if session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
@@ -170,12 +211,16 @@ public final class MetalFrameCompositor {
             return true
         }()
 
+        let effectivePaddingRatio: CGFloat = doc.frameStyle.deviceMockup.enabled
+            ? max(0.08, CGFloat(doc.canvas.paddingRatio))
+            : CGFloat(doc.canvas.paddingRatio)
+
         let screenFrameRect: CGRect = {
             if isSplitScreenActive {
                 let splitGeo = Self.computeSplitScreenGeometry(
                     canvasSize: outputSize,
                     sourceScreenSize: maskedScreen.extent.size,
-                    cameraConfig: doc.camera,
+                    cameraConfig: effectiveCameraConfig,
                     canvasPaddingRatio: doc.canvas.paddingRatio
                 )
                 return splitGeo.screenRect
@@ -183,7 +228,7 @@ public final class MetalFrameCompositor {
                 return calculateFittedScreenRect(
                     sourceSize: maskedScreen.extent.size,
                     inCanvas: canvasRect,
-                    paddingRatio: CGFloat(doc.canvas.paddingRatio)
+                    paddingRatio: effectivePaddingRatio
                 )
             }
         }()
@@ -200,7 +245,10 @@ public final class MetalFrameCompositor {
             scaledScreen = maskedScreen.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
         }
 
-        let scaledRadius = CGFloat(doc.frameStyle.borderRadius) * (outputSize.height / 900.0)
+        let baseRadius = doc.frameStyle.deviceMockup.enabled
+            ? (doc.frameStyle.deviceMockup.deviceId?.contains("iphone") == true ? 34.0 : 14.0)
+            : doc.frameStyle.borderRadius
+        let scaledRadius = CGFloat(baseRadius) * (outputSize.height / 900.0)
         scaledScreen = applyRoundedCorners(
             to: scaledScreen,
             rect: CGRect(origin: .zero, size: screenFrameRect.size),
@@ -211,8 +259,18 @@ public final class MetalFrameCompositor {
             by: CGAffineTransform(translationX: screenFrameRect.minX, y: screenFrameRect.minY)
         )
 
-        // Screen Inset Border (`Inset` toggle in Background tab)
-        if doc.frameStyle.inset.enabled && doc.frameStyle.inset.size > 0.1 {
+        // Device Mockup Bezel
+        if doc.frameStyle.deviceMockup.enabled {
+            if let bezelImg = renderDeviceMockupBezel(
+                screenRect: screenFrameRect,
+                canvasRect: canvasRect,
+                screenRadius: scaledRadius,
+                mockup: doc.frameStyle.deviceMockup
+            ) {
+                positionedScreen = bezelImg.composited(over: positionedScreen)
+            }
+        } else if doc.frameStyle.inset.enabled && doc.frameStyle.inset.size > 0.1 {
+            // Screen Inset Border (`Inset` toggle in Background tab)
             let insetPx = CGFloat(doc.frameStyle.inset.size) * (outputSize.height / 900.0)
             let outerInsetRect = screenFrameRect.insetBy(dx: -insetPx, dy: -insetPx)
             let c = CIColor(hexString: doc.frameStyle.inset.color)
@@ -414,10 +472,15 @@ public final class MetalFrameCompositor {
 
         // --- PASS 6: 3D Keyboard Shortcut Keycaps + Camera & Captions Overlay (For Video/GIF/Still-Frame Export!) ---
         if includeShortcutOverlay {
-            if doc.camera.enabled && session.hasRecordedCamera && !session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
+            if doc.camera.enabled
+                && session.hasRecordedCamera
+                && !isScreenOnly
+                && !isHiddenByVoiceover
+                && !session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
                 composite = renderWebcamOverlayForExport(
                     over: composite,
-                    camCfg: doc.camera,
+                    camCfg: effectiveCameraConfig,
+                    isFullscreenCamera: isFullscreenCamera,
                     sourceScreenSize: maskedScreen.extent.size,
                     canvasPaddingRatio: doc.canvas.paddingRatio,
                     currentZoomScale: cameraState.scale,
@@ -1392,9 +1455,163 @@ public final class MetalFrameCompositor {
         return base
     }
 
+    private func renderDeviceMockupBezel(
+        screenRect: CGRect,
+        canvasRect: CGRect,
+        screenRadius: CGFloat,
+        mockup: DeviceMockupConfig
+    ) -> CIImage? {
+        let key = DeviceBezelCacheKey(
+            screenRect: screenRect,
+            canvasRect: canvasRect,
+            mockupConfig: mockup
+        )
+        if key == lastDeviceBezelKey, let cached = cachedDeviceBezelImage {
+            return cached
+        }
+
+        let isPhone = (mockup.deviceId?.contains("iphone") == true)
+        let isPad = (mockup.deviceId?.contains("ipad") == true)
+        let scale = canvasRect.height / 900.0
+        let bezelW: CGFloat = isPhone ? (14.0 * scale) : (isPad ? (16.0 * scale) : (12.0 * scale))
+        let rimW: CGFloat = max(2.2, 3.2 * scale)
+        let totalPad: CGFloat = bezelW + rimW + 24.0 * scale
+
+        let outerFrameRect = screenRect.insetBy(dx: -(bezelW + rimW), dy: -(bezelW + rimW))
+        let innerBezelRect = screenRect.insetBy(dx: -bezelW, dy: -bezelW)
+        let drawExtent = screenRect.insetBy(dx: -totalPad, dy: -totalPad).integral
+        let bitmapW = max(8, Int(drawExtent.width))
+        let bitmapH = max(8, Int(drawExtent.height))
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+
+        guard let ctx = CGContext(
+            data: nil,
+            width: bitmapW,
+            height: bitmapH,
+            bitsPerComponent: 8,
+            bytesPerRow: bitmapW * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        // Translate so `drawExtent.origin` maps to `(0, 0)` in CoreGraphics bottom-left coordinates
+        ctx.translateBy(x: -drawExtent.minX, y: -drawExtent.minY)
+
+        let finishHex: (outer: NSColor, highlight: NSColor) = {
+            switch mockup.colorVariantId {
+            case "silver", "white-titanium":
+                return (
+                    NSColor(srgbRed: 0.82, green: 0.83, blue: 0.85, alpha: 1.0),
+                    NSColor(srgbRed: 0.95, green: 0.96, blue: 0.98, alpha: 1.0)
+                )
+            case "natural-titanium", "starlight":
+                return (
+                    NSColor(srgbRed: 0.68, green: 0.66, blue: 0.62, alpha: 1.0),
+                    NSColor(srgbRed: 0.84, green: 0.82, blue: 0.78, alpha: 1.0)
+                )
+            case "desert-titanium":
+                return (
+                    NSColor(srgbRed: 0.72, green: 0.63, blue: 0.56, alpha: 1.0),
+                    NSColor(srgbRed: 0.88, green: 0.80, blue: 0.73, alpha: 1.0)
+                )
+            case "midnight":
+                return (
+                    NSColor(srgbRed: 0.16, green: 0.19, blue: 0.25, alpha: 1.0),
+                    NSColor(srgbRed: 0.30, green: 0.35, blue: 0.44, alpha: 1.0)
+                )
+            default: // "space-black", "black-titanium"
+                return (
+                    NSColor(srgbRed: 0.20, green: 0.20, blue: 0.22, alpha: 1.0),
+                    NSColor(srgbRed: 0.38, green: 0.38, blue: 0.42, alpha: 1.0)
+                )
+            }
+        }()
+
+        let outerRadius = screenRadius + bezelW + rimW
+        let innerBezelRadius = screenRadius + bezelW
+
+        // 1. Draw Anodized Metallic Outer Rim Ring + Inner Glass Black Bezel Ring (with screen cutout hole!)
+        ctx.saveGState()
+        let outerRingPath = CGMutablePath()
+        outerRingPath.addRoundedRect(in: outerFrameRect, cornerWidth: outerRadius, cornerHeight: outerRadius)
+        outerRingPath.addRoundedRect(in: screenRect, cornerWidth: screenRadius, cornerHeight: screenRadius)
+        ctx.addPath(outerRingPath)
+        ctx.clip(using: .evenOdd)
+
+        // Metallic chassis gradient
+        if let grad = CGGradient(
+            colorsSpace: colorSpace,
+            colors: [finishHex.highlight.cgColor, finishHex.outer.cgColor, finishHex.highlight.cgColor] as CFArray,
+            locations: [0.0, 0.5, 1.0]
+        ) {
+            ctx.drawLinearGradient(
+                grad,
+                start: CGPoint(x: outerFrameRect.minX, y: outerFrameRect.maxY),
+                end: CGPoint(x: outerFrameRect.maxX, y: outerFrameRect.minY),
+                options: []
+            )
+        }
+
+        // Inner black glass bezel ring
+        let blackBezelPath = CGMutablePath()
+        blackBezelPath.addRoundedRect(in: innerBezelRect, cornerWidth: innerBezelRadius, cornerHeight: innerBezelRadius)
+        blackBezelPath.addRoundedRect(in: screenRect, cornerWidth: screenRadius, cornerHeight: screenRadius)
+        ctx.setFillColor(NSColor(srgbRed: 0.04, green: 0.04, blue: 0.05, alpha: 1.0).cgColor)
+        ctx.addPath(blackBezelPath)
+        ctx.fillPath(using: .evenOdd)
+        ctx.restoreGState()
+
+        // 2. Top Notch (MacBook Pro / Air) or Dynamic Island (iPhone)
+        if isPhone {
+            let islandW = min(screenRect.width * 0.28, 96.0 * scale)
+            let islandH = max(12.0, 22.0 * scale)
+            let islandRect = CGRect(
+                x: screenRect.midX - islandW * 0.5,
+                y: screenRect.maxY - islandH - 10.0 * scale,
+                width: islandW,
+                height: islandH
+            )
+            let islandPath = CGPath(roundedRect: islandRect, cornerWidth: islandH * 0.5, cornerHeight: islandH * 0.5, transform: nil)
+            ctx.setFillColor(NSColor(srgbRed: 0.03, green: 0.03, blue: 0.04, alpha: 1.0).cgColor)
+            ctx.addPath(islandPath)
+            ctx.fillPath()
+        } else if !isPad {
+            // MacBook camera notch at top-center + subtle bottom aluminum keyboard deck lip
+            let notchW = min(screenRect.width * 0.14, 130.0 * scale)
+            let notchH = max(10.0, 18.0 * scale)
+            let notchRect = CGRect(
+                x: screenRect.midX - notchW * 0.5,
+                y: screenRect.maxY - notchH + 2.0,
+                width: notchW,
+                height: notchH
+            )
+            let notchPath = CGPath(roundedRect: notchRect, cornerWidth: 6.0 * scale, cornerHeight: 6.0 * scale, transform: nil)
+            ctx.setFillColor(NSColor(srgbRed: 0.04, green: 0.04, blue: 0.05, alpha: 1.0).cgColor)
+            ctx.addPath(notchPath)
+            ctx.fillPath()
+
+            // Subtle camera lens dot inside notch
+            let lensR = max(2.0, 3.0 * scale)
+            let lensRect = CGRect(x: screenRect.midX - lensR, y: notchRect.midY - lensR, width: lensR * 2.0, height: lensR * 2.0)
+            ctx.setFillColor(NSColor(srgbRed: 0.12, green: 0.16, blue: 0.24, alpha: 1.0).cgColor)
+            ctx.fillEllipse(in: lensRect)
+        }
+
+        guard let cgImg = ctx.makeImage() else { return nil }
+        let ciImg = CIImage(cgImage: cgImg)
+            .transformed(by: CGAffineTransform(translationX: drawExtent.minX, y: drawExtent.minY))
+        let materialized = materializeToGPUTexture(ciImg, extent: drawExtent) ?? ciImg
+        lastDeviceBezelKey = key
+        cachedDeviceBezelImage = materialized
+        return materialized
+    }
+
     private func renderWebcamOverlayForExport(
         over background: CIImage,
         camCfg: CameraConfig,
+        isFullscreenCamera: Bool = false,
         sourceScreenSize: CGSize,
         canvasPaddingRatio: Double,
         currentZoomScale: Double,
@@ -1418,18 +1635,25 @@ public final class MetalFrameCompositor {
         let overlayWidth = max(64.0, overlayHeight * aspect)
 
         let splitZoomedSide = max(84.0, baseRef * 0.34)
-        let pipWidth: CGFloat = (camCfg.layoutMode == .splitScreen)
-            ? (splitGeo.cameraRect.width + (splitZoomedSide - splitGeo.cameraRect.width) * CGFloat(zoomProgress01))
-            : overlayWidth
-        let pipHeight: CGFloat = (camCfg.layoutMode == .splitScreen)
-            ? (splitGeo.cameraRect.height + (splitZoomedSide - splitGeo.cameraRect.height) * CGFloat(zoomProgress01))
-            : overlayHeight
+        let pipWidth: CGFloat = isFullscreenCamera
+            ? canvasRect.width
+            : ((camCfg.layoutMode == .splitScreen)
+                ? (splitGeo.cameraRect.width + (splitZoomedSide - splitGeo.cameraRect.width) * CGFloat(zoomProgress01))
+                : overlayWidth)
+        let pipHeight: CGFloat = isFullscreenCamera
+            ? canvasRect.height
+            : ((camCfg.layoutMode == .splitScreen)
+                ? (splitGeo.cameraRect.height + (splitZoomedSide - splitGeo.cameraRect.height) * CGFloat(zoomProgress01))
+                : overlayHeight)
 
         let margin: CGFloat = max(16.0, baseRef * 0.035)
         let availW = max(1.0, canvasRect.width - pipWidth - margin * 2.0)
         let availH = max(1.0, canvasRect.height - pipHeight - margin * 2.0)
 
         let originX: CGFloat = {
+            if isFullscreenCamera {
+                return 0.0
+            }
             switch camCfg.layoutMode {
             case .overlay:
                 return margin + CGFloat(max(0.0, min(1.0, camCfg.position01.x))) * availW
@@ -1444,6 +1668,9 @@ public final class MetalFrameCompositor {
 
         // Bottom-left CoreImage Y coordinate
         let originY: CGFloat = {
+            if isFullscreenCamera {
+                return 0.0
+            }
             switch camCfg.layoutMode {
             case .overlay:
                 return margin + CGFloat(1.0 - max(0.0, min(1.0, camCfg.position01.y))) * availH
@@ -1464,13 +1691,13 @@ public final class MetalFrameCompositor {
                 customPreset: $0,
                 intensity: camCfg.colorGradeIntensity,
                 sharpen01: camCfg.sharpen01,
-                isCutoutMode: camCfg.layoutMode == .cutout
+                isCutoutMode: !isFullscreenCamera && camCfg.layoutMode == .cutout
             )
         } ?? GradedWebcamPortraitView.cachedGradedPortraitImage(
             preset: camCfg.colorGradePreset,
             intensity: camCfg.colorGradeIntensity,
             sharpen01: camCfg.sharpen01,
-            isCutoutMode: camCfg.layoutMode == .cutout
+            isCutoutMode: !isFullscreenCamera && camCfg.layoutMode == .cutout
         )
         guard let tiff = gradedNSImg.tiffRepresentation,
               let rawCI = CIImage(data: tiff) else {
@@ -1492,6 +1719,9 @@ public final class MetalFrameCompositor {
 
         let baseRadius = min(pipWidth, pipHeight) * CGFloat(max(0.0, min(0.50, camCfg.borderRadiusRatio)))
         let cornerRadius: CGFloat = {
+            if isFullscreenCamera {
+                return 0.0
+            }
             if camCfg.layoutMode == .splitScreen {
                 return splitGeo.hasPadding ? baseRadius : (baseRadius * CGFloat(zoomProgress01))
             }
