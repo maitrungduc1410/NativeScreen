@@ -545,10 +545,20 @@ public struct ProjectEditorWindowView: View {
                                     .foregroundStyle(.white.opacity(0.88))
                             }
 
-                            Text(formatTimecode(session.timeMapper.totalTimelineDurationMs))
-                                .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
-                                .foregroundStyle(.secondary.opacity(0.75))
-                                .frame(width: 64, alignment: .leading)
+                            let totalTimeText = formatTimecode(session.timeMapper.totalTimelineDurationMs)
+                            Button {
+                                let pb = NSPasteboard.general
+                                pb.clearContents()
+                                pb.setString(totalTimeText, forType: .string)
+                                session.showToast("Copied to clipboard")
+                            } label: {
+                                Text(totalTimeText)
+                                    .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
+                                    .foregroundStyle(.secondary.opacity(0.75))
+                                    .frame(width: 64, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
 
                         // Right: Playback Speed (`1x`) + Timeline Zoom Slider
@@ -664,6 +674,19 @@ public struct ProjectEditorWindowView: View {
                 CameraCropModalView(session: session)
                     .zIndex(580)
                     .transition(.opacity)
+            }
+
+            // 8. BOTTOM-CENTER TOAST NOTIFICATION
+            if let toastMessage = session.activeToastMessage {
+                VStack {
+                    Spacer()
+                    BottomToastBannerView(message: toastMessage)
+                        .padding(.bottom, 18)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+                .zIndex(750)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .background(
@@ -917,6 +940,13 @@ public struct ProjectEditorWindowView: View {
                 }
                 return event
 
+            case 1: // `S`
+                if flags == .command {
+                    session.saveProjectWithToast()
+                    return nil
+                }
+                return event
+
             case 51, 117: // Delete / Forward Delete
                 session.deleteSelectedTimelineItem()
                 return nil
@@ -932,8 +962,17 @@ public struct ProjectEditorWindowView: View {
                         session.copyZoomToClipboard(id: zId)
                         return nil
                     }
+                    session.copyCurrentFrameToClipboard()
+                    return nil
                 } else if flags.isEmpty {
                     session.splitAtCurrentTimeShortcut()
+                    return nil
+                }
+                return event
+
+            case 9: // 'V' key with ⌘V: Paste from clipboard
+                if flags.contains(.command) {
+                    session.pasteFromClipboard()
                     return nil
                 }
                 return event
@@ -1271,11 +1310,48 @@ private struct LivePlayheadTimecodeTextView: View {
         let mins = Int(totalSec) / 60
         let secs = Int(totalSec) % 60
         let hundredths = Int((totalSec - floor(totalSec)) * 100)
+        let timeString = String(format: "%02d:%02d.%02d", mins, secs, hundredths)
 
-        Text(String(format: "%02d:%02d.%02d", mins, secs, hundredths))
-            .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
-            .foregroundStyle(.secondary)
-            .frame(width: 64, alignment: .trailing)
+        Button {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(timeString, forType: .string)
+            session.showToast("Copied to clipboard")
+        } label: {
+            Text(timeString)
+                .font(.system(size: 12.5, weight: .regular, design: .default).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 64, alignment: .trailing)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Bottom-Center Toast Pill
+private struct BottomToastBannerView: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.system(size: 13.5, weight: .medium))
+            .foregroundStyle(.white.opacity(0.96))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color(red: 0.16, green: 0.08, blue: 0.25).opacity(0.94))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1.0)
+                    .padding(1.5)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.65), lineWidth: 1.2)
+            )
+            .shadow(color: .black.opacity(0.45), radius: 14, y: 5)
     }
 }
 
@@ -2167,6 +2243,16 @@ private struct CommandMenuOverlayView: View {
             icon: "camera.viewfinder"
         ) {
             session.openStillFrameExportModal()
+        })
+
+        items.append(EditorCommandItem(
+            id: "saveProject",
+            group: "Project",
+            title: "Save",
+            icon: "square.and.arrow.down",
+            shortcutBadge: "⌘ S"
+        ) {
+            session.saveProjectWithToast()
         })
 
         items.append(EditorCommandItem(

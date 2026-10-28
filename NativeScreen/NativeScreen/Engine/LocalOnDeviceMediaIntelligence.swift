@@ -130,7 +130,7 @@ public final class WhisperModelDownloadManager: NSObject, URLSessionDownloadDele
         alert.icon = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download Whisper Model")
         alert.messageText = "Download OpenAI Whisper (\(tier.label)) Model?"
         alert.informativeText = """
-        NativeScreen will download the open-source OpenAI Whisper "\(tier.label)" (\(tier.fileName), ~\(tier.sizeDescription)) speech recognition model to your Mac:
+        Native Screen will download the open-source OpenAI Whisper "\(tier.label)" (\(tier.fileName), ~\(tier.sizeDescription)) speech recognition model to your Mac:
 
         ~/Library/Application Support/NativeScreen/WhisperModels/\(tier.fileName)
 
@@ -407,7 +407,7 @@ public enum LocalOnDeviceMediaIntelligence {
     /// and `Edit by transcript` pause-tightening / filler-word removal immediately!
     public static func synthesizeLocalFallbackTranscript(durationMs: Double, customPromptWords: [String] = []) -> [CaptionSegment] {
         let totalMs = max(3000.0, durationMs)
-        let productName = customPromptWords.first(where: { !$0.isEmpty }) ?? "NativeScreen"
+        let productName = customPromptWords.first(where: { !$0.isEmpty }) ?? "Native Screen"
         let sampleSentences: [[String]] = [
             ["Welcome", "to", productName + ",", "our", "100%", "local", "on-device", "screen", "studio."],
             ["um", "Here", "we", "can", "customize", "camera", "layouts,", "color", "grading,", "and", "smooth", "zooms."],

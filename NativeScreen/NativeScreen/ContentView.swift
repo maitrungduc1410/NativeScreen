@@ -18,7 +18,7 @@ struct ContentView: View {
                         Image(systemName: "record.circle.fill")
                             .font(.system(size: 30))
                             .foregroundStyle(.indigo)
-                        Text("NativeScreen")
+                        Text("Native Screen")
                             .font(.system(size: 24, weight: .bold))
                     }
                     Text("100% Native macOS & Metal Engine • 0% Idle CPU")

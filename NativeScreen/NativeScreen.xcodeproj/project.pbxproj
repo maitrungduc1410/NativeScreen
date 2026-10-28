@@ -250,11 +250,12 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "NativeScreen uses your camera to record a presenter overlay.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Native Screen";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Native Screen uses your camera to record a presenter overlay.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NativeScreen uses your microphone to record voiceovers.";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "NativeScreen records your screen or selected window to create product demos.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NativeScreen uses on-device speech recognition to generate captions locally.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Native Screen uses your microphone to record voiceovers.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Native Screen records your screen or selected window to create product demos.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Native Screen uses on-device speech recognition to generate captions locally.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -287,11 +288,12 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "NativeScreen uses your camera to record a presenter overlay.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Native Screen";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Native Screen uses your camera to record a presenter overlay.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NativeScreen uses your microphone to record voiceovers.";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "NativeScreen records your screen or selected window to create product demos.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NativeScreen uses on-device speech recognition to generate captions locally.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Native Screen uses your microphone to record voiceovers.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Native Screen records your screen or selected window to create product demos.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Native Screen uses on-device speech recognition to generate captions locally.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

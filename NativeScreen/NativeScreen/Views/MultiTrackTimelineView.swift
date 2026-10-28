@@ -44,7 +44,9 @@ public struct MultiTrackTimelineView: View {
                 let baseTrackWidth = max(260, viewportWidth - trackHorizontalInset * 2)
                 let contentWidth = baseTrackWidth * CGFloat(session.timelineZoom)
                 let totalDocumentWidth = contentWidth + trackHorizontalInset * 2
-                let totalTimelineMs = max(1000.0, session.timeMapper.totalTimelineDurationMs)
+                // Freeze `totalTimelineMs` while resizing a clip
+                // so the ruler ticks and timeline scale stay 100% stationary while dragging a clip handle!
+                let totalTimelineMs = max(1000.0, session.frozenPlaybackDurationMs ?? session.timeMapper.totalTimelineDurationMs)
                 let stepInfo = SmoothTimeRulerView.computeStepIntervals(totalDurationMs: totalTimelineMs, width: contentWidth)
 
                 ZStack(alignment: .topLeading) {
@@ -68,7 +70,7 @@ public struct MultiTrackTimelineView: View {
                             }
                             .zIndex(20)
 
-                                // Top-Right Horizontally Synced Time Ruler + Golden Split Teardrop Badges at Cut Boundaries!
+                                // Top-Right Horizontally Synced Time Ruler + Golden Split / Trim Teardrop Badges!
                                 ZStack(alignment: .topLeading) {
                                     SmoothTimeRulerView(
                                         totalDurationMs: totalTimelineMs,
@@ -78,18 +80,17 @@ public struct MultiTrackTimelineView: View {
                                     )
                                     .offset(x: trackHorizontalInset)
 
-                                    // Golden Split Teardrop Badges (`✂️`) at every cut boundary between adjacent ClipSlices (Matches Screenshot!)
-                                    if session.timeMapper.mappedSlices.count > 1 {
-                                        ForEach(Array(session.timeMapper.mappedSlices.dropLast().enumerated()), id: \.element.slice.id) { idx, mapped in
-                                            let cutX = trackHorizontalInset + CGFloat(mapped.timelineEndMs / totalTimelineMs) * contentWidth
-                                            let nextSliceId = session.timeMapper.mappedSlices[idx + 1].slice.id
-                                            CutBoundaryTeardropBadgeView {
-                                                // Clicking the golden scissors badge merges the two split slices back together!
-                                                session.mergeSliceWithNext(id: mapped.slice.id)
-                                            }
-                                            .offset(x: cutX - 10.0, y: rulerHeight - 22.0)
-                                            .help("Merge cut slices (\(mapped.slice.id.prefix(4)) + \(nextSliceId.prefix(4)))")
+                                    // Golden Teardrop Badges (`✂️` or `0.6s ✂️`) for Start Trim, Inter-Slice Cuts/Trims, and End Trim
+                                    let badges = computeClipTrimAndCutBadges()
+                                    ForEach(badges) { badge in
+                                        let cutX = trackHorizontalInset + CGFloat(badge.timelineMs / totalTimelineMs) * contentWidth
+                                        CutBoundaryTeardropBadgeView(
+                                            trimmedDurationLabel: badge.trimmedDurationLabel,
+                                            tooltipText: badge.tooltipText
+                                        ) {
+                                            badge.action()
                                         }
+                                        .offset(x: cutX - 13.0, y: rulerHeight - 25.0)
                                     }
                                 }
                             .frame(width: totalDocumentWidth, height: rulerHeight, alignment: .leading)
@@ -308,12 +309,18 @@ public struct MultiTrackTimelineView: View {
                                             switch phase {
                                             case .active(let pt):
                                                 guard !session.isDraggingTimelineSegment && NSEvent.pressedMouseButtons == 0 else { return }
+                                                if session.isSplitModeActive {
+                                                    NSCursor.crosshair.set()
+                                                }
                                                 let localTrackX = pt.x - trackHorizontalInset
                                                 let frac = max(0.0, min(1.0, Double(localTrackX / max(1.0, contentWidth))))
                                                 session.setHoverSkimTimelineMs(frac * totalTimelineMs)
                                             case .ended:
                                                 if !session.isDraggingTimelineSegment {
                                                     session.setHoverSkimTimelineMs(nil)
+                                                }
+                                                if session.isSplitModeActive {
+                                                    NSCursor.arrow.set()
                                                 }
                                             }
                                         }
@@ -1159,22 +1166,123 @@ public struct MultiTrackTimelineView: View {
         }
         return String(format: "%.1f×", rounded)
     }
+
+    private struct ClipTrimCutBadgeItem: Identifiable {
+        let id: String
+        let timelineMs: Double
+        let trimmedDurationLabel: String?
+        let tooltipText: String
+        let action: () -> Void
+    }
+
+    /// `Mg(ms)`:
+    /// `< 1s` -> `0.6s`, `< 60s` -> `4s`, `< 60m` -> `2m`, else `1h`.
+    private static func formatTrimmedDurationBadge(_ ms: Double) -> String {
+        let sec = max(0.0, ms / 1000.0)
+        if sec < 1.0 {
+            return String(format: "%.1fs", sec)
+        }
+        if sec < 60.0 {
+            return String(format: "%.0fs", sec)
+        }
+        let mins = Int(floor(sec / 60.0))
+        if mins < 60 {
+            return "\(mins)m"
+        }
+        return "\(mins / 60)h"
+    }
+
+    /// `Pg`:
+    /// Computes golden teardrop badges for:
+    /// 1. First slice's leading trim (`sourceStartMs > 1.0`).
+    /// 2. Every inter-slice boundary (`next.sourceStartMs - curr.sourceEndMs`: if `> 1ms` -> `Undo trim` with duration label, else `Join clips`).
+    /// 3. Last slice's trailing trim (`totalSourceMs - last.sourceEndMs > 1.0`).
+    private func computeClipTrimAndCutBadges() -> [ClipTrimCutBadgeItem] {
+        let slices = session.timeMapper.mappedSlices
+        guard !slices.isEmpty else { return [] }
+        let totalSourceMs = session.metadata.durationMs
+        var items: [ClipTrimCutBadgeItem] = []
+
+        // 1. Leading trim on the first slice
+        let first = slices[0]
+        if first.slice.sourceStartMs > 20.0 {
+            let trimmedMs = first.slice.sourceStartMs
+            let sliceId = first.slice.id
+            items.append(
+                ClipTrimCutBadgeItem(
+                    id: "trim-start-\(sliceId)",
+                    timelineMs: first.timelineStartMs,
+                    trimmedDurationLabel: Self.formatTrimmedDurationBadge(trimmedMs),
+                    tooltipText: "Undo trim",
+                    action: {
+                        session.removeSliceStartTrim(id: sliceId)
+                    }
+                )
+            )
+        }
+
+        // 2. Inter-slice cut / trim boundaries
+        if slices.count > 1 {
+            for idx in 0..<(slices.count - 1) {
+                let curr = slices[idx]
+                let next = slices[idx + 1]
+                let gapMs = max(0.0, next.slice.sourceStartMs - curr.slice.sourceEndMs)
+                let isTrimmedGap = (gapMs > 20.0)
+                let sliceId = curr.slice.id
+                items.append(
+                    ClipTrimCutBadgeItem(
+                        id: "cut-\(curr.slice.id)-\(next.slice.id)",
+                        timelineMs: curr.timelineEndMs,
+                        trimmedDurationLabel: isTrimmedGap ? Self.formatTrimmedDurationBadge(gapMs) : nil,
+                        tooltipText: isTrimmedGap ? "Undo trim" : "Join clips",
+                        action: {
+                            session.mergeSliceWithNext(id: sliceId)
+                        }
+                    )
+                )
+            }
+        }
+
+        // 3. Trailing trim on the last slice
+        if let last = slices.last {
+            let tailTrimMs = totalSourceMs - last.slice.sourceEndMs
+            if tailTrimMs > 20.0 {
+                let sliceId = last.slice.id
+                items.append(
+                    ClipTrimCutBadgeItem(
+                        id: "trim-end-\(sliceId)",
+                        timelineMs: last.timelineEndMs,
+                        trimmedDurationLabel: Self.formatTrimmedDurationBadge(tailTrimMs),
+                        tooltipText: "Undo trim",
+                        action: {
+                            session.removeSliceEndTrim(id: sliceId)
+                        }
+                    )
+                )
+            }
+        }
+
+        return items
+    }
 }
 
-// MARK: - Unified Continuous Playhead Canvas (Zero-Overlap Single-Path Teardrop + Stem)
+// MARK: - Unified Continuous Playhead Canvas & Golden Trim/Cut Teardrop Badge
 
 private struct CutBoundaryTeardropBadgeView: View {
+    let trimmedDurationLabel: String?
+    let tooltipText: String
     let onMergeClick: () -> Void
     @State private var isHovered = false
 
     var body: some View {
+        let hasLabel = (trimmedDurationLabel != nil)
         Button(action: onMergeClick) {
             ZStack {
                 Canvas { context, size in
                     let centerX = size.width * 0.5
-                    let radius: CGFloat = 8.5
-                    let circleCenterY: CGFloat = 9.0
-                    let tipY: CGFloat = 21.5
+                    let radius: CGFloat = hasLabel ? 11.2 : 9.2
+                    let circleCenterY: CGFloat = hasLabel ? 11.5 : 10.0
+                    let tipY: CGFloat = size.height - 0.5
 
                     var path = Path()
                     path.addArc(
@@ -1188,20 +1296,41 @@ private struct CutBoundaryTeardropBadgeView: View {
                     path.closeSubpath()
 
                     let fillColor = isHovered
-                        ? Color(red: 1.0, green: 0.72, blue: 0.22)
-                        : Color(red: 0.95, green: 0.64, blue: 0.14)
+                        ? Color(red: 0.98, green: 0.68, blue: 0.18)
+                        : Color(red: 0.91, green: 0.58, blue: 0.09)
                     context.fill(path, with: .color(fillColor))
+                    context.stroke(
+                        path,
+                        with: .color(Color.black.opacity(0.32)),
+                        lineWidth: 0.8
+                    )
                 }
 
-                Image(systemName: "scissors")
-                    .font(.system(size: 8.5, weight: .bold))
-                    .foregroundStyle(.black.opacity(0.88))
-                    .offset(y: -2.0)
+                if let label = trimmedDurationLabel {
+                    VStack(spacing: 0.5) {
+                        Text(label)
+                            .font(.system(size: 7.5, weight: .heavy).monospacedDigit())
+                            .foregroundStyle(.black.opacity(0.90))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+
+                        Image(systemName: "scissors")
+                            .font(.system(size: 7.5, weight: .bold))
+                            .foregroundStyle(.black.opacity(0.88))
+                    }
+                    .offset(y: -2.5)
+                } else {
+                    Image(systemName: "scissors")
+                        .font(.system(size: 9.0, weight: .bold))
+                        .foregroundStyle(.black.opacity(0.88))
+                        .offset(y: -2.5)
+                }
             }
-            .frame(width: 20, height: 22)
-            .scaleEffect(isHovered ? 1.08 : 1.0)
+            .frame(width: 26, height: 26)
+            .scaleEffect(isHovered ? 1.07 : 1.0)
         }
         .buttonStyle(.plain)
+        .help(tooltipText)
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
@@ -1959,7 +2088,11 @@ private struct TimelineInteractiveSegmentView: View {
             case .ended:
                 guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
                 isHovered = false
-                NSCursor.arrow.set()
+                if isSplitMode {
+                    NSCursor.crosshair.set()
+                } else {
+                    NSCursor.arrow.set()
+                }
             }
         }
         .offset(x: xOffset, y: verticalDragOffset)
@@ -2043,7 +2176,11 @@ private struct TimelineInteractiveSegmentView: View {
                     dragInitialStartMs = nil
                     dragInitialEndMs = nil
                     verticalDragOffset = 0.0
-                    NSCursor.arrow.set()
+                    if isSplitMode {
+                        NSCursor.crosshair.set()
+                    } else {
+                        NSCursor.arrow.set()
+                    }
                 }
         )
     }
@@ -2540,7 +2677,9 @@ private struct ShortcutTimelineSegmentView: View {
                 if !isHovered {
                     isHovered = true
                 }
-                if localX <= adaptiveEdgeHitWidth || localX >= segWidth - adaptiveEdgeHitWidth {
+                if session.isSplitModeActive {
+                    NSCursor.crosshair.set()
+                } else if localX <= adaptiveEdgeHitWidth || localX >= segWidth - adaptiveEdgeHitWidth {
                     NSCursor.resizeLeftRight.set()
                 } else {
                     NSCursor.arrow.set()
@@ -2548,7 +2687,11 @@ private struct ShortcutTimelineSegmentView: View {
             case .ended:
                 guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
                 isHovered = false
-                NSCursor.arrow.set()
+                if session.isSplitModeActive {
+                    NSCursor.crosshair.set()
+                } else {
+                    NSCursor.arrow.set()
+                }
             }
         }
         .offset(x: xOffset, y: verticalDragOffset)

@@ -38,6 +38,13 @@ public final class ProjectSession: Identifiable {
     public var pendingAddMaskType: MaskType? = nil
     public var pendingAddMaskStyle: MaskStyle = .gaussian
     public var isDraggingTimelineSegment: Bool = false
+    /// Frozen timeline duration while resizing a segment so the ruler never jumps or rescales mid-drag!
+    public var frozenPlaybackDurationMs: Double? = nil
+
+    // Bottom-Center Toast Notification State
+    public var activeToastMessage: String? = nil
+    @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
+
     public var scrollToTrackTargetId: String? = nil
     public var scrollToTrackRevision: Int = 0
     public var selectedInspectorTab: InspectorTab = .background
@@ -266,6 +273,25 @@ public final class ProjectSession: Identifiable {
         try projectData.write(to: projectJSONURL, options: .atomic)
     }
 
+    public func saveProjectWithToast() {
+        try? saveNow()
+        showToast("Project saved", durationMs: 2000)
+    }
+
+    public func showToast(_ message: String, durationMs: Int = 2000) {
+        toastDismissTask?.cancel()
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+            activeToastMessage = message
+        }
+        toastDismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(durationMs))
+            guard !Task.isCancelled, let self = self else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                self.activeToastMessage = nil
+            }
+        }
+    }
+
     private func scheduleAutoSave() {
         saveTask?.cancel()
         saveTask = Task { [weak self] in
@@ -282,6 +308,9 @@ public final class ProjectSession: Identifiable {
 
     public func beginInteractiveEdit() {
         isDraggingTimelineSegment = true
+        if frozenPlaybackDurationMs == nil {
+            frozenPlaybackDurationMs = max(1000.0, timeMapper.totalTimelineDurationMs)
+        }
         if interactiveEditSnapshot == nil {
             interactiveEditSnapshot = document
         }
@@ -289,6 +318,7 @@ public final class ProjectSession: Identifiable {
 
     public func endInteractiveEdit() {
         isDraggingTimelineSegment = false
+        frozenPlaybackDurationMs = nil
         if let snapshot = interactiveEditSnapshot {
             interactiveEditSnapshot = nil
             if snapshot != document {
@@ -575,7 +605,10 @@ public final class ProjectSession: Identifiable {
     public func splitSlice(id: String, atTimelineMs timelineMs: Double) {
         guard let index = timeMapper.mappedSlices.firstIndex(where: { $0.slice.id == id }) else { return }
         let mapped = timeMapper.mappedSlices[index]
-        guard timelineMs > mapped.timelineStartMs + 100.0 && timelineMs < mapped.timelineEndMs - 100.0 else { return }
+        guard timelineMs > mapped.timelineStartMs + 100.0 && timelineMs < mapped.timelineEndMs - 100.0 else {
+            showToast("The part you want to cut is too short", durationMs: 2000)
+            return
+        }
 
         let offsetTimeline = timelineMs - mapped.timelineStartMs
         let splitSourceMs = mapped.slice.sourceStartMs + offsetTimeline * mapped.slice.speed
@@ -606,11 +639,13 @@ public final class ProjectSession: Identifiable {
     }
 
     public func splitZoom(id: String, atSourceMs sourceMs: Double) {
+        guard let idx = document.timeline.zooms.firstIndex(where: { $0.id == id }) else { return }
+        let original = document.timeline.zooms[idx]
+        guard sourceMs > original.sourceStartMs + 200.0 && sourceMs < original.sourceEndMs - 200.0 else {
+            showToast("Can't cut item shorter than 0.2s", durationMs: 2000)
+            return
+        }
         mutate { doc in
-            guard let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) else { return }
-            let original = doc.timeline.zooms[idx]
-            guard sourceMs > original.sourceStartMs + 200.0 && sourceMs < original.sourceEndMs - 200.0 else { return }
-
             var firstHalf = original
             firstHalf.id = UUID().uuidString
             firstHalf.sourceEndMs = sourceMs
@@ -625,13 +660,15 @@ public final class ProjectSession: Identifiable {
     }
 
     public func splitMask(id: String, atSourceMs sourceMs: Double) {
-        mutate { doc in
-            for tIdx in doc.timeline.maskTracks.indices {
-                if let mIdx = doc.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {
-                    let original = doc.timeline.maskTracks[tIdx].items[mIdx]
-                    guard sourceMs > original.sourceStartMs + 180.0 && sourceMs < original.sourceEndMs - 180.0 else { return }
-
-                    let rectAtSplit = original.interpolatedRect(at: sourceMs)
+        for tIdx in document.timeline.maskTracks.indices {
+            if let mIdx = document.timeline.maskTracks[tIdx].items.firstIndex(where: { $0.id == id }) {
+                let original = document.timeline.maskTracks[tIdx].items[mIdx]
+                guard sourceMs > original.sourceStartMs + 180.0 && sourceMs < original.sourceEndMs - 180.0 else {
+                    showToast("Can't cut item shorter than 0.2s", durationMs: 2000)
+                    return
+                }
+                let rectAtSplit = original.interpolatedRect(at: sourceMs)
+                mutate { doc in
                     var firstHalf = original
                     firstHalf.id = UUID().uuidString
                     firstHalf.sourceEndMs = sourceMs
@@ -643,8 +680,8 @@ public final class ProjectSession: Identifiable {
 
                     doc.timeline.maskTracks[tIdx].items.replaceSubrange(mIdx...mIdx, with: [firstHalf, secondHalf])
                     selectedMaskId = secondHalf.id
-                    return
                 }
+                return
             }
         }
     }
@@ -1339,6 +1376,9 @@ public final class ProjectSession: Identifiable {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.writeObjects([nsImg])
+            await MainActor.run {
+                self.showToast("Current frame image copied to clipboard")
+            }
         }
     }
 
@@ -1351,6 +1391,29 @@ public final class ProjectSession: Identifiable {
             let nextSlice = doc.timeline.slices[idx + 1]
             doc.timeline.slices[idx].sourceEndMs = max(doc.timeline.slices[idx].sourceEndMs, nextSlice.sourceEndMs)
             doc.timeline.slices.remove(at: idx + 1)
+            selectedSliceId = doc.timeline.slices[idx].id
+        }
+    }
+
+    public func removeSliceStartTrim(id: String) {
+        mutate { doc in
+            guard let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) else { return }
+            let prevEnd = idx > 0 ? doc.timeline.slices[idx - 1].sourceEndMs : 0.0
+            if doc.timeline.slices[idx].sourceStartMs > prevEnd {
+                doc.timeline.slices[idx].sourceStartMs = prevEnd
+            }
+            selectedSliceId = doc.timeline.slices[idx].id
+        }
+    }
+
+    public func removeSliceEndTrim(id: String) {
+        let maxDur = metadata.durationMs
+        mutate { doc in
+            guard let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) else { return }
+            let nextStart = (idx + 1 < doc.timeline.slices.count) ? doc.timeline.slices[idx + 1].sourceStartMs : maxDur
+            if doc.timeline.slices[idx].sourceEndMs < nextStart {
+                doc.timeline.slices[idx].sourceEndMs = nextStart
+            }
             selectedSliceId = doc.timeline.slices[idx].id
         }
     }
@@ -1435,6 +1498,7 @@ public final class ProjectSession: Identifiable {
                 doc.timeline.zooms[idx].scale = sourceZoom.scale
             }
         }
+        showToast("Zoom level applied to all zooms")
     }
 
     public func duplicateZoom(id: String) {
@@ -1482,12 +1546,16 @@ public final class ProjectSession: Identifiable {
     public func copyZoomToClipboard(id: String) {
         if let found = document.timeline.zooms.first(where: { $0.id == id }) {
             copiedZoomBlock = found
+            showToast("Zoom range copied")
         }
     }
 
     public func cutZoomToClipboard(id: String) {
-        copyZoomToClipboard(id: id)
+        if let found = document.timeline.zooms.first(where: { $0.id == id }) {
+            copiedZoomBlock = found
+        }
         deleteZoom(zoomId: id)
+        showToast("Zoom range copied")
     }
 
     public func setMaskType(id: String, type: MaskType) {
@@ -1521,14 +1589,70 @@ public final class ProjectSession: Identifiable {
         for track in document.timeline.maskTracks {
             if let found = track.items.first(where: { $0.id == id }) {
                 copiedMaskItem = found
+                showToast("Mask copied")
                 return
             }
         }
     }
 
     public func cutMaskToClipboard(id: String) {
-        copyMaskToClipboard(id: id)
+        for track in document.timeline.maskTracks {
+            if let found = track.items.first(where: { $0.id == id }) {
+                copiedMaskItem = found
+                break
+            }
+        }
         deleteMask(maskId: id)
+        showToast("Mask copied")
+    }
+
+    public func pasteFromClipboard() {
+        let srcMs = currentSourceTimeMs
+        let maxDur = metadata.durationMs
+        if let copiedZoom = copiedZoomBlock {
+            if let selZoomId = selectedZoomId {
+                mutate { doc in
+                    if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == selZoomId }) {
+                        doc.timeline.zooms[idx].mode = copiedZoom.mode
+                        doc.timeline.zooms[idx].scale = copiedZoom.scale
+                        doc.timeline.zooms[idx].presentation = copiedZoom.presentation
+                        doc.timeline.zooms[idx].loupe = copiedZoom.loupe
+                        doc.timeline.zooms[idx].manualCenter01 = copiedZoom.manualCenter01
+                        doc.timeline.zooms[idx].instantAnimation = copiedZoom.instantAnimation
+                    }
+                }
+                showToast("Zoom range settings pasted")
+            } else {
+                let dur = max(300.0, copiedZoom.sourceEndMs - copiedZoom.sourceStartMs)
+                var newZoom = copiedZoom
+                newZoom.id = UUID().uuidString
+                newZoom.sourceStartMs = min(max(0.0, srcMs), max(0.0, maxDur - 300.0))
+                newZoom.sourceEndMs = min(maxDur, newZoom.sourceStartMs + dur)
+                mutate { doc in
+                    doc.timeline.zooms.append(newZoom)
+                    doc.timeline.zooms.sort { $0.sourceStartMs < $1.sourceStartMs }
+                    selectedZoomId = newZoom.id
+                }
+                showToast("Zoom range settings pasted")
+            }
+            return
+        }
+        if let copiedMask = copiedMaskItem {
+            let dur = max(300.0, copiedMask.sourceEndMs - copiedMask.sourceStartMs)
+            var newMask = copiedMask
+            newMask.id = UUID().uuidString
+            newMask.sourceStartMs = min(max(0.0, srcMs), max(0.0, maxDur - 300.0))
+            newMask.sourceEndMs = min(maxDur, newMask.sourceStartMs + dur)
+            mutate { doc in
+                if doc.timeline.maskTracks.isEmpty {
+                    doc.timeline.maskTracks.append(MaskTrack(id: UUID().uuidString, name: "Masks", items: [newMask]))
+                } else {
+                    doc.timeline.maskTracks[0].items.append(newMask)
+                }
+                selectedMaskId = newMask.id
+            }
+            showToast("Mask settings pasted")
+        }
     }
 
     /// Splits whichever item is currently selected at `currentSourceTimeMs` (or splits the Clip at Playhead) when pressing `C`.

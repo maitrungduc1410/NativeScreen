@@ -32,9 +32,8 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
     }
 
     public static var defaultProjectsDirectory: URL {
-        let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Movies")
-        let dir = movies.appendingPathComponent("NativeScreen Projects", isDirectory: true)
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let dir = homeDir.appendingPathComponent("Native Screen Projects", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

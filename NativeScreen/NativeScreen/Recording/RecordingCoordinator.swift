@@ -1419,7 +1419,7 @@ public final class RecordingCoordinator {
                 displayId: 1,
                 appBundleId: "com.apple.Safari",
                 appName: "Interactive Demo",
-                windowTitle: "NativeScreen 120Hz Engine Preview",
+                windowTitle: "Native Screen 120Hz Engine Preview",
                 logicalBounds: LogicalBounds(x: 100, y: 80, width: 1280, height: 800),
                 pixelSize: PixelDimensions(width: 2560, height: 1600),
                 scaleFactor: 2.0,

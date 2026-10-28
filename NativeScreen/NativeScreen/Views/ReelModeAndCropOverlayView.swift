@@ -199,7 +199,7 @@ public struct ReelModeSafeZoneOverlayView: View {
                             HStack(spacing: 5 * scale) {
                                 Image(systemName: "music.note")
                                     .font(.system(size: 10.5 * scale))
-                                Text("original sound — NativeScreen")
+                                Text("original sound — Native Screen")
                                     .font(.system(size: 11 * scale, weight: .medium))
                             }
                             .foregroundStyle(.white.opacity(0.90))

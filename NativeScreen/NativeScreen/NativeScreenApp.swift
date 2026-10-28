@@ -38,7 +38,7 @@ struct NativeScreenApp: App {
 
     var body: some Scene {
         // Menu Bar Extra Icon (Like the top-right macOS Menu Bar icon!)
-        MenuBarExtra("NativeScreen", systemImage: "record.circle") {
+        MenuBarExtra("Native Screen", systemImage: "record.circle") {
             Button("Show Recording Bar") {
                 recorder.showRecordingHUD()
             }
@@ -66,7 +66,7 @@ struct NativeScreenApp: App {
             }
 
             Divider()
-            Button("Quit NativeScreen") {
+            Button("Quit Native Screen") {
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: [.command])

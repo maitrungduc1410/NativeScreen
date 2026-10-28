@@ -3209,7 +3209,7 @@ public struct InspectorSidebarView: View {
                     .foregroundStyle(.white.opacity(0.42))
 
                 TextField(
-                    "e.g. NativeScreen, Swift, Metal",
+                    "e.g. Native Screen, Swift, Metal",
                     text: Binding(
                         get: { cap.customPrompt },
                         set: { v in session.mutate { $0.captions.customPrompt = v } }
