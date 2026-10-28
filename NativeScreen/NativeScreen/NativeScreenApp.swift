@@ -7,6 +7,10 @@ import AppKit
 @MainActor
 final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let appMenuItem = NSApp.mainMenu?.items.first {
+            appMenuItem.title = "Native Screen"
+            appMenuItem.submenu?.title = "Native Screen"
+        }
         if !ProjectWorkspaceStore.shared.hasOpenEditorWindows {
             RecordingCoordinator.shared.showRecordingHUD()
         }

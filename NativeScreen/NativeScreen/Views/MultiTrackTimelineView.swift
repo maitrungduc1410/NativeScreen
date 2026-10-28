@@ -90,7 +90,8 @@ public struct MultiTrackTimelineView: View {
                                         ) {
                                             badge.action()
                                         }
-                                        .offset(x: cutX - 13.0, y: rulerHeight - 25.0)
+                                        .offset(x: cutX - 15.0, y: rulerHeight - 28.0)
+                                        .zIndex(10)
                                     }
                                 }
                             .frame(width: totalDocumentWidth, height: rulerHeight, alignment: .leading)
@@ -232,78 +233,65 @@ public struct MultiTrackTimelineView: View {
 
                                     // B2. HORIZONTALLY SCROLLABLE TRACK LANES
                                     ScrollView(.horizontal, showsIndicators: false) {
-                                        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !session.isSplitModeActive)) { timelineCtx in
-                                            let baseWiggleY: CGFloat = session.isSplitModeActive
-                                                ? CGFloat(sin(timelineCtx.date.timeIntervalSinceReferenceDate * (2.0 * .pi / 0.70))) * 1.0
-                                                : 0.0
-
-                                            ZStack(alignment: .topLeading) {
-                                                VStack(alignment: .leading, spacing: rowSpacing) {
-                                                    // Lane 0 (Optional): Speed up typing suggestion bars right above Clip
-                                                    if hasTypingSuggestions {
-                                                        typingSuggestionsLaneView(
-                                                            suggestions: typingSuggestions,
-                                                            contentWidth: contentWidth,
-                                                            totalTimelineMs: totalTimelineMs
-                                                        )
-                                                        .padding(.bottom, -4)
-                                                        .offset(y: baseWiggleY)
-                                                    }
-
-                                                    // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
-                                                    clipLaneView(
-                                                        contentWidth: contentWidth,
-                                                        totalTimelineMs: totalTimelineMs,
-                                                        minorTickStepSec: stepInfo.minor
-                                                    )
-                                                    .offset(y: baseWiggleY)
-
-                                                    // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
-                                                    zoomLaneView(
+                                        ZStack(alignment: .topLeading) {
+                                            VStack(alignment: .leading, spacing: rowSpacing) {
+                                                // Lane 0 (Optional): Speed up typing suggestion bars right above Clip
+                                                if hasTypingSuggestions {
+                                                    typingSuggestionsLaneView(
+                                                        suggestions: typingSuggestions,
                                                         contentWidth: contentWidth,
                                                         totalTimelineMs: totalTimelineMs
                                                     )
-                                                    .offset(y: -baseWiggleY)
+                                                    .padding(.bottom, -4)
+                                                }
 
-                                                    // Lane 3+: Dynamic Mask Tracks (`34pt` height)
-                                                    ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
-                                                        let dir: CGFloat = ((2 + trackIdx) % 2 == 0) ? 1.0 : -1.0
-                                                        maskLaneView(
-                                                            track: track,
-                                                            trackIndex: trackIdx,
+                                                // Lane 1: Screen Clips (`52pt` height, with Ruler Tick Lines + Audio Waveform)
+                                                clipLaneView(
+                                                    contentWidth: contentWidth,
+                                                    totalTimelineMs: totalTimelineMs,
+                                                    minorTickStepSec: stepInfo.minor
+                                                )
+
+                                                // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
+                                                zoomLaneView(
+                                                    contentWidth: contentWidth,
+                                                    totalTimelineMs: totalTimelineMs
+                                                )
+
+                                                // Lane 3+: Dynamic Mask Tracks (`34pt` height)
+                                                ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
+                                                    maskLaneView(
+                                                        track: track,
+                                                        trackIndex: trackIdx,
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                }
+
+                                                // Lane 4+: Multi-Track Keyboard Shortcuts Lanes (`34pt` height)
+                                                if hasShortcutsTrack {
+                                                    ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
+                                                        shortcutsLaneView(
+                                                            track: sTrack,
+                                                            trackIndex: sIdx,
+                                                            clusters: session.shortcutClusters(forTrackId: sTrack.id),
                                                             contentWidth: contentWidth,
                                                             totalTimelineMs: totalTimelineMs
                                                         )
-                                                        .offset(y: baseWiggleY * dir)
-                                                    }
-
-                                                    // Lane 4+: Multi-Track Keyboard Shortcuts Lanes (`34pt` height)
-                                                    if hasShortcutsTrack {
-                                                        ForEach(Array(session.document.captions.shortcutTracks.enumerated()), id: \.element.id) { sIdx, sTrack in
-                                                            let dir: CGFloat = ((2 + session.document.timeline.maskTracks.count + sIdx) % 2 == 0) ? 1.0 : -1.0
-                                                            shortcutsLaneView(
-                                                                track: sTrack,
-                                                                trackIndex: sIdx,
-                                                                clusters: session.shortcutClusters(forTrackId: sTrack.id),
-                                                                contentWidth: contentWidth,
-                                                                totalTimelineMs: totalTimelineMs
-                                                            )
-                                                            .offset(y: baseWiggleY * dir)
-                                                        }
                                                     }
                                                 }
-                                                .padding(.vertical, 8)
-                                                .padding(.horizontal, trackHorizontalInset)
-                                                .background(
-                                                    HorizontalScrollViewIntrospector { sv in
-                                                        if horizontalScrollView !== sv {
-                                                            horizontalScrollView = sv
-                                                        }
-                                                    }
-                                                )
                                             }
-                                            .frame(width: totalDocumentWidth)
+                                            .padding(.vertical, 8)
+                                            .padding(.horizontal, trackHorizontalInset)
+                                            .background(
+                                                HorizontalScrollViewIntrospector(isSplitMode: session.isSplitModeActive) { sv in
+                                                    if horizontalScrollView !== sv {
+                                                        horizontalScrollView = sv
+                                                    }
+                                                }
+                                            )
                                         }
+                                        .frame(width: totalDocumentWidth)
                                         .coordinateSpace(name: "timelineContentSpace")
                                         .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
                                             switch phase {
@@ -1280,8 +1268,8 @@ private struct CutBoundaryTeardropBadgeView: View {
             ZStack {
                 Canvas { context, size in
                     let centerX = size.width * 0.5
-                    let radius: CGFloat = hasLabel ? 11.2 : 9.2
-                    let circleCenterY: CGFloat = hasLabel ? 11.5 : 10.0
+                    let radius: CGFloat = hasLabel ? 12.2 : 9.6
+                    let circleCenterY: CGFloat = hasLabel ? 13.0 : 11.2
                     let tipY: CGFloat = size.height - 0.5
 
                     var path = Path()
@@ -1307,26 +1295,26 @@ private struct CutBoundaryTeardropBadgeView: View {
                 }
 
                 if let label = trimmedDurationLabel {
-                    VStack(spacing: 0.5) {
+                    VStack(spacing: 1.0) {
                         Text(label)
-                            .font(.system(size: 7.5, weight: .heavy).monospacedDigit())
+                            .font(.system(size: 7.0, weight: .heavy).monospacedDigit())
                             .foregroundStyle(.black.opacity(0.90))
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
 
                         Image(systemName: "scissors")
-                            .font(.system(size: 7.5, weight: .bold))
+                            .font(.system(size: 7.2, weight: .bold))
                             .foregroundStyle(.black.opacity(0.88))
                     }
-                    .offset(y: -2.5)
+                    .offset(y: -0.8)
                 } else {
                     Image(systemName: "scissors")
                         .font(.system(size: 9.0, weight: .bold))
                         .foregroundStyle(.black.opacity(0.88))
-                        .offset(y: -2.5)
+                        .offset(y: -2.0)
                 }
             }
-            .frame(width: 26, height: 26)
+            .frame(width: 30, height: 29)
             .scaleEffect(isHovered ? 1.07 : 1.0)
         }
         .buttonStyle(.plain)
@@ -1964,7 +1952,7 @@ private struct TimelineInteractiveSegmentView: View {
     let onEndInteractive: () -> Void
 
     @State private var isHovered = false
-    @State private var lastHoverLocalX: CGFloat = 0.0
+    @State private var isEdgeHovered = false
     @State private var activeDragMode: SegmentDragMode? = nil
     @State private var pressLocalX: CGFloat = 0.0
     @State private var hasExceededClickSlop = false
@@ -2059,7 +2047,10 @@ private struct TimelineInteractiveSegmentView: View {
         }
         .frame(width: segWidth, height: height)
         .overlay(
-            RightClickDetectorView { pointInView, parentView in
+            RightClickDetectorView(
+                isSplitMode: isSplitMode,
+                isEdgeHovered: isEdgeHovered && !isSplitMode
+            ) { pointInView, parentView in
                 onRightClick(pointInView, parentView)
             }
         )
@@ -2072,22 +2063,25 @@ private struct TimelineInteractiveSegmentView: View {
                 // SwiftUI passes `pt.x` in the parent `ZStack` coordinate space (`xOffset .. xOffset + segWidth`).
                 // Subtracting `xOffset` gives the true `[0 .. segWidth]` local coordinate!
                 let localX = (pt.x >= xOffset - 6 && pt.x <= xOffset + segWidth + 6) ? (pt.x - xOffset) : pt.x
-                lastHoverLocalX = max(0, min(segWidth, localX))
+                let clampedLocalX = max(0, min(segWidth, localX))
+                let onEdge = (clampedLocalX <= edgeHitWidth || clampedLocalX >= segWidth - edgeHitWidth)
                 if !isHovered {
                     isHovered = true
                 }
+                if isEdgeHovered != onEdge {
+                    isEdgeHovered = onEdge
+                }
                 if isSplitMode {
                     NSCursor.crosshair.set()
+                } else if onEdge {
+                    NSCursor.resizeLeftRight.set()
                 } else {
-                    if lastHoverLocalX <= edgeHitWidth || lastHoverLocalX >= segWidth - edgeHitWidth {
-                        NSCursor.resizeLeftRight.set()
-                    } else {
-                        NSCursor.arrow.set()
-                    }
+                    NSCursor.arrow.set()
                 }
             case .ended:
                 guard activeDragMode == nil && NSEvent.pressedMouseButtons == 0 else { return }
                 isHovered = false
+                isEdgeHovered = false
                 if isSplitMode {
                     NSCursor.crosshair.set()
                 } else {
@@ -2239,20 +2233,40 @@ private struct TimelineInteractiveSegmentView: View {
 // MARK: - AppKit Helpers for Right-Click Popover Trigger & NSScrollView Introspection
 
 private struct RightClickDetectorView: NSViewRepresentable {
+    var isSplitMode: Bool = false
+    var isEdgeHovered: Bool = false
     let onRightClick: (NSPoint, NSView) -> Void
 
     func makeNSView(context: Context) -> RightClickCatcherNSView {
         let v = RightClickCatcherNSView()
+        v.isSplitMode = isSplitMode
+        v.isEdgeHovered = isEdgeHovered
         v.onRightClick = onRightClick
         return v
     }
 
     func updateNSView(_ nsView: RightClickCatcherNSView, context: Context) {
+        let modeChanged = (nsView.isSplitMode != isSplitMode) || (nsView.isEdgeHovered != isEdgeHovered)
+        nsView.isSplitMode = isSplitMode
+        nsView.isEdgeHovered = isEdgeHovered
         nsView.onRightClick = onRightClick
+        if modeChanged {
+            nsView.window?.invalidateCursorRects(for: nsView)
+        }
     }
 
     final class RightClickCatcherNSView: NSView {
+        var isSplitMode: Bool = false
+        var isEdgeHovered: Bool = false
         var onRightClick: ((NSPoint, NSView) -> Void)?
+
+        override func resetCursorRects() {
+            super.resetCursorRects()
+            let cursor: NSCursor = isSplitMode
+                ? .crosshair
+                : (isEdgeHovered ? .resizeLeftRight : .arrow)
+            addCursorRect(bounds, cursor: cursor)
+        }
 
         // Crucial: return `nil` from `hitTest` for normal left-clicks/drags/hovers so SwiftUI gestures work 100% normally,
         // and ONLY intercept right-clicks (or Control + Left Click)!
@@ -2283,12 +2297,14 @@ private struct RightClickDetectorView: NSViewRepresentable {
 }
 
 private struct HorizontalScrollViewIntrospector: NSViewRepresentable {
+    var isSplitMode: Bool = false
     let onFound: (NSScrollView) -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
             if let sv = view.enclosingScrollView {
+                sv.documentCursor = isSplitMode ? .crosshair : nil
                 onFound(sv)
             }
         }
@@ -2296,8 +2312,14 @@ private struct HorizontalScrollViewIntrospector: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        let splitMode = isSplitMode
         DispatchQueue.main.async {
             if let sv = nsView.enclosingScrollView {
+                let targetCursor: NSCursor? = splitMode ? .crosshair : nil
+                if sv.documentCursor !== targetCursor {
+                    sv.documentCursor = targetCursor
+                    sv.window?.invalidateCursorRects(for: sv.contentView)
+                }
                 onFound(sv)
             }
         }

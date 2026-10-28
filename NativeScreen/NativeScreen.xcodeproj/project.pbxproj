@@ -251,6 +251,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Native Screen";
+				INFOPLIST_KEY_CFBundleName = "Native Screen";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Native Screen uses your camera to record a presenter overlay.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Native Screen uses your microphone to record voiceovers.";
@@ -262,7 +263,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dmai.NativeScreen;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Native Screen";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -289,6 +290,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Native Screen";
+				INFOPLIST_KEY_CFBundleName = "Native Screen";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Native Screen uses your camera to record a presenter overlay.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Native Screen uses your microphone to record voiceovers.";
@@ -300,7 +302,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dmai.NativeScreen;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Native Screen";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
