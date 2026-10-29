@@ -60,8 +60,10 @@ public final class ProjectSession: Identifiable {
     // Audio Waveform Envelope Samples (`0.0 ... 1.0`, ~240 buckets/sec across `metadata.durationMs`)
     // - `audioWaveformSamples`: System / App Audio waveform (Purple `#4D2FF5` in Timeline Clip)
     // - `microphoneWaveformSamples`: Recorded Microphone waveform (Translucent White in Timeline Clip)
+    // - `voiceoverWaveformSamplesByID`: Per-VoiceoverSegment audio waveform samples (Translucent White in Voiceover segment)
     public var audioWaveformSamples: [Float] = []
     public var microphoneWaveformSamples: [Float] = []
+    public var voiceoverWaveformSamplesByID: [String: [Float]] = [:]
 
     // Clipboard for Zoom / Mask Copy & Cut (`⌘C` / `⌘X`)
     public var copiedZoomBlock: ZoomBlock?
@@ -1788,6 +1790,27 @@ public final class ProjectSession: Identifiable {
                 self.microphoneWaveformSamples = []
             }
         }
+
+        // 3. Voiceovers Audio Waveforms (`voiceovers` -> Translucent white waveform on each Voiceover segment)
+        await loadAllVoiceoverWaveformsIfNeeded()
+    }
+
+    public func loadAllVoiceoverWaveformsIfNeeded() async {
+        for vo in document.timeline.voiceovers {
+            await loadVoiceoverWaveform(for: vo)
+        }
+    }
+
+    public func loadVoiceoverWaveform(for vo: VoiceoverSegment) async {
+        let voURL = packageURL.appendingPathComponent(vo.relativePath)
+        let bins = max(128, min(4096, Int((vo.durationMs / 1000.0) * 240.0)))
+        if FileManager.default.fileExists(atPath: voURL.path),
+           let extracted = await Self.extractNormalizedAudioWaveform(from: voURL, targetBinCount: bins) {
+            self.voiceoverWaveformSamplesByID[vo.id] = extracted
+        } else {
+            self.voiceoverWaveformSamplesByID[vo.id] = Self.generateProceduralWaveform(durationMs: vo.durationMs, bucketCount: max(96, bins))
+        }
+        renderRevision &+= 1
     }
 
     private static func extractNormalizedAudioWaveform(from url: URL, targetBinCount: Int) async -> [Float]? {
@@ -2848,11 +2871,45 @@ public final class ProjectSession: Identifiable {
     }
 
     public var hasRecordedCamera: Bool {
-        metadata.tracks.webcamVideo != nil || webcamVideoFileURL != nil || document.camera.enabled
+        metadata.tracks.webcamVideo != nil || webcamVideoFileURL != nil
     }
 
     public var hasRecordedMicrophone: Bool {
         metadata.tracks.microphoneAudio != nil || microphoneAudioFileURL != nil || !document.captions.segments.isEmpty
+    }
+
+    /// Evaluates whether a sidebar tab can be opened and returns the exact disabled tooltip reason.
+    public func inspectorTabAvailability(_ tab: InspectorTab) -> (canApply: Bool, disabledTooltip: String?) {
+        switch tab {
+        case .background:
+            return (true, nil)
+        case .cursor:
+            let hasCursor = !cursorEvents.isEmpty
+            return (hasCursor, hasCursor ? nil : "There is no mouse cursor recorded")
+        case .cameraLayout:
+            return (hasRecordedCamera, hasRecordedCamera ? nil : "No camera recorded")
+        case .cameraStyle:
+            if !hasRecordedCamera {
+                return (false, "No camera recorded")
+            }
+            if !document.camera.enabled {
+                return (false, "Camera is hidden (see Camera Layout)")
+            }
+            return (true, nil)
+        case .captions, .transcript:
+            return (hasRecordedMicrophone, hasRecordedMicrophone ? nil : "No microphone recorded")
+        case .audio:
+            return (true, nil)
+        case .shortcuts:
+            let hasShortcuts = !keyEvents.isEmpty || !document.captions.customShortcuts.isEmpty || !document.captions.shortcutTracks.isEmpty
+            return (hasShortcuts, hasShortcuts ? nil : "No keyboard shortcuts during recording")
+        case .zoom:
+            return (true, nil)
+        case .deviceFrame:
+            return (true, nil)
+        case .masks:
+            return (true, nil)
+        }
     }
 
     /// Generates a word-level transcript 100% locally on-device (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true` or local OpenAI Whisper model).
@@ -3550,6 +3607,9 @@ public final class ProjectSession: Identifiable {
             doc.timeline.voiceovers.append(newVO)
             doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
         }
+        Task { @MainActor [weak self] in
+            await self?.loadVoiceoverWaveform(for: newVO)
+        }
         selectVoiceover(newVO.id)
         scrollToTimelineTrack("track_voiceovers")
         showToast("Voiceover added")
@@ -3598,6 +3658,7 @@ public final class ProjectSession: Identifiable {
                 doc.timeline.voiceovers.append(newVO)
                 doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
             }
+            await self.loadVoiceoverWaveform(for: newVO)
             self.selectVoiceover(newVO.id)
             self.scrollToTimelineTrack("track_voiceovers")
             self.showToast("Voiceover added")
@@ -3662,5 +3723,237 @@ public final class ProjectSession: Identifiable {
             doc.timeline.voiceovers.removeAll()
         }
         selectedVoiceoverId = nil
+    }
+
+    // MARK: - Built-In & Custom Background Audio
+
+    public var isPreviewingBackgroundAudio: Bool = false
+    @ObservationIgnored private var backgroundAudioPreviewPlayer: AVAudioPlayer?
+
+    public func resolvedBackgroundAudioFileURL() -> URL? {
+        guard let rel = document.audio.backgroundMusic.relativePath, !rel.isEmpty else {
+            return nil
+        }
+        let inPackage = packageURL.appendingPathComponent(rel)
+        if FileManager.default.fileExists(atPath: inPackage.path) {
+            return inPackage
+        }
+        let inAssets = packageURL.appendingPathComponent("assets", isDirectory: true).appendingPathComponent(rel)
+        if FileManager.default.fileExists(atPath: inAssets.path) {
+            return inAssets
+        }
+        return Self.ensureSynthesizedBuiltInBackgroundTrack(named: rel)
+    }
+
+    public func selectBuiltInBackgroundTrack(_ trackName: String) {
+        stopBackgroundAudioPreview()
+        let isCurrentlySelected = (document.audio.backgroundMusic.relativePath == trackName)
+        if isCurrentlySelected {
+            mutate { $0.audio.backgroundMusic.relativePath = nil }
+            return
+        }
+        _ = Self.ensureSynthesizedBuiltInBackgroundTrack(named: trackName)
+        mutate {
+            $0.audio.backgroundMusic.relativePath = trackName
+            $0.audio.backgroundMusic.muted = false
+        }
+        // Automatically preview the newly selected track if editor playback is paused
+        if !isPlaying {
+            toggleBackgroundAudioPreview()
+        }
+    }
+
+    public func importCustomBackgroundAudioFile(from sourceURL: URL) {
+        stopBackgroundAudioPreview()
+        let assetsDir = packageURL.appendingPathComponent("assets", isDirectory: true)
+        try? FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        let destFileName = "bg-\(sourceURL.lastPathComponent)"
+        let destURL = assetsDir.appendingPathComponent(destFileName)
+        try? FileManager.default.removeItem(at: destURL)
+        try? FileManager.default.copyItem(at: sourceURL, to: destURL)
+        mutate {
+            $0.audio.backgroundMusic.relativePath = "assets/\(destFileName)"
+            $0.audio.backgroundMusic.muted = false
+        }
+        showToast("Background audio file added")
+    }
+
+    public func toggleBackgroundAudioPreview() {
+        if isPreviewingBackgroundAudio {
+            stopBackgroundAudioPreview()
+            return
+        }
+        guard let url = resolvedBackgroundAudioFileURL() else { return }
+        if isPlaying {
+            isPlaying = false
+        }
+        if let player = try? AVAudioPlayer(contentsOf: url) {
+            player.numberOfLoops = -1
+            player.volume = Float(min(1.0, max(0.05, document.audio.backgroundMusic.volume * 2.5)))
+            player.prepareToPlay()
+            player.play()
+            backgroundAudioPreviewPlayer = player
+            isPreviewingBackgroundAudio = true
+        }
+    }
+
+    public func updateBackgroundAudioPreviewVolume() {
+        backgroundAudioPreviewPlayer?.volume = Float(min(1.0, max(0.02, document.audio.backgroundMusic.volume * 2.5)))
+    }
+
+    public func stopBackgroundAudioPreview() {
+        backgroundAudioPreviewPlayer?.stop()
+        backgroundAudioPreviewPlayer = nil
+        isPreviewingBackgroundAudio = false
+    }
+
+    public nonisolated static func ensureSynthesizedBuiltInBackgroundTrack(named trackName: String) -> URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        let dir = appSupport.appendingPathComponent("NativeScreen/BackgroundAudio", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let slug = trackName
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+        let outURL = dir.appendingPathComponent("\(slug).wav")
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: outURL.path),
+           let size = attrs[.size] as? Int64, size > 64_000 {
+            return outURL
+        }
+
+        let sampleRate = 44_100
+        let durationSec = 16.0
+        let totalFrames = Int(Double(sampleRate) * durationSec)
+        var pcm = [Int16](repeating: 0, count: totalFrames * 2)
+
+        // Distinct chord progressions & tempos per track (`Sunny Lo-Fi`, `Lean Groove`, `Bright Lounge`, `Chill Hop`, etc.)
+        let progression: [[Double]]
+        let bpm: Double
+        let padBrightness: Double
+
+        switch slug {
+        case "lean-groove", "upbeat-spark", "pulse-drive":
+            bpm = 108.0
+            padBrightness = 0.45
+            progression = [
+                [220.00, 277.18, 329.63, 415.30], // A maj7
+                [185.00, 220.00, 277.18, 329.63], // F#m7
+                [146.83, 185.00, 220.00, 277.18], // D maj7
+                [164.81, 207.65, 246.94, 329.63]  // E7
+            ]
+        case "bright-lounge", "warm-horizon", "velvet-keys":
+            bpm = 92.0
+            padBrightness = 0.35
+            progression = [
+                [174.61, 220.00, 261.63, 329.63], // F maj7
+                [164.81, 196.00, 246.94, 293.66], // Em7
+                [146.83, 174.61, 220.00, 261.63], // Dm7
+                [130.81, 164.81, 196.00, 246.94]  // C maj7
+            ]
+        case "chill-hop", "midnight-study", "soft-rain":
+            bpm = 78.0
+            padBrightness = 0.25
+            progression = [
+                [146.83, 174.61, 220.00, 261.63], // Dm7
+                [196.00, 246.94, 293.66, 349.23], // G7
+                [130.81, 164.81, 196.00, 246.94], // C maj7
+                [110.00, 138.59, 164.81, 196.00]  // A7
+            ]
+        default: // "sunny-lo-fi" and others
+            bpm = 84.0
+            padBrightness = 0.30
+            progression = [
+                [130.81, 164.81, 196.00, 246.94, 293.66], // C maj9
+                [110.00, 130.81, 164.81, 196.00, 246.94], // Am9
+                [146.83, 174.61, 220.00, 261.63, 329.63], // Dm9
+                [98.00,  146.83, 174.61, 220.00, 246.94]  // G13
+            ]
+        }
+
+        let secPerBeat = 60.0 / bpm
+        let secPerBar = secPerBeat * 4.0
+
+        for i in 0..<totalFrames {
+            let t = Double(i) / Double(sampleRate)
+            let barIdx = Int(t / secPerBar) % progression.count
+            let barPhase = t.truncatingRemainder(dividingBy: secPerBar)
+            let beatPhase = t.truncatingRemainder(dividingBy: secPerBeat)
+            let chord = progression[barIdx]
+
+            // 1. Warm Rhodes Electric Piano Chord Pad + Gentle Tremolo
+            let barEnv = min(1.0, barPhase / 0.06) * exp(-barPhase * 0.42)
+            let tremoloL = 0.88 + 0.12 * sin(2.0 * .pi * 3.2 * t)
+            let tremoloR = 0.88 + 0.12 * cos(2.0 * .pi * 3.2 * t)
+
+            var padSumL = 0.0
+            var padSumR = 0.0
+            for (nIdx, freq) in chord.enumerated() {
+                let detune = 1.0 + Double(nIdx - 2) * 0.0008
+                let fundamental = sin(2.0 * .pi * freq * detune * t)
+                let harmonic2 = sin(2.0 * .pi * freq * 2.0 * t) * padBrightness * exp(-barPhase * 1.4)
+                let voice = (fundamental + harmonic2) / Double(chord.count)
+                let pan = 0.5 + Double(nIdx - chord.count / 2) * 0.12
+                padSumL += voice * (1.0 - pan * 0.4)
+                padSumR += voice * (0.6 + pan * 0.4)
+            }
+
+            // 2. Warm Sub-Bass on Beats 1 and 2.5
+            let rootFreq = chord[0] * 0.5
+            let bassTime = (barPhase < secPerBeat * 2.5) ? barPhase : (barPhase - secPerBeat * 2.5)
+            let bassEnv = min(1.0, bassTime / 0.015) * exp(-bassTime * 3.2)
+            let bassSample = sin(2.0 * .pi * rootFreq * t) * bassEnv * 0.34
+
+            // 3. Soft Lo-Fi Kick (Beats 1 & 3) and Gentle Brush Hat (Eighth notes)
+            let isBeat1Or3 = (Int(barPhase / secPerBeat) % 2 == 0)
+            let kickEnv = isBeat1Or3 ? exp(-beatPhase * 22.0) : 0.0
+            let kickFreq = 52.0 + 95.0 * exp(-beatPhase * 38.0)
+            let kickSample = sin(2.0 * .pi * kickFreq * t) * kickEnv * 0.28
+
+            let eighthPhase = t.truncatingRemainder(dividingBy: secPerBeat * 0.5)
+            let hatEnv = exp(-eighthPhase * 48.0) * 0.035
+            let pseudoNoise = sin(Double(i) * 1.73205) * cos(Double(i) * 2.41421)
+            let hatSample = pseudoNoise * hatEnv
+
+            // Smooth loop crossfade at start/end
+            let loopFade = min(1.0, min(t / 0.08, (durationSec - t) / 0.15))
+
+            let left = (padSumL * barEnv * tremoloL * 0.52 + bassSample + kickSample + hatSample) * loopFade
+            let right = (padSumR * barEnv * tremoloR * 0.52 + bassSample + kickSample + hatSample) * loopFade
+
+            pcm[i * 2] = Int16(max(-32000.0, min(32000.0, left * 26000.0)))
+            pcm[i * 2 + 1] = Int16(max(-32000.0, min(32000.0, right * 26000.0)))
+        }
+
+        // Write standard 44-byte RIFF WAV header + 16-bit stereo PCM data
+        let dataByteCount = UInt32(pcm.count * MemoryLayout<Int16>.size)
+        var wavData = Data(capacity: 44 + Int(dataByteCount))
+        wavData.append("RIFF".data(using: .ascii)!)
+        var riffChunkSize = UInt32(36 + dataByteCount).littleEndian
+        wavData.append(Data(bytes: &riffChunkSize, count: 4))
+        wavData.append("WAVEfmt ".data(using: .ascii)!)
+        var fmtChunkSize = UInt32(16).littleEndian
+        var audioFormat = UInt16(1).littleEndian
+        var numChannels = UInt16(2).littleEndian
+        var sRate = UInt32(sampleRate).littleEndian
+        var byteRate = UInt32(sampleRate * 2 * 2).littleEndian
+        var blockAlign = UInt16(4).littleEndian
+        var bitsPerSample = UInt16(16).littleEndian
+        wavData.append(Data(bytes: &fmtChunkSize, count: 4))
+        wavData.append(Data(bytes: &audioFormat, count: 2))
+        wavData.append(Data(bytes: &numChannels, count: 2))
+        wavData.append(Data(bytes: &sRate, count: 4))
+        wavData.append(Data(bytes: &byteRate, count: 4))
+        wavData.append(Data(bytes: &blockAlign, count: 2))
+        wavData.append(Data(bytes: &bitsPerSample, count: 2))
+        wavData.append("data".data(using: .ascii)!)
+        var dataSizeLE = dataByteCount.littleEndian
+        wavData.append(Data(bytes: &dataSizeLE, count: 4))
+        pcm.withUnsafeBytes { rawBuf in
+            wavData.append(contentsOf: rawBuf)
+        }
+        try? wavData.write(to: outURL, options: .atomic)
+        return outURL
     }
 }

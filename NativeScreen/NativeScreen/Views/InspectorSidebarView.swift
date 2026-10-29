@@ -44,15 +44,22 @@ public struct InspectorSidebarView: View {
             // Vertical Icon Navigation Rail with Purple Active Dot Indicator
             VStack(spacing: 4) {
                 ForEach(ProjectSession.InspectorTab.allCases) { tab in
-                    let isSelected = (session.selectedInspectorTab == tab)
+                    let availability = session.inspectorTabAvailability(tab)
+                    let isTabDisabled = !availability.canApply
+                    let isSelected = (session.selectedInspectorTab == tab) && !isTabDisabled
+                    let displayTooltip = isTabDisabled ? (availability.disabledTooltip ?? tab.tooltipTitle) : tab.tooltipTitle
+
                     InstantTooltipButton(
-                        tooltip: tab.tooltipTitle,
-                        shortcutBadge: tab.shortcutBadge,
+                        tooltip: displayTooltip,
+                        shortcutBadge: isTabDisabled ? nil : tab.shortcutBadge,
                         edge: .leading,
                         isActive: isSelected,
+                        isDisabled: isTabDisabled,
+                        allowHoverWhenDisabled: true,
                         size: 38,
                         cornerRadius: 6
                     ) {
+                        guard !isTabDisabled else { return }
                         withAnimation(.easeOut(duration: 0.15)) {
                             session.clearTimelineSelection()
                             session.selectedInspectorTab = tab
@@ -2113,14 +2120,21 @@ public struct InspectorSidebarView: View {
                     }
                 }
 
+                let genreTracks: [String] = {
+                    switch selectedAudioGenre {
+                    case "Commercial": return ["Upbeat Spark", "Warm Horizon", "Bright Lounge", "Lean Groove"]
+                    case "Electronic": return ["Pulse Drive", "Lean Groove", "Midnight Study", "Sunny Lo-Fi"]
+                    case "Instrumental": return ["Velvet Keys", "Soft Rain", "Warm Horizon", "Chill Hop"]
+                    default: return ["Sunny Lo-Fi", "Lean Groove", "Bright Lounge", "Chill Hop"]
+                    }
+                }()
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        ForEach(["Sunny Lo-Fi", "Lean Groove", "Bright Lounge", "Chill Hop"], id: \.self) { trackName in
+                        ForEach(genreTracks, id: \.self) { trackName in
                             let isSelected = (session.document.audio.backgroundMusic.relativePath == trackName)
                             inspectorPillOptionButton(title: trackName, isSelected: isSelected) {
-                                session.mutate {
-                                    $0.audio.backgroundMusic.relativePath = isSelected ? nil : trackName
-                                }
+                                session.selectBuiltInBackgroundTrack(trackName)
                             }
                         }
                     }
@@ -2129,22 +2143,60 @@ public struct InspectorSidebarView: View {
                 inspectorDivider
 
                 if let selectedTrack = session.document.audio.backgroundMusic.relativePath {
+                    let displayTrackTitle = URL(fileURLWithPath: selectedTrack).deletingPathExtension().lastPathComponent
+                        .replacingOccurrences(of: "bg-", with: "")
+
+                    // Play / Stop Preview Button
+                    Button {
+                        session.toggleBackgroundAudioPreview()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: session.isPreviewingBackgroundAudio ? "stop.circle" : "play.circle")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("\(session.isPreviewingBackgroundAudio ? "Stop" : "Play") \(displayTrackTitle)")
+                                .font(.system(size: 13, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.16))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color(red: 0.44, green: 0.34, blue: 0.98).opacity(0.45), lineWidth: 1)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
                     inspectorToggleRow(
                         title: "Mute background audio",
                         icon: nil,
                         description: nil,
                         isOn: Binding(
                             get: { session.document.audio.backgroundMusic.muted },
-                            set: { v in session.mutate { $0.audio.backgroundMusic.muted = v } }
+                            set: { v in
+                                session.mutate { $0.audio.backgroundMusic.muted = v }
+                                if v {
+                                    session.stopBackgroundAudioPreview()
+                                }
+                            }
                         )
                     )
 
                     if !session.document.audio.backgroundMusic.muted {
                         coalescedSlider(
                             title: "Background audio volume",
+                            icon: "hifispeaker",
                             value: Binding(
                                 get: { session.document.audio.backgroundMusic.volume },
-                                set: { v in session.mutate { $0.audio.backgroundMusic.volume = v } }
+                                set: { v in
+                                    session.mutate { $0.audio.backgroundMusic.volume = v }
+                                    session.updateBackgroundAudioPreviewVolume()
+                                }
                             ),
                             range: 0.0...1.0,
                             defaultValue: 0.08
@@ -2152,12 +2204,13 @@ public struct InspectorSidebarView: View {
                     }
 
                     Button {
+                        session.stopBackgroundAudioPreview()
                         session.mutate { $0.audio.backgroundMusic.relativePath = nil }
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "hifispeaker.badge.minus")
                                 .font(.system(size: 13.5, weight: .medium))
-                            Text("Remove \(selectedTrack)")
+                            Text("Remove background audio")
                                 .font(.system(size: 13, weight: .medium))
                                 .lineLimit(1)
                         }
@@ -2181,9 +2234,7 @@ public struct InspectorSidebarView: View {
                         panel.allowedContentTypes = [.audio]
                         panel.allowsMultipleSelection = false
                         if panel.runModal() == .OK, let url = panel.url {
-                            session.mutate {
-                                $0.audio.backgroundMusic.relativePath = url.lastPathComponent
-                            }
+                            session.importCustomBackgroundAudioFile(from: url)
                         }
                     } label: {
                         HStack(spacing: 8) {

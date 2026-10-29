@@ -61,10 +61,12 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         private var lastCanvasAspect: Double = -1.0
         private var lastFrameTickUptime: TimeInterval = 0
 
-        // Video frame decoder for recorded `.mp4` / `.m3u8` + synchronized Microphone `.m4a` & Voiceover audio players
+        // Video frame decoder for recorded `.mp4` / `.m3u8` + synchronized Microphone `.m4a`, Voiceover & Background Audio players
         private var player: AVPlayer?
         private var micPlayer: AVPlayer?
         private var loadedMicURL: URL?
+        private var bgMusicPlayer: AVAudioPlayer?
+        private var loadedBgMusicURL: URL?
         private var voiceoverPlayersByID: [String: AVPlayer] = [:]
         private var videoOutput: AVPlayerItemVideoOutput?
         private var playerItemStatusObserver: NSKeyValueObservation?
@@ -79,6 +81,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             super.init()
             setupVideoDecoderIfNeeded(for: session.videoFileURL)
             setupMicrophonePlayerIfNeeded(for: session.microphoneAudioFileURL)
+            setupBackgroundMusicPlayerIfNeeded(for: session.resolvedBackgroundAudioFileURL())
         }
 
         func attach(mtkView: MTKView) {
@@ -90,8 +93,12 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             self.session = newSession
             setupVideoDecoderIfNeeded(for: newSession.videoFileURL)
             setupMicrophonePlayerIfNeeded(for: newSession.microphoneAudioFileURL)
+            setupBackgroundMusicPlayerIfNeeded(for: newSession.resolvedBackgroundAudioFileURL())
 
             if newSession.isPlaying {
+                if newSession.isPreviewingBackgroundAudio {
+                    newSession.stopBackgroundAudioPreview()
+                }
                 if mtkView.isPaused {
                     lastFrameTickUptime = ProcessInfo.processInfo.systemUptime
                     mtkView.enableSetNeedsDisplay = false
@@ -100,6 +107,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             } else {
                 if let micPlayer = micPlayer, micPlayer.rate != 0 {
                     micPlayer.pause()
+                }
+                if let bgMusicPlayer = bgMusicPlayer, bgMusicPlayer.isPlaying {
+                    bgMusicPlayer.pause()
                 }
                 for voPlayer in voiceoverPlayersByID.values where voPlayer.rate != 0 {
                     voPlayer.pause()
@@ -200,6 +210,20 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             let mPlayer = AVPlayer(playerItem: item)
             mPlayer.isMuted = false
             self.micPlayer = mPlayer
+        }
+
+        private func setupBackgroundMusicPlayerIfNeeded(for url: URL?) {
+            guard loadedBgMusicURL != url else { return }
+            loadedBgMusicURL = url
+            bgMusicPlayer?.stop()
+            bgMusicPlayer = nil
+            guard let bgURL = url, FileManager.default.fileExists(atPath: bgURL.path),
+                  let audioPlayer = try? AVAudioPlayer(contentsOf: bgURL) else {
+                return
+            }
+            audioPlayer.numberOfLoops = -1
+            audioPlayer.prepareToPlay()
+            self.bgMusicPlayer = audioPlayer
         }
 
         private func seekDecoderCoalesced(toSourceMs sourceMs: Double, fastSkim: Bool) {
@@ -324,6 +348,25 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                         }
                     }
 
+                    // Synchronize looping `bgMusicPlayer` (`BackgroundMusicConfig`)!
+                    if let bgMusicPlayer = bgMusicPlayer {
+                        let bgCfg = session.document.audio.backgroundMusic
+                        let bgVol = bgCfg.muted ? Float(0.0) : Float(min(1.0, max(0.0, bgCfg.volume * masterVol * 2.5)))
+                        bgMusicPlayer.volume = bgVol
+                        if bgVol > 0.001 {
+                            let dur = max(1.0, bgMusicPlayer.duration)
+                            let targetBgSec = (session.playheadTimelineMs / 1000.0).truncatingRemainder(dividingBy: dur)
+                            if !bgMusicPlayer.isPlaying {
+                                bgMusicPlayer.currentTime = targetBgSec
+                                bgMusicPlayer.play()
+                            } else if abs(bgMusicPlayer.currentTime - targetBgSec) > 0.35 && abs(bgMusicPlayer.currentTime - targetBgSec) < dur - 0.35 {
+                                bgMusicPlayer.currentTime = targetBgSec
+                            }
+                        } else if bgMusicPlayer.isPlaying {
+                            bgMusicPlayer.pause()
+                        }
+                    }
+
                     // Synchronize any active `VoiceoverSegment`s (`voiceoverPlayersByID`)!
                     let activeVOs = session.activeVoiceovers(atSourceMs: sourceMs)
                     let activeVOIDs = Set(activeVOs.map(\.id))
@@ -375,6 +418,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     }
                     if let micPlayer = micPlayer, micPlayer.rate != 0 {
                         micPlayer.pause()
+                    }
+                    if let bgMusicPlayer = bgMusicPlayer, bgMusicPlayer.isPlaying {
+                        bgMusicPlayer.pause()
                     }
                     for voPlayer in voiceoverPlayersByID.values where voPlayer.rate != 0 {
                         voPlayer.pause()

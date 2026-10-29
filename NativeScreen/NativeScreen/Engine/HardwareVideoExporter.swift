@@ -1286,6 +1286,40 @@ public final class HardwareVideoExporter {
             }
         }
 
+        // 4. Background Audio Track (`doc.audio.backgroundMusic`, looping across `totalTimelineSec`)
+        if !doc.audio.backgroundMusic.muted && doc.audio.backgroundMusic.volume > 0.001,
+           let bgURL = session.resolvedBackgroundAudioFileURL(),
+           FileManager.default.fileExists(atPath: bgURL.path) {
+            let bgAsset = AVURLAsset(url: bgURL)
+            if let bgTracks = try? await bgAsset.loadTracks(withMediaType: .audio),
+               let srcBgTrack = bgTracks.first,
+               let compBgTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+                let assetDurCM = (try? await bgAsset.load(.duration)) ?? CMTime(seconds: 16.0, preferredTimescale: 600)
+                let assetDurSec = max(0.5, CMTimeGetSeconds(assetDurCM))
+                var cursorSec = 0.0
+                var hasInsertedAny = false
+                while cursorSec < totalTimelineSec - 0.02 {
+                    let chunkSec = min(assetDurSec, totalTimelineSec - cursorSec)
+                    let range = CMTimeRange(start: .zero, duration: CMTime(seconds: chunkSec, preferredTimescale: 600))
+                    let destCM = CMTime(seconds: cursorSec, preferredTimescale: 600)
+                    if (try? compBgTrack.insertTimeRange(range, of: srcBgTrack, at: destCM)) != nil {
+                        hasInsertedAny = true
+                    } else {
+                        break
+                    }
+                    cursorSec += chunkSec
+                }
+                if hasInsertedAny {
+                    let params = AVMutableAudioMixInputParameters(track: compBgTrack)
+                    let bgVol = Float(min(1.0, max(0.0, doc.audio.backgroundMusic.volume * Double(masterVol) * 2.5)))
+                    params.setVolume(bgVol, at: .zero)
+                    mixParams.append(params)
+                } else {
+                    composition.removeTrack(compBgTrack)
+                }
+            }
+        }
+
         let audioTracks = composition.tracks(withMediaType: .audio)
         guard !audioTracks.isEmpty,
               let reader = try? AVAssetReader(asset: composition) else {

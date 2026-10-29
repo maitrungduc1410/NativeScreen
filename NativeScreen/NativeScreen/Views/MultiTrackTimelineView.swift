@@ -1414,10 +1414,13 @@ public struct MultiTrackTimelineView: View {
                     let isOtherSelected = (session.selectedVoiceoverId != nil && session.selectedVoiceoverId != vo.id)
                     let isPlayedNow = session.committedSourceTimeMs >= vo.sourceStartMs
                         && session.committedSourceTimeMs <= vo.sourceEndMs
+                    let voSamples = session.voiceoverWaveformSamplesByID[vo.id] ?? []
+                    let voVolumePct = "\(Int(round(vo.volume * 100)))%"
+                    let voVolIcon = vo.volume <= 0.01 ? "speaker.slash.fill" : (vo.volume < 0.5 ? "speaker.wave.1.fill" : "speaker.wave.2.fill")
 
                     TimelineInteractiveSegmentView(
                         topTitle: "Voiceover",
-                        subtitleContent: .mask(text: "Microphone \(Int(round(vo.volume * 100)))%"),
+                        subtitleContent: .voiceover(volumeText: voVolumePct, volumeIcon: voVolIcon),
                         palette: .mask,
                         isSelected: isSelected,
                         isPlayed: isPlayedNow,
@@ -1433,7 +1436,19 @@ public struct MultiTrackTimelineView: View {
                         endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: false,
-                        clipDecoration: nil,
+                        clipDecoration: ClipSegmentDecoration(
+                            timelineStartMs: tStartMs,
+                            timelineEndMs: tEndMs,
+                            totalTimelineMs: totalTimelineMs,
+                            minorTickStepSec: 0.0,
+                            sourceStartMs: 0.0,
+                            sourceEndMs: max(1.0, vo.durationMs),
+                            totalSourceMs: max(1.0, vo.durationMs),
+                            volumeScale: 0.0,
+                            waveformSamples: [],
+                            microphoneVolumeScale: (isHidden || vo.disabled) ? 0.0 : vo.volume,
+                            microphoneWaveformSamples: voSamples
+                        ),
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
                             let clickedTimelineMs = session.hoverSkimTimelineMs
@@ -2009,26 +2024,28 @@ private struct ClipSegmentDecoration: Equatable, View {
             }
 
             // B. Vertical Ruler Tick Lines at every minor/major ruler dot
-            let stepMs = minorTickStepSec * 1000.0
-            let sliceSpanMs = max(1.0, timelineEndMs - timelineStartMs)
-            var tickMs = ceil(timelineStartMs / stepMs) * stepMs
-            while tickMs < timelineEndMs {
-                let localX = CGFloat((tickMs - timelineStartMs) / sliceSpanMs) * size.width
-                if localX > 4 && localX < size.width - 4 {
-                    let tickRect = CGRect(x: localX - 0.5, y: 0, width: 1.0, height: size.height * 0.65)
-                    context.fill(
-                        Path(tickRect),
-                        with: .linearGradient(
-                            Gradient(colors: [
-                                Color.white.opacity(0.18),
-                                Color.white.opacity(0.0)
-                            ]),
-                            startPoint: CGPoint(x: localX, y: 0),
-                            endPoint: CGPoint(x: localX, y: size.height * 0.65)
+            if minorTickStepSec > 0.01 {
+                let stepMs = minorTickStepSec * 1000.0
+                let sliceSpanMs = max(1.0, timelineEndMs - timelineStartMs)
+                var tickMs = ceil(timelineStartMs / stepMs) * stepMs
+                while tickMs < timelineEndMs {
+                    let localX = CGFloat((tickMs - timelineStartMs) / sliceSpanMs) * size.width
+                    if localX > 4 && localX < size.width - 4 {
+                        let tickRect = CGRect(x: localX - 0.5, y: 0, width: 1.0, height: size.height * 0.65)
+                        context.fill(
+                            Path(tickRect),
+                            with: .linearGradient(
+                                Gradient(colors: [
+                                    Color.white.opacity(0.18),
+                                    Color.white.opacity(0.0)
+                                ]),
+                                startPoint: CGPoint(x: localX, y: 0),
+                                endPoint: CGPoint(x: localX, y: size.height * 0.65)
+                            )
                         )
-                    )
+                    }
+                    tickMs += stepMs
                 }
-                tickMs += stepMs
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -2289,6 +2306,7 @@ private enum SegmentSubtitleContent: Equatable {
     case clip(durationText: String, speedText: String)
     case zoom(scaleText: String, modeText: String)
     case mask(text: String)
+    case voiceover(volumeText: String, volumeIcon: String)
 }
 
 private struct TimelineInteractiveSegmentView: View {
@@ -2598,6 +2616,25 @@ private struct TimelineInteractiveSegmentView: View {
                     .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(.white.opacity(0.96))
             }
+            .lineLimit(1)
+
+        case .voiceover(let volumeText, let volumeIcon):
+            // Matches `gv` (`microphone` + `Microphone` + speaker icon + `100%`)
+            HStack(spacing: 7) {
+                HStack(spacing: 3.5) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 10.0, weight: .regular))
+                    Text("Microphone")
+                        .font(.system(size: 11.5, weight: .regular))
+                }
+                HStack(spacing: 3.0) {
+                    Image(systemName: volumeIcon)
+                        .font(.system(size: 10.0, weight: .regular))
+                    Text(volumeText)
+                        .font(.system(size: 11.5, weight: .regular).monospacedDigit())
+                }
+            }
+            .foregroundStyle(.white.opacity(0.96))
             .lineLimit(1)
         }
     }

@@ -1081,56 +1081,70 @@ public struct ProjectEditorWindowView: View {
 
             case 19: // `⌘ 2` Cursor
                 if flags == .command {
-                    session.clearTimelineSelection()
-                    session.selectedInspectorTab = .cursor
+                    if session.inspectorTabAvailability(.cursor).canApply {
+                        session.clearTimelineSelection()
+                        session.selectedInspectorTab = .cursor
+                    }
                     return nil
                 }
                 return event
 
             case 20: // `⌘ 3` Camera Layout
                 if flags == .command {
-                    session.clearTimelineSelection()
-                    session.selectedInspectorTab = .cameraLayout
+                    if session.inspectorTabAvailability(.cameraLayout).canApply {
+                        session.clearTimelineSelection()
+                        session.selectedInspectorTab = .cameraLayout
+                    }
                     return nil
                 }
                 return event
 
             case 21: // `⌘ 4` Camera Style
                 if flags == .command {
-                    session.clearTimelineSelection()
-                    session.selectedInspectorTab = .cameraStyle
+                    if session.inspectorTabAvailability(.cameraStyle).canApply {
+                        session.clearTimelineSelection()
+                        session.selectedInspectorTab = .cameraStyle
+                    }
                     return nil
                 }
                 return event
 
             case 23: // `⌘ 5` Captions
                 if flags == .command {
-                    session.clearTimelineSelection()
-                    session.selectedInspectorTab = .captions
+                    if session.inspectorTabAvailability(.captions).canApply {
+                        session.clearTimelineSelection()
+                        session.selectedInspectorTab = .captions
+                    }
                     return nil
                 }
                 return event
 
             case 22: // `⌘ 6` Edit by transcript
                 if flags == .command {
-                    session.clearTimelineSelection()
-                    session.selectedInspectorTab = .transcript
+                    if session.inspectorTabAvailability(.transcript).canApply {
+                        session.clearTimelineSelection()
+                        session.selectedInspectorTab = .transcript
+                    }
                     return nil
                 }
                 return event
 
             case 26: // `⌘ 7` Audio
                 if flags == .command {
-                    session.clearTimelineSelection()
-                    session.selectedInspectorTab = .audio
+                    if session.inspectorTabAvailability(.audio).canApply {
+                        session.clearTimelineSelection()
+                        session.selectedInspectorTab = .audio
+                    }
                     return nil
                 }
                 return event
 
             case 28: // `⌘ 8` Keyboard Shortcuts
                 if flags == .command {
-                    session.clearTimelineSelection()
-                    session.selectedInspectorTab = .shortcuts
+                    if session.inspectorTabAvailability(.shortcuts).canApply {
+                        session.clearTimelineSelection()
+                        session.selectedInspectorTab = .shortcuts
+                    }
                     return nil
                 }
                 return event
