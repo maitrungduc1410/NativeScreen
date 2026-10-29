@@ -218,6 +218,7 @@ public final class ProjectSession: Identifiable {
         Task { [weak self] in
             await self?.loadRealAudioWaveformIfAvailable()
         }
+        Self.prewarmAllBuiltInBackgroundTracksInBackground()
     }
 
     // MARK: - Load & Save `.nativescreen` Bundle
@@ -3730,6 +3731,32 @@ public final class ProjectSession: Identifiable {
     public var isPreviewingBackgroundAudio: Bool = false
     @ObservationIgnored private var backgroundAudioPreviewPlayer: AVAudioPlayer?
 
+    public nonisolated static let allBuiltInBackgroundTrackNames: [String] = [
+        "Sunny Lo-Fi", "Lean Groove", "Bright Lounge", "Chill Hop",
+        "Upbeat Spark", "Warm Horizon", "Pulse Drive", "Midnight Study",
+        "Velvet Keys", "Soft Rain"
+    ]
+
+    public nonisolated static func builtInBackgroundTrackFileURL(named trackName: String) -> URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        let dir = appSupport.appendingPathComponent("NativeScreen/BackgroundAudio", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let slug = trackName
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+        return dir.appendingPathComponent("\(slug).wav")
+    }
+
+    public nonisolated static func prewarmAllBuiltInBackgroundTracksInBackground() {
+        Task.detached(priority: .utility) {
+            for name in Self.allBuiltInBackgroundTrackNames {
+                _ = Self.ensureSynthesizedBuiltInBackgroundTrack(named: name)
+            }
+        }
+    }
+
     public func resolvedBackgroundAudioFileURL() -> URL? {
         guard let rel = document.audio.backgroundMusic.relativePath, !rel.isEmpty else {
             return nil
@@ -3742,7 +3769,12 @@ public final class ProjectSession: Identifiable {
         if FileManager.default.fileExists(atPath: inAssets.path) {
             return inAssets
         }
-        return Self.ensureSynthesizedBuiltInBackgroundTrack(named: rel)
+        let builtInURL = Self.builtInBackgroundTrackFileURL(named: rel)
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: builtInURL.path),
+           let size = attrs[.size] as? Int64, size > 64_000 {
+            return builtInURL
+        }
+        return nil
     }
 
     public func selectBuiltInBackgroundTrack(_ trackName: String) {
@@ -3752,14 +3784,28 @@ public final class ProjectSession: Identifiable {
             mutate { $0.audio.backgroundMusic.relativePath = nil }
             return
         }
-        _ = Self.ensureSynthesizedBuiltInBackgroundTrack(named: trackName)
         mutate {
             $0.audio.backgroundMusic.relativePath = trackName
             $0.audio.backgroundMusic.muted = false
         }
-        // Automatically preview the newly selected track if editor playback is paused
-        if !isPlaying {
-            toggleBackgroundAudioPreview()
+        // If already on disk, play immediately with zero main-thread synthesis lag!
+        // Otherwise synthesize on a background thread and start preview once ready.
+        if resolvedBackgroundAudioFileURL() != nil {
+            if !isPlaying {
+                toggleBackgroundAudioPreview()
+            }
+        } else {
+            Task.detached(priority: .userInitiated) { [weak self] in
+                _ = Self.ensureSynthesizedBuiltInBackgroundTrack(named: trackName)
+                await MainActor.run { [weak self] in
+                    guard let self = self,
+                          self.document.audio.backgroundMusic.relativePath == trackName else { return }
+                    self.renderRevision &+= 1
+                    if !self.isPlaying {
+                        self.toggleBackgroundAudioPreview()
+                    }
+                }
+            }
         }
     }
 

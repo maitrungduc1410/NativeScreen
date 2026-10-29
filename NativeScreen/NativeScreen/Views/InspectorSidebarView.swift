@@ -2238,7 +2238,7 @@ public struct InspectorSidebarView: View {
                         }
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "hifispeaker.and.homepodmini.badge.plus")
+                            Image(systemName: "hifispeaker.badge.plus")
                                 .font(.system(size: 13.5, weight: .medium))
                             Text("Add background audio")
                                 .font(.system(size: 13, weight: .medium))

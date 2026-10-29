@@ -965,31 +965,70 @@ public final class HardwareVideoExporter {
             muxWriter.startWriting()
             muxWriter.startSession(atSourceTime: .zero)
 
-            for sample in allSamples {
-                while !muxInput.isReadyForMoreMediaData {
-                    try Task.checkCancellation()
-                    try await Task.sleep(for: .milliseconds(1))
-                }
-                muxInput.append(sample)
+            // Crucial: Interleave video (`muxInput`) and audio (`muxAudioInput`) in a single loop!
+            // Appending all video frames before feeding any audio samples causes `AVAssetWriter`'s interleave buffer
+            // to fill up after ~1.5s, setting `muxInput.isReadyForMoreMediaData = false` forever (deadlock at 96%)!
+            var videoIndex = 0
+            var isVideoDone = allSamples.isEmpty
+            if isVideoDone {
+                muxInput.markAsFinished()
             }
-            muxInput.markAsFinished()
 
-            if let aInput = muxAudioInput, let (aReader, aOutput) = audioPipeline {
-                while aReader.status == .reading {
-                    try Task.checkCancellation()
-                    while !aInput.isReadyForMoreMediaData {
-                        try Task.checkCancellation()
-                        try await Task.sleep(for: .milliseconds(1))
-                    }
-                    if let aSample = aOutput.copyNextSampleBuffer() {
-                        aInput.append(aSample)
-                    } else {
+            var isAudioDone = (muxAudioInput == nil || audioPipeline == nil)
+            if isAudioDone {
+                muxAudioInput?.markAsFinished()
+            }
+
+            while !isVideoDone || !isAudioDone {
+                try Task.checkCancellation()
+                if muxWriter.status == .failed {
+                    throw muxWriter.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+                }
+
+                var madeProgress = false
+
+                while !isVideoDone && muxInput.isReadyForMoreMediaData {
+                    let sample = allSamples[videoIndex]
+                    if !muxInput.append(sample) {
+                        isVideoDone = true
+                        muxInput.markAsFinished()
                         break
                     }
+                    videoIndex += 1
+                    madeProgress = true
+                    if videoIndex >= allSamples.count {
+                        isVideoDone = true
+                        muxInput.markAsFinished()
+                    }
                 }
-                aInput.markAsFinished()
+
+                if !isAudioDone, let aInput = muxAudioInput, let (_, aOutput) = audioPipeline {
+                    while !isAudioDone && aInput.isReadyForMoreMediaData {
+                        if let aSample = aOutput.copyNextSampleBuffer() {
+                            if !aInput.append(aSample) {
+                                isAudioDone = true
+                                aInput.markAsFinished()
+                                break
+                            }
+                            madeProgress = true
+                        } else {
+                            isAudioDone = true
+                            aInput.markAsFinished()
+                        }
+                    }
+                }
+
+                let muxFrac = Double(videoIndex) / Double(max(1, allSamples.count))
+                let localProgress = 0.96 + muxFrac * 0.035
+                let mappedProgress = progressRange.0 + localProgress * (progressRange.1 - progressRange.0)
+                onProgress(mappedProgress)
+
+                if !madeProgress && (!isVideoDone || !isAudioDone) {
+                    try await Task.sleep(for: .milliseconds(1))
+                }
             }
 
+            audioPipeline?.reader.cancelReading()
             await muxWriter.finishWriting()
             onProgress(progressRange.1)
         } catch {
@@ -1078,6 +1117,28 @@ public final class HardwareVideoExporter {
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         var lastYieldUptime = ProcessInfo.processInfo.systemUptime
+        var isProResAudioDone = (proResAudioInput == nil || audioPipeline == nil)
+        if isProResAudioDone {
+            proResAudioInput?.markAsFinished()
+        }
+
+        func drainReadyProResAudioSamples() {
+            guard !isProResAudioDone,
+                  let aInput = proResAudioInput,
+                  let (_, aOutput) = audioPipeline else { return }
+            while !isProResAudioDone && aInput.isReadyForMoreMediaData {
+                if let aSample = aOutput.copyNextSampleBuffer() {
+                    if !aInput.append(aSample) {
+                        isProResAudioDone = true
+                        aInput.markAsFinished()
+                        break
+                    }
+                } else {
+                    isProResAudioDone = true
+                    aInput.markAsFinished()
+                }
+            }
+        }
 
         do {
             for frameIdx in 0..<totalFrames {
@@ -1085,6 +1146,7 @@ public final class HardwareVideoExporter {
 
                 while !writerInput.isReadyForMoreMediaData {
                     try Task.checkCancellation()
+                    drainReadyProResAudioSamples()
                     try await Task.sleep(for: .milliseconds(2))
                 }
 
@@ -1121,6 +1183,8 @@ public final class HardwareVideoExporter {
                     }
                 }
 
+                drainReadyProResAudioSamples()
+
                 let localProgress = Double(frameIdx + 1) / Double(totalFrames)
                 let mappedProgress = progressRange.0 + localProgress * (progressRange.1 - progressRange.0)
                 onProgress(mappedProgress)
@@ -1136,26 +1200,20 @@ public final class HardwareVideoExporter {
             frameReader?.cancel()
             writerInput.markAsFinished()
 
-            if let aInput = proResAudioInput, let (aReader, aOutput) = audioPipeline {
-                while aReader.status == .reading {
-                    try Task.checkCancellation()
-                    while !aInput.isReadyForMoreMediaData {
-                        try Task.checkCancellation()
-                        try await Task.sleep(for: .milliseconds(1))
-                    }
-                    if let aSample = aOutput.copyNextSampleBuffer() {
-                        aInput.append(aSample)
-                    } else {
-                        break
-                    }
+            while !isProResAudioDone {
+                try Task.checkCancellation()
+                drainReadyProResAudioSamples()
+                if !isProResAudioDone {
+                    try await Task.sleep(for: .milliseconds(1))
                 }
-                aInput.markAsFinished()
             }
 
+            audioPipeline?.reader.cancelReading()
             await writer.finishWriting()
             onProgress(progressRange.1)
         } catch {
             frameReader?.cancel()
+            audioPipeline?.reader.cancelReading()
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: outputURL)
             throw error
@@ -1182,17 +1240,22 @@ public final class HardwareVideoExporter {
             let sysURL = session.videoFileURL
             if FileManager.default.fileExists(atPath: sysURL.path) {
                 let sysAsset = AVURLAsset(url: sysURL)
-                if let sysAudioTracks = try? await sysAsset.loadTracks(withMediaType: .audio),
+                let sysAssetDurSec = max(0.0, CMTimeGetSeconds((try? await sysAsset.load(.duration)) ?? .zero))
+                if sysAssetDurSec > 0.05,
+                   let sysAudioTracks = try? await sysAsset.loadTracks(withMediaType: .audio),
                    let srcSysTrack = sysAudioTracks.first,
                    let compSysTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
                     let params = AVMutableAudioMixInputParameters(track: compSysTrack)
                     var hasInsertedAny = false
                     for mapped in mappedSlices {
                         let slice = mapped.slice
-                        let sliceStartCM = CMTime(seconds: slice.sourceStartMs / 1000.0, preferredTimescale: 600)
-                        let sliceDurCM = CMTime(seconds: slice.sourceDurationMs / 1000.0, preferredTimescale: 600)
+                        let startSec = slice.sourceStartMs / 1000.0
+                        let availSec = max(0.0, min(slice.sourceDurationMs / 1000.0, sysAssetDurSec - startSec))
+                        guard availSec > 0.02 else { continue }
+                        let sliceStartCM = CMTime(seconds: startSec, preferredTimescale: 600)
+                        let sliceDurCM = CMTime(seconds: availSec, preferredTimescale: 600)
                         let destStartCM = CMTime(seconds: mapped.timelineStartMs / 1000.0, preferredTimescale: 600)
-                        let destDurCM = CMTime(seconds: (mapped.timelineEndMs - mapped.timelineStartMs) / 1000.0, preferredTimescale: 600)
+                        let destDurCM = CMTime(seconds: availSec / max(0.1, slice.speed), preferredTimescale: 600)
                         if (try? compSysTrack.insertTimeRange(CMTimeRange(start: sliceStartCM, duration: sliceDurCM), of: srcSysTrack, at: destStartCM)) != nil {
                             if abs(slice.speed - 1.0) > 0.01 {
                                 compSysTrack.scaleTimeRange(CMTimeRange(start: destStartCM, duration: sliceDurCM), toDuration: destDurCM)
@@ -1216,17 +1279,22 @@ public final class HardwareVideoExporter {
            let micURL = session.microphoneAudioFileURL,
            FileManager.default.fileExists(atPath: micURL.path) {
             let micAsset = AVURLAsset(url: micURL)
-            if let micTracks = try? await micAsset.loadTracks(withMediaType: .audio),
+            let micAssetDurSec = max(0.0, CMTimeGetSeconds((try? await micAsset.load(.duration)) ?? .zero))
+            if micAssetDurSec > 0.05,
+               let micTracks = try? await micAsset.loadTracks(withMediaType: .audio),
                let srcMicTrack = micTracks.first,
                let compMicTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
                 let params = AVMutableAudioMixInputParameters(track: compMicTrack)
                 var hasInsertedAny = false
                 for mapped in mappedSlices {
                     let slice = mapped.slice
-                    let sliceStartCM = CMTime(seconds: slice.sourceStartMs / 1000.0, preferredTimescale: 600)
-                    let sliceDurCM = CMTime(seconds: slice.sourceDurationMs / 1000.0, preferredTimescale: 600)
+                    let startSec = slice.sourceStartMs / 1000.0
+                    let availSec = max(0.0, min(slice.sourceDurationMs / 1000.0, micAssetDurSec - startSec))
+                    guard availSec > 0.02 else { continue }
+                    let sliceStartCM = CMTime(seconds: startSec, preferredTimescale: 600)
+                    let sliceDurCM = CMTime(seconds: availSec, preferredTimescale: 600)
                     let destStartCM = CMTime(seconds: mapped.timelineStartMs / 1000.0, preferredTimescale: 600)
-                    let destDurCM = CMTime(seconds: (mapped.timelineEndMs - mapped.timelineStartMs) / 1000.0, preferredTimescale: 600)
+                    let destDurCM = CMTime(seconds: availSec / max(0.1, slice.speed), preferredTimescale: 600)
                     if (try? compMicTrack.insertTimeRange(CMTimeRange(start: sliceStartCM, duration: sliceDurCM), of: srcMicTrack, at: destStartCM)) != nil {
                         if abs(slice.speed - 1.0) > 0.01 {
                             compMicTrack.scaleTimeRange(CMTimeRange(start: destStartCM, duration: sliceDurCM), toDuration: destDurCM)
@@ -1294,7 +1362,7 @@ public final class HardwareVideoExporter {
             if let bgTracks = try? await bgAsset.loadTracks(withMediaType: .audio),
                let srcBgTrack = bgTracks.first,
                let compBgTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
-                let assetDurCM = (try? await bgAsset.load(.duration)) ?? CMTime(seconds: 16.0, preferredTimescale: 600)
+                let assetDurCM = (try? await bgAsset.load(.duration)) ?? CMTime(seconds: 8.0, preferredTimescale: 600)
                 let assetDurSec = max(0.5, CMTimeGetSeconds(assetDurCM))
                 var cursorSec = 0.0
                 var hasInsertedAny = false
@@ -1325,6 +1393,7 @@ public final class HardwareVideoExporter {
               let reader = try? AVAssetReader(asset: composition) else {
             return nil
         }
+        reader.timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: totalTimelineSec, preferredTimescale: 600))
 
         let pcmSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,

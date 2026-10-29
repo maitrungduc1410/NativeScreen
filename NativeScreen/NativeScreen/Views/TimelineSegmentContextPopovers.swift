@@ -576,7 +576,6 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
                     height: customView.frame.height
                 )
                 customView.needsLayout = true
-                customView.layoutSubtreeIfNeeded()
             }
         }
     }
