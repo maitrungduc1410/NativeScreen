@@ -2133,7 +2133,12 @@ public struct InspectorSidebarView: View {
                     HStack(spacing: 6) {
                         ForEach(genreTracks, id: \.self) { trackName in
                             let isSelected = (session.document.audio.backgroundMusic.relativePath == trackName)
-                            inspectorPillOptionButton(title: trackName, isSelected: isSelected) {
+                            let isTrackLoading = (session.loadingBackgroundAudioTrackName == trackName)
+                            inspectorPillOptionButton(
+                                title: trackName,
+                                isSelected: isSelected,
+                                isLoading: isTrackLoading
+                            ) {
                                 session.selectBuiltInBackgroundTrack(trackName)
                             }
                         }
@@ -2145,14 +2150,28 @@ public struct InspectorSidebarView: View {
                 if let selectedTrack = session.document.audio.backgroundMusic.relativePath {
                     let displayTrackTitle = URL(fileURLWithPath: selectedTrack).deletingPathExtension().lastPathComponent
                         .replacingOccurrences(of: "bg-", with: "")
+                    let isPreparingSelectedTrack = (session.loadingBackgroundAudioTrackName == selectedTrack)
 
                     // Play / Stop Preview Button
                     Button {
                         session.toggleBackgroundAudioPreview()
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: session.isPreviewingBackgroundAudio ? "stop.circle" : "play.circle")
-                                .font(.system(size: 14, weight: .medium))
+                            ZStack {
+                                if isPreparingSelectedTrack {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .scaleEffect(0.75)
+                                        .transition(.opacity)
+                                } else {
+                                    Image(systemName: session.isPreviewingBackgroundAudio ? "stop.circle" : "play.circle")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .transition(.opacity)
+                                }
+                            }
+                            .frame(width: 15, height: 15)
+                            .animation(.easeInOut(duration: 0.18), value: isPreparingSelectedTrack)
+
                             Text("\(session.isPreviewingBackgroundAudio ? "Stop" : "Play") \(displayTrackTitle)")
                                 .font(.system(size: 13, weight: .medium))
                                 .lineLimit(1)
@@ -5999,35 +6018,48 @@ public struct InspectorSidebarView: View {
     private func inspectorPillOptionButton(
         title: String,
         isSelected: Bool,
+        isLoading: Bool = false,
         horizontalPadding: CGFloat = 14,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 13.0, weight: .regular))
-                .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.82))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, horizontalPadding)
-                .frame(height: 36)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(
-                            isSelected
-                                ? Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.16)
-                                : Color.white.opacity(0.038)
-                        )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(
-                            isSelected
-                                ? Color(red: 0.44, green: 0.34, blue: 0.98)
-                                : Color.white.opacity(0.06),
-                            lineWidth: isSelected ? 1.3 : 1.0
-                        )
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            ZStack {
+                Text(title)
+                    .font(.system(size: 13.0, weight: .regular))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.82))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .opacity(isLoading ? 0.25 : 1.0)
+
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.75)
+                        .tint(.white)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: isLoading)
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.16)
+                            : Color.white.opacity(0.038)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(
+                        isSelected
+                            ? Color(red: 0.44, green: 0.34, blue: 0.98)
+                            : Color.white.opacity(0.06),
+                        lineWidth: isSelected ? 1.3 : 1.0
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
     }

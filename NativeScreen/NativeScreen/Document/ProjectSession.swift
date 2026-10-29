@@ -218,7 +218,6 @@ public final class ProjectSession: Identifiable {
         Task { [weak self] in
             await self?.loadRealAudioWaveformIfAvailable()
         }
-        Self.prewarmAllBuiltInBackgroundTracksInBackground()
     }
 
     // MARK: - Load & Save `.nativescreen` Bundle
@@ -3729,13 +3728,8 @@ public final class ProjectSession: Identifiable {
     // MARK: - Built-In & Custom Background Audio
 
     public var isPreviewingBackgroundAudio: Bool = false
+    public var loadingBackgroundAudioTrackName: String? = nil
     @ObservationIgnored private var backgroundAudioPreviewPlayer: AVAudioPlayer?
-
-    public nonisolated static let allBuiltInBackgroundTrackNames: [String] = [
-        "Sunny Lo-Fi", "Lean Groove", "Bright Lounge", "Chill Hop",
-        "Upbeat Spark", "Warm Horizon", "Pulse Drive", "Midnight Study",
-        "Velvet Keys", "Soft Rain"
-    ]
 
     public nonisolated static func builtInBackgroundTrackFileURL(named trackName: String) -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -3747,14 +3741,6 @@ public final class ProjectSession: Identifiable {
             .replacingOccurrences(of: " ", with: "-")
             .replacingOccurrences(of: "/", with: "-")
         return dir.appendingPathComponent("\(slug).wav")
-    }
-
-    public nonisolated static func prewarmAllBuiltInBackgroundTracksInBackground() {
-        Task.detached(priority: .utility) {
-            for name in Self.allBuiltInBackgroundTrackNames {
-                _ = Self.ensureSynthesizedBuiltInBackgroundTrack(named: name)
-            }
-        }
     }
 
     public func resolvedBackgroundAudioFileURL() -> URL? {
@@ -3781,6 +3767,9 @@ public final class ProjectSession: Identifiable {
         stopBackgroundAudioPreview()
         let isCurrentlySelected = (document.audio.backgroundMusic.relativePath == trackName)
         if isCurrentlySelected {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                loadingBackgroundAudioTrackName = nil
+            }
             mutate { $0.audio.backgroundMusic.relativePath = nil }
             return
         }
@@ -3788,18 +3777,29 @@ public final class ProjectSession: Identifiable {
             $0.audio.backgroundMusic.relativePath = trackName
             $0.audio.backgroundMusic.muted = false
         }
-        // If already on disk, play immediately with zero main-thread synthesis lag!
-        // Otherwise synthesize on a background thread and start preview once ready.
+        // If already cached on disk, play immediately with zero lag!
+        // Otherwise synthesize on demand in the background while showing a smooth fade-in loading indicator on the selected pill button.
         if resolvedBackgroundAudioFileURL() != nil {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                loadingBackgroundAudioTrackName = nil
+            }
             if !isPlaying {
                 toggleBackgroundAudioPreview()
             }
         } else {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                loadingBackgroundAudioTrackName = trackName
+            }
             Task.detached(priority: .userInitiated) { [weak self] in
                 _ = Self.ensureSynthesizedBuiltInBackgroundTrack(named: trackName)
                 await MainActor.run { [weak self] in
-                    guard let self = self,
-                          self.document.audio.backgroundMusic.relativePath == trackName else { return }
+                    guard let self = self else { return }
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        if self.loadingBackgroundAudioTrackName == trackName {
+                            self.loadingBackgroundAudioTrackName = nil
+                        }
+                    }
+                    guard self.document.audio.backgroundMusic.relativePath == trackName else { return }
                     self.renderRevision &+= 1
                     if !self.isPlaying {
                         self.toggleBackgroundAudioPreview()
