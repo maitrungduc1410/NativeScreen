@@ -353,6 +353,7 @@ public struct StandaloneCropWindowView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+                    .contentShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -387,6 +388,7 @@ public struct StandaloneCropWindowView: View {
                         RoundedRectangle(cornerRadius: 7)
                             .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .buttonStyle(.plain)
                 .disabled(draftCrop01 == .full)
@@ -522,6 +524,7 @@ public struct StandaloneCropWindowView: View {
                         Color(red: 0.36, green: 0.22, blue: 0.98),
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
@@ -542,6 +545,7 @@ public struct StandaloneCropWindowView: View {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
@@ -770,6 +774,7 @@ public struct ExportStillFrameModalView: View {
                                     .foregroundStyle(.white.opacity(0.9))
                                     .frame(width: 34, height: 32)
                                     .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -815,6 +820,7 @@ public struct ExportStillFrameModalView: View {
                                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .fixedSize()
@@ -885,6 +891,7 @@ public struct ExportStillFrameModalView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
@@ -900,6 +907,7 @@ public struct ExportStillFrameModalView: View {
                             Color(red: 0.302, green: 0.184, blue: 0.961),
                             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(isExporting)

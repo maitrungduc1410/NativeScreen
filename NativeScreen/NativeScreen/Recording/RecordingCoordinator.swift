@@ -2981,6 +2981,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                             .padding(.vertical, 10)
                             .background(Color(red: 0.36, green: 0.22, blue: 0.98), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+                            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 4)
@@ -3027,6 +3028,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                             .padding(.horizontal, 18)
                             .padding(.vertical, 10)
                             .background(Color(red: 0.36, green: 0.22, blue: 0.98), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -3081,6 +3083,7 @@ public struct WindowAndAreaPickerOverlayView: View {
                                 .padding(.vertical, 8)
                                 .background(Color(red: 0.36, green: 0.22, blue: 0.98), in: Capsule())
                                 .foregroundStyle(.white)
+                                .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                     }

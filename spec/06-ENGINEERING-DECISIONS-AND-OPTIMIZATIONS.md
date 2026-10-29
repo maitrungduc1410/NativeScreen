@@ -140,9 +140,10 @@ During 60/120Hz video preview playback, two UI interactions previously caused fr
 
 ### Solution
 1. **Pure AppKit / Direct2D Tooltip Rendering**: `SharedFloatingTooltipWindowController` uses a 100% pure AppKit `NSView` (`TooltipContentView`) with zero `NSHostingView`, rendering in `< 0.02 ms` without touching SwiftUI's `AttributeGraph`.
-2. **Retained-Layer `.hover-magnet` Button Physics (`HoverMagnetTrackingNSView`)**:
-   - Every toolbar, quick-dock, header, and rail button uses an AppKit `NSTrackingArea` + `CALayer` driven by a 120Hz 1D spring solver (`stiffness = 1500, damping = 100, mass = 2`, magnetic pull `±2pt`, escape multiplier `10x`, entry scale `0.8 -> 1.0`, `masksToBounds = false`).
+2. **Retained-Layer `.hover-magnet` Button Physics (`HoverMagnetTrackingNSView`) & 1:1 Hitbox-to-Highlight Parity**:
+   - Every toolbar, quick-dock, header (`Presets`, `Command Menu`, `Undo`, `Redo`, `Show in Finder`, `Remove`), sub-toolbar, transport, and rail button uses an AppKit `NSTrackingArea` + `CALayer` driven by a 120Hz 1D spring solver (`stiffness = 1500, damping = 100, mass = 2`, magnetic pull `±2pt`, escape multiplier `10x`, entry scale `0.8 -> 1.0`, `masksToBounds = false`).
    - When the cursor enters a button from any angle (e.g. top-right), the highlight layer starts `22pt` outside in that exact direction and flies into the button, tracks the cursor magnetically while inside, and flies out along the exit vector when leaving—all with **zero SwiftUI `@State` mutations**.
+   - **Strict 1:1 Hitbox-to-Highlight Rule (`.contentShape(...)`)**: In SwiftUI on macOS, `Button`s styled with `.buttonStyle(.plain)` only hit-test opaque text/icon glyphs unless `.contentShape(RoundedRectangle(cornerRadius: ...))` (or `.contentShape(Rectangle())`) is explicitly applied **after** `.padding(...)`, `.frame(...)`, `.background(...)`, and `.overlay(...)` inside the button's `label`. Every interactive button and row across the app must attach `.contentShape(...)` matching its outer visual background/highlight geometry so 100% of the visible highlight area is clickable.
    - When a modal overlay (`Export Settings`, `Command Menu`, `Export Still Frames`) is open, `\.isTooltipAndHoverBlocked` suspends `NSTrackingArea`s on background views so hovering modal buttons never triggers tooltips from underlying editor controls.
 3. **3-Tap Radial Shutter Blend & Seek Gating**:
    - Gate `AVPlayer.seek` with an `isDecoderSeeking` flag during scrubbing, and replace `CIZoomBlur` with a 3-tap radial scale/alpha blend (`< 0.4 ms/frame` on Metal).

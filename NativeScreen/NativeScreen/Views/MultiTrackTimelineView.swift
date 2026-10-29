@@ -158,6 +158,8 @@ public struct MultiTrackTimelineView: View {
                                                 Image(systemName: zoomHidden ? "eye.slash" : "eye")
                                                     .font(.system(size: 10, weight: .medium))
                                                     .foregroundStyle(Color.white.opacity(zoomHidden ? 0.28 : 0.65))
+                                                    .frame(width: 22, height: 22)
+                                                    .contentShape(Rectangle())
                                             }
                                             .buttonStyle(.plain)
 
@@ -165,7 +167,7 @@ public struct MultiTrackTimelineView: View {
                                                 .font(.system(size: 11, weight: .medium))
                                                 .foregroundStyle(Color.white.opacity(zoomHidden ? 0.30 : 0.65))
                                         }
-                                        .padding(.leading, 14)
+                                        .padding(.leading, 10)
                                         .frame(width: labelColumnWidth, height: zoomRowHeight, alignment: .leading)
                                         .id("track_zoom")
 
@@ -178,6 +180,8 @@ public struct MultiTrackTimelineView: View {
                                                     Image(systemName: layoutsHidden ? "eye.slash" : "eye")
                                                         .font(.system(size: 10, weight: .medium))
                                                         .foregroundStyle(Color.white.opacity(layoutsHidden ? 0.28 : 0.65))
+                                                        .frame(width: 22, height: 22)
+                                                        .contentShape(Rectangle())
                                                 }
                                                 .buttonStyle(.plain)
 
@@ -186,7 +190,7 @@ public struct MultiTrackTimelineView: View {
                                                     .foregroundStyle(Color.white.opacity(layoutsHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
                                             }
-                                            .padding(.leading, 14)
+                                            .padding(.leading, 10)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                             .id("track_camera_layouts")
                                         }
@@ -200,6 +204,8 @@ public struct MultiTrackTimelineView: View {
                                                     Image(systemName: maskHidden ? "eye.slash" : "eye")
                                                         .font(.system(size: 10, weight: .medium))
                                                         .foregroundStyle(Color.white.opacity(maskHidden ? 0.28 : 0.65))
+                                                        .frame(width: 22, height: 22)
+                                                        .contentShape(Rectangle())
                                                 }
                                                 .buttonStyle(.plain)
 
@@ -208,7 +214,7 @@ public struct MultiTrackTimelineView: View {
                                                     .foregroundStyle(Color.white.opacity(maskHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
                                             }
-                                            .padding(.leading, 14)
+                                            .padding(.leading, 10)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                             .id("track_mask_\(track.id)")
                                         }
@@ -222,6 +228,8 @@ public struct MultiTrackTimelineView: View {
                                                     Image(systemName: voHidden ? "eye.slash" : "eye")
                                                         .font(.system(size: 10, weight: .medium))
                                                         .foregroundStyle(Color.white.opacity(voHidden ? 0.28 : 0.65))
+                                                        .frame(width: 22, height: 22)
+                                                        .contentShape(Rectangle())
                                                 }
                                                 .buttonStyle(.plain)
 
@@ -230,7 +238,7 @@ public struct MultiTrackTimelineView: View {
                                                     .foregroundStyle(Color.white.opacity(voHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
                                             }
-                                            .padding(.leading, 14)
+                                            .padding(.leading, 10)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                             .id("track_voiceovers")
                                         }
@@ -248,6 +256,8 @@ public struct MultiTrackTimelineView: View {
                                                         Image(systemName: isTrackHidden ? "eye.slash" : "eye")
                                                             .font(.system(size: 10, weight: .medium))
                                                             .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.28 : 0.65))
+                                                            .frame(width: 22, height: 22)
+                                                            .contentShape(Rectangle())
                                                     }
                                                     .buttonStyle(.plain)
 
@@ -260,10 +270,12 @@ public struct MultiTrackTimelineView: View {
                                                             .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.30 : 0.65))
                                                             .lineLimit(1)
                                                             .minimumScaleFactor(0.85)
+                                                            .frame(maxHeight: .infinity)
+                                                            .contentShape(Rectangle())
                                                     }
                                                     .buttonStyle(.plain)
                                                 }
-                                                .padding(.leading, 14)
+                                                .padding(.leading, 10)
                                                 .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
                                                 .id("track_shortcut_\(sTrack.id)")
                                             }
@@ -1664,6 +1676,7 @@ private struct CutBoundaryTeardropBadgeView: View {
             }
             .frame(width: 30, height: 29)
             .scaleEffect(isHovered ? 1.07 : 1.0)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(tooltipText)
@@ -2834,6 +2847,7 @@ private struct SpeedUpTypingPopoverView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!isModified)
@@ -2861,6 +2875,7 @@ private struct SpeedUpTypingPopoverView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.return, modifiers: [.command])
@@ -2880,6 +2895,7 @@ private struct SpeedUpTypingPopoverView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(Color(red: 0.302, green: 0.184, blue: 0.961))
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.return, modifiers: [])
@@ -2900,6 +2916,7 @@ private struct SpeedUpTypingPopoverView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }

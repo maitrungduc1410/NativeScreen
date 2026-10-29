@@ -283,6 +283,7 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -318,6 +319,7 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                                             .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -466,6 +468,7 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                                             .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .help("Pick random gradient")
@@ -531,6 +534,7 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                                             .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -577,6 +581,7 @@ public struct InspectorSidebarView: View {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                                         .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .help("Pick random color")
@@ -846,6 +851,7 @@ public struct InspectorSidebarView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     } else {
@@ -980,6 +986,7 @@ public struct InspectorSidebarView: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 32)
                             .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -2033,6 +2040,7 @@ public struct InspectorSidebarView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -2164,6 +2172,7 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -2194,6 +2203,7 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -2228,6 +2238,7 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -2251,6 +2262,7 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -2718,6 +2730,7 @@ public struct InspectorSidebarView: View {
                                         lineWidth: isSelected ? 1.5 : 1.0
                                     )
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .help(preset.rawValue)
@@ -2746,6 +2759,7 @@ public struct InspectorSidebarView: View {
                                         lineWidth: isSelected ? 1.5 : 1.0
                                     )
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .help(custom.name)
@@ -2780,6 +2794,7 @@ public struct InspectorSidebarView: View {
                                 .foregroundStyle(.white.opacity(0.88))
                         }
                         .frame(width: 36, height: 36)
+                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -2849,6 +2864,7 @@ public struct InspectorSidebarView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -2869,6 +2885,7 @@ public struct InspectorSidebarView: View {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -3133,6 +3150,7 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -3243,6 +3261,7 @@ public struct InspectorSidebarView: View {
                                         onViewReady: { _ in }
                                     )
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .id("whisper")
@@ -3310,6 +3329,7 @@ public struct InspectorSidebarView: View {
                                         onViewReady: { _ in }
                                     )
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -3348,6 +3368,7 @@ public struct InspectorSidebarView: View {
                                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                                 .fill(Color.red.opacity(0.14))
                                         )
+                                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -3400,6 +3421,7 @@ public struct InspectorSidebarView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -3444,6 +3466,7 @@ public struct InspectorSidebarView: View {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .fixedSize()
@@ -3503,6 +3526,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(Color(red: 0.36, green: 0.24, blue: 0.96))
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(session.isGeneratingTranscript)
@@ -3547,6 +3571,7 @@ public struct InspectorSidebarView: View {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .fill(Color(red: 0.36, green: 0.24, blue: 0.96))
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
             } else {
@@ -3577,6 +3602,7 @@ public struct InspectorSidebarView: View {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                                         .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .help("Cut every detected filled pause (\"um\", \"uh\"...) out of the video")
@@ -3603,6 +3629,7 @@ public struct InspectorSidebarView: View {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                                         .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .help("Shorten every long pause, keeping a natural breath on each side")
@@ -3646,6 +3673,7 @@ public struct InspectorSidebarView: View {
                                                     : (isSpokenNow ? Color(red: 0.38, green: 0.26, blue: 0.96).opacity(0.26) : Color.clear)
                                             )
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -3680,6 +3708,7 @@ public struct InspectorSidebarView: View {
                                                 Capsule()
                                                     .fill(Color.white.opacity(0.06))
                                             )
+                                            .contentShape(Capsule())
                                     }
                                     .buttonStyle(.plain)
                                     .help(
@@ -3743,6 +3772,7 @@ public struct InspectorSidebarView: View {
                                             RoundedRectangle(cornerRadius: 7, style: .continuous)
                                                 .fill(Color.red.opacity(0.22))
                                         )
+                                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -3759,6 +3789,7 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                                             .fill(Color.white.opacity(0.06))
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
                             .buttonStyle(.plain)
 
@@ -3779,6 +3810,7 @@ public struct InspectorSidebarView: View {
                                             RoundedRectangle(cornerRadius: 7, style: .continuous)
                                                 .fill(Color.white.opacity(0.06))
                                         )
+                                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -3916,6 +3948,7 @@ public struct InspectorSidebarView: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -3967,6 +4000,8 @@ public struct InspectorSidebarView: View {
                                     .fill(Color.white)
                                     .frame(width: 4.5, height: 4.5)
                             }
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
                         .position(x: cx, y: cy)
@@ -4019,6 +4054,8 @@ public struct InspectorSidebarView: View {
                                     .fill(Color.white)
                                     .frame(width: 4.5, height: 4.5)
                             }
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
                         .position(x: cx, y: cy)
@@ -4060,6 +4097,7 @@ public struct InspectorSidebarView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 60)
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -4084,6 +4122,7 @@ public struct InspectorSidebarView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 60)
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -4113,6 +4152,7 @@ public struct InspectorSidebarView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 60)
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -4195,6 +4235,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -4382,6 +4423,7 @@ public struct InspectorSidebarView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -4420,6 +4462,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
         }
@@ -4458,6 +4501,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -4510,6 +4554,7 @@ public struct InspectorSidebarView: View {
                                 lineWidth: 1
                             )
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -4633,6 +4678,7 @@ public struct InspectorSidebarView: View {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -4657,6 +4703,7 @@ public struct InspectorSidebarView: View {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .strokeBorder(Color.red.opacity(0.22), lineWidth: 1)
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -4745,6 +4792,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -4894,6 +4942,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
         }
@@ -5008,6 +5057,7 @@ public struct InspectorSidebarView: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -5043,6 +5093,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -5082,6 +5133,7 @@ public struct InspectorSidebarView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -5168,6 +5220,7 @@ public struct InspectorSidebarView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
         }
@@ -5331,6 +5384,7 @@ public struct InspectorSidebarView: View {
                                             lineWidth: isSelected ? 1.4 : 1.0
                                         )
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -5405,6 +5459,7 @@ public struct InspectorSidebarView: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(Color(red: 0.302, green: 0.184, blue: 0.961))
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -5429,6 +5484,7 @@ public struct InspectorSidebarView: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -5623,6 +5679,7 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                                             .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -5715,6 +5772,7 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                                             .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -5741,6 +5799,7 @@ public struct InspectorSidebarView: View {
                                             RoundedRectangle(cornerRadius: 5, style: .continuous)
                                                 .strokeBorder(isSel ? Color.white : Color.white.opacity(0.12), lineWidth: isSel ? 1.4 : 0.8)
                                         )
+                                        .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -6360,6 +6419,7 @@ private struct ColorPickerPopoverView: View {
                                 RoundedRectangle(cornerRadius: 5, style: .continuous)
                                     .strokeBorder(isSel ? Color.white : Color.white.opacity(0.15), lineWidth: isSel ? 1.5 : 0.8)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -6417,6 +6477,7 @@ private struct ColorPickerPopoverView: View {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .help("Pick color from screen")

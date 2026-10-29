@@ -1077,6 +1077,7 @@ public struct StandaloneCameraCropWindowView: View {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .fixedSize()
@@ -1111,6 +1112,7 @@ public struct StandaloneCameraCropWindowView: View {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -1250,6 +1252,7 @@ public struct StandaloneCameraCropWindowView: View {
                             Color(red: 0.36, green: 0.22, blue: 0.98),
                             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
@@ -1270,6 +1273,7 @@ public struct StandaloneCameraCropWindowView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                             )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.cancelAction)
@@ -1525,6 +1529,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
                                     Color(red: 0.36, green: 0.22, blue: 0.98),
                                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .keyboardShortcut(.defaultAction)
@@ -1545,6 +1550,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                                             .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .keyboardShortcut(.cancelAction)
@@ -1596,6 +1602,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 .fill(Color.white.opacity(0.03))
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(isAtDefault)

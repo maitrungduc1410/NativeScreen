@@ -1215,6 +1215,9 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
     let tooltip: String?
     let edge: TooltipEdge
     let isActive: Bool
+    let height: CGFloat
+    let horizontalPadding: CGFloat
+    let cornerRadius: CGFloat
     let action: () -> Void
     let onActionWithAnchorView: ((NSView?) -> Void)?
     @ViewBuilder let label: () -> LabelContent
@@ -1226,6 +1229,9 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
         tooltip: String? = nil,
         edge: TooltipEdge = .top,
         isActive: Bool = false,
+        height: CGFloat = 34,
+        horizontalPadding: CGFloat = 12,
+        cornerRadius: CGFloat = 6,
         action: @escaping () -> Void = {},
         onActionWithAnchorView: ((NSView?) -> Void)? = nil,
         @ViewBuilder label: @escaping () -> LabelContent
@@ -1233,6 +1239,9 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
         self.tooltip = tooltip
         self.edge = edge
         self.isActive = isActive
+        self.height = height
+        self.horizontalPadding = horizontalPadding
+        self.cornerRadius = cornerRadius
         self.action = action
         self.onActionWithAnchorView = onActionWithAnchorView
         self.label = label
@@ -1249,14 +1258,14 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
             }
         } label: {
             label()
-                .padding(.horizontal, 12)
-                .frame(height: 34)
+                .padding(.horizontal, horizontalPadding)
+                .frame(height: height)
                 .background(
                     HoverMagnetBackgroundRepresentable(
                         tooltip: tooltip ?? "",
                         shortcutBadge: nil,
                         edge: edge,
-                        cornerRadius: 6,
+                        cornerRadius: cornerRadius,
                         isActive: isActive,
                         isDisabled: false,
                         isHoverBlocked: isTooltipAndHoverBlocked,
@@ -1267,7 +1276,7 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
                         magnetNSView = v
                     }
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
     }

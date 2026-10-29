@@ -146,6 +146,7 @@ public struct ProjectEditorWindowView: View {
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                                         .fill(isHoveringTitle ? Color.white.opacity(0.08) : Color.clear)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .onHover { hovering in
@@ -159,7 +160,7 @@ public struct ProjectEditorWindowView: View {
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, max(6.0, centerY - 18.0))
 
-                    // Right Controls: Command Menu (`⌘`) | Undo & Redo | Export ( & 2!)
+                    // Right Controls: Command Menu (`⌘`) | Undo & Redo | Presets | Export ( & 2!)
                     HStack(spacing: 10) {
                         Spacer()
 
@@ -225,9 +226,17 @@ public struct ProjectEditorWindowView: View {
                             .frame(width: 1, height: 18)
 
                         // 2B. Presets Button
-                        Button {
-                            isShowingPresetsPopover.toggle()
-                        } label: {
+                        SubToolbarPillButton(
+                            tooltip: nil,
+                            edge: .bottom,
+                            isActive: isShowingPresetsPopover,
+                            height: 36,
+                            horizontalPadding: 12,
+                            cornerRadius: 6,
+                            action: {
+                                isShowingPresetsPopover.toggle()
+                            }
+                        ) {
                             HStack(spacing: 6) {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 13.0, weight: .medium))
@@ -240,14 +249,7 @@ public struct ProjectEditorWindowView: View {
                                     .foregroundStyle(.white.opacity(0.55))
                             }
                             .fixedSize()
-                            .padding(.horizontal, 12)
-                            .frame(height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(isShowingPresetsPopover ? Color.white.opacity(0.10) : Color.clear)
-                            )
                         }
-                        .buttonStyle(.plain)
                         .popover(isPresented: $isShowingPresetsPopover, arrowEdge: .bottom) {
                             PresetsPopoverView(session: session)
                         }
@@ -274,6 +276,7 @@ public struct ProjectEditorWindowView: View {
                                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                             )
                             .foregroundStyle(.white)
+                            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .keyboardShortcut("e", modifiers: [.command])
@@ -2450,6 +2453,8 @@ private struct CommandMenuOverlayView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 14))
                                 .foregroundStyle(.white.opacity(0.42))
+                                .frame(width: 26, height: 26)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -2989,6 +2994,7 @@ private struct ExportSettingsModalView: View {
                                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                                         .fill(isHoveringPrimaryExport ? Color(red: 0.35, green: 0.23, blue: 0.99) : purpleAccent)
                                 )
+                                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .onHover { isHoveringPrimaryExport = $0 }
@@ -3007,6 +3013,7 @@ private struct ExportSettingsModalView: View {
                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                                             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                             }
                             .buttonStyle(.plain)
                             .onHover { isHoveringCancel = $0 }
@@ -3121,6 +3128,7 @@ private struct ExportSettingsModalView: View {
                         lineWidth: isSelected ? 1.35 : 1.0
                     )
             )
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
@@ -3270,6 +3278,7 @@ private struct ExportingFullOverlayView: View {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .onHover { isHoveringStop = $0 }
@@ -3347,6 +3356,7 @@ private struct PresetsPopoverView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(Color(red: 0.302, green: 0.184, blue: 0.961))
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -3372,12 +3382,15 @@ private struct PresetsPopoverView: View {
         let matchesProject = preset.matchesDocument(session.document)
         let isDefault = (store.defaultPresetId == preset.id)
 
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             if editingPresetId == preset.id {
                 TextField("Preset name", text: $editingPresetName)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.0, weight: .medium))
                     .foregroundStyle(.white)
+                    .padding(.leading, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .onSubmit {
                         store.renamePreset(preset, to: editingPresetName)
                         editingPresetId = nil
@@ -3401,6 +3414,9 @@ private struct PresetsPopoverView: View {
                             presetBadge("Default")
                         }
                     }
+                    .padding(.leading, 12)
+                    .padding(.trailing, 6)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -3445,19 +3461,19 @@ private struct PresetsPopoverView: View {
                 Image(systemName: "gear")
                     .font(.system(size: 13.0, weight: .regular))
                     .foregroundStyle(.white.opacity(0.68))
-                    .frame(width: 28, height: 28)
+                    .frame(width: 34, height: 36)
                     .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            .padding(.trailing, 4)
             .help("Preset options...")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isHovered ? Color.white.opacity(0.07) : Color.clear)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { hovering in
             hoveredPresetId = hovering ? preset.id : nil
         }
