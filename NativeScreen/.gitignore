@@ -1,0 +1,19 @@
+# macOS app (Xcode)
+
+# User-specific data (never commit local usernames or window states)
+xcuserdata/
+*.xcuserdatad/
+*.xcscmblueprint
+*.xccheckout
+
+# Build artifacts
+DerivedData/
+build/
+*.build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
