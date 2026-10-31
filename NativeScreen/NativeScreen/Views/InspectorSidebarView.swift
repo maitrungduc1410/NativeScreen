@@ -967,7 +967,7 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 2. Cursor & Spring Physics Inspector (Layout & Full 24 Cursor Sets + Variants)
+    // MARK: - 2. Cursor & Spring Physics Inspector (Cursor Themes + Variants)
 
     @ViewBuilder
     private var cursorInspector: some View {
@@ -1079,7 +1079,7 @@ public struct InspectorSidebarView: View {
                         }
                         .padding(.trailing, -18)
                         .onAppear {
-                            if normalizedThemeId != "macos" && normalizedThemeId != "macos-tahoe" {
+                            if normalizedThemeId != CursorThemePreset.preferredOrder.first {
                                 DispatchQueue.main.async {
                                     scrollProxy.scrollTo(normalizedThemeId, anchor: .center)
                                 }
@@ -1259,7 +1259,7 @@ public struct InspectorSidebarView: View {
 
                 inspectorDivider
 
-                // 5. Click effect (`None` | `Circle` | `Ripple`) & Click sound (`None` | `Magic Mouse™` | `MX Master™`)
+                // 5. Click effect (`None` | `Circle` | `Ripple`) & Click sound (`None` | `Soft` | `Crisp`)
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Click effect")
@@ -1292,13 +1292,7 @@ public struct InspectorSidebarView: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.ink.opacity(0.92))
 
-                        let normalizedSoundSet: String? = {
-                            switch cursor.clickEffect.soundSet {
-                            case "apple-magic-mouse", "magic-mouse": return "apple-magic-mouse"
-                            case "logitech-mx-master", "mx-master": return "logitech-mx-master"
-                            default: return nil
-                            }
-                        }()
+                        let normalizedSoundSet = CursorClickSoundPlayer.normalizedSoundSet(cursor.clickEffect.soundSet)
 
                         ScrollViewReader { soundProxy in
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -1311,29 +1305,19 @@ public struct InspectorSidebarView: View {
                                     }
                                     .id("none")
 
-                                    inspectorPillOptionButton(title: "Magic Mouse™", isSelected: normalizedSoundSet == "apple-magic-mouse", horizontalPadding: 12) {
-                                        session.mutate { $0.cursor.clickEffect.soundSet = "apple-magic-mouse" }
-                                        CursorClickSoundPlayer.shared.playClickSound(
-                                            soundSet: "apple-magic-mouse",
-                                            volume: session.document.cursor.clickEffect.soundVolume
-                                        )
-                                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                                            soundProxy.scrollTo("apple-magic-mouse", anchor: .center)
+                                    ForEach(CursorClickSoundPlayer.soundSets, id: \.id) { sound in
+                                        inspectorPillOptionButton(title: sound.title, isSelected: normalizedSoundSet == sound.id, horizontalPadding: 12) {
+                                            session.mutate { $0.cursor.clickEffect.soundSet = sound.id }
+                                            CursorClickSoundPlayer.shared.playClickSound(
+                                                soundSet: sound.id,
+                                                volume: session.document.cursor.clickEffect.soundVolume
+                                            )
+                                            withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                                soundProxy.scrollTo(sound.id, anchor: .center)
+                                            }
                                         }
+                                        .id(sound.id)
                                     }
-                                    .id("apple-magic-mouse")
-
-                                    inspectorPillOptionButton(title: "MX Master™", isSelected: normalizedSoundSet == "logitech-mx-master", horizontalPadding: 12) {
-                                        session.mutate { $0.cursor.clickEffect.soundSet = "logitech-mx-master" }
-                                        CursorClickSoundPlayer.shared.playClickSound(
-                                            soundSet: "logitech-mx-master",
-                                            volume: session.document.cursor.clickEffect.soundVolume
-                                        )
-                                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                                            soundProxy.scrollTo("logitech-mx-master", anchor: .center)
-                                        }
-                                    }
-                                    .id("logitech-mx-master")
                                 }
                                 .padding(.vertical, 2)
                                 .padding(.trailing, 18)
@@ -2008,7 +1992,7 @@ public struct InspectorSidebarView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else if isCameraVisibleAndMicMuted {
-                    // Exact Warning Card + `Hide camera` Button from
+                    // Warning Card + `Hide camera` Button from
                     VStack(alignment: .leading, spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 13.5, weight: .semibold))
@@ -4083,7 +4067,7 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    /// Horizontal 3-Dot `Camera Position` Picker for `Camera cutout` Mode (`Left: 0.0`, `Center: 0.5`, `Right: 1.0` & 3 1:1!)
+    /// Horizontal 3-Dot `Camera Position` Picker for `Camera cutout` Mode (`Left: 0.0`, `Center: 0.5`, `Right: 1.0` & 3)
     private struct CameraCutoutPositionDotBarPicker: View {
         @Binding var positionX01: Double
 
@@ -4274,7 +4258,7 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 6. Dedicated Zoom Segment Editor ( `Close Zoom editor` 1:1!)
+    // MARK: - 6. Dedicated Zoom Segment Editor ( `Close Zoom editor`)
 
     @ViewBuilder
     private func zoomSegmentEditor(zoom: ZoomBlock) -> some View {
@@ -6262,7 +6246,7 @@ private struct SpringPhysicsDemoDotView: View {
     }
 }
 
-/// Interactive Cursor Style card that displays the active cursor SVG sprite (and cycles through its variants on hover when unselected, `ve` component!).
+/// Interactive Cursor Style card that displays the active cursor SVG sprite (and cycles through its variants on hover when unselected).
 private struct CursorStyleHorizontalCardView: View {
     let theme: CursorThemePreset
     let selectedVariantId: String?

@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// NativeScreen-grade Multi-Track NLE Timeline:
+/// Multi-Track NLE Timeline:
 /// - **Unified Continuous Playhead** (teardrop head + vertical stem drawn as a single connected shape with zero gap).
 /// - **Ghost Playhead "Ducking" Animation** (when hovering near the main purple playhead, the grey ghost playhead head smoothly ducks down underneath it).
 /// - **Ruler Dots & Clip Vertical Tick Lines** (major labels + minor dots, with matching vertical tick lines inside the Clip bar).
@@ -675,7 +675,7 @@ public struct MultiTrackTimelineView: View {
                     .allowsHitTesting(false)
             }
 
-            // Hover `+` Ghost Add-Zoom Preview Block (`Screenshot_2026-10-25_at_11.39.25_PM.png`!)
+            // Hover `+` Ghost Add-Zoom Preview Block
             if let preview = addPreview {
                 let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
                 let previewW = max(24.0, CGFloat((preview.tEndMs - preview.tStartMs) / totalTimelineMs) * contentWidth - 1.0)
@@ -856,7 +856,7 @@ public struct MultiTrackTimelineView: View {
                 .frame(width: contentWidth, height: maskRowHeight)
                 .contentShape(Rectangle())
 
-            // Hover `+` Ghost Add-Mask Preview Block ( `Screenshot_2026-10-26_at_2.29.54_PM.png` 1:1!)
+            // Hover `+` Ghost Add-Mask Preview Block 
             if let preview = addPreview {
                 let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
                 let previewW = max(24.0, CGFloat((preview.tEndMs - preview.tStartMs) / totalTimelineMs) * contentWidth - 1.0)
@@ -1541,7 +1541,7 @@ public struct MultiTrackTimelineView: View {
         let action: () -> Void
     }
 
-    /// `Mg(ms)`:
+    /// Formats a playhead time for the trim badge:
     /// `< 1s` -> `0.6s`, `< 60s` -> `4s`, `< 60m` -> `2m`, else `1h`.
     private static func formatTrimmedDurationBadge(_ ms: Double) -> String {
         let sec = max(0.0, ms / 1000.0)
@@ -1558,7 +1558,7 @@ public struct MultiTrackTimelineView: View {
         return "\(mins / 60)h"
     }
 
-    /// `Pg`:
+    /// Badge placement:
     /// Computes golden teardrop badges for:
     /// 1. First slice's leading trim (`sourceStartMs > 1.0`).
     /// 2. Every inter-slice boundary (`next.sourceStartMs - curr.sourceEndMs`: if `> 1ms` -> `Undo trim` with duration label, else `Join clips`).
@@ -1802,10 +1802,10 @@ private struct SmoothTimeRulerView: View {
     let majorStepSec: Double
     let minorStepSec: Double
 
-    /// `Bf(pixelsPerPlaybackMs)`:
+    /// Picks the ruler step for `pixelsPerPlaybackMs`:
     /// Picks the closest interval from `[0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0]` seconds
     /// so that adjacent ruler marks are spaced around ~100–200px apart.
-    /// In `Jp({timeMs})`, `let hasLabel = (timeMs % 1000 == 0)`:
+    /// A tick gets a label when `timeMs % 1000 == 0`:
     /// - When `markIntervalSec` is `0.5s` or `2.5s`, every other dot (`0.5s`, `2.5s`, `7.5s`, `12.5s`) is a half-second (`% 1000 != 0`) -> **dot only, no label**, while whole seconds (`1.0s`, `5.0s`, `10.0s`, `15.0s`) have **both dot + time label**!
     /// - When `markIntervalSec` is `1.0s`, `5.0s`, `10.0s`, `30.0s`, `60.0s`, every dot is an exact whole second (`% 1000 == 0`) -> **every dot has a time label**!
     static func computeStepIntervals(totalDurationMs: Double, width: CGFloat) -> (major: Double, minor: Double) {
@@ -1906,7 +1906,7 @@ private struct ClipSegmentDecoration: Equatable, View {
                 let baseCount = Double(waveformSamples.count)
                 let sliceSampleSpan = max(1.0, (endFrac - startFrac) * baseCount)
 
-                // `pxPerBin = 5.0` (`Wg = 5` when `enableSmoothWaveform` is enabled):
+                // `pxPerBin = 5.0` (when `enableSmoothWaveform` is enabled):
                 // Each control bin spans ~11px on screen, and Catmull-Rom cubic spline (`readPyramidLevel`)
                 // evaluates every 1.5px between bins to form rolling mountain-dune peaks & valleys!
                 let pxPerBin: Double = 11.0
@@ -2049,7 +2049,7 @@ private struct ClipSegmentDecoration: Equatable, View {
         return path
     }
 
-    // MARK: - Exact Mip-Pyramid + Catmull-Rom Cubic Spline
+    // MARK: - Mip-Pyramid + Catmull-Rom Cubic Spline
 
     private static func buildWaveformPyramid(from baseSamples: [Float]) -> [[Float]] {
         guard !baseSamples.isEmpty else { return [] }
@@ -2357,14 +2357,14 @@ private struct TimelineInteractiveSegmentView: View {
         // Adaptive edge hit width: up to `13pt` on wide segments, and at least ~1/3 of `segWidth` (`>= 5.5pt`) on narrow segments
         // so even a minimum-width segment always has a left resize zone, a center move zone, and a right resize zone!
         let edgeHitWidth = min(edgeHandleHitWidth, max(5.5, segWidth * 0.34))
-        // NativeScreen: `.track-item.is-hovered & { opacity: 1; transform: scaleY(1); }`
+        // Hover: `.track-item.is-hovered & { opacity: 1; transform: scaleY(1); }`
         // Resize handles appear on hover or during an active resize drag — including on narrow segments!
         let showHandles = !isSplitMode
             && (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight)
         let handleBarWidth: CGFloat = segWidth < 24 ? 2.4 : 3.0
         let handleHorizontalInset: CGFloat = min(6.5, max(2.2, (segWidth - handleBarWidth * 2.0 - 3.5) * 0.5))
 
-        // opacity rules (`Xm = 0.50` when disabled, `Zm = 0.30` when dimmed by another open item on the same track)
+        // opacity rules (`0.50` when disabled, `0.30` when dimmed by another open item on the same track)
         let bodyOpacity: Double = (isDimmed ? 0.50 : 1.0) * (isDimmedBySelection ? 0.30 : 1.0)
 
         ZStack(alignment: .leading) {
@@ -2616,7 +2616,7 @@ private struct TimelineInteractiveSegmentView: View {
             .lineLimit(1)
 
         case .voiceover(let volumeText, let volumeIcon):
-            // Matches `gv` (`microphone` + `Microphone` + speaker icon + `100%`)
+            // Voiceover label (`microphone` + `Microphone` + speaker icon + `100%`)
             HStack(spacing: 7) {
                 HStack(spacing: 3.5) {
                     Image(systemName: "mic.fill")
@@ -3029,7 +3029,7 @@ private struct ShortcutTimelineSegmentView: View {
         let handleHorizontalInset: CGFloat = min(5.0, max(2.0, (segWidth - handleBarWidth * 2.0 - 3.0) * 0.5))
 
         ZStack {
-            // 1. `W_` Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
+            // 1. Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(
                     LinearGradient(

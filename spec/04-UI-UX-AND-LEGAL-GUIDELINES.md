@@ -38,7 +38,7 @@
   4. In the center of the highlighted window, render a floating card showing:
      - **High-resolution App Icon** (`NSRunningApplication(processIdentifier: pid)?.icon`)
      - **App Name & Window Title** (e.g., `Google Chrome`)
-     - **Exact Dimensions Badge + `[Resize]` menu** (e.g., `761 × 1090 [Resize]` — uses `AXUIElementSetAttributeValue` to resize the target window to standard 16:9 / 9:16 / 4:3 presets before recording!).
+     - **Dimensions Badge + `[Resize]` menu** (e.g., `761 × 1090 [Resize]` — uses `AXUIElementSetAttributeValue` to resize the target window to standard 16:9 / 9:16 / 4:3 presets before recording!).
      - **`[Start Recording]` primary button**.
 
 ### 2.3. Main Editor Window (Multi-Document Support)

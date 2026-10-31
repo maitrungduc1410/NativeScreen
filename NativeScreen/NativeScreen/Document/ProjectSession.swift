@@ -2902,7 +2902,7 @@ public final class ProjectSession: Identifiable {
             default: break
             }
         }
-        // Canonical order (`fg` / `g`):
+        // Canonical order:
         let order = ["CapsLock", "Meta", "Shift", "Alt", "Ctrl"]
         return order.filter { set.contains($0) }
     }
@@ -2933,7 +2933,7 @@ public final class ProjectSession: Identifiable {
     }
 
     private static func buildCompactTimelineLabel(modifiers: [String], primaryKey: String) -> String {
-        // Note:, timeline order is `["Meta", "Shift", "Alt", "Ctrl"]` (or `⌥ ⌃` as shown in)
+        // Note: timeline order is `["Meta", "Shift", "Alt", "Ctrl"]` (or `⌥ ⌃` as shown in)
         let modSymbols: [String] = modifiers.map { mod in
             switch mod {
             case "Meta": return "⌘"

@@ -91,7 +91,7 @@ public final class HardwareVideoExporter {
             }
         }
 
-        /// Target bits-per-pixel at `1920x1080 @ 60fps` (`N`:
+        /// Target bits-per-pixel at `1920x1080 @ 60fps`:
         /// `[{ crf: 14, bitsPerPixel: 0.0816 }, { crf: 24, bitsPerPixel: 0.0221 }, { crf: 30, bitsPerPixel: 0.011 }, { crf: 42, bitsPerPixel: 0.0038 }]`)
         public var referenceBitsPerPixel: Double {
             switch self {

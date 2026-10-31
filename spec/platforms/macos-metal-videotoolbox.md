@@ -36,7 +36,7 @@ This guide documents the macOS-specific implementation details, API pitfalls, an
 
 ---
 
-## 2. Metal & CoreImage Compositor (`MetalFrameCompositor.swift`, `LiquidGlassLoupeShaderRenderer.swift`)
+## 2. Metal & CoreImage Compositor (`MetalFrameCompositor.swift`, `EffectKernels.swift`)
 
 ### 2.1. Materializing Lazy `CIImage` Graphs into VRAM `MTLTexture`s
 - **Pitfall:** A `CIImage` is a lazy filter recipe. Storing `shadowBox.applyingGaussianBlur(...)` in a property and compositing it on every frame still re-runs the 4K Gaussian Blur on every frame!
@@ -44,7 +44,7 @@ This guide documents the macOS-specific implementation details, API pitfalls, an
 - **Crucial Frame-0 Sync:** Always call `cmdBuf.waitUntilCompleted()` after `cmdBuf.commit()` inside `materializeToGPUTexture(_:extent:)`. Because `materializeToGPUTexture` only runs once when parameters change, waiting `< 0.8 ms` guarantees that Frame 0 never samples an uninitialized stencil texture on a concurrent command queue.
 
 ### 2.2. Runtime-Compiled Metal Shaders (`MTLLibrary` from Source)
-- **Context:** To avoid fragile Xcode build-rule dependencies or missing `.metallib` resources when embedding shaders in `CIImageProcessorKernel`, `LiquidGlassLoupeShaderRenderer` compiles its Metal compute shader (`liquidGlassLoupeKernel`) once at runtime via `device.makeLibrary(source:options:)` and caches the `MTLComputePipelineState` in a static singleton.
+- **Context:** To avoid fragile Xcode build-rule dependencies or missing `.metallib` resources when embedding shaders in `CIImageProcessorKernel`, `EffectKernels` compiles its Metal compute shaders (`magnifierLens`, `cameraMotionBlur`) once at runtime via `device.makeLibrary(source:options:)` and caches the `MTLComputePipelineState`s in a static singleton.
 
 ---
 

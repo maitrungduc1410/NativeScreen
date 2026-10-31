@@ -147,14 +147,20 @@ Every video frame at source timestamp $t$ is composited on the GPU in a determin
 - Render active click effects (`Circle` or `Ripple` expanding over `450 ms`) at the click coordinate.
 - Composite the high-DPI vector cursor sprite (`CursorSpriteProvider`) at smoothed `cursorState.position01` with hotspot alignment, `cursor.scale`, and rotation `cursorState.rotationRadians`.
 
-### Pass 5: Virtual Camera Transform, 1-Frame Shutter Motion Blur & Liquid Glass Loupe
-- **5A. Classic Camera Zoom & 1-Frame Shutter Motion Blur:**
+### Pass 5: Virtual Camera Transform, Camera Motion Blur & Magnifier Lens
+- **5A. Camera Zoom & Motion Blur (`EffectKernels.applyCameraMotionBlur`):**
   - When not in Loupe mode, apply the affine camera transform (`scale: Z`, centered on `cameraState.center01`).
-  - Compare camera state at $t$ against $t - 16.67\text{ ms}$ (1-frame shutter window):
-    - If translational displacement exceeds `1.8 px/frame`, apply directional `CIMotionBlur` along the instantaneous pan angle.
-    - If radial scale displacement exceeds `1.8 px/frame`, apply a fast `< 0.4 ms` 3-tap radial shutter blend (`1.0`, `stepScale1`, `stepScale2`).
-    - Once per-frame displacement drops below `1.8 px/frame`, blur is `0.0` so the image settles crystal-clear immediately.
-- **5B. Glass Loupe Shader:** when the loupe is active, a Metal compute kernel draws a circular magnifier over the composited scene, with a refracting rim, color fringing, rim lighting and a drop shadow.
+  - Evaluate where the zoomed screen rect sits now ($R_1$) and one frame earlier ($R_0$, at $t - 16.67\text{ ms}$). The shutter is open for the last `motionBlurIntensity` fraction of that interval.
+  - For a pixel $p$, the screen point under it at time $s$ is $u(s) = (p - R(s)_{xy}) / R(s)_{wh}$ with $R(s) = \text{lerp}(R_0, R_1, s)$, drawn in the current frame at $q(s) = R_{1,xy} + u(s) \cdot R_{1,wh}$. The output averages the current frame at $q(s)$ for $s \in [1 - \text{shutter}, 1]$. For pans the path is a straight line; for zooms it curves toward the focus point.
+  - Samples are taken in linear light (gamma 2.2 decode, premultiplied), with a per-pixel jitter (interleaved gradient noise) so a small sample count reads as fine grain. Sample count = `travel / pixelsPerSample`, capped at 8 in playback and 24 in export.
+  - If no edge moves at least `0.5 px`, the pass is skipped, so the image is sharp the moment the camera settles. Also skipped during instant zoom snaps and on the paused last frame.
+- **5B. Magnifier Lens (`EffectKernels.applyMagnifierLens`):**
+  - When `cameraState.loupePresence01 > 0.005`, run the lens kernel over the composited scene (screen + background):
+    1. **Magnification:** inside radius $R$, sample at `center + offset / zoom`.
+    2. **Rim refraction:** in the rim band (`rimRatio` of the radius), scale the sample offset by $1 + 0.55\,e^2$ with $e = \text{smoothstep}(1 - \text{rimRatio}, 1, r/R)$, so the edge shows content from further out like a thick convex lens.
+    3. **Color fringing:** red and blue are sampled at offsets scaled by $1 \mp 0.045 \cdot \text{colorFringe} \cdot e$ (3 taps).
+    4. **Lighting:** soft gloss over the upper half, slight rim darkening away from the light, and an exponential rim highlight that is strongest on the top-left (light side) with a faint counter highlight opposite.
+    5. **Shadow:** a Gaussian-falloff disc offset slightly downward, visible only outside the glass. `presence` fades the whole lens and its shadow.
 
 ### Pass 6: 3D Keyboard Shortcut Keycaps Overlay (`WYSIWYG` Preview & Export)
 - Render active `ShortcutPressCluster` 3D bevel keycaps (`renderShortcutKeycapsOverlay` with cached `keycapSpriteCache`) across all visible shortcut tracks.

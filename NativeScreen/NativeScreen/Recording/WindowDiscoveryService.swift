@@ -119,7 +119,7 @@ public enum WindowDiscoveryService {
     }
 
     /// Detects the exact macOS corner radius of a window using `AXUIElement` (`AXSubrole` + `AXToolbar` height),
-    /// matching `Windowing.AccessibilityWindow.cornerRadius` in NativeScreen:
+    /// using these window corner radii:
     /// - `AXFullScreen`: `0.0`
     /// - `AXDialog` / `AXSheet`: `16.0`
     /// - Standard window with `AXToolbar`: `26.0` (tall unified toolbar > 50pt) or `20.0` (standard toolbar)

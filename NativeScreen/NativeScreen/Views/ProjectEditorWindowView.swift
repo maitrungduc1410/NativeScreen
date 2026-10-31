@@ -48,7 +48,7 @@ public struct ProjectEditorWindowView: View {
     public var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                // 1. UNIFIED DARK WINDOW HEADER BAR (Matches Header 1:1 & 2!)
+                // 1. UNIFIED DARK WINDOW HEADER BAR (Matches Header & 2!)
                 let centerY = max(24.0, trafficLightCenterY)
                 ZStack {
                     // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢 — 36pt buttons, 6pt radius & 16pt icons!)
@@ -1229,7 +1229,7 @@ public struct ProjectEditorWindowView: View {
         isActive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        // Exact `Zo` (`squareControl`: `width: 38, height: 38, radius: 5, iconSize: 16`)
+        // Square control (`width: 38, height: 38, radius: 5, iconSize: 16`)
         InstantTooltipButton(
             tooltip: tooltip,
             edge: .trailing,

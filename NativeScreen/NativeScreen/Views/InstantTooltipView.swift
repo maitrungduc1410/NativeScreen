@@ -2,12 +2,12 @@ import SwiftUI
 import AppKit
 import QuartzCore
 
-/// Exact NativeScreen, and `.hover-magnet` System:
+/// Instant tooltips and the `.hover-magnet` button system:
 /// 1. **Standalone Borderless `TooltipPanel` + `NSVisualEffectView` (`.popover` material, `.behindWindow`)**:
 ///    Every tooltip in the app is drawn by AppKit in a dedicated panel (`CGWindowLevelForKey(.popUpMenuWindow)`)
 ///    with `panel.sharingType` mirrored from the owner window (`ownerWindow.sharingType != .none ? .readOnly : .none`),
 ///    so screenshots (`⇧⌘4`) capture tooltips normally while private HUD windows remain hidden if needed.
-/// 2. **Exact `BubbleShape` Boolean CSG Silhouette (`margin = 7.0`, `cornerRadius = min(W/6, H/6, 6.667)`, `caretReach = 5.8`, `tipRadius = 2.0`)**:
+/// 2. **`BubbleShape` Boolean CSG Silhouette (`margin = 7.0`, `cornerRadius = min(W/6, H/6, 6.667)`, `caretReach = 5.8`, `tipRadius = 2.0`)**:
 ///    Constructs the exact union of `bodyPath` and `caretPath` with rounded inner fillet joints (`strokeWidth: 9.0` & `4.0` CSG rounding),
 ///    applied as `NSVisualEffectView.maskImage` and stroked with a seamless `1px` inner border (`white.opacity(0.16)`).
 /// 3. **Directional Slide-In (`4pt` offset, `0.13s easeOut`) & Smooth Reposition (`0.12s`)**:
@@ -15,7 +15,7 @@ import QuartzCore
 ///    When moving directly from one hovered button to an adjacent button, it glides (`0.12s`) to the new frame.
 /// 4. **Directional `.hover-magnet` Button Highlight**:
 ///    Every button tracks cursor entry, movement, and exit via a zero-SwiftUI-overhead AppKit `NSTrackingArea` + `CALayer` spring solver
-///    (`stiffness = 1500, damping = 100, mass = 2`, `Ka = 2pt` magnetic pull, `qa = 10x` escape distance, `Ja = 0.8` entry scale).
+///    (`stiffness = 1500, damping = 100, mass = 2`, `2pt` magnetic pull, `10x` escape distance, `0.8` entry scale).
 ///    When the cursor enters from any angle (e.g. top-right corner), the highlight layer starts `22pt` outside in that exact direction
 ///    and flies into the button (`overflow: visible`), tracks the cursor magnetically while inside, and flies out in the exit direction on leave!
 ///
@@ -50,7 +50,7 @@ public enum TooltipEdge: Sendable {
     }
 }
 
-// MARK: - 1. Exact `BubbleShape`
+// MARK: - 1. `BubbleShape`
 
 public struct BubbleShape: Sendable, Equatable {
     /// Extra margin around `bodySize` inside the `NSPanel` so the `5.8pt` caret tip fits cleanly inside the mask image.
@@ -72,7 +72,7 @@ public struct BubbleShape: Sendable, Equatable {
         CGRect(origin: .zero, size: panelSize).insetBy(dx: Self.margin, dy: Self.margin)
     }
 
-    /// Exact `BubbleShape.cornerRadius`: `min(bodyRect.width / 6.0, bodyRect.height / 6.0, 6.666666666666667)`.
+    /// `BubbleShape.cornerRadius`: `min(bodyRect.width / 6.0, bodyRect.height / 6.0, 6.666666666666667)`.
     /// For a standard `28pt` tall tooltip, `28 / 6 = 4.67pt` `border-radius: 5px`!).
     public var cornerRadius: CGFloat {
         let br = bodyRect
@@ -88,7 +88,7 @@ public struct BubbleShape: Sendable, Equatable {
         return CGPath(roundedRect: br, cornerWidth: r, cornerHeight: r, transform: nil)
     }
 
-    /// Exact `BubbleShape.caretPath`:
+    /// `BubbleShape.caretPath`:
     /// Builds the rounded-tip triangle (`reach = 5.8`, `tipRadius = 2.0`) extending outward from `bodyRect` and overlapping deep into `bodyRect`.
     public var caretPath: CGPath {
         let br = bodyRect
@@ -159,7 +159,7 @@ public struct BubbleShape: Sendable, Equatable {
         return path
     }
 
-    /// Exact `BubbleShape.outline`:
+    /// `BubbleShape.outline`:
     /// Unions `bodyPath` and `caretPath`, and uses CoreGraphics path stroke-union/subtraction CSG (`9.0pt` outer fillet, `4.0pt` inner fillet)
     /// so the caret base blends into the bubble edge with zero internal seam or dashed artifact!
     public var outline: CGPath {
@@ -197,7 +197,7 @@ public struct BubbleShape: Sendable, Equatable {
     }
 }
 
-// MARK: - 2. Exact `TooltipPanel`, `TooltipContentView` & `SharedFloatingTooltipWindowController`
+// MARK: - 2. `TooltipPanel`, `TooltipContentView` & `SharedFloatingTooltipWindowController`
 
 @MainActor
 private final class TooltipPanel: NSPanel {
@@ -353,7 +353,7 @@ public final class SharedFloatingTooltipWindowController {
         self.contentView = content
     }
 
-    /// Exact `TooltipPanelController.layOut(placement:bodySize:anchor:screen:)`.
+    /// `TooltipPanelController.layOut(placement:bodySize:anchor:screen:)`.
     private static func layOut(
         placement: TooltipEdge,
         bodySize: CGSize,
@@ -682,7 +682,7 @@ public struct InstantTooltipBubble: View {
     }
 }
 
-// MARK: - 4. Exact 120Hz Directional `.hover-magnet` AppKit Layer Engine
+// MARK: - 4. 120Hz Directional `.hover-magnet` AppKit Layer Engine
 
 private struct TooltipHoverBlockedEnvironmentKey: EnvironmentKey {
     static let defaultValue: Bool = false
@@ -815,12 +815,12 @@ public final class HoverMagnetTrackingNSView: NSView {
     private var trackingAreaRef: NSTrackingArea?
     private var springTimer: Timer?
 
-    // Exact springs (`isHoveredSpring`, `offsetSpring.x`, `offsetSpring.y`)
+    // Springs (`isHoveredSpring`, `offsetSpring.x`, `offsetSpring.y`)
     private var isHoveredSpring = ScalarSpring1D()
     private var offsetXSpring = ScalarSpring1D()
     private var offsetYSpring = ScalarSpring1D()
 
-    // Exact constants (`Ka = 2`, `qa = 10`, `Ja = 0.8`)
+    // Magnet constants: pull 2pt, escape at 10x, entry scale 0.8
     private let magnetMaxOffset: Double = 2.0
     private let escapeMultiplier: Double = 10.0
     private let entryScale: Double = 0.80
@@ -886,7 +886,7 @@ public final class HoverMagnetTrackingNSView: NSView {
         guard (!isButtonDisabled || allowHoverWhenDisabled), !isHoverBlocked, window?.attachedSheet == nil else { return }
         let targetOff = computeMagnetTargetOffset(for: event)
 
-        // Exact (`if (type === "enter") offsetSpring.snapToTarget(targetOff)`):
+        // On enter, snap the offset spring straight to its target:
         // When entering from idle, snap the offset spring to the entry angle so the highlight flies in from that exact angle!
         if isHoveredSpring.value < 0.15 {
             offsetXSpring.snap(to: Double(targetOff.x))
@@ -960,7 +960,7 @@ public final class HoverMagnetTrackingNSView: NSView {
 
     private func stepSprings() {
         let dt = 1.0 / 120.0
-        // Exact `Ya = { damping: 100, stiffness: 1500, mass: 2 }`
+        // Spring `{ damping: 100, stiffness: 1500, mass: 2 }`
         isHoveredSpring.step(dt: dt, stiffness: 1500.0, damping: 100.0, mass: 2.0)
         offsetXSpring.step(dt: dt, stiffness: 1500.0, damping: 100.0, mass: 2.0, clampOvershoot: false)
         offsetYSpring.step(dt: dt, stiffness: 1500.0, damping: 100.0, mass: 2.0, clampOvershoot: false)
@@ -1054,7 +1054,7 @@ public final class HoverMagnetTrackingNSView: NSView {
                 magnetLayer.borderWidth = 0.0
             }
         } else {
-            // Exact `#ffffff14`
+            // `#ffffff14`
             magnetLayer.backgroundColor = NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.095).cgColor
             magnetLayer.borderWidth = 0.0
         }

@@ -190,7 +190,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
   "cursor": {
     "hidden": false,
     "scale": 1.6,
-    "themeId": "macos-tahoe",
+    "themeId": "arrow",
     "variantId": "default",
     "alwaysUsePointer": false,
     "smoothMovementEnabled": true,
@@ -212,7 +212,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
     "clickEffect": {
       "visualStyle": "ripple",
       "color": "#FFFFFF",
-      "soundSet": "apple-magic-mouse",
+      "soundSet": "soft",
       "soundVolume": 0.50
     }
   },

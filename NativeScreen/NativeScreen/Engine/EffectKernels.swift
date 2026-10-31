@@ -1,0 +1,372 @@
+import Foundation
+import Metal
+import CoreImage
+
+/// GPU effects that CoreImage has no filter for: the magnifier lens (loupe zoom) and camera motion blur.
+/// The Metal source is compiled at launch with `makeLibrary(source:)`, so the build needs no Metal toolchain,
+/// and each kernel runs inside a `CIImageProcessorKernel` so it slots into the CoreImage compositor graph.
+///
+/// See `spec/03-CINEMATIC-ENGINE-AND-MATH.md` (Pass 5) for the behavior both kernels implement.
+public final class EffectKernels {
+    public static let shared = EffectKernels()
+
+    let lensPipeline: MTLComputePipelineState?
+    let motionBlurPipeline: MTLComputePipelineState?
+    let sampler: MTLSamplerState?
+
+    private init() {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            lensPipeline = nil
+            motionBlurPipeline = nil
+            sampler = nil
+            return
+        }
+        let options = MTLCompileOptions()
+        options.fastMathEnabled = true
+        let library: MTLLibrary?
+        do {
+            library = try device.makeLibrary(source: Self.metalSource, options: options)
+        } catch {
+            NSLog("EffectKernels: shader compile failed: \(error)")
+            library = nil
+        }
+        func pipeline(_ name: String) -> MTLComputePipelineState? {
+            guard let fn = library?.makeFunction(name: name) else { return nil }
+            return try? device.makeComputePipelineState(function: fn)
+        }
+        lensPipeline = pipeline("magnifierLens")
+        motionBlurPipeline = pipeline("cameraMotionBlur")
+
+        let desc = MTLSamplerDescriptor()
+        desc.minFilter = .linear
+        desc.magFilter = .linear
+        desc.sAddressMode = .clampToEdge
+        desc.tAddressMode = .clampToEdge
+        desc.normalizedCoordinates = true
+        sampler = device.makeSamplerState(descriptor: desc)
+    }
+
+    // MARK: - Magnifier lens
+
+    /// Draws a round magnifying lens over `inputImage`: magnified content, a refracting rim with slight color fringing,
+    /// a soft gloss and rim light, and a drop shadow on what is under the lens. `presence` fades the whole lens in and out.
+    /// `centerPx` and `canvasRect` are in CoreImage coordinates (bottom-left origin).
+    public static func applyMagnifierLens(
+        to inputImage: CIImage,
+        canvasRect: CGRect,
+        centerPx: CGPoint,
+        radiusPx: CGFloat,
+        zoomScale: CGFloat,
+        rimRatio: CGFloat,
+        colorFringe: CGFloat,
+        presence: CGFloat
+    ) -> CIImage {
+        guard shared.lensPipeline != nil, presence > 0.005, radiusPx > 2.0, zoomScale > 1.001 else {
+            return inputImage
+        }
+        let uniforms = LensUniforms(
+            center: SIMD2(Float(centerPx.x - canvasRect.minX), Float(canvasRect.maxY - centerPx.y)),
+            radius: Float(radiusPx),
+            zoom: Float(zoomScale),
+            rimRatio: Float(min(0.6, max(0.05, rimRatio))),
+            fringe: Float(min(1.5, max(0.0, colorFringe))),
+            presence: Float(min(1.0, presence))
+        )
+        return run(.lens, on: inputImage, canvasRect: canvasRect, uniforms: uniforms)
+    }
+
+    // MARK: - Camera motion blur
+
+    /// Simulates a camera shutter while the zoom camera moves. `rectNow` is where the screen sits on the canvas in this
+    /// frame and `rectPrevious` where it sat one frame earlier (CoreImage coordinates). The shutter stays open for
+    /// `shutter` (0...1) of that frame interval, and every pixel averages what passed under it during that time.
+    public static func applyCameraMotionBlur(
+        to positionedScreen: CIImage,
+        canvasRect: CGRect,
+        rectNow: CGRect,
+        rectPrevious: CGRect,
+        shutter: CGFloat,
+        isExportQuality: Bool
+    ) -> CIImage {
+        guard shared.motionBlurPipeline != nil, shutter > 0.01 else { return positionedScreen }
+
+        // Where the screen was when the shutter opened. Less than half a pixel of travel everywhere: nothing to blur.
+        let opened = CGRect(
+            x: rectNow.minX + (rectPrevious.minX - rectNow.minX) * shutter,
+            y: rectNow.minY + (rectPrevious.minY - rectNow.minY) * shutter,
+            width: rectNow.width + (rectPrevious.width - rectNow.width) * shutter,
+            height: rectNow.height + (rectPrevious.height - rectNow.height) * shutter
+        )
+        let travel = max(
+            abs(opened.minX - rectNow.minX), abs(opened.maxX - rectNow.maxX),
+            abs(opened.minY - rectNow.minY), abs(opened.maxY - rectNow.maxY)
+        )
+        guard travel >= 0.5 else { return positionedScreen }
+
+        func topDown(_ r: CGRect) -> SIMD4<Float> {
+            SIMD4(
+                Float(r.minX - canvasRect.minX),
+                Float(canvasRect.maxY - r.maxY),
+                Float(max(1.0, r.width)),
+                Float(max(1.0, r.height))
+            )
+        }
+        let uniforms = MotionBlurUniforms(
+            rectNow: topDown(rectNow),
+            rectPrevious: topDown(rectPrevious),
+            shutter: Float(min(1.0, shutter)),
+            pixelsPerSample: isExportQuality ? 3.0 : 10.0,
+            maxSamples: isExportQuality ? 24 : 8
+        )
+        return run(.motionBlur, on: positionedScreen, canvasRect: canvasRect, uniforms: uniforms)
+    }
+
+    // MARK: - Dispatch
+
+    fileprivate enum Kind: Int {
+        case lens
+        case motionBlur
+    }
+
+    fileprivate struct LensUniforms {
+        var center: SIMD2<Float>
+        var radius: Float
+        var zoom: Float
+        var rimRatio: Float
+        var fringe: Float
+        var presence: Float
+    }
+
+    fileprivate struct MotionBlurUniforms {
+        var rectNow: SIMD4<Float>
+        var rectPrevious: SIMD4<Float>
+        var shutter: Float
+        var pixelsPerSample: Float
+        var maxSamples: Int32
+    }
+
+    private static func run<U>(_ kind: Kind, on image: CIImage, canvasRect: CGRect, uniforms: U) -> CIImage {
+        // Pad to the stride: Metal sizes the struct with its trailing padding.
+        var bytes = withUnsafeBytes(of: uniforms) { Data($0) }
+        bytes.append(Data(count: MemoryLayout<U>.stride - bytes.count))
+        let args: [String: Any] = [
+            EffectKernelProcessor.kindKey: kind.rawValue,
+            EffectKernelProcessor.uniformsKey: bytes,
+            EffectKernelProcessor.canvasKey: CIVector(cgRect: canvasRect)
+        ]
+        guard let out = try? EffectKernelProcessor.apply(
+            withExtent: canvasRect,
+            inputs: [image.cropped(to: canvasRect)],
+            arguments: args
+        ) else {
+            return image
+        }
+        return out.cropped(to: canvasRect)
+    }
+
+    // MARK: - Metal source
+
+    private static let metalSource = """
+    #include <metal_stdlib>
+    using namespace metal;
+
+    // Textures are addressed top-down here (row 0 is the top of the canvas); the Swift side converts rects and points.
+
+    struct LensUniforms {
+        float2 center;
+        float radius;
+        float zoom;
+        float rimRatio;
+        float fringe;
+        float presence;
+    };
+
+    struct MotionBlurUniforms {
+        float4 rectNow;      // x, y, width, height in pixels
+        float4 rectPrevious;
+        float shutter;
+        float pixelsPerSample;
+        int maxSamples;
+    };
+
+    inline float4 sampleAt(texture2d<float, access::sample> tex, sampler s, float2 px, float2 size) {
+        return tex.sample(s, px / size);
+    }
+
+    kernel void magnifierLens(
+        texture2d<float, access::sample> src [[texture(0)]],
+        texture2d<float, access::write> dst [[texture(1)]],
+        sampler smp [[sampler(0)]],
+        constant LensUniforms &u [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]]
+    ) {
+        float2 size = float2(dst.get_width(), dst.get_height());
+        if (gid.x >= uint(size.x) || gid.y >= uint(size.y)) { return; }
+
+        float2 px = float2(gid) + 0.5;
+        float4 under = sampleAt(src, smp, px, size);
+        float2 offset = px - u.center;
+        float dist = length(offset);
+        float R = u.radius;
+
+        // Drop shadow: a blurred disc a little below the lens, only visible outside the glass.
+        float shadowSigma = R * 0.10;
+        float shadowDist = length(offset - float2(0.0, R * 0.07)) - R * 0.98;
+        float shadow = 0.30 * exp(-0.5 * pow(max(shadowDist, 0.0) / shadowSigma, 2.0));
+        float coverage = clamp(R - dist + 0.5, 0.0, 1.0);
+        float4 outside = float4(under.rgb * (1.0 - shadow * u.presence * (1.0 - coverage)), under.a);
+
+        if (coverage <= 0.0) {
+            dst.write(outside, gid);
+            return;
+        }
+
+        // Lens body. r is 0 at the center and 1 at the edge; inside the rim band the glass bends outward,
+        // so the edge shows content from further out (barrel-like) the way a thick convex lens does.
+        float r = dist / R;
+        float rimStart = 1.0 - u.rimRatio;
+        float rim = smoothstep(rimStart, 1.0, r);
+        float2 lensOffset = offset / u.zoom;
+        float bend = 1.0 + 0.55 * rim * rim;
+
+        // Color fringing grows toward the rim: red bends a bit less than blue.
+        float spread = 0.045 * u.fringe * rim;
+        float2 baseRel = lensOffset * bend;
+        float4 g = sampleAt(src, smp, u.center + baseRel, size);
+        float rr = sampleAt(src, smp, u.center + baseRel * (1.0 - spread), size).r;
+        float bb = sampleAt(src, smp, u.center + baseRel * (1.0 + spread), size).b;
+        float3 glass = float3(rr, g.g, bb);
+
+        // Light comes from the top left.
+        float2 dir = dist > 0.001 ? offset / dist : float2(0.0, -1.0);
+        float2 toLight = normalize(float2(-0.45, -0.9));
+        float facing = dot(dir, toLight); // 1 on the lit side of the rim, -1 opposite
+
+        // Soft gloss over the upper half, fading out before the rim.
+        float gloss = smoothstep(0.25, -0.85, offset.y / R) * (1.0 - smoothstep(0.55, 0.95, r)) * 0.07;
+        glass += gloss;
+
+        // The rim: slightly darker glass, a crisp highlight on the lit side and a faint one opposite.
+        glass *= 1.0 - 0.10 * rim * (0.6 - 0.4 * facing);
+        float edgePx = R - dist;
+        float ringWidth = max(1.5, R * 0.018);
+        float ring = exp(-edgePx / ringWidth);
+        float highlight = ring * (0.55 * smoothstep(0.1, 0.9, facing) + 0.18 * smoothstep(0.3, 0.95, -facing));
+        glass = glass + (1.0 - glass) * clamp(highlight, 0.0, 1.0);
+
+        float mixAmount = coverage * u.presence;
+        float4 result = float4(mix(outside.rgb, glass, mixAmount), mix(outside.a, max(g.a, under.a), mixAmount));
+        dst.write(result, gid);
+    }
+
+    // Approximate display gamma; good enough to average light instead of encoded values.
+    inline float4 toLinear(float4 c) {
+        float a = c.a;
+        if (a <= 0.0001) { return float4(0.0); }
+        float3 straight = clamp(c.rgb / a, 0.0, 1.0);
+        return float4(pow(straight, 2.2) * a, a);
+    }
+
+    inline float4 fromLinear(float4 c) {
+        float a = c.a;
+        if (a <= 0.0001) { return float4(0.0); }
+        float3 straight = clamp(c.rgb / a, 0.0, 1.0);
+        return float4(pow(straight, 1.0 / 2.2) * a, a);
+    }
+
+    // Per-pixel jitter so the finite samples read as grain instead of stepped copies.
+    inline float pixelNoise(float2 px) {
+        return fract(52.9829189 * fract(dot(px, float2(0.06711056, 0.00583715))));
+    }
+
+    // At time t (0 = previous frame, 1 = now) the screen sits at lerp(previous, now, t). Returns where the point of the
+    // screen that was under `px` at time t is drawn in the current frame.
+    inline float2 mapToNow(float2 px, float4 previous, float4 now, float t) {
+        float4 r = mix(previous, now, t);
+        float2 local = (px - r.xy) / r.zw;
+        return now.xy + local * now.zw;
+    }
+
+    kernel void cameraMotionBlur(
+        texture2d<float, access::sample> src [[texture(0)]],
+        texture2d<float, access::write> dst [[texture(1)]],
+        sampler smp [[sampler(0)]],
+        constant MotionBlurUniforms &u [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]]
+    ) {
+        float2 size = float2(dst.get_width(), dst.get_height());
+        if (gid.x >= uint(size.x) || gid.y >= uint(size.y)) { return; }
+        float2 px = float2(gid) + 0.5;
+
+        float2 opened = mapToNow(px, u.rectPrevious, u.rectNow, 1.0 - u.shutter);
+        float travel = length(opened - px);
+        if (travel < 0.5) {
+            dst.write(sampleAt(src, smp, px, size), gid);
+            return;
+        }
+
+        int count = clamp(int(ceil(travel / u.pixelsPerSample)), 2, max(2, u.maxSamples));
+        float jitter = pixelNoise(px);
+        float4 sum = float4(0.0);
+        for (int i = 0; i < count; ++i) {
+            float t = 1.0 - u.shutter * ((float(i) + jitter) / float(count));
+            sum += toLinear(sampleAt(src, smp, mapToNow(px, u.rectPrevious, u.rectNow, t), size));
+        }
+        dst.write(fromLinear(sum / float(count)), gid);
+    }
+    """
+}
+
+/// Runs one of the `EffectKernels` compute pipelines on a CoreImage input.
+private final class EffectKernelProcessor: CIImageProcessorKernel {
+    static let kindKey = "kind"
+    static let uniformsKey = "uniforms"
+    static let canvasKey = "canvas"
+
+    override class func process(
+        with inputs: [CIImageProcessorInput]?,
+        arguments: [String: Any]?,
+        output: CIImageProcessorOutput
+    ) throws {
+        let kernels = EffectKernels.shared
+        guard let input = inputs?.first,
+              let inTexture = input.metalTexture,
+              let outTexture = output.metalTexture,
+              let commandBuffer = output.metalCommandBuffer,
+              let rawKind = arguments?[kindKey] as? Int,
+              let kind = EffectKernels.Kind(rawValue: rawKind),
+              let uniforms = arguments?[uniformsKey] as? Data,
+              let sampler = kernels.sampler else {
+            return
+        }
+        let pipeline: MTLComputePipelineState?
+        switch kind {
+        case .lens: pipeline = kernels.lensPipeline
+        case .motionBlur: pipeline = kernels.motionBlurPipeline
+        }
+        guard let pipeline, let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+
+        encoder.setComputePipelineState(pipeline)
+        encoder.setTexture(inTexture, index: 0)
+        encoder.setTexture(outTexture, index: 1)
+        encoder.setSamplerState(sampler, index: 0)
+        uniforms.withUnsafeBytes { encoder.setBytes($0.baseAddress!, length: uniforms.count, index: 0) }
+
+        let width = pipeline.threadExecutionWidth
+        let height = max(1, pipeline.maxTotalThreadsPerThreadgroup / width)
+        encoder.dispatchThreads(
+            MTLSize(width: outTexture.width, height: outTexture.height, depth: 1),
+            threadsPerThreadgroup: MTLSize(width: width, height: height, depth: 1)
+        )
+        encoder.endEncoding()
+    }
+
+    /// Both kernels sample anywhere on the canvas (magnified or trailing content), so they need the whole input.
+    override class func roi(forInput input: Int32, arguments: [String: Any]?, outputRect: CGRect) -> CGRect {
+        (arguments?[canvasKey] as? CIVector)?.cgRectValue ?? outputRect
+    }
+
+    override class var outputFormat: CIFormat { .BGRA8 }
+    override class func formatForInput(at input: Int32) -> CIFormat { .BGRA8 }
+    override class var synchronizeInputs: Bool { false }
+}

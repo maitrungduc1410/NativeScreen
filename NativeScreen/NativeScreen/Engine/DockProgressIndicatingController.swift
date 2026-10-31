@@ -49,7 +49,7 @@ private final class DockTileProgressView: NSView {
             appIcon.draw(in: bounds)
         }
 
-        // 2. Draw macOS Dock-style pill progress bar along the bottom (matches Screenshot!)
+        // 2. Draw macOS Dock-style pill progress bar along the bottom
         let barWidth = bounds.width * 0.84
         let barHeight = max(8.0, bounds.height * 0.095)
         let barX = (bounds.width - barWidth) * 0.5

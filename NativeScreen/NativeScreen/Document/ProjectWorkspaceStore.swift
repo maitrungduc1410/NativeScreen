@@ -125,7 +125,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.backgroundColor = NSColor.surface(red: 0.05, green: 0.05, blue: 0.07)
         window.isMovableByWindowBackground = false
 
-        // Match NativeScreen:
+        // Not full-screenable, but the green button still zooms:
         // Disable macOS native Full-Screen space mode so the green traffic light button shows `+` (Zoom / Move & Resize)!
         window.collectionBehavior = [.fullScreenNone]
 
@@ -768,7 +768,7 @@ public final class ProjectPresetsStore {
             canvas: CanvasConfig(aspectRatioMode: .preset, aspectRatioPreset: .widescreen16x9, paddingRatio: 0.10),
             background: BackgroundConfig(type: .mesh, meshPresetId: "spring-aurora"),
             frameStyle: FrameStyleConfig(borderRadius: 16.0, inset: FrameInsetConfig(enabled: true), shadow: FrameShadowConfig(enabled: true, isDirectional: true, intensity: 0.42)),
-            cursor: CursorConfig(scale: 1.6, themeId: "macos-tahoe"),
+            cursor: CursorConfig(scale: 1.6, themeId: CursorThemePreset.defaultThemeId),
             camera: CameraConfig(layoutMode: .overlay, colorGradePreset: .studio),
             motion: MotionConfig(cameraSpring: .defaultCamera, motionBlurIntensity: 1.0)
         )
@@ -784,7 +784,7 @@ public final class ProjectPresetsStore {
                 ])
             ),
             frameStyle: FrameStyleConfig(borderRadius: 20.0, inset: FrameInsetConfig(enabled: true, size: 1.5, opacity: 0.22), shadow: FrameShadowConfig(enabled: true, isDirectional: true, intensity: 0.58, blur: 44.0, distance: 26.0)),
-            cursor: CursorConfig(scale: 1.8, themeId: "macos-tahoe"),
+            cursor: CursorConfig(scale: 1.8, themeId: CursorThemePreset.defaultThemeId),
             camera: CameraConfig(layoutMode: .overlay, colorGradePreset: .cinema),
             motion: MotionConfig(cameraSpring: .focusedCamera, motionBlurIntensity: 1.0)
         )
@@ -800,7 +800,7 @@ public final class ProjectPresetsStore {
                 ])
             ),
             frameStyle: FrameStyleConfig(borderRadius: 18.0, inset: FrameInsetConfig(enabled: true), shadow: FrameShadowConfig(enabled: true, isDirectional: true, intensity: 0.48)),
-            cursor: CursorConfig(scale: 1.9, themeId: "macos-tahoe"),
+            cursor: CursorConfig(scale: 1.9, themeId: CursorThemePreset.defaultThemeId),
             camera: CameraConfig(layoutMode: .splitScreen, splitScreenRatio01: 0.50, colorGradePreset: .punch),
             motion: MotionConfig(cameraSpring: .focusedCamera, motionBlurIntensity: 1.0)
         )

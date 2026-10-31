@@ -2,12 +2,12 @@ import Foundation
 import CoreGraphics
 
 /// Pre-solves and caches 120Hz spring physics trajectories for both the cursor and the virtual camera
-/// using the algorithm:
+/// as follows:
 /// 1. **Stationary Dead-Zone Focus Groups (`MovesGroup` / `follow-click-groups`)**:
 ///    Instead of chasing every tiny cursor movement while zoomed in (which makes the camera jitter and causes motion sickness),
 ///    cursor events inside each zoom block are grouped into bounding-box clusters (`maxDistance = 0.5 / zoomScale`).
 ///    As long as the cursor moves within that half-viewport dead-zone, the camera target remains **100% stationary** at the
-///    time-weighted centroid (`qo`) of the group!
+///    time-weighted centroid of the group!
 /// 2. **Screen-Rect Space Interpolation (`rects.screen`)**:
 ///    Instead of springing `center` and `scale` independently (which causes curved/swimming trajectories),
 ///    we compute the target zoomed screen rectangle `(x, y, width, height)` via `Rect.zoom` + `containInZoomArea`
@@ -41,9 +41,9 @@ public struct SpringTrajectorySolver: Sendable {
         public var loupeConfig: LoupeConfig
     }
 
-    /// the `MovesGroup`:
+    /// A `MovesGroup`:
     /// Groups consecutive cursor samples whose bounding box `(maxX - minX, maxY - minY)` fits within `maxDistance01`
-    /// (`0.5 / zoomScale`, i.e. 50% of the zoomed viewport), and computes their time-weighted centroid (`function qo`).
+    /// (`0.5 / zoomScale`, i.e. 50% of the zoomed viewport), and computes their time-weighted centroid.
     private struct CursorMovesGroup {
         struct Sample {
             let tMs: Double
@@ -761,7 +761,7 @@ public struct SpringTrajectorySolver: Sendable {
         return raw
     }
 
-    /// Steps a 1D Newtonian spring by `dt` seconds using 1ms substeps and the dynamic critical damping clamp (`function G`):
+    /// Steps a 1D Newtonian spring by `dt` seconds using 1ms substeps and the dynamic critical damping clamp:
     /// Whenever velocity is approaching the target faster than the natural settling rate `|target - x| * sqrt(k / m)`,
     /// damping is boosted to at least critical damping `2 * sqrt(k * m)` so the spring NEVER overshoots or oscillates!
     @inline(__always)
@@ -787,8 +787,8 @@ public struct SpringTrajectorySolver: Sendable {
         var x = current
         var v = velocity
 
-        // Integrate in 8 substeps per 8.33ms frame (~1ms per substep, 1ms loop in `function K` & `Uc.run`)
-        // Re-evaluates the `function G` dynamic critical damping boost at EVERY 1ms substep!
+        // Integrate in 8 substeps per 8.33ms frame (~1ms per substep)
+        // Re-evaluates the dynamic critical damping boost at EVERY 1ms substep!
         let substeps = 8
         let subDt = dt / Double(substeps)
 
@@ -872,7 +872,7 @@ public struct SpringTrajectorySolver: Sendable {
             idx += 1
         }
 
-        // Include clicks inside the zoom range (clicks are always anchor points in `Bo`)
+        // Include clicks inside the zoom range (clicks are always anchor points of a group)
         var addedClicks = false
         for click in clickEvents where click.type == "down" && click.t >= startMs && click.t <= endMs {
             significantSamples.append((tMs: click.t, x: click.x, y: click.y))
@@ -948,7 +948,7 @@ public struct SpringTrajectorySolver: Sendable {
             return (cursorStates[i0], cameraStates[i0])
         }
 
-        // Fractional frame linear interpolation (`shouldInterpolateFractionalFrames = true` in the `Wd`)
+        // Fractional frame linear interpolation
         let c0 = cursorStates[i0]
         let c1 = cursorStates[i1]
         let interpCursor = CursorFrameState(
@@ -987,7 +987,7 @@ public struct SpringTrajectorySolver: Sendable {
 
 public enum AutoZoomClusterGenerator {
     /// Automatically groups mouse clicks into smooth cinematic ZoomBlocks using the window constants
-    /// (`Re = { before: 300ms, after: 2500ms }`, `fillGap = 2500ms`, default zoom `2.0x`).
+    /// (lead-in 300ms, hold 2500ms, `fillGap = 2500ms`, default zoom `2.0x`).
     public static func generateZooms(
         clicks: [ClickEvent],
         keys: [KeyStrokeEvent],
@@ -1002,7 +1002,7 @@ public enum AutoZoomClusterGenerator {
         let clusterGapMs = 2500.0     // `fillGap` merge threshold
         let holdAfterTypingMs = 1500.0
         let minZoomDurationMs = 2200.0
-        // `Ve` tail margin:
+        // Tail margin:
         // Every auto-generated zoom ends at least 800ms before `durationMs` so the camera spring (`stiffness: 170, damping: 50, mass: 3.0`,
         // settle time ~750ms) has 100% finished settling to rest before the end of the recording!
         let maxAutoZoomEndMs = max(600.0, durationMs - 800.0)

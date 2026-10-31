@@ -57,11 +57,11 @@ public struct SpringConfig: Codable, Equatable, Hashable, Sendable {
     }
 
     // Spring Presets:
-    // - Smooth Camera (`de`): `{ stiffness: 170, damping: 50, mass: 3.0 }` -> ζ ≈ 1.11 (Overdamped, zero bounce!)
-    // - Focused Camera (`Q`): `{ stiffness: 250, damping: 40, mass: 2.25 }` -> ζ ≈ 0.84 with clamp: true
-    // - Smooth Cursor (`fe`): `{ stiffness: 470, damping: 70, mass: 3.0 }` -> ζ ≈ 0.93
-    // - Medium Cursor (`Q`):  `{ stiffness: 340, damping: 60, mass: 3.0 }` -> ζ ≈ 0.94
-    // - Rapid Cursor (`pe`):  `{ stiffness: 530, damping: 40, mass: 1.0 }` -> ζ ≈ 0.87
+    // - Smooth Camera: `{ stiffness: 170, damping: 50, mass: 3.0 }` -> ζ ≈ 1.11 (Overdamped, zero bounce!)
+    // - Focused Camera: `{ stiffness: 250, damping: 40, mass: 2.25 }` -> ζ ≈ 0.84 with clamp: true
+    // - Smooth Cursor: `{ stiffness: 470, damping: 70, mass: 3.0 }` -> ζ ≈ 0.93
+    // - Medium Cursor:  `{ stiffness: 340, damping: 60, mass: 3.0 }` -> ζ ≈ 0.94
+    // - Rapid Cursor:  `{ stiffness: 530, damping: 40, mass: 1.0 }` -> ζ ≈ 0.87
     public static let defaultCursor = SpringConfig(stiffness: 470.0, damping: 70.0, mass: 3.0)
     public static let defaultCamera = SpringConfig(stiffness: 170.0, damping: 50.0, mass: 3.0)
     public static let focusedCamera = SpringConfig(stiffness: 250.0, damping: 40.0, mass: 2.25)
@@ -510,7 +510,7 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
     public init(
         hidden: Bool = false,
         scale: Double = 1.6,
-        themeId: String = "macos-tahoe",
+        themeId: String = CursorThemePreset.defaultThemeId,
         variantId: String? = nil,
         alwaysUsePointer: Bool = false,
         smoothMovementEnabled: Bool = true,
@@ -572,7 +572,7 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
         self.scale = try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.6
-        self.themeId = try container.decodeIfPresent(String.self, forKey: .themeId) ?? "macos-tahoe"
+        self.themeId = try container.decodeIfPresent(String.self, forKey: .themeId) ?? CursorThemePreset.defaultThemeId
         self.variantId = try container.decodeIfPresent(String.self, forKey: .variantId)
         self.alwaysUsePointer = try container.decodeIfPresent(Bool.self, forKey: .alwaysUsePointer) ?? false
         self.smoothMovementEnabled = try container.decodeIfPresent(Bool.self, forKey: .smoothMovementEnabled) ?? true

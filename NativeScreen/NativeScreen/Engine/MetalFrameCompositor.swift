@@ -327,17 +327,13 @@ public final class MetalFrameCompositor {
                 .cropped(to: zoomedMargin)
         }
 
-        // --- PASS 5: Exact Shutter-Trail Motion Blur ---
-        // 1. Suppress motion blur inside any Instant Zoom snap window.
-        // 2. Compute `rectNow` (at `sourceTimeMs`) and `rectPrev` (at `sourceTimeMs - 16.67ms`) in canvas pixel coordinates,
-        //    then interpolate `rectBefore = lerp(rectNow, rectPrev, blurStrength)` (`wo(now, before, strength)`).
-        // 3. If all 4 edges moved by `< 1.0px` (`To(rectNow, rectBefore, 1.0)`), the frame is 100% static -> zero blur!
-        //    Otherwise, run `LiquidGlassLoupeShaderRenderer.applyScreenTrailMotionBlur` (linear-light premultiplied trail integration + 4x4 Bayer phase dither).
+        // --- PASS 5: Camera motion blur ---
+        // Compare where the screen sits now and one frame earlier (16.67ms) and blur along that motion
+        // (`EffectKernels.applyCameraMotionBlur`). Skipped during instant zoom snaps, at the paused end frame and in loupe mode.
         let isInInstantSnapWindow = doc.timeline.zooms.contains { z in
             !z.disabled && z.instantAnimation && sourceTimeMs >= z.sourceStartMs && sourceTimeMs <= z.sourceEndMs + 50.0
         }
-        // 4. At the final settled frame of the timeline (`playheadTimelineMs >= totalTimelineDurationMs - 16.67` while paused),
-        //    the playback head is stationary so shutter motion blur is 0.0.
+        // Paused on the last frame: the camera is at rest, so no blur.
         let isPausedAtTimelineEnd = !includeShortcutOverlay
             && !session.isPlaying
             && session.hoverSkimTimelineMs == nil
@@ -377,19 +373,12 @@ public final class MetalFrameCompositor {
             let rectNow = zoomedScreenRectInCanvas(for: cameraState)
             let rectPrev = zoomedScreenRectInCanvas(for: prevCam)
 
-            // Exact `rf.trailStart(strength)`
-            let rectBefore = CGRect(
-                x: rectNow.minX + (rectPrev.minX - rectNow.minX) * blurStrength,
-                y: rectNow.minY + (rectPrev.minY - rectNow.minY) * blurStrength,
-                width: rectNow.width + (rectPrev.width - rectNow.width) * blurStrength,
-                height: rectNow.height + (rectPrev.height - rectNow.height) * blurStrength
-            )
-
-            positionedScreen = LiquidGlassLoupeShaderRenderer.applyScreenTrailMotionBlur(
+            positionedScreen = EffectKernels.applyCameraMotionBlur(
                 to: positionedScreen,
                 canvasRect: canvasRect,
                 rectNow: rectNow,
-                rectBefore: rectBefore,
+                rectPrevious: rectPrev,
+                shutter: blurStrength,
                 isExportQuality: includeShortcutOverlay || !session.isPlaying
             )
         }
@@ -399,23 +388,22 @@ public final class MetalFrameCompositor {
             .composited(over: composite)
             .cropped(to: canvasRect)
 
-        // --- PASS 5B: Liquid Glass Loupe Lens ---
-        // Rendered over the full scene (screen + background) so the 3D glass bevel refracts and casts its thrown shadow
-        // and rainbow caustics across both the screen window and the background wallpaper!
+        // --- PASS 5B: Magnifier lens (loupe zoom) ---
+        // Drawn over the whole scene (screen + background) so the lens and its shadow work over the wallpaper too.
         if !suppressZoomForMaskEditing && cameraState.loupePresence01 > 0.005 && cameraState.loupeScale > 1.002 {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
             let maxScreenDim = max(screenFrameRect.width, screenFrameRect.height)
             let loupeRadius = max(48.0, maxScreenDim * CGFloat(cameraState.loupeConfig.radius01))
 
-            composite = LiquidGlassLoupeShaderRenderer.apply(
+            composite = EffectKernels.applyMagnifierLens(
                 to: composite,
                 canvasRect: canvasRect,
                 centerPx: CGPoint(x: focusX, y: focusY),
                 radiusPx: loupeRadius,
                 zoomScale: CGFloat(cameraState.loupeScale),
-                bevelRatio: CGFloat(max(0.18, cameraState.loupeConfig.bevelRatio)),
-                chromaticAberration: CGFloat(max(0.55, cameraState.loupeConfig.chromaticAberration)),
+                rimRatio: CGFloat(max(0.18, cameraState.loupeConfig.bevelRatio)),
+                colorFringe: CGFloat(max(0.55, cameraState.loupeConfig.chromaticAberration)),
                 presence: CGFloat(cameraState.loupePresence01)
             )
         }
@@ -474,7 +462,7 @@ public final class MetalFrameCompositor {
         public let padPx: CGFloat
     }
 
-    /// Exact Split-Screen Stage Geometry:
+    /// Split-Screen Stage Geometry:
     /// Computes both the Screen region (`screenRect` fitted inside `zoomArea`) and the Camera region (`cameraRect`)
     /// for `Auto` (`<= 0`), `½ | ½` (`0.5`), and `⅔ | ⅓` (`2/3`), honoring `splitFlip` and `splitEnablePadding` (`Fullscreen` vs `Padded`).
     public static func computeSplitScreenGeometry(
@@ -929,7 +917,7 @@ public final class MetalFrameCompositor {
     private func calculateFittedScreenRect(sourceSize: CGSize, inCanvas canvas: CGRect, paddingRatio: CGFloat) -> CGRect {
         let clampedRatio = min(0.45, max(0.0, paddingRatio))
         let shortestCanvasSide = min(canvas.width, canvas.height)
-        // Exact `padByRatio(-paddingRatio01)`:
+        // `padByRatio(-paddingRatio01)`:
         // Uniform margin `m` on all 4 sides such that `shortestCanvasSide = innerShortest * (1 + 2 * r)`.
         let uniformMargin = (shortestCanvasSide - shortestCanvasSide / (1.0 + 2.0 * clampedRatio)) * 0.5
         let available = canvas.insetBy(dx: uniformMargin, dy: uniformMargin)
