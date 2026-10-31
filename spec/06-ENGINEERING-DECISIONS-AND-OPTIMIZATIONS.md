@@ -17,6 +17,8 @@ This document records the core engineering decisions, mathematical calibrations,
 9. [ADR-09: Value-Type Atomic Undo/Redo Snapshots & Non-Overlapping Track Clamping](#9-adr-09-value-type-atomic-undoredo-snapshots--non-overlapping-track-clamping)
 10. [ADR-10: Mip-Pyramid + Catmull-Rom Spline Audio Waveforms & Dynamic Fixed-Interval Ruler](#10-adr-10-mip-pyramid--catmull-rom-spline-audio-waveforms--dynamic-fixed-interval-ruler)
 11. [ADR-11: WYSIWYG 3D Keycap Overlay & Non-Linear Export File Size / Live ETA Estimation](#11-adr-11-wysiwyg-3d-keycap-overlay--non-linear-export-file-size--live-eta-estimation)
+14. [ADR-14: Recording Integrity, Decoder-Clocked Playback & Export/Preview Parity](#14-adr-14-recording-integrity-decoder-clocked-playback--exportpreview-parity)
+15. [ADR-15: Menu Bar Command Routing](#15-adr-15-menu-bar-command-routing)
 
 ---
 
@@ -29,17 +31,28 @@ When exporting a 22.5-second 4K (`3226×2160` @ 60fps = `1,350` frames) project 
 - Spawning 2 or 4 hardware `H.264` sessions in parallel yields the exact same `18.3s` runtime because they all queue into the same physical H.264 Media Engine silicon block, while the multi-core CPU sits at `< 5%` utilization.
 
 ### Decision & Architecture
-For `H.264` MP4 exports, NativeScreen uses a **Hybrid Parallel GOP Encoder**:
-1. The timeline is partitioned into **2-second closed GOP chunks** (`120` frames at 60fps), with an explicit keyframe (`forceKeyframe = true`) at the start of each chunk.
-2. Two independent compression workers run simultaneously on background queues:
-   - **Hardware Worker (`hwWorker`)**: Uses the dedicated Hardware Media Engine (`RequireHardwareAcceleratedVideoEncoder = true`) and processes **60% of the GOP chunks** (3 out of every 5 chunks).
-   - **Software Worker (`swWorker`)**: Uses the multi-core CPU encoder (`EnableHardwareAcceleratedVideoEncoder = false`) and processes **40% of the GOP chunks** (2 out of every 5 chunks) in parallel.
-3. Both encoders operate directly on native bi-planar YUV `4:2:0` buffers (`kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange` on macOS / `DXGI_FORMAT_NV12` on Windows), eliminating redundant RGB $\leftrightarrow$ YUV conversions.
-4. Once all chunks finish encoding in parallel, the resulting compressed `CMSampleBuffer` packets are sorted by presentation timestamp (`PTS`) and written into the final `.mp4` container via a **zero-reencode passthrough muxer** (`AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: formatDesc)`), which takes `< 0.05 seconds`.
+For `H.264` MP4 exports, NativeScreen uses a **Hybrid Parallel GOP Encoder** (`exportMP4VideoFileHybrid`):
+1. The timeline is partitioned into **2-second closed GOPs** (`fps * 2` frames) with a forced keyframe at the start of each GOP.
+2. Two **encoder lanes** run at the same time, each on a *different* GOP, each with its own decoder (`ExportFrameSource`) and `VTCompressionSession` (`VTParallelCompressionWorker`):
+   - **Hardware lane**: `RequireHardwareAcceleratedVideoEncoder = true`, constant quality (`kVTCompressionPropertyKey_Quality`).
+   - **Software lane**: `EnableHardwareAcceleratedVideoEncoder = false`. Apple's software H.264 encoder rejects `kVTCompressionPropertyKey_Quality` (`-12900`), so it runs average-bitrate and is **re-targeted to the hardware lane's measured bitrate** before each GOP (matched quality). It does not start until the hardware lane has produced 30 frames, so its first GOP is already calibrated.
+   - Whichever lane is free takes the next GOP, so the split adapts to the machine (no fixed 60/40 ratio).
+   - Submitting GOPs to the lanes one after the other does NOT run them in parallel (each lane only overlaps by its in-flight queue). Two GOPs must be in flight at once.
+3. GPU rendering is asynchronous: the main actor builds the `CIImage` graph and starts a `CIRenderTask` into the encoder's pool buffer; the lane's serial `workQueue` waits for the GPU and encodes, which also keeps presentation order intact. Decoding runs on each `ExportFrameSource`'s own queue and is prefetched one frame ahead.
+4. Encoded samples go to `OrderedEncodedSampleQueue`, which re-orders them and **streams them into the passthrough muxer while encoding** (interleaved with audio). A lane may start at most 3 GOPs ahead of the muxer, so memory is bounded to a few GOPs instead of the whole video.
+5. Muxer rules learned the hard way:
+   - The two lanes produce different SPS/PPS (`max_num_ref_frames`, VUI, `bottom_field_pic_order_in_frame_present_flag`). `AVAssetWriter` stores them as two `avc1` sample descriptions in one track; AVFoundation and FFmpeg decode it without errors.
+   - Hold audio back (to ~1s past the muxed video) only while the video input is ready. If the writer refuses video it is waiting for audio, so audio must keep flowing or the export deadlocks.
+   - When a lane finishes a GOP and has to idle (muxer lead limit), call `VTCompressionSessionCompleteFrames` on it, so frames parked in the software encoder's lookahead are emitted and the ordered muxer never waits on them.
 
 ### Result
-- 4K/60fps `H.264` export throughput jumps from `~74 fps` (`18.3s`) to **`~115–125 fps` (`11–13s`)**.
-- Note: For `HEVC (H.265)` and `ProRes`, the dedicated Apple Silicon HEVC/ProRes Media Engines natively run at `~125 fps` at 4K, so they run 100% on the hardware engine.
+Measured on an M4 Pro with a 43-second 3456×2170 recording exported at 4K/60fps H.264:
+- The H.264 Media Engine alone tops out at ~70 fps at this size (`kVTCompressionPropertyKey_RealTime` and `PrioritizeEncodingSpeedOverQuality` make no difference).
+- Previous sequential-chunk hybrid: ~35s, peak RSS ~267 MB (grows with video length), worst GOP SSIM 0.9846 vs a ProRes reference (software chunks were encoded at 65% of the target bitrate).
+- Parallel lanes: ~25s, peak RSS ~170 MB (bounded), worst GOP SSIM 0.9910, overall SSIM 0.9944 (was 0.9937). Files are ~15% larger because the software GOPs no longer get a lower bitrate.
+- Progress is reported from frames encoded by either lane, not frames muxed in order (the in-order count only moves when the slower lane finishes its GOP, which made the bar jump).
+- Main thread: no stall over 40ms while encoding (only ~0.8s of setup at export start).
+- `HEVC` uses only the hardware lane. `ProRes` and `GIF` use the same background decoder and main-actor pacing (yield every ~8ms, progress at ~30 Hz).
 
 ---
 
@@ -295,6 +308,40 @@ Users need studio-grade webcam layouts (`Camera overlay`, `Split screen`, `Camer
    - **Contextual Sidebar Tab Disabling with Hover-When-Disabled Tooltips (`inspectorTabAvailability` & `allowHoverWhenDisabled`)**: Disable sidebar navigation tabs whose underlying recording data is absent (`Cursor` when `cursorEvents.isEmpty` $\to$ `"There is no mouse cursor recorded"`, `Camera Layout` when `!hasRecordedCamera` $\to$ `"No camera recorded"`, `Camera Style` when `!hasRecordedCamera` or `!camera.enabled` $\to$ `"Camera is hidden (see Camera Layout)"`, `Captions` / `Edit by transcript` when `!hasRecordedMicrophone` $\to$ `"No microphone recorded"`, and `Keyboard Shortcuts` when no shortcuts exist $\to$ `"No keyboard shortcuts during recording"`), while keeping `allowHoverWhenDisabled = true` on `HoverMagnetTrackingNSView` so hovering a disabled tab still animates a subtle directional `.hover-magnet` highlight (`0.48x` opacity) and displays the explanatory tooltip.
    - **GPU-Cached Metallic Device Mockup Bezels (`renderDeviceMockupBezel`)**: Rasterize high-DPI vector anodized aluminum/titanium device frames (`MacBook Pro 16"`, `MacBook Air 15"`, `iPhone 16 Pro`, `iPad Pro 13"`) with even-odd screen cutouts and camera notch / Dynamic Island, materializing the bezel into a VRAM `MTLTexture` (`cachedDeviceBezelImage`) so Pass 3 composites it in `< 0.05 ms/frame`.
 
+---
 
+## 14. ADR-14: Recording Integrity, Decoder-Clocked Playback & Export/Preview Parity
 
+### Problem
+- Recordings were plain MP4s: a crash, force-quit or power loss mid-recording left files with no `moov` atom (several real projects were lost this way).
+- Pause/resume subtracted the gap between the first frame *after* pausing and the first frame *after* resuming. The capture stream only delivers frames when the screen changes, so on a still screen that gap differs from the wall-clock pause the telemetry recorder subtracts, shifting cursor and clicks against the video after every pause. Audio read the pause state from another queue without synchronization.
+- The preview playhead advanced on the wall clock with a 50ms clamp, so any main-thread hitch lost timeline time while the decoder kept playing (up to 180ms cursor/video drift, then a hard seek).
+- Export composited a still 240px webcam image and a single caption word instead of what the preview shows.
+- Views that read the playhead in their body (Inspector transcript/masks/cursor sections) were re-evaluated 120 times a second during playback.
+- Any `CursorConfig` change, including draw-only fields like size, re-solved the whole cursor trajectory, and the solver scanned every click and drag at every 120Hz step.
+
+### Solution
+1. **Fragmented recording**: every capture writer (screen, webcam, microphone) sets `movieFragmentInterval = 2s`. A killed recorder leaves a playable file up to the last fragment (verified with `kill -9`); `finishWriting` defragments as before.
+2. **One pause timeline**: `RecordingCoordinator` passes the same `systemUptime` to `ScreenCaptureEngine.setPaused(_:atUptime:)` and `TelemetryRecorder.setPaused(_:atUptime:)`. The engine stores pause intervals on the host clock behind a lock, drops any sample whose host PTS falls inside a pause, and subtracts the total pause time before it, for screen, system audio, webcam and microphone alike.
+3. **Decoder-clocked playback with an anchored start**: on Play (and on a cut-boundary re-sync) the preview calls `AVPlayer.setRate(_:time:atHostTime:)` with the current source time and *now* (`automaticallyWaitsToMinimizeStalling = false`) instead of `seek` + `rate`. The player's timebase is anchored immediately, so the playhead, cursor and zoom move from the very first frame and decoded frames catch up with the timebase 1-6 frames later. The mic, voiceover and webcam-bubble players are anchored the same way, so they start on the same frame. The playhead follows the anchored clock (`itemMs + (now - hostSec) * rate`) mapped through `NLETimeMapper.timelineTime(forSourceMs:withinSliceAtTimelineMs:)`, never stepping backwards; the wall clock remains the fallback for cut boundaries and audio-only projects. Measured on the Play path before this: seek-then-play froze the preview ~165ms (exact seek from the previous keyframe plus stall-avoidance buffering), and a variant that held the playhead during the seek still froze it the same amount. Do not call `AVPlayer.currentTime()` on the 120Hz path: right after a timebase change it blocks the main thread ~30ms. `itemTime(forHostTime:)` is invalid until the first decoded frame, which is why the anchor is the clock.
+4. **Export parity**: `MetalFrameCompositor.composeFrame(webcamVideoFrame:)` takes the real `webcam.mp4` frame (decoded side by side with the screen, honoring `delayAdjustmentMs`) and applies crop, mirror, Vision person cutout (one reused `VNGeneratePersonSegmentationRequest`), color grade and face-tracking punch-in. Captions use `CaptionLineLayout`, shared with the preview, rasterized with CoreGraphics (no TIFF round-trip) and cached until the visible words change.
+5. **Change-only mirrors for SwiftUI**: `ProjectSession` exposes `spokenTranscriptSegmentIds`, `activeMaskIdAtPreviewTime` and `isCursorHiddenAtPreviewTime`, recomputed in `didSet` of the playhead/skim/isPlaying properties and assigned only when they change. Views must read these instead of `currentSourceTimeMs`.
+6. **Cheaper solver rebuilds**: `scale`, `themeId`, `variantId` and `clickEffect` are excluded from the trajectory rebuild key; drags, clicks and ripple clicks are walked with sliding windows over sorted arrays (O(steps + events)).
+7. **Webcam preview filter thread safety**: the `AVVideoComposition` handler reads a lock-protected `WebcamFilterParamsBox` snapshot instead of main-actor view properties, and reuses one segmentation request.
+
+---
+
+## 15. ADR-15: Menu Bar Command Routing
+
+### Problem
+Menu bar items are app-wide, but almost every action belongs to one project window, and some of them (export modal, command menu, delete-project alert) live in that window's SwiftUI state. The editor also handles many shortcuts in its own `keyDown` monitor, which runs before menu key equivalents.
+
+### Solution
+1. `ProjectWorkspaceStore.activeSessionID` follows `windowDidBecomeKey` of editor windows (and falls back to another open editor when the active one closes). Menu items act on `activeSession` and are disabled without one.
+2. Window-local actions go through `ProjectSession.pendingEditorCommand` (`showExportSheet`, `quickExport(target)`, `showCommandMenu`, `removeProject`). `ProjectEditorWindowView` performs and clears it in `onChange` and also in `onAppear`, so a command set before the window exists (the recorder's `After Recording > Export…`) still runs.
+3. The key monitor must match modifiers exactly (`flags == .command`, never `flags.contains(.command)`) for keys that have an `⌥⌘` / `⇧⌘` variant in the menu, otherwise it swallows the menu shortcut (for example `⌥⌘C` Quick export to clipboard used to be eaten as `⌘C` Copy).
+4. `Edit` items first send the standard selector (`copy:`, `paste:`, `undo:`…) when an `NSText` is first responder, and only otherwise act on the timeline selection.
+5. SwiftUI appends `CommandMenu`s after `View`; `MainMenuOrder` re-orders the top-level items (`File, Edit, Record, Export, View, Window, Help`) and re-applies it on `NSMenu.didAddItemNotification` when SwiftUI rebuilds the menu bar.
+6. View preferences (`EditorViewPreferences`) are app-wide and persisted, shared by every open editor window.
+7. Menu icons: macOS 27 hides `NSMenuItem.image` by default (`preferredImageVisibility = .automatic`) and SwiftUI has no modifier for it, so `Button(_:systemImage:)` icons never show. `MainMenuOrder` sets `.visible` on the app's own items when the menu bar starts tracking (SwiftUI may have rebuilt them); the application menu, `Help` and system `Window` items keep AppKit's default.
 

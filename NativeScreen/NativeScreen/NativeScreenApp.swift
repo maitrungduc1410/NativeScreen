@@ -7,6 +7,7 @@ import AppKit
 @MainActor
 final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MainMenuOrder.install()
         if let appMenuItem = NSApp.mainMenu?.items.first {
             appMenuItem.title = "Native Screen"
             appMenuItem.submenu?.title = "Native Screen"
@@ -81,22 +82,7 @@ struct NativeScreenApp: App {
             EmptyView()
         }
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("New Screen Recording…") {
-                    recorder.showRecordingHUD()
-                }
-                .keyboardShortcut("n", modifiers: [.command])
-
-                Button("Open .nativescreen Project…") {
-                    workspace.promptOpenProjectDialog()
-                }
-                .keyboardShortcut("o", modifiers: [.command])
-
-                Button("Create Interactive Showcase Project") {
-                    _ = recorder.createInteractiveSampleProject()
-                }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
-            }
+            AppMenuCommands(workspace: workspace, recorder: recorder, preferences: EditorViewPreferences.shared)
         }
     }
 }

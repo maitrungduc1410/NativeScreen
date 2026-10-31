@@ -181,10 +181,16 @@ public struct SpringTrajectorySolver: Sendable {
                 timeOffsetMs: legacyStartupOffsetMs,
                 totalDurationMs: totalDuration
             )
-            let clickTimestampsMs: [Double] = clickEvents.map { max(0.0, $0.t - legacyStartupOffsetMs) }
+            let clickTimestampsMs: [Double] = clickEvents.map { max(0.0, $0.t - legacyStartupOffsetMs) }.sorted()
             let downClickTimesMs: [Double] = clickEvents.compactMap {
                 $0.type == "down" ? max(0.0, $0.t - legacyStartupOffsetMs) : nil
-            }
+            }.sorted()
+            let sortedDragIntervals = dragIntervals.sorted { $0.startMs < $1.startMs }
+            // Sliding-window cursors into the sorted drags/clicks: each step only visits the few events near `tMs`
+            // instead of every drag and click in the recording (O(steps + events) instead of O(steps x events)).
+            var dragWindowStart = 0
+            var clickWindowStart = 0
+            var rippleWindowStart = 0
 
             // Steady-state spring phase lag
             let baseSpringLagMs: Double = document.cursor.smoothMovementEnabled
@@ -267,7 +273,13 @@ public struct SpringTrajectorySolver: Sendable {
                 let baseLookupMs = stopMoveCutoffMs.map { min(tMs, $0) } ?? tMs
 
                 var syncSpeedMultiplier = 1.0
-                for drag in dragIntervals {
+                while dragWindowStart < sortedDragIntervals.count && sortedDragIntervals[dragWindowStart].endMs + 260.0 < tMs {
+                    dragWindowStart += 1
+                }
+                for drag in sortedDragIntervals[dragWindowStart...] {
+                    if drag.startMs - 220.0 > tMs {
+                        break
+                    }
                     if tMs >= drag.startMs - 220.0 && tMs <= drag.endMs + 260.0 {
                         if tMs < drag.startMs {
                             let ramp = (tMs - (drag.startMs - 220.0)) / 220.0
@@ -280,7 +292,13 @@ public struct SpringTrajectorySolver: Sendable {
                         }
                     }
                 }
-                for clickT in clickTimestampsMs {
+                while clickWindowStart < clickTimestampsMs.count && clickTimestampsMs[clickWindowStart] < tMs - 180.0 {
+                    clickWindowStart += 1
+                }
+                for clickT in clickTimestampsMs[clickWindowStart...] {
+                    if clickT > tMs + 180.0 {
+                        break
+                    }
                     let delta = abs(tMs - clickT)
                     if delta <= 180.0 {
                         let boost = 1.0 + 2.4 * (1.0 - delta / 180.0)
@@ -389,7 +407,13 @@ public struct SpringTrajectorySolver: Sendable {
                 let rotation = baseRad + dynamicRad
 
                 var activeRipple: Double? = nil
-                for adjClickT in downClickTimesMs {
+                while rippleWindowStart < downClickTimesMs.count && downClickTimesMs[rippleWindowStart] < tMs - rippleDurationMs {
+                    rippleWindowStart += 1
+                }
+                for adjClickT in downClickTimesMs[rippleWindowStart...] {
+                    if adjClickT > tMs {
+                        break
+                    }
                     let elapsed = tMs - adjClickT
                     if elapsed >= 0.0 && elapsed <= rippleDurationMs {
                         activeRipple = elapsed / rippleDurationMs

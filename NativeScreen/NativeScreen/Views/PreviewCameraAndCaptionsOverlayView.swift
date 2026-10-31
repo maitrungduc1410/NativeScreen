@@ -3,6 +3,7 @@ import AppKit
 import CoreImage
 import AVFoundation
 import CoreMedia
+import Vision
 
 // MARK: - 1. Live Webcam & Captions Canvas Overlay (Matches Camera Layout, Camera Style & Captions)
 
@@ -360,6 +361,69 @@ private struct RealRecordedWebcamVideoView: View {
     }
 }
 
+private struct WebcamFilterParams: Sendable {
+    var preset: CameraColorGradePreset
+    var customPreset: CustomCameraColorPreset?
+    var intensity: Double
+    var sharpen01: Double
+    var isCutoutMode: Bool
+    var cutoutEdgeSoftness: Double
+    var cutoutEdgeInset: Double
+}
+
+/// Thread-safe hand-off of the webcam style from the main actor to the `AVVideoComposition` render queue,
+/// plus one reused person-segmentation request for the cutout path.
+private nonisolated final class WebcamFilterParamsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var params = WebcamFilterParams(
+        preset: .original,
+        customPreset: nil,
+        intensity: 1.0,
+        sharpen01: 0.0,
+        isCutoutMode: false,
+        cutoutEdgeSoftness: 0.20,
+        cutoutEdgeInset: 0.0
+    )
+    private let segmentationLock = NSLock()
+    private lazy var segmentationRequest: VNGeneratePersonSegmentationRequest = {
+        let request = VNGeneratePersonSegmentationRequest()
+        request.qualityLevel = .balanced
+        request.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        return request
+    }()
+
+    func update(_ newParams: WebcamFilterParams) {
+        lock.lock()
+        params = newParams
+        lock.unlock()
+    }
+
+    func apply(to source: CIImage) -> CIImage {
+        lock.lock()
+        let p = params
+        lock.unlock()
+
+        var img = source
+        if p.isCutoutMode {
+            segmentationLock.lock()
+            img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(
+                to: img,
+                edgeSoftness: p.cutoutEdgeSoftness,
+                edgeInset: p.cutoutEdgeInset,
+                reusing: segmentationRequest
+            )
+            segmentationLock.unlock()
+        }
+        return LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
+            to: img,
+            preset: p.preset,
+            customPreset: p.customPreset,
+            intensity: p.intensity,
+            sharpen01: p.sharpen01
+        )
+    }
+}
+
 private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
     let videoURL: URL
     let sourceTimeMs: Double
@@ -449,6 +513,7 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
         ) {
             if loadedURL != url {
                 loadedURL = url
+                playAnchor = nil
                 GradedWebcamPortraitView.preloadFirstFrameIfNeeded(from: url)
                 let asset = AVURLAsset(url: url)
                 let item = AVPlayerItem(asset: asset)
@@ -492,6 +557,15 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
             currentIsCutoutMode = isCutoutMode
             currentCutoutEdgeSoftness = cutoutEdgeSoftness
             currentCutoutEdgeInset = cutoutEdgeInset
+            filterParams.update(WebcamFilterParams(
+                preset: preset,
+                customPreset: customPreset,
+                intensity: intensity,
+                sharpen01: sharpen01,
+                isCutoutMode: isCutoutMode,
+                cutoutEdgeSoftness: cutoutEdgeSoftness,
+                cutoutEdgeInset: cutoutEdgeInset
+            ))
 
             if styleChanged, let item = player?.currentItem, let asset = item.asset as? AVURLAsset {
                 applyVideoCompositionIfNeeded(
@@ -510,13 +584,19 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
 
             if isPlaying {
                 let desiredRate = Float(max(0.25, min(4.0, playbackRate)))
-                let currentSec = CMTimeGetSeconds(player.currentTime())
-                let driftMs = abs((currentSec.isFinite ? currentSec * 1000.0 : 0.0) - sourceTimeMs)
-                if abs(player.rate - desiredRate) > 0.05 || (!isSeeking && driftMs > 220.0) {
-                    seekCoalesced(toMs: sourceTimeMs, fast: false)
-                    player.rate = desiredRate
+                // Position from our own anchor while playing: `currentTime` blocks the main thread right after a
+                // timebase change, and seek-then-play started the bubble ~165ms after the screen.
+                let positionMs: Double = playAnchor.map {
+                    $0.itemMs + (CACurrentMediaTime() - $0.hostSec) * 1000.0 * $0.rate
+                } ?? {
+                    let sec = CMTimeGetSeconds(player.currentTime())
+                    return sec.isFinite ? sec * 1000.0 : 0.0
+                }()
+                if abs(player.rate - desiredRate) > 0.05 || (!isSeeking && abs(positionMs - sourceTimeMs) > 220.0) {
+                    startAnchoredToNow(player, atMs: sourceTimeMs, rate: desiredRate)
                 }
             } else {
+                playAnchor = nil
                 if player.rate != 0 {
                     player.pause()
                 }
@@ -553,29 +633,35 @@ private struct RecordedWebcamNSViewRepresentable: NSViewRepresentable {
                 return
             }
             if item.videoComposition == nil || force {
-                item.videoComposition = AVVideoComposition(asset: asset, applyingCIFiltersWithHandler: { [weak self] request in
-                    guard let self = self else {
-                        request.finish(with: request.sourceImage, context: nil)
-                        return
-                    }
-                    var img = request.sourceImage
-                    if self.currentIsCutoutMode {
-                        img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(
-                            to: img,
-                            edgeSoftness: self.currentCutoutEdgeSoftness,
-                            edgeInset: self.currentCutoutEdgeInset
-                        )
-                    }
-                    img = LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
-                        to: img,
-                        preset: self.currentPreset,
-                        customPreset: self.currentCustomPreset,
-                        intensity: self.currentIntensity,
-                        sharpen01: self.currentSharpen01
-                    )
-                    request.finish(with: img, context: nil)
+                // The handler runs on AVFoundation's render queue: it only touches the lock-protected `filterParams`
+                // snapshot, never this main-actor view's properties.
+                let params = filterParams
+                item.videoComposition = AVVideoComposition(asset: asset, applyingCIFiltersWithHandler: { request in
+                    request.finish(with: params.apply(to: request.sourceImage), context: nil)
                 })
             }
+        }
+
+        private let filterParams = WebcamFilterParamsBox()
+
+        private var playAnchor: (hostSec: Double, itemMs: Double, rate: Double)?
+
+        /// Anchors the player's timebase at this host instant (same approach as the main preview player), so the
+        /// bubble starts moving on the same frame as the screen recording.
+        private func startAnchoredToNow(_ player: AVPlayer, atMs ms: Double, rate: Float) {
+            pendingSeekMs = nil
+            guard player.currentItem?.status == .readyToPlay else {
+                playAnchor = nil
+                seekCoalesced(toMs: ms, fast: false)
+                player.rate = rate
+                return
+            }
+            player.automaticallyWaitsToMinimizeStalling = false
+            let hostNow = CMClockGetTime(CMClockGetHostTimeClock())
+            let itemTime = CMTime(seconds: max(0.0, ms / 1000.0), preferredTimescale: 600)
+            player.setRate(rate, time: itemTime, atHostTime: hostNow)
+            playAnchor = (CMTimeGetSeconds(hostNow), max(0.0, ms), Double(rate))
+            lastSeekedMs = ms
         }
 
         private func seekCoalesced(toMs ms: Double, fast: Bool) {
@@ -878,10 +964,7 @@ private struct LiveCaptionsCanvasView: View {
     let canvasSize: CGSize
 
     var body: some View {
-        let visibleWords = captionsConfig.segments.filter { !$0.isHidden }.sorted { $0.sourceStartMs < $1.sourceStartMs }
-        let activeLine = resolveActiveCaptionLine(words: visibleWords, at: sourceTimeMs)
-
-        if let line = activeLine, !line.words.isEmpty {
+        if let line = CaptionLineLayout.activeLine(in: captionsConfig, at: sourceTimeMs) {
             let fontSize = max(14.0, canvasSize.height * CGFloat(captionsConfig.fontSizeRatio))
             let fontDesign: Font.Design = {
                 switch captionsConfig.fontStyle {
@@ -893,47 +976,18 @@ private struct LiveCaptionsCanvasView: View {
             let isDarkTheme = (captionsConfig.colorTheme == .dark)
             let boxBgColor = isDarkTheme ? Color.black.opacity(0.82) : Color.white.opacity(0.92)
             let baseTextColor = isDarkTheme ? Color.white : Color.black
-
-            let displayedWords: [CaptionSegment] = {
-                switch captionsConfig.wordsReveal {
-                case .wordByWord:
-                    if let current = line.words.last(where: { $0.sourceStartMs <= sourceTimeMs }) ?? line.words.first {
-                        return [current]
-                    }
-                    return []
-                case .lineByLine:
-                    switch captionsConfig.lineGrowth {
-                    case .fullLine:
-                        return line.words
-                    case .expanding, .centered:
-                        let spoken = line.words.filter { $0.sourceStartMs <= sourceTimeMs + 40.0 }
-                        return spoken.isEmpty ? [line.words[0]] : spoken
-                    }
-                }
-            }()
+            let displayedWords = CaptionLineLayout.displayedWords(for: line, config: captionsConfig, at: sourceTimeMs)
 
             let posX = canvasSize.width * CGFloat(max(0.15, min(0.85, captionsConfig.position01.x)))
             let posY = canvasSize.height * CGFloat(max(0.12, min(0.90, captionsConfig.position01.y)))
 
             HStack(spacing: fontSize * 0.28) {
-                ForEach(displayedWords) { word in
-                    let isSpokenNow = (sourceTimeMs >= word.sourceStartMs && sourceTimeMs <= word.sourceEndMs + 120.0)
-                    let isFutureWord = (sourceTimeMs < word.sourceStartMs)
-                    let wordOpacity: Double = {
-                        switch captionsConfig.wordAnimation {
-                        case .appear:
-                            return isFutureWord ? 0.0 : 1.0
-                        case .fadeIn:
-                            return isFutureWord ? 0.38 : 1.0
-                        case .slideIn:
-                            return isFutureWord ? 0.25 : 1.0
-                        }
-                    }()
-                    let slideOffsetY: CGFloat = (captionsConfig.wordAnimation == .slideIn && isSpokenNow) ? -1.5 : 0.0
+                ForEach(displayedWords, id: \.segment.id) { word in
+                    let slideOffsetY: CGFloat = (captionsConfig.wordAnimation == .slideIn && word.isSpokenNow) ? -1.5 : 0.0
 
-                    Text(word.text)
+                    Text(word.segment.text)
                         .font(.system(size: fontSize, weight: .semibold, design: fontDesign))
-                        .foregroundStyle(baseTextColor.opacity(wordOpacity))
+                        .foregroundStyle(baseTextColor.opacity(word.opacity))
                         .offset(y: slideOffsetY)
                 }
             }
@@ -950,38 +1004,6 @@ private struct LiveCaptionsCanvasView: View {
             .shadow(color: .black.opacity(0.38), radius: 12, y: 4)
             .position(x: posX, y: posY)
         }
-    }
-
-    private struct CaptionLineGroup {
-        let startMs: Double
-        let endMs: Double
-        let words: [CaptionSegment]
-    }
-
-    private func resolveActiveCaptionLine(words: [CaptionSegment], at timeMs: Double) -> CaptionLineGroup? {
-        guard !words.isEmpty else { return nil }
-        var lines: [CaptionLineGroup] = []
-        var bucket: [CaptionSegment] = []
-
-        func flush() {
-            guard let f = bucket.first, let l = bucket.last else { return }
-            lines.append(CaptionLineGroup(startMs: f.sourceStartMs, endMs: l.sourceEndMs, words: bucket))
-            bucket.removeAll()
-        }
-
-        for w in words {
-            if let prev = bucket.last {
-                let gap = w.sourceStartMs - prev.sourceEndMs
-                let isSentenceEnd = prev.text.hasSuffix(".") || prev.text.hasSuffix("?") || prev.text.hasSuffix("!")
-                if gap >= 750.0 || isSentenceEnd || bucket.count >= 6 {
-                    flush()
-                }
-            }
-            bucket.append(w)
-        }
-        flush()
-
-        return lines.first { timeMs >= $0.startMs - 140.0 && timeMs <= $0.endMs + 320.0 }
     }
 }
 

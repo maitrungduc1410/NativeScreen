@@ -42,10 +42,11 @@ public final class TelemetryRecorder {
         }
     }
 
-    public func setPaused(_ paused: Bool) {
+    /// `uptimeSec` must be the same value passed to `ScreenCaptureEngine.setPaused` so cursor time and video time drop the same span.
+    public func setPaused(_ paused: Bool, atUptime uptimeSec: TimeInterval = ProcessInfo.processInfo.systemUptime) {
         queue.async {
             guard self.isPausedInternal != paused else { return }
-            let now = ProcessInfo.processInfo.systemUptime
+            let now = uptimeSec
             if paused {
                 self.pauseStartUptimeSec = now
             } else if let pStart = self.pauseStartUptimeSec {

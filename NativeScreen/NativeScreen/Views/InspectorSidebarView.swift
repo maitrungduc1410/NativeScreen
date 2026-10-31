@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import AppKit
 import UniformTypeIdentifiers
 
@@ -975,7 +976,7 @@ public struct InspectorSidebarView: View {
         let activeTheme = CursorThemePreset.theme(withId: normalizedThemeId)
 
         VStack(alignment: .leading, spacing: 24) {
-            if let slice = session.currentActiveSlice, slice.hideCursor {
+            if session.isCursorHiddenAtPreviewTime {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -1858,7 +1859,7 @@ public struct InspectorSidebarView: View {
             }
 
             let activeOrSelectedMaskId = session.selectedMaskId
-                ?? session.activeMasks(atSourceMs: session.currentSourceTimeMs).first?.id
+                ?? session.activeMaskIdAtPreviewTime
                 ?? session.document.timeline.maskTracks.first?.items.first?.id
 
             if let maskId = activeOrSelectedMaskId,
@@ -3708,11 +3709,11 @@ public struct InspectorSidebarView: View {
                 }
 
                 // 2. Interactive Word & Pause Token Flow
-                let currentSourceMs = session.currentSourceTimeMs
+                let spokenIds = session.spokenTranscriptSegmentIds
                 FlowLayoutWrapRow(spacing: 5) {
                     ForEach(Array(segments.enumerated()), id: \.element.id) { idx, seg in
                         let isPresentInVideo = session.isSourceRangePresentInSlices(startMs: seg.sourceStartMs, endMs: seg.sourceEndMs)
-                        let isSpokenNow = (currentSourceMs >= seg.sourceStartMs && currentSourceMs <= seg.sourceEndMs + 80.0)
+                        let isSpokenNow = spokenIds.contains(seg.id)
                         let isSelected = (selectedTranscriptWordId == seg.id)
                         let isFiller = LocalOnDeviceMediaIntelligence.isFillerWord(seg.text)
 
@@ -4353,46 +4354,54 @@ public struct InspectorSidebarView: View {
 
             inspectorDivider
 
-            // 4. `Zoom position` (`Auto` | `Manual`)
+            // 4. `Zoom position`: `Auto` / `Manual` when a cursor was recorded; projects without a cursor (imported
+            //    videos) only have the drag pad.
             VStack(alignment: .leading, spacing: 10) {
                 Text("Zoom position")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.white.opacity(0.92))
 
-                HStack(spacing: 8) {
-                    segmentLargeOptionButton(
-                        title: "Auto",
-                        icon: "wand.and.stars",
-                        isSelected: isAuto
-                    ) {
-                        session.mutate { doc in
-                            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
-                                doc.timeline.zooms[idx].mode = .followCursor
+                if session.hasRecordedCursor {
+                    HStack(spacing: 8) {
+                        segmentLargeOptionButton(
+                            title: "Auto",
+                            icon: "wand.and.stars",
+                            isSelected: isAuto
+                        ) {
+                            session.mutate { doc in
+                                if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                    doc.timeline.zooms[idx].mode = .followCursor
+                                }
+                            }
+                        }
+
+                        segmentLargeOptionButton(
+                            title: "Manual",
+                            icon: "scope",
+                            isSelected: !isAuto
+                        ) {
+                            session.mutate { doc in
+                                if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
+                                    doc.timeline.zooms[idx].mode = .manual
+                                }
                             }
                         }
                     }
 
-                    segmentLargeOptionButton(
-                        title: "Manual",
-                        icon: "scope",
-                        isSelected: !isAuto
-                    ) {
-                        session.mutate { doc in
-                            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == zoomId }) {
-                                doc.timeline.zooms[idx].mode = .manual
-                            }
-                        }
-                    }
+                    Text(
+                        isAuto
+                            ? "Zoomed camera will automatically try to keep the mouse cursor visible."
+                            : "Drag the point to choose what the camera focuses on."
+                    )
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text(
-                    isAuto
-                        ? "Zoomed camera will automatically try to keep the mouse cursor visible."
-                        : "Camera stays focused on the manual target point."
-                )
-                .font(.system(size: 12.5, weight: .regular))
-                .foregroundStyle(.white.opacity(0.42))
-                .fixedSize(horizontal: false, vertical: true)
+                if !session.hasRecordedCursor || !isAuto {
+                    ZoomPositionPadView(session: session, zoom: zoom)
+                        .padding(.top, 2)
+                }
             }
 
             // 5. `Zoom level` Slider + Reset
@@ -6670,6 +6679,141 @@ struct FlowLayoutWrapRow: Layout {
             rowHeight = max(rowHeight, size.height)
             x += size.width + spacing
         }
+    }
+}
+
+// MARK: - Zoom Position Drag Pad
+
+/// Thumbnail of the recording with a draggable focus point and the zoomed viewport it produces.
+/// Dragging writes `manualCenter01` live (one undo step per drag) and parks the playhead inside the zoom,
+/// so the preview canvas follows the drag.
+private struct ZoomPositionPadView: View {
+    @Bindable var session: ProjectSession
+    let zoom: ZoomBlock
+
+    @State private var thumbnail: CGImage?
+    @State private var isDragging = false
+    @State private var isHovering = false
+
+    private var sourceAspect: CGFloat {
+        let size = session.metadata.captureTarget.pixelSize
+        return CGFloat(max(1, size.width)) / CGFloat(max(1, size.height))
+    }
+
+    var body: some View {
+        let center = zoom.manualCenter01
+        GeometryReader { geo in
+            let padSize = geo.size
+            let viewport = Self.viewportRect(center: center, scale: zoom.scale, in: padSize)
+            let dot = CGPoint(x: CGFloat(center.x) * padSize.width, y: CGFloat(center.y) * padSize.height)
+
+            ZStack(alignment: .topLeading) {
+                Group {
+                    if let thumbnail {
+                        Image(decorative: thumbnail, scale: 1.0)
+                            .resizable()
+                    } else {
+                        Color.white.opacity(0.05)
+                    }
+                }
+                .frame(width: padSize.width, height: padSize.height)
+
+                // Dim everything outside the zoomed viewport.
+                Path { p in
+                    p.addRect(CGRect(origin: .zero, size: padSize))
+                    p.addRect(viewport)
+                }
+                .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
+
+                Rectangle()
+                    .strokeBorder(Color.white.opacity(0.75), lineWidth: 1)
+                    .frame(width: viewport.width, height: viewport.height)
+                    .offset(x: viewport.minX, y: viewport.minY)
+
+                Circle()
+                    .fill(Color(red: 0.16, green: 0.17, blue: 0.22).opacity(0.92))
+                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 2))
+                    .frame(width: 26, height: 26)
+                    .shadow(color: .black.opacity(0.45), radius: 4, y: 1)
+                    .scaleEffect(isDragging ? 1.12 : 1.0)
+                    .offset(x: dot.x - 13, y: dot.y - 13)
+                    .animation(.easeOut(duration: 0.12), value: isDragging)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(alignment: .top) {
+                if isDragging || isHovering {
+                    Text("Left \(Int((center.x * 100).rounded()))% · Top \(Int((center.y * 100).rounded()))%")
+                        .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.95))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.black.opacity(0.78))
+                        )
+                        .offset(y: -30)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .onHover { isHovering = $0 }
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        if !isDragging {
+                            isDragging = true
+                            session.seekIntoZoomForEditing(id: zoom.id)
+                            session.beginInteractiveEdit()
+                        }
+                        session.setZoomManualCenter(
+                            id: zoom.id,
+                            center01: Point01(
+                                x: Double(value.location.x / max(1, padSize.width)),
+                                y: Double(value.location.y / max(1, padSize.height))
+                            )
+                        )
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        session.endInteractiveEdit()
+                    }
+            )
+        }
+        .aspectRatio(sourceAspect, contentMode: .fit)
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .task(id: zoom.id) {
+            thumbnail = await Self.loadThumbnail(
+                url: session.videoFileURL,
+                atSourceMs: (zoom.sourceStartMs + zoom.sourceEndMs) * 0.5
+            )
+        }
+    }
+
+    /// The part of the screen visible at `scale`, centered on `center` and kept inside the frame (the camera clamps the same way).
+    private static func viewportRect(center: Point01, scale: Double, in size: CGSize) -> CGRect {
+        let s = CGFloat(max(1.0, scale))
+        let w = size.width / s
+        let h = size.height / s
+        let x = min(max(0, CGFloat(center.x) * size.width - w * 0.5), size.width - w)
+        let y = min(max(0, CGFloat(center.y) * size.height - h * 0.5), size.height - h)
+        return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    private static func loadThumbnail(url: URL, atSourceMs ms: Double) async -> CGImage? {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 720, height: 720)
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+        return try? await generator.image(at: CMTime(seconds: ms / 1000.0, preferredTimescale: 600)).image
     }
 }
 

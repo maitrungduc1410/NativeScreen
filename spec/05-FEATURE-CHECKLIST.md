@@ -29,7 +29,8 @@
 - [x] Hide real system cursor from the captured video stream (`showsCursor = false` in `SCStreamConfiguration`) so cursor can be rendered synthetically in post.
 
 ### 1.3. Multi-Channel Capture & Telemetry Writer
-- [x] Crash-safe video recording via `AVAssetWriter` (support direct `.mp4` and segmented `.m3u8` + `.m4s` fMP4 output).
+- [x] Crash-safe video recording via `AVAssetWriter` with fragmented `.mp4` (`movieFragmentInterval = 2s` on screen, webcam and microphone writers).
+- [ ] Segmented `.m3u8` + `.m4s` fMP4 recording output.
 - [x] High-frequency mouse telemetry logger (`telemetry/cursor.jsonl` at 60–120Hz with normalized `0..1` coordinates and cursor type, synchronized `t = 0.0ms` to the first captured `SCStream` video frame).
 - [x] Mouse clicks & scroll logger (`telemetry/clicks.jsonl`).
 - [x] Keystroke timestamp logger (`telemetry/keys.jsonl`) for typing-aware auto-zoom hold, typing speed-up suggestions, and 3D shortcut keycaps.
@@ -93,6 +94,10 @@
 - [x] **Extract Current Frame:** Dedicated `Export still frames` modal (`PNG` / `JPEG` squircle toggles, resolution up to `4K`, live preview) and instant `Copy current frame to clipboard`.
 - [x] **Command Menu (`⌘K`):** Global searchable command palette (`CommandMenuOverlayView`) with keyboard navigation across all editor actions.
 - [x] **Pure AppKit Zero-Lag Tooltips:** Borderless floating `NSPanel` rendered via `PureAppKitTooltipCalloutView` (`< 0.02ms` draw time, zero `NSHostingView` overhead during 120Hz playback).
+- [x] **Native Menu Bar:** `File` (Open recent, Open project, Open last project, Show previous projects, Create project from video, Import preset, Save, Save as, Show project in Finder, Remove project), `Edit` (Undo/Redo, Cut/Copy/Paste/Delete routed to text fields or the timeline selection), `Record` (New recording, Record display/window/area, `After Recording` action, Automatically create zooms), `Export` (Export, Quick export to clipboard/file, Show previous clipboard exports, Extract raw recording files, Export current frame as image), `View` (inspector tabs, waveform, loop playback, scrollbar, sidebar/timeline visibility, recording widget), `Window` (Reset windows positions). `Create interactive showcase project` lives in `File`.
+- [x] **App Icon:** white squircle with a purple to pink ring (matches the `record.circle` toolbar symbol). `AppIcon.icon` (Icon Composer, Liquid Glass with Default/Dark/Clear/Tinted on macOS 26+) plus `AppIcon.appiconset` PNGs rendered from it with `ictool` on the macOS 11 icon grid (824pt body in 1024, standard shadow) for macOS 15.
+- [x] **Create Project from Video:** import any movie file as a `.nativescreen` project (no cursor telemetry) with a draggable `Zoom position` pad for manual zooms (live preview while dragging).
+- [ ] `View > Show speaker notes`, `View > Show shortcuts guide`, `View > Preview size`, and quick export to a shareable link.
 - [x] **Presets System:** Save, rename, set default for new projects, and apply reusable style presets (`✨ Presets ⌄` popover in top header bar + `ProjectPresetsStore`).
 - [x] **Quick Export & GIF Export:**
   - [x] High-quality animated GIF export (`High quality` & `Disable loop` options).

@@ -359,7 +359,10 @@ public struct MultiTrackTimelineView: View {
                                             .padding(.vertical, 8)
                                             .padding(.horizontal, trackHorizontalInset)
                                             .background(
-                                                HorizontalScrollViewIntrospector(isSplitMode: session.isSplitModeActive) { sv in
+                                                HorizontalScrollViewIntrospector(
+                                                    isSplitMode: session.isSplitModeActive,
+                                                    alwaysShowScroller: EditorViewPreferences.shared.alwaysShowTimelineScrollbar
+                                                ) { sv in
                                                     if horizontalScrollView !== sv {
                                                         horizontalScrollView = sv
                                                     }
@@ -1889,9 +1892,11 @@ private struct ClipSegmentDecoration: Equatable, View {
     var microphoneWaveformSamples: [Float] = []
 
     var body: some View {
+        let showWaveform = EditorViewPreferences.shared.showAudioWaveform
+        let smooth = EditorViewPreferences.shared.smoothWaveform
         Canvas { context, size in
             // A1. System / App Audio Waveform (`#4D2FF5` Purple)
-            if !waveformSamples.isEmpty && totalSourceMs > 1.0 && volumeScale > 0.005 {
+            if showWaveform && !waveformSamples.isEmpty && totalSourceMs > 1.0 && volumeScale > 0.005 {
                 let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
                 let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
                 let clampedVol = CGFloat(min(1.5, max(0.0, volumeScale)))
@@ -1911,26 +1916,11 @@ private struct ClipSegmentDecoration: Equatable, View {
                 let stepPx: CGFloat = 1.5
                 let pointCount = max(4, Int(ceil(size.width / stepPx)))
 
-                var wavePath = Path()
-                wavePath.move(to: CGPoint(x: 0, y: size.height))
-
-                for i in 0...pointCount {
-                    let localFrac = Double(i) / Double(pointCount)
-                    let globalFrac = startFrac + localFrac * (endFrac - startFrac)
-                    let samplePos = globalFrac * baseCount
-
-                    let env01 = Self.readWaveformEnvelope(
-                        pyramid: pyramid,
-                        samplePosition: samplePos,
-                        samplesPerBin: samplesPerBin
-                    )
-                    let x = CGFloat(localFrac) * size.width
-                    let waveH = min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedVol)
-                    wavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
+                let wavePath = Self.waveformEnvelopePath(size: size, pointCount: pointCount, smooth: smooth) { localFrac in
+                    let samplePos = (startFrac + localFrac * (endFrac - startFrac)) * baseCount
+                    let env01 = Self.readWaveformEnvelope(pyramid: pyramid, samplePosition: samplePos, samplesPerBin: samplesPerBin)
+                    return min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedVol)
                 }
-
-                wavePath.addLine(to: CGPoint(x: size.width, y: size.height))
-                wavePath.closeSubpath()
 
                 // `fillUnder` + `system-audio` color (`#4D2FF5`, top opacity `0.50` -> bottom opacity `0.25`)
                 // Blended over the golden Clip gradient, this produces the exact rich purple-to-warm-lavender gradient in
@@ -1948,23 +1938,11 @@ private struct ClipSegmentDecoration: Equatable, View {
 
                 // When slice volume < 100%, also draws a subtle ghost outline of the 100% waveform (`outlineColor` with `opacity: 0.10`)
                 if clampedVol < 0.99 {
-                    var unscaledPath = Path()
-                    unscaledPath.move(to: CGPoint(x: 0, y: size.height))
-                    for i in 0...pointCount {
-                        let localFrac = Double(i) / Double(pointCount)
-                        let globalFrac = startFrac + localFrac * (endFrac - startFrac)
-                        let samplePos = globalFrac * baseCount
-                        let env01 = Self.readWaveformEnvelope(
-                            pyramid: pyramid,
-                            samplePosition: samplePos,
-                            samplesPerBin: samplesPerBin
-                        )
-                        let x = CGFloat(localFrac) * size.width
-                        let waveH = min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx)
-                        unscaledPath.addLine(to: CGPoint(x: x, y: size.height - waveH))
+                    let unscaledPath = Self.waveformEnvelopePath(size: size, pointCount: pointCount, smooth: smooth) { localFrac in
+                        let samplePos = (startFrac + localFrac * (endFrac - startFrac)) * baseCount
+                        let env01 = Self.readWaveformEnvelope(pyramid: pyramid, samplePosition: samplePos, samplesPerBin: samplesPerBin)
+                        return min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx)
                     }
-                    unscaledPath.addLine(to: CGPoint(x: size.width, y: size.height))
-                    unscaledPath.closeSubpath()
                     context.fill(
                         unscaledPath,
                         with: .color(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.12))
@@ -1973,7 +1951,7 @@ private struct ClipSegmentDecoration: Equatable, View {
             }
 
             // A2. Recorded Microphone Audio Waveform (Translucent White)
-            if !microphoneWaveformSamples.isEmpty && totalSourceMs > 1.0 && microphoneVolumeScale > 0.005 {
+            if showWaveform && !microphoneWaveformSamples.isEmpty && totalSourceMs > 1.0 && microphoneVolumeScale > 0.005 {
                 let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
                 let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
                 let clampedMicVol = CGFloat(min(1.5, max(0.0, microphoneVolumeScale)))
@@ -1989,26 +1967,11 @@ private struct ClipSegmentDecoration: Equatable, View {
                 let stepPx: CGFloat = 1.5
                 let pointCount = max(4, Int(ceil(size.width / stepPx)))
 
-                var micWavePath = Path()
-                micWavePath.move(to: CGPoint(x: 0, y: size.height))
-
-                for i in 0...pointCount {
-                    let localFrac = Double(i) / Double(pointCount)
-                    let globalFrac = startFrac + localFrac * (endFrac - startFrac)
-                    let samplePos = globalFrac * baseCount
-
-                    let env01 = Self.readWaveformEnvelope(
-                        pyramid: micPyramid,
-                        samplePosition: samplePos,
-                        samplesPerBin: samplesPerBin
-                    )
-                    let x = CGFloat(localFrac) * size.width
-                    let waveH = min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedMicVol)
-                    micWavePath.addLine(to: CGPoint(x: x, y: size.height - waveH))
+                let micWavePath = Self.waveformEnvelopePath(size: size, pointCount: pointCount, smooth: smooth) { localFrac in
+                    let samplePos = (startFrac + localFrac * (endFrac - startFrac)) * baseCount
+                    let env01 = Self.readWaveformEnvelope(pyramid: micPyramid, samplePosition: samplePos, samplesPerBin: samplesPerBin)
+                    return min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedMicVol)
                 }
-
-                micWavePath.addLine(to: CGPoint(x: size.width, y: size.height))
-                micWavePath.closeSubpath()
 
                 context.fill(
                     micWavePath,
@@ -2050,6 +2013,40 @@ private struct ClipSegmentDecoration: Equatable, View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .allowsHitTesting(false)
+    }
+
+    /// Filled waveform outline from the bottom edge. `smooth` traces the spline envelope; otherwise one rounded bar
+    /// per 3pt column (`View > Smooth waveform` off). `height(localFrac)` returns the wave height at `0...1` across the slice.
+    private static func waveformEnvelopePath(
+        size: CGSize,
+        pointCount: Int,
+        smooth: Bool,
+        height: (Double) -> CGFloat
+    ) -> Path {
+        var path = Path()
+        if smooth {
+            path.move(to: CGPoint(x: 0, y: size.height))
+            for i in 0...pointCount {
+                let localFrac = Double(i) / Double(pointCount)
+                path.addLine(to: CGPoint(x: CGFloat(localFrac) * size.width, y: size.height - height(localFrac)))
+            }
+            path.addLine(to: CGPoint(x: size.width, y: size.height))
+            path.closeSubpath()
+        } else {
+            let pitch: CGFloat = 3.0
+            let barWidth: CGFloat = 2.0
+            let columns = max(1, Int(size.width / pitch))
+            for c in 0..<columns {
+                let x = CGFloat(c) * pitch
+                let h = height(Double((x + barWidth * 0.5) / max(1, size.width)))
+                guard h > 0.5 else { continue }
+                path.addRoundedRect(
+                    in: CGRect(x: x, y: size.height - h, width: barWidth, height: h),
+                    cornerSize: CGSize(width: 1, height: 1)
+                )
+            }
+        }
+        return path
     }
 
     // MARK: - Exact Mip-Pyramid + Catmull-Rom Cubic Spline
@@ -2708,6 +2705,7 @@ private struct RightClickDetectorView: NSViewRepresentable {
 
 private struct HorizontalScrollViewIntrospector: NSViewRepresentable {
     var isSplitMode: Bool = false
+    var alwaysShowScroller: Bool = false
     let onFound: (NSScrollView) -> Void
 
     func makeNSView(context: Context) -> NSView {
@@ -2723,8 +2721,15 @@ private struct HorizontalScrollViewIntrospector: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         let splitMode = isSplitMode
+        let alwaysShowScroller = self.alwaysShowScroller
         DispatchQueue.main.async {
             if let sv = nsView.enclosingScrollView {
+                // `View > Always show timeline scrollbar`: a legacy scroller stays visible; overlay scrollers auto-hide.
+                let style: NSScroller.Style = alwaysShowScroller ? .legacy : .overlay
+                if sv.scrollerStyle != style {
+                    sv.scrollerStyle = style
+                    sv.autohidesScrollers = !alwaysShowScroller
+                }
                 let targetCursor: NSCursor? = splitMode ? .crosshair : nil
                 if sv.documentCursor !== targetCursor {
                     sv.documentCursor = targetCursor

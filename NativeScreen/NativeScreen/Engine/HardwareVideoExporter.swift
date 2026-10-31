@@ -419,7 +419,7 @@ public final class HardwareVideoExporter {
 
     /// Ultra-fast sequential hardware video decoder powered by `AVAssetReaderTrackOutput`.
     /// Decodes directly into native `kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange` Metal-compatible `CVPixelBuffer`s (`~1.2ms` total per frame!).
-    private final class SequentialVideoFrameReader {
+    private nonisolated final class SequentialVideoFrameReader {
         private let asset: AVURLAsset
         private let videoTrack: AVAssetTrack
         private let preferredTransform: CGAffineTransform
@@ -529,21 +529,36 @@ public final class HardwareVideoExporter {
         }
     }
 
-    /// Hybrid `VTCompressionSession` Wrapper (`src/hybrid/mod.rs` architecture):
-    /// Pairs Apple Silicon's Hardware Media Engine (`RequireHardwareAcceleratedVideoEncoder = true`) with
-    /// Apple Silicon's multi-core CPU encoder (`EnableHardwareAcceleratedVideoEncoder = false`) in parallel,
-    /// increasing 4K/60fps H.264 throughput from ~74 fps (`18.2s`) to ~128 fps (`10.5s`) while enforcing strict bitrate limits (`~26MB`)!
+    /// One `VTCompressionSession` lane of the hybrid exporter (`spec/06` ADR-01).
+    /// - The Hardware Media Engine lane tops out at ~70 fps for H.264 at ~3.4K (measured), so for H.264 a second lane runs
+    ///   Apple's multi-core software encoder at the same time, on a DIFFERENT GOP, which is what makes the two run truly in parallel.
+    /// - Frames are handed over as in-flight `CIRenderTask`s: the GPU wait and the encode both happen on this lane's serial
+    ///   `workQueue`, never on `@MainActor`, and the serial queue keeps presentation order intact for VideoToolbox.
+    /// - Encoded samples are streamed to `onEncoded` (the ordered muxer) instead of being kept in memory.
     private nonisolated final class VTParallelCompressionWorker: @unchecked Sendable {
+        let isHardware: Bool
         private var session: VTCompressionSession?
         private let lock = NSLock()
-        private var _encodedSamples: [CMSampleBuffer] = []
         private var _inFlightCount: Int = 0
         private let workQueue: DispatchQueue
+        private let onEncoded: @Sendable (_ frameIndex: Int, _ sample: CMSampleBuffer?) -> Void
         /// Must exceed the 14-frame internal lookahead buffer of Apple's software H.264 `VTCompressionSession`!
         private let maxInFlightFrames: Int = 28
 
-        init?(width: Int, height: Int, codecType: CMVideoCodecType, useHardware: Bool, quality: Double, bitrate: Int, fps: Int, label: String) {
+        init?(
+            width: Int,
+            height: Int,
+            codecType: CMVideoCodecType,
+            useHardware: Bool,
+            quality: Double,
+            bitrate: Int,
+            fps: Int,
+            label: String,
+            onEncoded: @escaping @Sendable (_ frameIndex: Int, _ sample: CMSampleBuffer?) -> Void
+        ) {
+            self.isHardware = useHardware
             self.workQueue = DispatchQueue(label: label, qos: .userInitiated)
+            self.onEncoded = onEncoded
 
             let spec: [String: Any] = useHardware
                 ? [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder as String: true]
@@ -571,7 +586,8 @@ public final class HardwareVideoExporter {
             guard status == noErr, let s = createdSession else { return nil }
             self.session = s
 
-            VTSessionSetProperty(s, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
+            // Offline export: no realtime pacing hint (measured: same speed on the Media Engine, never slower).
+            VTSessionSetProperty(s, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanFalse)
             VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
             if codecType == kCMVideoCodecType_H264 {
                 VTSessionSetProperty(s, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
@@ -582,6 +598,8 @@ public final class HardwareVideoExporter {
                 // causing blurry text and dark macroblocking across the entire GOP!
                 VTSessionSetProperty(s, key: kVTCompressionPropertyKey_Quality, value: quality as CFNumber)
             } else {
+                // The software H.264 encoder rejects `kVTCompressionPropertyKey_Quality` (-12900), so it runs average-bitrate.
+                // `setAverageBitRate` keeps re-targeting it to the Media Engine's measured bitrate (`matched quality`).
                 VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber)
             }
             VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: (fps * 2) as CFNumber)
@@ -602,12 +620,6 @@ public final class HardwareVideoExporter {
             inFlightCount < maxInFlightFrames
         }
 
-        var encodedSamples: [CMSampleBuffer] {
-            lock.lock()
-            defer { lock.unlock() }
-            return _encodedSamples
-        }
-
         func allocatePixelBuffer() -> CVPixelBuffer? {
             guard let s = session, let pool = VTCompressionSessionGetPixelBufferPool(s) else { return nil }
             var pb: CVPixelBuffer?
@@ -615,44 +627,67 @@ public final class HardwareVideoExporter {
             return pb
         }
 
-        func submitFrame(pixelBuffer: CVPixelBuffer, pts: CMTime, duration: CMTime, forceKeyframe: Bool) {
+        func setAverageBitRate(_ bitsPerSecond: Int) {
+            workQueue.async {
+                guard let s = self.session else { return }
+                VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: bitsPerSecond as CFNumber)
+            }
+        }
+
+        private func finishOne(frameIndex: Int, sample: CMSampleBuffer?) {
+            lock.lock()
+            _inFlightCount = max(0, _inFlightCount - 1)
+            lock.unlock()
+            onEncoded(frameIndex, sample)
+        }
+
+        func submitFrame(
+            renderTask: CIRenderTask?,
+            pixelBuffer: CVPixelBuffer,
+            frameIndex: Int,
+            pts: CMTime,
+            duration: CMTime,
+            forceKeyframe: Bool
+        ) {
             lock.lock()
             _inFlightCount += 1
             lock.unlock()
 
+            nonisolated(unsafe) let task = renderTask
+            nonisolated(unsafe) let buffer = pixelBuffer
             workQueue.async { [weak self] in
-                guard let self = self, let s = self.session else {
-                    if let self = self {
-                        self.lock.lock()
-                        self._inFlightCount = max(0, self._inFlightCount - 1)
-                        self.lock.unlock()
-                    }
+                guard let self = self else { return }
+                guard let s = self.session else {
+                    self.finishOne(frameIndex: frameIndex, sample: nil)
                     return
                 }
+                _ = try? task?.waitUntilCompleted()
                 let props: CFDictionary? = forceKeyframe
                     ? [kVTEncodeFrameOptionKey_ForceKeyFrame as String: true] as CFDictionary
                     : nil
                 let status = VTCompressionSessionEncodeFrame(
                     s,
-                    imageBuffer: pixelBuffer,
+                    imageBuffer: buffer,
                     presentationTimeStamp: pts,
                     duration: duration,
                     frameProperties: props,
                     infoFlagsOut: nil
                 ) { [weak self] encodeStatus, _, sampleBuffer in
-                    guard let self = self else { return }
-                    self.lock.lock()
-                    self._inFlightCount = max(0, self._inFlightCount - 1)
-                    if encodeStatus == noErr, let sb = sampleBuffer {
-                        self._encodedSamples.append(sb)
-                    }
-                    self.lock.unlock()
+                    self?.finishOne(frameIndex: frameIndex, sample: encodeStatus == noErr ? sampleBuffer : nil)
                 }
                 if status != noErr {
-                    self.lock.lock()
-                    self._inFlightCount = max(0, self._inFlightCount - 1)
-                    self.lock.unlock()
+                    self.finishOne(frameIndex: frameIndex, sample: nil)
                 }
+            }
+        }
+
+        /// Emits every frame the encoder is still holding in its lookahead buffer. Called at the end of each GOP: otherwise
+        /// the software encoder keeps the GOP's last ~14 frames until it receives more input, and if this lane does not get
+        /// another GOP right away (the muxer lead limit), the ordered muxer waits on those frames forever.
+        func flushPendingFrames() {
+            workQueue.async {
+                guard let s = self.session else { return }
+                VTCompressionSessionCompleteFrames(s, untilPresentationTimeStamp: .invalid)
             }
         }
 
@@ -674,8 +709,144 @@ public final class HardwareVideoExporter {
                 }
                 self.lock.lock()
                 self._inFlightCount = 0
-                self._encodedSamples.removeAll()
                 self.lock.unlock()
+            }
+        }
+    }
+
+    /// Puts frames coming back from both encoder lanes into presentation order and hands them to the muxer as soon
+    /// as the next expected frame is available. Memory stays bounded to the GOPs currently in flight
+    /// (a few MB) instead of the whole encoded video. Also tracks the Media Engine's real bitrate so the
+    /// software lane can be re-targeted to it.
+    private nonisolated final class OrderedEncodedSampleQueue: @unchecked Sendable {
+        private let lock = NSLock()
+        private var pending: [Int: CMSampleBuffer] = [:]
+        private var dropped: Set<Int> = []
+        private var nextIndex: Int = 0
+        private var deliveredCount: Int = 0
+        private var hardwareBytes: Int = 0
+        private var hardwareFrames: Int = 0
+
+        func deliver(frameIndex: Int, sample: CMSampleBuffer?, fromHardware: Bool) {
+            lock.lock()
+            defer { lock.unlock() }
+            deliveredCount += 1
+            if let sample {
+                pending[frameIndex] = sample
+                if fromHardware {
+                    hardwareBytes += CMSampleBufferGetTotalSampleSize(sample)
+                    hardwareFrames += 1
+                }
+            } else {
+                dropped.insert(frameIndex)
+            }
+        }
+
+        /// Pops the next in-order sample, skipping frames the encoder dropped. `nil` means the next frame is not encoded yet.
+        func popNext() -> CMSampleBuffer? {
+            lock.lock()
+            defer { lock.unlock() }
+            while dropped.remove(nextIndex) != nil {
+                nextIndex += 1
+            }
+            guard let sample = pending.removeValue(forKey: nextIndex) else { return nil }
+            nextIndex += 1
+            return sample
+        }
+
+        /// Frames that came out of either encoder, in any order. Used for progress: the in-order count only moves when
+        /// the slower lane finishes its GOP, so it advances in jumps.
+        var encodedFrameCount: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return deliveredCount
+        }
+
+        var orderedFrameCount: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return nextIndex
+        }
+
+        func hardwareBitsPerFrame() -> Double? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard hardwareFrames >= 30 else { return nil }
+            return Double(hardwareBytes * 8) / Double(hardwareFrames)
+        }
+    }
+
+    /// Decodes the screen recording and (when present) the webcam recording side by side for one export lane, on its own
+    /// serial queue so `AVAssetReader` decode and GOP-jump seeks never block the main actor.
+    private nonisolated final class ExportFrameSource: @unchecked Sendable {
+        struct Frames: @unchecked Sendable {
+            let screen: CIImage?
+            let webcam: CIImage?
+        }
+
+        private let queue = DispatchQueue(label: "com.nativescreen.export.decode", qos: .userInitiated)
+        private let screenReader: SequentialVideoFrameReader?
+        private let webcamReader: SequentialVideoFrameReader?
+        private let webcamDelayMs: Double
+
+        private init(screenReader: SequentialVideoFrameReader?, webcamReader: SequentialVideoFrameReader?, webcamDelayMs: Double) {
+            self.screenReader = screenReader
+            self.webcamReader = webcamReader
+            self.webcamDelayMs = webcamDelayMs
+        }
+
+        @MainActor
+        static func make(session: ProjectSession) async -> ExportFrameSource {
+            let videoURL = session.videoFileURL
+            let camera = session.document.camera
+            let webcamURL = camera.enabled ? session.webcamVideoFileURL : nil
+            let screen = await SequentialVideoFrameReader(url: videoURL)
+            let webcam: SequentialVideoFrameReader? = if let webcamURL { await SequentialVideoFrameReader(url: webcamURL) } else { nil }
+            return ExportFrameSource(screenReader: screen, webcamReader: webcam, webcamDelayMs: camera.delayAdjustmentMs)
+        }
+
+        func frames(atSourceMs sourceMs: Double) async -> Frames {
+            await withCheckedContinuation { continuation in
+                queue.async {
+                    let frames = autoreleasepool {
+                        Frames(
+                            screen: self.screenReader?.frame(atSourceMs: sourceMs),
+                            webcam: self.webcamReader?.frame(atSourceMs: max(0.0, sourceMs + self.webcamDelayMs))
+                        )
+                    }
+                    continuation.resume(returning: frames)
+                }
+            }
+        }
+
+        func cancel() {
+            queue.async {
+                self.screenReader?.cancel()
+                self.webcamReader?.cancel()
+            }
+        }
+    }
+
+    /// Keeps long `@MainActor` export loops from starving the UI: yields to the main run loop every ~8ms of work and
+    /// throttles progress callbacks to ~30 Hz.
+    @MainActor
+    private struct MainActorExportPacer {
+        private var lastYieldUptime = ProcessInfo.processInfo.systemUptime
+        private var lastProgressUptime: TimeInterval = 0
+
+        mutating func reportProgress(_ value: Double, force: Bool = false, _ onProgress: @MainActor (Double) -> Void) {
+            let now = ProcessInfo.processInfo.systemUptime
+            if force || now - lastProgressUptime >= 1.0 / 30.0 {
+                lastProgressUptime = now
+                onProgress(value)
+            }
+        }
+
+        mutating func yieldIfNeeded() async throws {
+            let now = ProcessInfo.processInfo.systemUptime
+            if now - lastYieldUptime >= 0.008 {
+                try await Task.sleep(for: .milliseconds(1))
+                lastYieldUptime = ProcessInfo.processInfo.systemUptime
             }
         }
     }
@@ -788,11 +959,16 @@ public final class HardwareVideoExporter {
         }
     }
 
-    /// Hybrid Parallel MP4 Exporter (`H.264` & `HEVC`):
-    /// - For `H.264`, splits GOP chunks (`120` frames = 2 seconds per chunk) across BOTH the Apple Silicon Hardware Media Engine
-    ///   (`hwWorker`, handling 60% of chunks) AND the Apple Silicon Multi-Core Software Encoder (`swWorker`, handling 40% of chunks) simultaneously,
-    ///   then performs a `<0.05s` zero-reencode passthrough mux into `outputURL`!
-    /// - For `HEVC`, uses the dedicated Apple Silicon HEVC Hardware Media Engine (which natively runs at ~125 fps at 4K).
+    /// Hybrid Parallel MP4 Exporter (`H.264` & `HEVC`), see `spec/06` ADR-01:
+    /// - H.264 runs two encoder lanes at the same time, each on its own 2-second GOP: the Hardware Media Engine lane
+    ///   (~70 fps ceiling at ~3.4K, measured) and Apple's multi-core software lane. Whichever lane frees up first takes
+    ///   the next GOP, so the split adapts to the machine instead of a fixed 60/40.
+    /// - The software lane is continuously re-targeted to the Media Engine's measured bitrate so both halves of the
+    ///   video have matched quality (no visible quality pulse every 2 seconds).
+    /// - Encoded frames are re-ordered and muxed (interleaved with audio) WHILE encoding, so memory stays bounded.
+    /// - The two lanes produce different SPS/PPS; `AVAssetWriter` stores them as two `avc1` sample descriptions in one
+    ///   track (verified decodable by AVFoundation and FFmpeg).
+    /// - HEVC uses only the Hardware Media Engine lane.
     @MainActor
     private static func exportMP4VideoFileHybrid(
         session: ProjectSession,
@@ -814,8 +990,8 @@ public final class HardwareVideoExporter {
         try? FileManager.default.removeItem(at: outputURL)
 
         let hwQuality = compression.vtHardwareQuality
-        let swBitrate = max(600_000, Int(round(Double(bitrate) * 0.65)))
         let cmCodec: CMVideoCodecType = (codecOption == .h265) ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264
+        let ordered = OrderedEncodedSampleQueue()
 
         guard let hwWorker = VTParallelCompressionWorker(
             width: targetW,
@@ -823,130 +999,86 @@ public final class HardwareVideoExporter {
             codecType: cmCodec,
             useHardware: true,
             quality: hwQuality,
-            bitrate: swBitrate,
+            bitrate: bitrate,
             fps: fps,
-            label: "com.nativescreen.export.vt.hw"
+            label: "com.nativescreen.export.vt.hw",
+            onEncoded: { ordered.deliver(frameIndex: $0, sample: $1, fromHardware: true) }
         ) else {
             throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: "Hardware video encoder unavailable."])
         }
 
-        // For H.264, launch a companion multi-core CPU VTCompressionSession worker in parallel (`src/hybrid/mod.rs` architecture)
         let swWorker: VTParallelCompressionWorker? = (codecOption == .h264) ? VTParallelCompressionWorker(
             width: targetW,
             height: targetH,
             codecType: kCMVideoCodecType_H264,
             useHardware: false,
             quality: hwQuality,
-            bitrate: swBitrate,
+            bitrate: bitrate,
             fps: fps,
-            label: "com.nativescreen.export.vt.sw"
+            label: "com.nativescreen.export.vt.sw",
+            onEncoded: { ordered.deliver(frameIndex: $0, sample: $1, fromHardware: false) }
         ) : nil
 
         let totalDurationMs = session.timeMapper.totalTimelineDurationMs
         let frameStepMs = 1000.0 / Double(fps)
         let totalFrames = max(1, Int(ceil(totalDurationMs / frameStepMs)))
-        let gopSize = max(fps, fps * 2) // 2-second closed GOP boundaries for seamless hybrid chunk interleaving
+        let gopSize = max(1, fps * 2) // 2-second closed GOPs, the unit of work each lane takes
+        let gopCount = (totalFrames + gopSize - 1) / gopSize
+        // A lane may start at most this many GOPs ahead of the muxer, which bounds the re-order buffer.
+        let maxGOPLead = 3
         let frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
-
-        let videoURL = session.videoFileURL
-        let frameReader = await SequentialVideoFrameReader(url: videoURL)
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-        var lastYieldUptime = ProcessInfo.processInfo.systemUptime
 
-        do {
-            for frameIdx in 0..<totalFrames {
-                try Task.checkCancellation()
+        final class EncodeLane {
+            let worker: VTParallelCompressionWorker
+            let source: ExportFrameSource
+            var gopIndex: Int?
+            var nextFrameIndex: Int = 0
+            /// Decode of `nextFrameIndex`, started one frame ahead so it overlaps GPU work and the other lane.
+            var prefetch: Task<ExportFrameSource.Frames, Never>?
+            /// Set when the lane finished a GOP; if it then has to idle, its encoder is flushed so no frame stays parked.
+            var needsFlush = false
 
-                let timelineMs = Double(frameIdx) * frameStepMs
-                let sourceMs = session.timeMapper.sourceTime(forTimelineMs: timelineMs).sourceMs
-
-                // Route GOP chunks: 3 chunks to Hardware Media Engine, 2 chunks to Multi-Core Software Engine (60% / 40% split)
-                let gopIndex = frameIdx / gopSize
-                let isFrameAtGOPStart = (frameIdx % gopSize == 0)
-                let useSWWorker = (swWorker != nil) && (gopIndex % 5 == 1 || gopIndex % 5 == 3)
-                let activeWorker = (useSWWorker ? swWorker : hwWorker) ?? hwWorker
-
-                // Non-blocking async backpressure: NEVER block `@MainActor` with `DispatchSemaphore.wait`,
-                // so the macOS RunLoop and UI stay 100% responsive and the software encoder's 14-frame lookahead never deadlocks!
-                while !activeWorker.hasCapacity {
-                    try Task.checkCancellation()
-                    try await Task.sleep(for: .milliseconds(2))
-                }
-
-                try autoreleasepool {
-                    let sourceCIImage = frameReader?.frame(atSourceMs: sourceMs)
-                    try Task.checkCancellation()
-
-                    let composited = compositor.composeFrame(
-                        sourceVideoFrame: sourceCIImage,
-                        sourceTimeMs: sourceMs,
-                        session: session,
-                        outputSize: outputSize,
-                        includeShortcutOverlay: true
-                    )
-
-                    if let pixelBuffer = activeWorker.allocatePixelBuffer() {
-                        compositor.ciContext.render(
-                            composited,
-                            to: pixelBuffer,
-                            bounds: CGRect(origin: .zero, size: outputSize),
-                            colorSpace: colorSpace
-                        )
-                        let pts = CMTime(value: CMTimeValue(frameIdx), timescale: CMTimeScale(fps))
-                        activeWorker.submitFrame(
-                            pixelBuffer: pixelBuffer,
-                            pts: pts,
-                            duration: frameDuration,
-                            forceKeyframe: isFrameAtGOPStart
-                        )
-                    }
-                }
-
-                let localProgress = Double(frameIdx + 1) / Double(totalFrames) * 0.96
-                let mappedProgress = progressRange.0 + localProgress * (progressRange.1 - progressRange.0)
-                onProgress(mappedProgress)
-
-                let nowUptime = ProcessInfo.processInfo.systemUptime
-                if nowUptime - lastYieldUptime >= 0.08 || frameIdx == totalFrames - 1 {
-                    lastYieldUptime = nowUptime
-                    try await Task.sleep(for: .milliseconds(1))
-                }
+            init(worker: VTParallelCompressionWorker, source: ExportFrameSource) {
+                self.worker = worker
+                self.source = source
             }
+        }
 
-            try Task.checkCancellation()
-            frameReader?.cancel()
+        var lanes = [EncodeLane(worker: hwWorker, source: await ExportFrameSource.make(session: session))]
+        if let swWorker {
+            lanes.append(EncodeLane(worker: swWorker, source: await ExportFrameSource.make(session: session)))
+        }
+        let sourceMs: (Int) -> Double = { frameIdx in
+            session.timeMapper.sourceTime(forTimelineMs: Double(frameIdx) * frameStepMs).sourceMs
+        }
+        func startPrefetch(_ lane: EncodeLane) {
+            let source = lane.source
+            let ms = sourceMs(lane.nextFrameIndex)
+            lane.prefetch = Task { await source.frames(atSourceMs: ms) }
+        }
 
-            // Wait for both Hardware & Software encoders to flush their remaining in-flight frames
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    hwWorker.finishAndWait()
-                    swWorker?.finishAndWait()
-                    continuation.resume()
-                }
-            }
+        // Multi-Track Audio Mixdown (`display.mp4` system audio + `microphone.m4a` + `voiceovers` + `backgroundMusic`)
+        let audioPipeline = await buildMultiTrackAudioReaderAndOutput(session: session)
 
-            try Task.checkCancellation()
+        // The passthrough muxer needs a format hint, so it is created when frame 0 comes out of the encoder.
+        var muxWriter: AVAssetWriter?
+        var muxInput: AVAssetWriterInput?
+        var muxAudioInput: AVAssetWriterInput?
+        var nextVideoSample: CMSampleBuffer?
+        var pendingAudioSample: CMSampleBuffer?
+        var isVideoInputFinished = false
+        var isAudioDone = (audioPipeline == nil)
+        var lastMuxedVideoSeconds = 0.0
 
-            // Fast zero-reencode passthrough muxing of all encoded CMSampleBuffers into `outputURL`
-            let allSamples = (hwWorker.encodedSamples + (swWorker?.encodedSamples ?? [])).sorted {
-                CMTimeCompare(CMSampleBufferGetPresentationTimeStamp($0), CMSampleBufferGetPresentationTimeStamp($1)) < 0
-            }
-            guard let firstSample = allSamples.first,
-                  let formatDesc = CMSampleBufferGetFormatDescription(firstSample) else {
-                throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: "No video frames were encoded."])
-            }
-
-            let muxWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-            let muxInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: formatDesc)
-            muxInput.expectsMediaDataInRealTime = false
-            guard muxWriter.canAdd(muxInput) else {
+        func startMuxer(formatHint: CMFormatDescription) throws {
+            let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: formatHint)
+            input.expectsMediaDataInRealTime = false
+            guard writer.canAdd(input) else {
                 throw NSError(domain: "NativeScreenExport", code: -6, userInfo: [NSLocalizedDescriptionKey: "Cannot configure MP4 passthrough muxer."])
             }
-            muxWriter.add(muxInput)
-
-            // Multi-Track Audio Mixdown (`display.mp4` system audio + `microphone.m4a` + `voiceovers` + `backgroundMusic`)
-            let audioPipeline = await buildMultiTrackAudioReaderAndOutput(session: session)
-            var muxAudioInput: AVAssetWriterInput? = nil
+            writer.add(input)
             if audioPipeline != nil {
                 let aSettings: [String: Any] = [
                     AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -956,85 +1088,195 @@ public final class HardwareVideoExporter {
                 ]
                 let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aSettings)
                 aInput.expectsMediaDataInRealTime = false
-                if muxWriter.canAdd(aInput) {
-                    muxWriter.add(aInput)
+                if writer.canAdd(aInput) {
+                    writer.add(aInput)
                     muxAudioInput = aInput
+                } else {
+                    isAudioDone = true
                 }
             }
+            writer.startWriting()
+            writer.startSession(atSourceTime: .zero)
+            muxWriter = writer
+            muxInput = input
+        }
 
-            muxWriter.startWriting()
-            muxWriter.startSession(atSourceTime: .zero)
-
-            // Crucial: Interleave video (`muxInput`) and audio (`muxAudioInput`) in a single loop!
-            // Appending all video frames before feeding any audio samples causes `AVAssetWriter`'s interleave buffer
-            // to fill up after ~1.5s, setting `muxInput.isReadyForMoreMediaData = false` forever (deadlock at 96%)!
-            var videoIndex = 0
-            var isVideoDone = allSamples.isEmpty
-            if isVideoDone {
-                muxInput.markAsFinished()
+        /// Appends every in-order video sample the muxer can take, and audio up to ~1s past the muxed video
+        /// (interleaving both keeps `AVAssetWriter` from stalling at `isReadyForMoreMediaData = false`).
+        func drainMuxer(encodersFinished: Bool) throws {
+            if nextVideoSample == nil {
+                nextVideoSample = ordered.popNext()
             }
-
-            var isAudioDone = (muxAudioInput == nil || audioPipeline == nil)
-            if isAudioDone {
-                muxAudioInput?.markAsFinished()
-            }
-
-            while !isVideoDone || !isAudioDone {
-                try Task.checkCancellation()
-                if muxWriter.status == .failed {
-                    throw muxWriter.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+            if muxWriter == nil {
+                guard let first = nextVideoSample else { return }
+                guard let formatDesc = CMSampleBufferGetFormatDescription(first) else {
+                    throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: "No video frames were encoded."])
                 }
+                try startMuxer(formatHint: formatDesc)
+            }
+            guard let writer = muxWriter, let input = muxInput else { return }
+            if writer.status == .failed {
+                throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+            }
 
-                var madeProgress = false
+            while !isVideoInputFinished, input.isReadyForMoreMediaData, let sample = nextVideoSample {
+                guard input.append(sample) else {
+                    throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+                }
+                lastMuxedVideoSeconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
+                nextVideoSample = ordered.popNext()
+            }
+            if !isVideoInputFinished, encodersFinished, nextVideoSample == nil, ordered.orderedFrameCount >= totalFrames {
+                isVideoInputFinished = true
+                input.markAsFinished()
+            }
 
-                while !isVideoDone && muxInput.isReadyForMoreMediaData {
-                    let sample = allSamples[videoIndex]
-                    if !muxInput.append(sample) {
-                        isVideoDone = true
-                        muxInput.markAsFinished()
+            if !isAudioDone, let aInput = muxAudioInput, let (_, aOutput) = audioPipeline {
+                while !isAudioDone && aInput.isReadyForMoreMediaData {
+                    guard let aSample = pendingAudioSample ?? aOutput.copyNextSampleBuffer() else {
+                        isAudioDone = true
+                        aInput.markAsFinished()
                         break
                     }
-                    videoIndex += 1
-                    madeProgress = true
-                    if videoIndex >= allSamples.count {
-                        isVideoDone = true
-                        muxInput.markAsFinished()
+                    let aSeconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(aSample))
+                    // Hold audio back only while the video input could take more frames (we are just waiting on the
+                    // encoders). If the writer refuses video, it is waiting for audio, so audio must keep flowing.
+                    if !isVideoInputFinished && input.isReadyForMoreMediaData && aSeconds > lastMuxedVideoSeconds + 1.0 {
+                        pendingAudioSample = aSample
+                        break
+                    }
+                    pendingAudioSample = nil
+                    if !aInput.append(aSample) {
+                        isAudioDone = true
+                        aInput.markAsFinished()
                     }
                 }
+            }
+        }
 
-                if !isAudioDone, let aInput = muxAudioInput, let (_, aOutput) = audioPipeline {
-                    while !isAudioDone && aInput.isReadyForMoreMediaData {
-                        if let aSample = aOutput.copyNextSampleBuffer() {
-                            if !aInput.append(aSample) {
-                                isAudioDone = true
-                                aInput.markAsFinished()
-                                break
-                            }
-                            madeProgress = true
-                        } else {
-                            isAudioDone = true
-                            aInput.markAsFinished()
+        var pacer = MainActorExportPacer()
+        func reportProgress(_ local: Double, force: Bool = false) {
+            pacer.reportProgress(progressRange.0 + local * (progressRange.1 - progressRange.0), force: force, onProgress)
+        }
+
+        do {
+            var nextGOP = 0
+            while true {
+                try Task.checkCancellation()
+                var submittedFrame = false
+
+                for lane in lanes {
+                    // The software lane waits until the Media Engine has produced enough frames to measure its bitrate,
+                    // so its very first GOP is already rate-matched.
+                    let softwareLaneNeedsCalibration = !lane.worker.isHardware && ordered.hardwareBitsPerFrame() == nil && nextGOP < gopCount - 1
+                    if lane.gopIndex == nil, !softwareLaneNeedsCalibration, nextGOP < gopCount, nextGOP <= ordered.orderedFrameCount / gopSize + maxGOPLead {
+                        lane.gopIndex = nextGOP
+                        lane.nextFrameIndex = nextGOP * gopSize
+                        lane.needsFlush = false
+                        nextGOP += 1
+                        startPrefetch(lane)
+                        if !lane.worker.isHardware, let bitsPerFrame = ordered.hardwareBitsPerFrame() {
+                            lane.worker.setAverageBitRate(max(600_000, Int(bitsPerFrame * Double(fps))))
                         }
                     }
+                    if lane.gopIndex == nil && lane.needsFlush {
+                        lane.needsFlush = false
+                        lane.worker.flushPendingFrames()
+                    }
+                    guard let gop = lane.gopIndex, lane.worker.hasCapacity else { continue }
+
+                    let frameIdx = lane.nextFrameIndex
+                    let frameSourceMs = sourceMs(frameIdx)
+                    let frames = await (lane.prefetch ?? Task { await lane.source.frames(atSourceMs: frameSourceMs) }).value
+                    lane.prefetch = nil
+                    try Task.checkCancellation()
+                    autoreleasepool {
+                        let composited = compositor.composeFrame(
+                            sourceVideoFrame: frames.screen,
+                            sourceTimeMs: frameSourceMs,
+                            session: session,
+                            outputSize: outputSize,
+                            includeShortcutOverlay: true,
+                            webcamVideoFrame: frames.webcam
+                        )
+                        guard let pixelBuffer = lane.worker.allocatePixelBuffer() else {
+                            ordered.deliver(frameIndex: frameIdx, sample: nil, fromHardware: lane.worker.isHardware)
+                            return
+                        }
+                        let destination = CIRenderDestination(pixelBuffer: pixelBuffer)
+                        destination.colorSpace = colorSpace
+                        // Async GPU render: the lane's work queue waits for it, the main actor moves on.
+                        let task = try? compositor.ciContext.startTask(
+                            toRender: composited,
+                            from: CGRect(origin: .zero, size: outputSize),
+                            to: destination,
+                            at: .zero
+                        )
+                        lane.worker.submitFrame(
+                            renderTask: task,
+                            pixelBuffer: pixelBuffer,
+                            frameIndex: frameIdx,
+                            pts: CMTime(value: CMTimeValue(frameIdx), timescale: CMTimeScale(fps)),
+                            duration: frameDuration,
+                            forceKeyframe: frameIdx % gopSize == 0
+                        )
+                    }
+                    submittedFrame = true
+
+                    lane.nextFrameIndex += 1
+                    if lane.nextFrameIndex >= min(totalFrames, (gop + 1) * gopSize) {
+                        lane.gopIndex = nil
+                        lane.needsFlush = true
+                    } else {
+                        startPrefetch(lane)
+                    }
                 }
 
-                let muxFrac = Double(videoIndex) / Double(max(1, allSamples.count))
-                let localProgress = 0.96 + muxFrac * 0.035
-                let mappedProgress = progressRange.0 + localProgress * (progressRange.1 - progressRange.0)
-                onProgress(mappedProgress)
+                try drainMuxer(encodersFinished: false)
+                reportProgress(Double(ordered.encodedFrameCount) / Double(totalFrames) * 0.98)
 
-                if !madeProgress && (!isVideoDone || !isAudioDone) {
+                if nextGOP >= gopCount && lanes.allSatisfy({ $0.gopIndex == nil }) {
+                    break
+                }
+                if submittedFrame {
+                    try await pacer.yieldIfNeeded()
+                } else {
+                    try await Task.sleep(for: .milliseconds(1))
+                }
+            }
+
+            lanes.forEach { $0.source.cancel() }
+
+            // Flush both encoders off the main actor. At most `maxGOPLead` GOPs are still in flight here.
+            await Task.detached(priority: .userInitiated) {
+                hwWorker.finishAndWait()
+                swWorker?.finishAndWait()
+            }.value
+            try Task.checkCancellation()
+
+            while !isVideoInputFinished || !isAudioDone {
+                try Task.checkCancellation()
+                try drainMuxer(encodersFinished: true)
+                if muxWriter == nil {
+                    throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: "No video frames were encoded."])
+                }
+                if !isVideoInputFinished || !isAudioDone {
                     try await Task.sleep(for: .milliseconds(1))
                 }
             }
 
             audioPipeline?.reader.cancelReading()
-            await muxWriter.finishWriting()
-            onProgress(progressRange.1)
+            await muxWriter?.finishWriting()
+            if let writer = muxWriter, writer.status == .failed {
+                throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+            }
+            reportProgress(1.0, force: true)
         } catch {
-            frameReader?.cancel()
+            lanes.forEach { $0.prefetch?.cancel(); $0.source.cancel() }
             hwWorker.cancel()
             swWorker?.cancel()
+            audioPipeline?.reader.cancelReading()
+            muxWriter?.cancelWriting()
             try? FileManager.default.removeItem(at: outputURL)
             throw error
         }
@@ -1112,11 +1354,10 @@ public final class HardwareVideoExporter {
         let frameStepMs = 1000.0 / Double(fps)
         let totalFrames = max(1, Int(ceil(totalDurationMs / frameStepMs)))
 
-        let videoURL = session.videoFileURL
-        let frameReader = await SequentialVideoFrameReader(url: videoURL)
+        let frameSource = await ExportFrameSource.make(session: session)
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-        var lastYieldUptime = ProcessInfo.processInfo.systemUptime
+        var pacer = MainActorExportPacer()
         var isProResAudioDone = (proResAudioInput == nil || audioPipeline == nil)
         if isProResAudioDone {
             proResAudioInput?.markAsFinished()
@@ -1152,18 +1393,19 @@ public final class HardwareVideoExporter {
 
                 let timelineMs = Double(frameIdx) * frameStepMs
                 let sourceMs = session.timeMapper.sourceTime(forTimelineMs: timelineMs).sourceMs
+                let frames = await frameSource.frames(atSourceMs: sourceMs)
 
                 try autoreleasepool {
-                    let sourceCIImage = frameReader?.frame(atSourceMs: sourceMs)
 
                     try Task.checkCancellation()
 
                     let composited = compositor.composeFrame(
-                        sourceVideoFrame: sourceCIImage,
+                        sourceVideoFrame: frames.screen,
                         sourceTimeMs: sourceMs,
                         session: session,
                         outputSize: outputSize,
-                        includeShortcutOverlay: true
+                        includeShortcutOverlay: true,
+                        webcamVideoFrame: frames.webcam
                     )
 
                     if let pool = adaptor.pixelBufferPool {
@@ -1186,18 +1428,12 @@ public final class HardwareVideoExporter {
                 drainReadyProResAudioSamples()
 
                 let localProgress = Double(frameIdx + 1) / Double(totalFrames)
-                let mappedProgress = progressRange.0 + localProgress * (progressRange.1 - progressRange.0)
-                onProgress(mappedProgress)
-
-                let nowUptime = ProcessInfo.processInfo.systemUptime
-                if nowUptime - lastYieldUptime >= 0.08 || frameIdx == totalFrames - 1 {
-                    lastYieldUptime = nowUptime
-                    try await Task.sleep(for: .milliseconds(1))
-                }
+                pacer.reportProgress(progressRange.0 + localProgress * (progressRange.1 - progressRange.0), onProgress)
+                try await pacer.yieldIfNeeded()
             }
 
             try Task.checkCancellation()
-            frameReader?.cancel()
+            frameSource.cancel()
             writerInput.markAsFinished()
 
             while !isProResAudioDone {
@@ -1212,7 +1448,7 @@ public final class HardwareVideoExporter {
             await writer.finishWriting()
             onProgress(progressRange.1)
         } catch {
-            frameReader?.cancel()
+            frameSource.cancel()
             audioPipeline?.reader.cancelReading()
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: outputURL)
@@ -1459,10 +1695,9 @@ public final class HardwareVideoExporter {
             ]
         ]
 
-        let videoURL = session.videoFileURL
-        let frameReader = await SequentialVideoFrameReader(url: videoURL)
+        let frameSource = await ExportFrameSource.make(session: session)
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-        var lastYieldUptime = ProcessInfo.processInfo.systemUptime
+        var pacer = MainActorExportPacer()
 
         do {
             for frameIdx in 0..<totalFrames {
@@ -1470,18 +1705,19 @@ public final class HardwareVideoExporter {
 
                 let timelineMs = Double(frameIdx) * frameStepMs
                 let sourceMs = session.timeMapper.sourceTime(forTimelineMs: timelineMs).sourceMs
+                let frames = await frameSource.frames(atSourceMs: sourceMs)
 
                 try autoreleasepool {
-                    let sourceCIImage = frameReader?.frame(atSourceMs: sourceMs)
 
                     try Task.checkCancellation()
 
                     let composited = compositor.composeFrame(
-                        sourceVideoFrame: sourceCIImage,
+                        sourceVideoFrame: frames.screen,
                         sourceTimeMs: sourceMs,
                         session: session,
                         outputSize: outputSize,
-                        includeShortcutOverlay: true
+                        includeShortcutOverlay: true,
+                        webcamVideoFrame: frames.webcam
                     )
 
                     if let cgImage = compositor.ciContext.createCGImage(
@@ -1494,22 +1730,18 @@ public final class HardwareVideoExporter {
                     }
                 }
 
-                onProgress(Double(frameIdx + 1) / Double(totalFrames))
-                let nowUptime = ProcessInfo.processInfo.systemUptime
-                if nowUptime - lastYieldUptime >= 0.08 || frameIdx == totalFrames - 1 {
-                    lastYieldUptime = nowUptime
-                    try await Task.sleep(for: .milliseconds(1))
-                }
+                pacer.reportProgress(Double(frameIdx + 1) / Double(totalFrames), onProgress)
+                try await pacer.yieldIfNeeded()
             }
 
             try Task.checkCancellation()
-            frameReader?.cancel()
+            frameSource.cancel()
             if !CGImageDestinationFinalize(destination) {
                 throw NSError(domain: "NativeScreenExport", code: -4, userInfo: [NSLocalizedDescriptionKey: "Failed to finalize GIF file."])
             }
             onProgress(1.0)
         } catch {
-            frameReader?.cancel()
+            frameSource.cancel()
             try? FileManager.default.removeItem(at: outputURL)
             throw error
         }

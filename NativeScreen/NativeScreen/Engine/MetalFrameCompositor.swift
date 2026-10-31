@@ -4,6 +4,7 @@ import MetalKit
 import CoreImage
 import AVFoundation
 import AppKit
+import Vision
 
 /// Shared GPU Compositor that executes the 6-Pass Cinematic Render Pipeline on a `CAMetalDrawable` (for 0% Idle CPU Preview)
 /// or an offscreen `CVPixelBuffer` (for ultra-fast `VideoToolbox` hardware MP4/HEVC export).
@@ -112,7 +113,8 @@ public final class MetalFrameCompositor {
         sourceTimeMs: Double,
         session: ProjectSession,
         outputSize: CGSize,
-        includeShortcutOverlay: Bool = false
+        includeShortcutOverlay: Bool = false,
+        webcamVideoFrame: CIImage? = nil
     ) -> CIImage {
         let doc = session.document
         let canvasRect = CGRect(origin: .zero, size: outputSize)
@@ -479,6 +481,7 @@ public final class MetalFrameCompositor {
                 && !session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
                 composite = renderWebcamOverlayForExport(
                     over: composite,
+                    webcamFrame: webcamVideoFrame,
                     camCfg: effectiveCameraConfig,
                     isFullscreenCamera: isFullscreenCamera,
                     sourceScreenSize: maskedScreen.extent.size,
@@ -1610,6 +1613,7 @@ public final class MetalFrameCompositor {
 
     private func renderWebcamOverlayForExport(
         over background: CIImage,
+        webcamFrame: CIImage?,
         camCfg: CameraConfig,
         isFullscreenCamera: Bool = false,
         sourceScreenSize: CGSize,
@@ -1686,30 +1690,22 @@ public final class MetalFrameCompositor {
         let activeCustomPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
             camCfg.customColorPresets.first(where: { $0.id == id })
         }
-        let gradedNSImg = activeCustomPreset.map {
-            GradedWebcamPortraitView.cachedGradedCustomPresetImage(
-                customPreset: $0,
-                intensity: camCfg.colorGradeIntensity,
-                sharpen01: camCfg.sharpen01,
-                isCutoutMode: !isFullscreenCamera && camCfg.layoutMode == .cutout
-            )
-        } ?? GradedWebcamPortraitView.cachedGradedPortraitImage(
-            preset: camCfg.colorGradePreset,
-            intensity: camCfg.colorGradeIntensity,
-            sharpen01: camCfg.sharpen01,
-            isCutoutMode: !isFullscreenCamera && camCfg.layoutMode == .cutout
-        )
-        guard let tiff = gradedNSImg.tiffRepresentation,
-              let rawCI = CIImage(data: tiff) else {
+        let isCutout = !isFullscreenCamera && camCfg.layoutMode == .cutout
+        guard let rawCI = webcamFrame.map({
+            self.prepareRecordedWebcamFrame($0, camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: isCutout)
+        }) ?? Self.placeholderWebcamImage(camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: isCutout) else {
             return background
         }
 
         // Aspect-fill crop inside `pipRect` so portrait/landscape split-screen camera frames never stretch!
-        let scale = max(pipWidth / max(1.0, rawCI.extent.width), pipHeight / max(1.0, rawCI.extent.height))
+        // Face tracking adds the same 1.16x punch-in the preview applies.
+        let faceZoom: CGFloat = camCfg.enableFaceTracking ? 1.16 : 1.0
+        let scale = max(pipWidth / max(1.0, rawCI.extent.width), pipHeight / max(1.0, rawCI.extent.height)) * faceZoom
         let scaledW = rawCI.extent.width * scale
         let scaledH = rawCI.extent.height * scale
         let pipRect = CGRect(x: originX, y: originY, width: pipWidth, height: pipHeight)
         let scaled = rawCI
+            .transformed(by: CGAffineTransform(translationX: -rawCI.extent.minX, y: -rawCI.extent.minY))
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             .transformed(by: CGAffineTransform(
                 translationX: originX + (pipWidth - scaledW) * 0.5,
@@ -1744,51 +1740,210 @@ public final class MetalFrameCompositor {
         return scaled.composited(over: background).cropped(to: canvasRect)
     }
 
+    /// Applies the same per-frame camera styling the live preview applies to the recorded `webcam.mp4` frame:
+    /// `Crop camera` rect, `Mirror horizontally`, on-device person cutout, color grade and sharpen.
+    /// One segmentation request reused across exported frames (keeps the Vision model and its temporal state warm).
+    private lazy var webcamSegmentationRequest: VNGeneratePersonSegmentationRequest = {
+        let request = VNGeneratePersonSegmentationRequest()
+        request.qualityLevel = .balanced
+        request.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        return request
+    }()
+
+    private func prepareRecordedWebcamFrame(
+        _ frame: CIImage,
+        camCfg: CameraConfig,
+        customPreset: CustomCameraColorPreset?,
+        isCutoutMode: Bool
+    ) -> CIImage {
+        var img = frame.transformed(by: CGAffineTransform(translationX: -frame.extent.minX, y: -frame.extent.minY))
+        let ext = img.extent
+        let crop = camCfg.cropRect01
+        if crop != .full {
+            // `Rect01` is top-left based; CoreImage is bottom-left based.
+            let cropRect = CGRect(
+                x: CGFloat(crop.x) * ext.width,
+                y: CGFloat(1.0 - crop.y - crop.height) * ext.height,
+                width: max(16.0, CGFloat(max(0.25, crop.width)) * ext.width),
+                height: max(16.0, CGFloat(max(0.25, crop.height)) * ext.height)
+            ).intersection(ext)
+            img = img.cropped(to: cropRect)
+                .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
+        }
+        // Matches the preview's `scaleEffect(x: mirror ? 1 : -1)`: the raw camera frame is flipped unless `mirror` is on.
+        if !camCfg.mirror {
+            img = img.transformed(by: CGAffineTransform(scaleX: -1.0, y: 1.0).translatedBy(x: -img.extent.width, y: 0.0))
+        }
+        if isCutoutMode {
+            img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(
+                to: img,
+                edgeSoftness: camCfg.cutoutEdgeSoftness,
+                edgeInset: camCfg.cutoutEdgeInset,
+                reusing: webcamSegmentationRequest
+            )
+        }
+        return LocalOnDeviceMediaIntelligence.applyCameraGradeAndSharpen(
+            to: img,
+            preset: customPreset == nil ? camCfg.colorGradePreset : .original,
+            customPreset: customPreset,
+            intensity: camCfg.colorGradeIntensity,
+            sharpen01: camCfg.sharpen01
+        )
+    }
+
+    /// Still placeholder used only when no `webcam.mp4` frame could be decoded (missing or unreadable file).
+    private static func placeholderWebcamImage(
+        camCfg: CameraConfig,
+        customPreset: CustomCameraColorPreset?,
+        isCutoutMode: Bool
+    ) -> CIImage? {
+        let gradedNSImg = customPreset.map {
+            GradedWebcamPortraitView.cachedGradedCustomPresetImage(
+                customPreset: $0,
+                intensity: camCfg.colorGradeIntensity,
+                sharpen01: camCfg.sharpen01,
+                isCutoutMode: isCutoutMode
+            )
+        } ?? GradedWebcamPortraitView.cachedGradedPortraitImage(
+            preset: camCfg.colorGradePreset,
+            intensity: camCfg.colorGradeIntensity,
+            sharpen01: camCfg.sharpen01,
+            isCutoutMode: isCutoutMode
+        )
+        guard let cg = gradedNSImg.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        return CIImage(cgImage: cg)
+    }
+
+    private struct CaptionPillCacheKey: Equatable {
+        let words: [CaptionLineLayout.DisplayedWord]
+        let fontSize: CGFloat
+        let fontStyle: CaptionFontStyle
+        let colorTheme: CaptionColorTheme
+        let wordAnimation: CaptionWordAnimation
+    }
+    private var lastCaptionPillKey: CaptionPillCacheKey?
+    private var cachedCaptionPill: CIImage?
+
+    /// Bakes the same caption line the preview shows (`CaptionLineLayout`) into the exported frame.
+    /// The pill is rasterized with CoreGraphics straight into a bitmap (no TIFF round-trip) and cached until the
+    /// visible words or their opacities change, which happens only at word boundaries.
     private func renderCaptionsOverlayForExport(
         over background: CIImage,
         captionsConfig: CaptionsConfig,
         sourceTimeMs: Double,
         canvasRect: CGRect
     ) -> CIImage {
-        let visible = captionsConfig.segments.filter { !$0.isHidden }.sorted { $0.sourceStartMs < $1.sourceStartMs }
-        guard let activeWord = visible.last(where: { $0.sourceStartMs <= sourceTimeMs && sourceTimeMs <= $0.sourceEndMs + 450.0 }) else {
+        guard let line = CaptionLineLayout.activeLine(in: captionsConfig, at: sourceTimeMs) else {
             return background
         }
+        let words = CaptionLineLayout.displayedWords(for: line, config: captionsConfig, at: sourceTimeMs)
+        guard !words.isEmpty else { return background }
 
-        let fontSize = max(18.0, canvasRect.height * CGFloat(captionsConfig.fontSizeRatio))
-        let text = activeWord.text
-        let nsFont = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
-        let isDark = (captionsConfig.colorTheme == .dark)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: nsFont,
-            .foregroundColor: isDark ? NSColor.white : NSColor.black
-        ]
-        let textSize = (text as NSString).size(withAttributes: attrs)
-        let padX = fontSize * 0.72
-        let padY = fontSize * 0.38
-        let pillW = ceil(textSize.width + padX * 2.0)
-        let pillH = ceil(textSize.height + padY * 2.0)
-
-        let nsImg = NSImage(size: NSSize(width: pillW, height: pillH), flipped: false) { rect in
-            let bgColor = isDark
-                ? NSColor(white: 0.0, alpha: 0.82)
-                : NSColor(white: 1.0, alpha: 0.92)
-            bgColor.setFill()
-            let path = NSBezierPath(roundedRect: rect, xRadius: fontSize * 0.42, yRadius: fontSize * 0.42)
-            path.fill()
-            (text as NSString).draw(at: NSPoint(x: padX, y: padY), withAttributes: attrs)
-            return true
-        }
-
-        guard let tiff = nsImg.tiffRepresentation,
-              let pillCI = CIImage(data: tiff) else {
-            return background
+        let fontSize = max(14.0, canvasRect.height * CGFloat(captionsConfig.fontSizeRatio))
+        let key = CaptionPillCacheKey(
+            words: words,
+            fontSize: fontSize,
+            fontStyle: captionsConfig.fontStyle,
+            colorTheme: captionsConfig.colorTheme,
+            wordAnimation: captionsConfig.wordAnimation
+        )
+        let pill: CIImage
+        if key == lastCaptionPillKey, let cached = cachedCaptionPill {
+            pill = cached
+        } else {
+            guard let rendered = Self.rasterizeCaptionPill(key: key) else { return background }
+            lastCaptionPillKey = key
+            cachedCaptionPill = rendered
+            pill = rendered
         }
 
         let cx = canvasRect.width * CGFloat(max(0.15, min(0.85, captionsConfig.position01.x)))
         let cy = canvasRect.height * CGFloat(1.0 - max(0.12, min(0.90, captionsConfig.position01.y)))
-        let placed = pillCI.transformed(by: CGAffineTransform(translationX: cx - pillW * 0.5, y: cy - pillH * 0.5))
+        let placed = pill.transformed(by: CGAffineTransform(
+            translationX: cx - pill.extent.width * 0.5,
+            y: cy - pill.extent.height * 0.5
+        ))
         return placed.composited(over: background).cropped(to: canvasRect)
+    }
+
+    private static func rasterizeCaptionPill(key: CaptionPillCacheKey) -> CIImage? {
+        let fontSize = key.fontSize
+        let baseFont = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+        let font: NSFont = {
+            let design: NSFontDescriptor.SystemDesign
+            switch key.fontStyle {
+            case .sansSerif: return baseFont
+            case .serif: design = .serif
+            case .mono: design = .monospaced
+            }
+            guard let desc = baseFont.fontDescriptor.withDesign(design) else { return baseFont }
+            return NSFont(descriptor: desc, size: fontSize) ?? baseFont
+        }()
+        let isDark = (key.colorTheme == .dark)
+        let textColor = isDark ? NSColor.white : NSColor.black
+
+        let spacing = fontSize * 0.28
+        let attributed = key.words.map { word in
+            NSAttributedString(string: word.segment.text, attributes: [
+                .font: font,
+                .foregroundColor: textColor.withAlphaComponent(CGFloat(word.opacity))
+            ])
+        }
+        let sizes = attributed.map { $0.size() }
+        let textW = sizes.reduce(0.0) { $0 + $1.width } + spacing * CGFloat(max(0, sizes.count - 1))
+        let textH = sizes.map(\.height).max() ?? fontSize
+        let padX = fontSize * 0.72
+        let padY = fontSize * 0.38
+        let pillW = ceil(textW + padX * 2.0)
+        let pillH = ceil(textH + padY * 2.0)
+
+        // Leave room for the soft drop shadow around the pill.
+        let shadowRadius = fontSize * 0.45
+        let shadowOffsetY = fontSize * 0.15
+        let margin = ceil(shadowRadius * 2.0 + shadowOffsetY)
+        let width = Int(pillW + margin * 2.0)
+        let height = Int(pillH + margin * 2.0)
+
+        guard let ctx = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else { return nil }
+
+        let pillRect = CGRect(x: margin, y: margin, width: pillW, height: pillH)
+        let radius = fontSize * 0.42
+        let pillPath = CGPath(roundedRect: pillRect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -shadowOffsetY), blur: shadowRadius * 2.0, color: NSColor.black.withAlphaComponent(0.38).cgColor)
+        ctx.addPath(pillPath)
+        ctx.setFillColor((isDark ? NSColor(white: 0.0, alpha: 0.82) : NSColor(white: 1.0, alpha: 0.92)).cgColor)
+        ctx.fillPath()
+        ctx.restoreGState()
+
+        ctx.addPath(CGPath(roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: radius, cornerHeight: radius, transform: nil))
+        ctx.setStrokeColor((isDark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.10)).cgColor)
+        ctx.setLineWidth(1.0)
+        ctx.strokePath()
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+        var x = pillRect.minX + padX
+        for (idx, str) in attributed.enumerated() {
+            let size = sizes[idx]
+            // Same 1.5pt lift the preview applies to the spoken word in `Slide in` mode, scaled to export pixels.
+            let lift: CGFloat = (key.wordAnimation == .slideIn && key.words[idx].isSpokenNow) ? fontSize * 0.06 : 0.0
+            str.draw(at: CGPoint(x: x, y: pillRect.minY + padY + (textH - size.height) * 0.5 + lift))
+            x += size.width + spacing
+        }
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let cg = ctx.makeImage() else { return nil }
+        return CIImage(cgImage: cg)
     }
 }
 

@@ -364,6 +364,31 @@ public final class RecordingCoordinator {
         return apps
     }
 
+    /// What happens when a recording stops (`Record > After Recording`).
+    public enum AfterRecordingAction: String, CaseIterable, Identifiable {
+        case createProject
+        case exportToClipboard
+        case exportToFile
+
+        public var id: String { rawValue }
+
+        public var title: String {
+            switch self {
+            case .createProject: return "Create project"
+            case .exportToClipboard: return "Export and copy to clipboard"
+            case .exportToFile: return "Export and save to file"
+            }
+        }
+    }
+
+    public var afterRecordingAction: AfterRecordingAction = .createProject {
+        didSet { UserDefaults.standard.set(afterRecordingAction.rawValue, forKey: afterRecordingActionKey) }
+    }
+    /// `Record > Automatically create zooms`: generate click-cluster zooms for new recordings.
+    public var autoCreateZooms: Bool = true {
+        didSet { UserDefaults.standard.set(autoCreateZooms, forKey: autoCreateZoomsKey) }
+    }
+
     // Recording Options (Persisted in UserDefaults)
     public var countdownOption: RecordingCountdownOption = .threeSeconds {
         didSet { UserDefaults.standard.set(countdownOption.rawValue, forKey: countdownOptionKey) }
@@ -415,6 +440,8 @@ public final class RecordingCoordinator {
     private let savedHUDOriginYKey = "NativeScreen.HUDPanel.OriginY"
     private let hasSavedHUDOriginKey = "NativeScreen.HUDPanel.HasSavedOrigin"
 
+    private let afterRecordingActionKey = "NativeScreen.RecordingOptions.AfterRecording"
+    private let autoCreateZoomsKey = "NativeScreen.RecordingOptions.AutoCreateZooms"
     private let countdownOptionKey = "NativeScreen.RecordingOptions.Countdown"
     private let hideDesktopIconsKey = "NativeScreen.RecordingOptions.HideDesktopIcons"
     private let hideDockIconKey = "NativeScreen.RecordingOptions.HideDockIcon"
@@ -427,6 +454,12 @@ public final class RecordingCoordinator {
 
     private init() {
         let defaults = UserDefaults.standard
+        if let raw = defaults.string(forKey: afterRecordingActionKey), let action = AfterRecordingAction(rawValue: raw) {
+            afterRecordingAction = action
+        }
+        if defaults.object(forKey: autoCreateZoomsKey) != nil {
+            autoCreateZooms = defaults.bool(forKey: autoCreateZoomsKey)
+        }
         if defaults.object(forKey: countdownOptionKey) != nil,
            let opt = RecordingCountdownOption(rawValue: defaults.integer(forKey: countdownOptionKey)) {
             self.countdownOption = opt
@@ -1159,8 +1192,8 @@ public final class RecordingCoordinator {
             accumulatedPausedSeconds += max(0.0, now - pStart)
             pauseStartUptime = nil
         }
-        captureEngine?.setPaused(newPaused)
-        telemetryRecorder?.setPaused(newPaused)
+        captureEngine?.setPaused(newPaused, atUptime: now)
+        telemetryRecorder?.setPaused(newPaused, atUptime: now)
     }
 
     public func restartCurrentRecording() async {
@@ -1329,12 +1362,12 @@ public final class RecordingCoordinator {
         let clicks = JSONLinesCodec.load(ClickEvent.self, from: clicksURL)
         let keys = JSONLinesCodec.load(KeyStrokeEvent.self, from: keysURL)
 
-        let autoZooms = AutoZoomClusterGenerator.generateZooms(
+        let autoZooms = autoCreateZooms ? AutoZoomClusterGenerator.generateZooms(
             clicks: clicks,
             keys: keys,
             durationMs: durationMs,
             defaultScale: 1.8
-        )
+        ) : []
 
         let projectName = targetMeta.appName ?? packageURL.deletingPathExtension().lastPathComponent
         let initialSlice = ClipSlice(sourceStartMs: 0.0, sourceEndMs: durationMs, speed: 1.0)
@@ -1358,8 +1391,46 @@ public final class RecordingCoordinator {
         hideRecordingHUD()
 
         if let session = ProjectWorkspaceStore.shared.openOrFocusProject(at: packageURL) {
+            switch afterRecordingAction {
+            case .createProject:
+                break
+            case .exportToClipboard:
+                session.pendingEditorCommand = .quickExport(.clipboard)
+            case .exportToFile:
+                session.pendingEditorCommand = .quickExport(.file)
+            }
             onRecordingCompleted?(session)
         }
+    }
+
+    // MARK: - App Menu Entry Points (`Record`, `View > Show recording widget`, `Window > Reset windows positions`)
+
+    /// `Record > Record display / window / area`: opens the recording bar with that capture mode already picking a target.
+    public func showRecordingHUD(mode: CaptureTargetMode) {
+        guard !isRecording && !isCountingDown else { return }
+        showRecordingHUD()
+        if !(selectedMode == mode && isPickingTarget) {
+            selectMode(mode)
+        }
+    }
+
+    public func toggleRecordingHUD() {
+        if isHUDVisible {
+            guard !isRecording && !isCountingDown else { return }
+            hideRecordingHUD()
+        } else {
+            showRecordingHUD()
+        }
+    }
+
+    public func resetHUDPosition() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: hasSavedHUDOriginKey)
+        defaults.removeObject(forKey: savedHUDOriginXKey)
+        defaults.removeObject(forKey: savedHUDOriginYKey)
+        guard isHUDVisible, let panel = hudPanel else { return }
+        let size = panel.frame.size
+        panel.setFrame(NSRect(origin: restoredAndClampedHUDOrigin(panelSize: size), size: size), display: true, animate: true)
     }
 
     // MARK: - Create Instant Interactive Demo Project

@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Observation
 import AppKit
+import UniformTypeIdentifiers
 
 /// Global registry that manages multiple simultaneously open `.nativescreen` project `NSWindow`s
 /// and coordinates showing/hiding the floating Recording HUD panel automatically:
@@ -15,6 +16,13 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
     public var sessionsByID: [UUID: ProjectSession] = [:]
     public var recentProjectURLs: [URL] = []
+    /// Session of the editor window that is (or was last) key. App menu commands act on it.
+    public private(set) var activeSessionID: UUID?
+
+    public var activeSession: ProjectSession? {
+        guard let id = activeSessionID, editorWindowsBySessionID[id] != nil else { return nil }
+        return sessionsByID[id]
+    }
 
     private var editorWindowsBySessionID: [UUID: NSWindow] = [:]
     private var cropWindowsBySessionID: [UUID: NSWindow] = [:]
@@ -129,6 +137,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.setFrame(initialFrame, display: true)
 
         editorWindowsBySessionID[session.id] = window
+        activeSessionID = session.id
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
@@ -374,6 +383,12 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
+    public func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let (sessionID, _) = editorWindowsBySessionID.first(where: { $0.value === window }) else { return }
+        activeSessionID = sessionID
+    }
+
     public func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow else { return }
 
@@ -394,6 +409,9 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         // If a Project Editor window is closed, also automatically close its associated Crop / Studio windows!
         if let (sessionID, _) = editorWindowsBySessionID.first(where: { $0.value === closingWindow }) {
             editorWindowsBySessionID.removeValue(forKey: sessionID)
+            if activeSessionID == sessionID {
+                activeSessionID = editorWindowsBySessionID.keys.first
+            }
             closeCropWindow(for: sessionID)
             closeCameraCropWindow(for: sessionID)
             closeColorPresetStudioWindow(for: sessionID)
@@ -426,6 +444,134 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
                 _ = openOrFocusProject(at: url)
             }
         }
+    }
+
+    // MARK: - App Menu Actions (`File`, `Export`, `Window`)
+
+    /// Opens the most recently used project that still exists on disk (`File > Open last project`).
+    public func openLastProject() {
+        guard let url = recentProjectURLs.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else { return }
+        openOrFocusProject(at: url)
+    }
+
+    public func clearRecentProjects() {
+        recentProjectURLs.removeAll()
+        UserDefaults.standard.set([String](), forKey: recentsDefaultsKey)
+    }
+
+    /// `File > Show previous projects`: reveals the folder new recordings are saved to.
+    public func revealProjectsFolder() {
+        NSWorkspace.shared.activateFileViewerSelecting([Self.defaultProjectsDirectory])
+    }
+
+    /// `File > Save as…`: saves, copies the whole package to a new location and continues editing the copy.
+    public func saveActiveProjectAs() {
+        guard let session = activeSession else { return }
+        session.isPlaying = false
+        try? session.saveNow()
+
+        let panel = NSSavePanel()
+        panel.message = "Save a copy of this project"
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "nativescreen") ?? .package]
+        panel.directoryURL = session.packageURL.deletingLastPathComponent()
+        panel.nameFieldStringValue = "\(session.document.name) copy.nativescreen"
+        guard panel.runModal() == .OK, var destination = panel.url else { return }
+        if destination.pathExtension.lowercased() != "nativescreen" {
+            destination.appendPathExtension("nativescreen")
+        }
+        guard destination.standardizedFileURL != session.packageURL.standardizedFileURL else { return }
+
+        do {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.trashItem(at: destination, resultingItemURL: nil)
+            }
+            // APFS clones the media files, so this is instant on the same volume.
+            try FileManager.default.copyItem(at: session.packageURL, to: destination)
+            var copiedDoc = session.document
+            copiedDoc.name = destination.deletingPathExtension().lastPathComponent
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(copiedDoc).write(to: destination.appendingPathComponent("project.json"), options: .atomic)
+        } catch {
+            NSAlert(error: error).runModal()
+            return
+        }
+        editorWindowsBySessionID[session.id]?.close()
+        openOrFocusProject(at: destination)
+    }
+
+    /// `Window > Reset windows positions`: maximizes every editor window on the main display and re-centers the recording bar.
+    public func resetWindowPositions() {
+        let screen = NSScreen.main ?? NSScreen.screens.first
+        guard let vf = screen?.visibleFrame else { return }
+        for window in editorWindowsBySessionID.values {
+            window.setFrame(NSRect(
+                x: vf.origin.x,
+                y: vf.origin.y,
+                width: max(Self.minEditorWindowWidth, vf.width),
+                height: max(Self.minEditorWindowHeight, vf.height)
+            ), display: true, animate: true)
+        }
+        RecordingCoordinator.shared.resetHUDPosition()
+    }
+
+    /// Folder clipboard exports are written to (kept so `Export > Show previous clipboard exports` can list them).
+    public static var clipboardExportsDirectory: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let dir = appSupport.appendingPathComponent("NativeScreen/Clipboard Exports", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Newest first.
+    public static func recentClipboardExports(limit: Int = 10) -> [URL] {
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: clipboardExportsDirectory,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        let dated = urls.map { url in
+            (url, (try? url.resourceValues(forKeys: Set(keys)).contentModificationDate) ?? .distantPast)
+        }
+        return dated.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
+    }
+
+    /// `Export > Extract raw recording files…`: copies the untouched recorded media (screen, camera, microphone) to a folder.
+    public func extractRawRecordingFiles() {
+        guard let session = activeSession else { return }
+        let panel = NSOpenPanel()
+        panel.message = "Choose where to save the raw recording files"
+        panel.prompt = "Extract"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let parent = panel.url else { return }
+
+        let recordingDir = session.packageURL.appendingPathComponent("recording", isDirectory: true)
+        let tracks = session.metadata.tracks
+        let names = Set([tracks.displayVideo, tracks.webcamVideo, tracks.microphoneAudio].compactMap { $0 })
+        var destination = parent.appendingPathComponent("\(session.document.name) raw files", isDirectory: true)
+        var suffix = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            destination = parent.appendingPathComponent("\(session.document.name) raw files \(suffix)", isDirectory: true)
+            suffix += 1
+        }
+        do {
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            for name in names.sorted() {
+                let source = recordingDir.appendingPathComponent(name)
+                guard FileManager.default.fileExists(atPath: source.path) else { continue }
+                try FileManager.default.copyItem(at: source, to: destination.appendingPathComponent(name))
+            }
+        } catch {
+            NSAlert(error: error).runModal()
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([destination])
     }
 
     public func addRecentProject(_ url: URL) {
@@ -638,6 +784,37 @@ public final class ProjectPresetsStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? encoder.encode(preset) {
             try? data.write(to: fileURL(for: preset), options: .atomic)
+        }
+    }
+
+    /// `File > Import preset…`: imports preset `.json` files (as written to the presets folder) shared by another user or machine.
+    /// An imported preset gets a fresh id so it never overwrites an existing one.
+    public func promptImportPresets() {
+        let panel = NSOpenPanel()
+        panel.message = "Choose preset files to import"
+        panel.prompt = "Import"
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+
+        var failed: [String] = []
+        for url in panel.urls {
+            guard let data = try? Data(contentsOf: url),
+                  var preset = try? JSONDecoder().decode(ProjectPreset.self, from: data) else {
+                failed.append(url.lastPathComponent)
+                continue
+            }
+            preset.id = UUID().uuidString
+            presets.append(preset)
+            savePresetToDisk(preset)
+        }
+        presets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        if !failed.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Some files are not NativeScreen presets"
+            alert.informativeText = failed.joined(separator: "\n")
+            alert.runModal()
         }
     }
 

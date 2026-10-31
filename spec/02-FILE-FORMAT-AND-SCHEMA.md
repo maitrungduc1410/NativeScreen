@@ -29,6 +29,12 @@ MyDemo.nativescreen/
         └── window.jsonl          # Target window resize/move bounds changes during capture
 ```
 
+**Projects created from an existing video** (`File > Create project from video…`) use the same layout: the movie is copied
+unchanged to `recording/display.<original extension>` (`tracks.displayVideo`, also `tracks.systemAudio` when the movie has
+audio), `captureTarget.mode` is `display` with the movie's pixel size and `scaleFactor: 1`, `tracks.windowTelemetry` is
+`null`, and `cursor.jsonl` / `clicks.jsonl` / `keys.jsonl` are empty files. Readers must treat an empty `cursor.jsonl` as
+"no cursor recorded": zooms are `manual` (`manualCenter01`) and the cursor layer is not drawn.
+
 > **Backward/Direct MP4 Compatibility:** The NativeScreen video reader checks the extension of `outputFilename` in `recording/metadata.json`. If it ends in `.m3u8`, it loads the segmented fMP4 stream; if it ends in `.mp4` or `.mov`, it reads the standalone video file directly.
 
 ---

@@ -403,26 +403,54 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private let audioQueue = DispatchQueue(label: "com.nativescreen.capture.audio", qos: .userInteractive)
     private let avDeviceQueue = DispatchQueue(label: "com.nativescreen.capture.avdevices", qos: .userInteractive)
 
+    /// Writes a movie fragment every 2s so a crash, force-quit or power loss mid-recording leaves a playable file
+    /// (everything up to the last fragment) instead of an MP4 with no `moov` atom. `finishWriting` defragments as usual.
+    private static let crashSafeFragmentInterval = CMTime(seconds: 2.0, preferredTimescale: 600)
+
     private var isWritingSessionStarted = false
     private var firstSampleTime: CMTime = .invalid
     private var lastSampleTime: CMTime = .zero
-    private var isPausedInternal: Bool = false
-    private var pauseStartSourcePTS: CMTime = .invalid
-    private var accumulatedPausedTime: CMTime = .zero
+    // Pause intervals on the host clock (the same clock as `SCStream`, `AVCaptureSession` and `systemUptime`).
+    // Every writer (screen, system audio, webcam, mic) and the telemetry recorder subtract the SAME wall-clock
+    // intervals, so pausing never shifts one track against another. Guarded by `pauseLock` because samples
+    // arrive on three different queues.
+    private struct PauseInterval {
+        let start: CMTime
+        var end: CMTime?
+    }
+    private let pauseLock = NSLock()
+    private var pauseIntervals: [PauseInterval] = []
 
     public private(set) var recordedDurationMs: Double = 0.0
     public var onFirstVideoFrameArrived: ((TimeInterval) -> Void)?
 
     public var onWebcamFrameCaptured: (@Sendable (IOSurfaceRef) -> Void)?
 
-    public func setPaused(_ paused: Bool) {
-        videoQueue.async {
-            guard self.isPausedInternal != paused else { return }
-            self.isPausedInternal = paused
-            if paused {
-                self.pauseStartSourcePTS = .invalid
-            }
+    /// `uptimeSec` must be the same `systemUptime` passed to `TelemetryRecorder.setPaused` so both clocks drop the exact same span.
+    public func setPaused(_ paused: Bool, atUptime uptimeSec: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        let hostTime = CMTime(seconds: uptimeSec, preferredTimescale: 1_000_000_000)
+        pauseLock.lock()
+        defer { pauseLock.unlock() }
+        let isPaused = pauseIntervals.last.map { $0.end == nil } ?? false
+        guard isPaused != paused else { return }
+        if paused {
+            pauseIntervals.append(PauseInterval(start: hostTime, end: nil))
+        } else {
+            pauseIntervals[pauseIntervals.count - 1].end = hostTime
         }
+    }
+
+    /// Returns `nil` when `hostPTS` falls inside a pause (drop the sample), otherwise the total paused time before it.
+    private func pausedOffset(forHostPTS hostPTS: CMTime) -> CMTime? {
+        pauseLock.lock()
+        defer { pauseLock.unlock() }
+        var offset = CMTime.zero
+        for interval in pauseIntervals {
+            guard CMTimeCompare(hostPTS, interval.start) >= 0 else { break }
+            guard let end = interval.end, CMTimeCompare(hostPTS, end) >= 0 else { return nil }
+            offset = CMTimeAdd(offset, CMTimeSubtract(end, interval.start))
+        }
+        return offset
     }
 
     public func startCapture(
@@ -457,6 +485,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         // Setup AVAssetWriter (Hardware H.264 / VideoToolbox)
         try? FileManager.default.removeItem(at: outputVideoURL)
         let writer = try AVAssetWriter(outputURL: outputVideoURL, fileType: .mp4)
+        writer.movieFragmentInterval = Self.crashSafeFragmentInterval
 
         let videoCompressionProps: [String: Any] = [
             AVVideoAverageBitRateKey: max(8_000_000, evenWidth * evenHeight * 4),
@@ -500,9 +529,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         self.isWritingSessionStarted = false
         self.firstSampleTime = .invalid
         self.lastSampleTime = .zero
-        self.isPausedInternal = false
-        self.pauseStartSourcePTS = .invalid
-        self.accumulatedPausedTime = .zero
+        pauseLock.lock()
+        self.pauseIntervals = []
+        pauseLock.unlock()
 
         let scStream = SCStream(filter: filter, configuration: config, delegate: self)
         try scStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: videoQueue)
@@ -543,6 +572,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                     if let webcamURL = outputWebcamURL {
                         try? FileManager.default.removeItem(at: webcamURL)
                         if let wWriter = try? AVAssetWriter(outputURL: webcamURL, fileType: .mp4) {
+                            wWriter.movieFragmentInterval = Self.crashSafeFragmentInterval
                             let rawH: Int = resolvedDims.height > 0 ? Int(resolvedDims.height) : Int(maxDimH)
                             let rawW: Int = resolvedDims.width > 0 ? Int(resolvedDims.width) : ((rawH * 16) / 9)
                             let targetW = max(2, rawW & ~1)
@@ -601,6 +631,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 guard let self = self else { return }
                 try? FileManager.default.removeItem(at: micURL)
                 if let mWriter = try? AVAssetWriter(outputURL: micURL, fileType: .m4a) {
+                    mWriter.movieFragmentInterval = Self.crashSafeFragmentInterval
                     let mSettings: [String: Any] = [
                         AVFormatIDKey: kAudioFormatMPEG4AAC,
                         AVSampleRateKey: 48_000,
@@ -738,20 +769,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             }
 
             let rawPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            if isPausedInternal {
-                if !pauseStartSourcePTS.isValid {
-                    pauseStartSourcePTS = rawPTS
-                }
-                return
-            } else if pauseStartSourcePTS.isValid {
-                let pauseDelta = CMTimeSubtract(rawPTS, pauseStartSourcePTS)
-                if pauseDelta.isValid && CMTimeGetSeconds(pauseDelta) > 0 {
-                    accumulatedPausedTime = CMTimeAdd(accumulatedPausedTime, pauseDelta)
-                }
-                pauseStartSourcePTS = .invalid
-            }
+            guard let pausedOffset = pausedOffset(forHostPTS: rawPTS) else { return }
 
-            let adjustedBuffer = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: accumulatedPausedTime) ?? sampleBuffer
+            let adjustedBuffer = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: pausedOffset) ?? sampleBuffer
             let pts = CMSampleBufferGetPresentationTimeStamp(adjustedBuffer)
 
             if !isWritingSessionStarted {
@@ -772,12 +792,12 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         case .audio:
             guard isWritingSessionStarted,
-                  !isPausedInternal,
                   let aInput = systemAudioInput,
-                  aInput.isReadyForMoreMediaData else {
+                  aInput.isReadyForMoreMediaData,
+                  let pausedOffset = pausedOffset(forHostPTS: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) else {
                 return
             }
-            let adjustedAudio = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: accumulatedPausedTime) ?? sampleBuffer
+            let adjustedAudio = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: pausedOffset) ?? sampleBuffer
             aInput.append(adjustedAudio)
 
         case .microphone:
@@ -792,7 +812,6 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
     private func handleWebcamSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard CMSampleBufferDataIsReady(sampleBuffer),
-              !isPausedInternal,
               let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             return
         }
@@ -807,8 +826,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
               let wAdaptor = webcamPixelBufferAdaptor else { return }
 
         let rawPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        guard rawPTS.isValid else { return }
-        let pts = accumulatedPausedTime.isValid ? CMTimeSubtract(rawPTS, accumulatedPausedTime) : rawPTS
+        guard rawPTS.isValid, let pausedOffset = pausedOffset(forHostPTS: rawPTS) else { return }
+        let pts = CMTimeSubtract(rawPTS, pausedOffset)
 
         if !isWebcamSessionStarted {
             // Guard against cold-start ISP black frames if the user started recording within milliseconds of selecting a camera
@@ -868,13 +887,13 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
     private func handleMicrophoneSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard CMSampleBufferDataIsReady(sampleBuffer),
-              !isPausedInternal,
               let mWriter = microphoneWriter, mWriter.status == .writing,
-              let mInput = microphoneAudioInput else {
+              let mInput = microphoneAudioInput,
+              let pausedOffset = pausedOffset(forHostPTS: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) else {
             return
         }
 
-        let adjusted = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: accumulatedPausedTime) ?? sampleBuffer
+        let adjusted = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: pausedOffset) ?? sampleBuffer
         let pts = CMSampleBufferGetPresentationTimeStamp(adjusted)
         guard pts.isValid else { return }
 

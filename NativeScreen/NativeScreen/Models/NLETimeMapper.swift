@@ -55,6 +55,16 @@ public struct NLETimeMapper: Sendable {
         return (0.0, nil)
     }
 
+    /// Maps `sourceMs` to timeline time, but only inside the slice that contains `referenceTimelineMs`
+    /// (used to follow the decoder clock during playback without jumping to another slice that reuses the same source range).
+    public func timelineTime(forSourceMs sourceMs: Double, withinSliceAtTimelineMs referenceTimelineMs: Double) -> Double? {
+        guard let item = mappedSlices.first(where: { referenceTimelineMs >= $0.timelineStartMs && referenceTimelineMs < $0.timelineEndMs }),
+              sourceMs >= item.slice.sourceStartMs && sourceMs <= item.slice.sourceEndMs else {
+            return nil
+        }
+        return item.timelineStartMs + (sourceMs - item.slice.sourceStartMs) / max(0.1, item.slice.speed)
+    }
+
     /// Maps a source video timestamp (`sourceMs`) to the first matching timeline timestamp (`timelineMs`).
     public func timelineTime(forSourceMs sourceMs: Double) -> Double? {
         for item in mappedSlices {

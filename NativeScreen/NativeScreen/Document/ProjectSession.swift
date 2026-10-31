@@ -20,9 +20,22 @@ public final class ProjectSession: Identifiable {
     public var keyEvents: [KeyStrokeEvent]
 
     // Playback, Hover Skimming, Tool Mode & Selection State
-    public var playheadTimelineMs: Double = 0.0
-    public var hoverSkimTimelineMs: Double? = nil
-    public var isPlaying: Bool = false
+    public var playheadTimelineMs: Double = 0.0 {
+        didSet { refreshPreviewTimeDerivedState() }
+    }
+    public var hoverSkimTimelineMs: Double? = nil {
+        didSet { refreshPreviewTimeDerivedState() }
+    }
+    public var isPlaying: Bool = false {
+        didSet { refreshPreviewTimeDerivedState() }
+    }
+
+    // Coarse, change-only mirrors of "what is under the preview time" for SwiftUI views.
+    // `playheadTimelineMs` changes 120 times a second during playback; views that read it directly re-evaluate every
+    // frame. Reading these instead only invalidates a view when the spoken word / active mask actually changes.
+    public private(set) var spokenTranscriptSegmentIds: Set<String> = []
+    public private(set) var activeMaskIdAtPreviewTime: String? = nil
+    public private(set) var isCursorHiddenAtPreviewTime: Bool = false
     public var previewPlaybackRate: Double = 1.0
     public var isSplitModeActive: Bool = false
     public var timelineZoom: Double = 1.0
@@ -52,6 +65,16 @@ public final class ProjectSession: Identifiable {
     // Bottom-Center Toast Notification State
     public var activeToastMessage: String? = nil
     @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
+
+    /// Actions that need the editor window's own UI state (export modal, command menu, alerts), requested by the
+    /// app menu or by the recorder (`After Recording`). `ProjectEditorWindowView` performs it and clears it.
+    public enum EditorCommand: Equatable {
+        case showExportSheet
+        case quickExport(HardwareVideoExporter.ExportTarget)
+        case showCommandMenu
+        case removeProject
+    }
+    public var pendingEditorCommand: EditorCommand? = nil
 
     public var scrollToTrackTargetId: String? = nil
     public var scrollToTrackRevision: Int = 0
@@ -215,6 +238,8 @@ public final class ProjectSession: Identifiable {
             self.document.captions.shortcutTracks.removeAll()
         }
 
+        refreshPreviewTimeDerivedState()
+
         Task { [weak self] in
             await self?.loadRealAudioWaveformIfAvailable()
         }
@@ -318,9 +343,6 @@ public final class ProjectSession: Identifiable {
 
     // MARK: - Value-Type Snapshot Undo / Redo (`⌘Z` / `⇧⌘Z`)
 
-    public var canUndo: Bool { !undoStack.isEmpty }
-    public var canRedo: Bool { !redoStack.isEmpty }
-
     public func beginInteractiveEdit() {
         isDraggingTimelineSegment = true
         if frozenPlaybackDurationMs == nil {
@@ -366,6 +388,12 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    public var canUndo: Bool { !undoStack.isEmpty }
+    public var canRedo: Bool { !redoStack.isEmpty }
+
+    /// Projects created from an imported video have no cursor telemetry: zooms must be positioned by hand.
+    public var hasRecordedCursor: Bool { !cursorEvents.isEmpty }
+
     public func undo() {
         guard let previous = undoStack.popLast() else { return }
         redoStack.append(document)
@@ -396,7 +424,14 @@ public final class ProjectSession: Identifiable {
             timeMapper = NLETimeMapper(slices: document.timeline.slices)
         }
 
-        let cursorChanged = forceSpringRebuild || document.cursor != lastSolverCursorConfig
+        // Size, cursor set and click effect are applied at draw time only, so changing them (e.g. dragging the
+        // Cursor size slider) must not re-solve the whole 120Hz trajectory.
+        var trajectoryCursorConfig = document.cursor
+        trajectoryCursorConfig.scale = lastSolverCursorConfig.scale
+        trajectoryCursorConfig.themeId = lastSolverCursorConfig.themeId
+        trajectoryCursorConfig.variantId = lastSolverCursorConfig.variantId
+        trajectoryCursorConfig.clickEffect = lastSolverCursorConfig.clickEffect
+        let cursorChanged = forceSpringRebuild || trajectoryCursorConfig != lastSolverCursorConfig
         let needsSpringRebuild = cursorChanged
             || document.motion != lastSolverMotionConfig
             || document.timeline.zooms != lastSolverZooms
@@ -420,7 +455,54 @@ public final class ProjectSession: Identifiable {
         if playheadTimelineMs > timeMapper.totalTimelineDurationMs {
             playheadTimelineMs = timeMapper.totalTimelineDurationMs
         }
+        refreshPreviewTimeDerivedState()
         renderRevision &+= 1
+    }
+
+    @ObservationIgnored private var sortedTranscriptSegmentsSource: [CaptionSegment] = []
+    @ObservationIgnored private var sortedTranscriptSegments: [CaptionSegment] = []
+
+    private func refreshPreviewTimeDerivedState() {
+        let sourceMs = currentSourceTimeMs
+
+        let cursorHidden = currentActiveSlice?.hideCursor == true
+        if cursorHidden != isCursorHiddenAtPreviewTime {
+            isCursorHiddenAtPreviewTime = cursorHidden
+        }
+
+        let maskId = activeMasks(atSourceMs: sourceMs).first?.id
+        if maskId != activeMaskIdAtPreviewTime {
+            activeMaskIdAtPreviewTime = maskId
+        }
+
+        let segments = document.captions.segments
+        if segments != sortedTranscriptSegmentsSource {
+            sortedTranscriptSegmentsSource = segments
+            sortedTranscriptSegments = segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        }
+        // Binary search the first word starting after `sourceMs`, then walk back over words still inside their +80ms tail.
+        var lo = 0
+        var hi = sortedTranscriptSegments.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if sortedTranscriptSegments[mid].sourceStartMs <= sourceMs {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        var spoken: Set<String> = []
+        var idx = lo - 1
+        while idx >= 0, idx >= lo - 32 {
+            let seg = sortedTranscriptSegments[idx]
+            if sourceMs <= seg.sourceEndMs + 80.0 {
+                spoken.insert(seg.id)
+            }
+            idx -= 1
+        }
+        if spoken != spokenTranscriptSegmentIds {
+            spokenTranscriptSegmentIds = spoken
+        }
     }
 
     // MARK: - Current Playhead & Live Hover Skimming Helpers
@@ -1023,9 +1105,9 @@ public final class ProjectSession: Identifiable {
             sourceStartMs: startMs,
             sourceEndMs: endMs,
             scale: presentation == .loupe ? 2.0 : 1.8,
-            mode: .followCursor,
+            mode: hasRecordedCursor ? .followCursor : .manual,
             presentation: presentation,
-            manualCenter01: cursorState.position01,
+            manualCenter01: hasRecordedCursor ? cursorState.position01 : .center,
             loupe: LoupeConfig(radius01: 0.35, bevelRatio: 0.25, chromaticAberration: 0.65)
         )
         mutate { doc in
@@ -1039,15 +1121,15 @@ public final class ProjectSession: Identifiable {
 
     public func addZoomInRange(sourceStartMs: Double, sourceEndMs: Double) {
         guard sourceEndMs - sourceStartMs >= 350.0 else { return }
-        let midMs = (sourceStartMs + sourceStartMs) * 0.5
+        let midMs = (sourceStartMs + sourceEndMs) * 0.5
         let cursorState = trajectorySolver.evaluate(atSourceMs: midMs).cursor
         let newZoom = ZoomBlock(
             sourceStartMs: sourceStartMs,
             sourceEndMs: sourceEndMs,
             scale: 1.8,
-            mode: .followCursor,
+            mode: hasRecordedCursor ? .followCursor : .manual,
             presentation: .screen,
-            manualCenter01: cursorState.position01
+            manualCenter01: hasRecordedCursor ? cursorState.position01 : .center
         )
         mutate { doc in
             doc.timeline.isZoomTrackHidden = false
@@ -1401,6 +1483,19 @@ public final class ProjectSession: Identifiable {
             }
         }
 
+        // Still frames bake the real webcam frame too, same as video export.
+        var webcamCI: CIImage?
+        if document.camera.enabled, let webcamURL = webcamVideoFileURL {
+            let gen = AVAssetImageGenerator(asset: AVURLAsset(url: webcamURL))
+            gen.appliesPreferredTrackTransform = true
+            gen.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 60)
+            gen.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 60)
+            let webcamMs = max(0.0, sourceMs + document.camera.delayAdjustmentMs)
+            if let (cgImg, _) = try? await gen.image(at: CMTime(seconds: webcamMs / 1000.0, preferredTimescale: 600)) {
+                webcamCI = CIImage(cgImage: cgImg)
+            }
+        }
+
         let srcW = Double(max(1280, metadata.captureTarget.pixelSize.width))
         let srcH = Double(max(720, metadata.captureTarget.pixelSize.height))
         let aspect = document.canvas.effectiveAspectRatio(sourceWidth: srcW, sourceHeight: srcH)
@@ -1413,7 +1508,8 @@ public final class ProjectSession: Identifiable {
             sourceTimeMs: sourceMs,
             session: self,
             outputSize: outputSize,
-            includeShortcutOverlay: true
+            includeShortcutOverlay: true,
+            webcamVideoFrame: webcamCI
         )
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         return compositor.ciContext.createCGImage(
@@ -1541,6 +1637,33 @@ public final class ProjectSession: Identifiable {
                 doc.timeline.zooms[idx].presentation = presentation
             }
         }
+    }
+
+    /// Pins a zoom to a hand-picked focus point (`Zoom position` pad). Switches the zoom to `Manual`.
+    public func setZoomManualCenter(id: String, center01: Point01) {
+        let clamped = Point01(x: min(1.0, max(0.0, center01.x)), y: min(1.0, max(0.0, center01.y)))
+        mutate { doc in
+            if let idx = doc.timeline.zooms.firstIndex(where: { $0.id == id }) {
+                doc.timeline.zooms[idx].mode = .manual
+                doc.timeline.zooms[idx].manualCenter01 = clamped
+            }
+        }
+    }
+
+    /// Moves the playhead inside `zoom`, past its zoom-in animation, so the preview shows the zoomed framing while
+    /// the zoom is being positioned. Does nothing when the playhead is already there.
+    public func seekIntoZoomForEditing(id: String) {
+        guard let zoom = document.timeline.zooms.first(where: { $0.id == id }) else { return }
+        let duration = zoom.sourceEndMs - zoom.sourceStartMs
+        let settledStartMs = zoom.sourceStartMs + min(900.0, duration * 0.5)
+        let current = currentSourceTimeMs
+        if current >= settledStartMs && current <= zoom.sourceEndMs - 30.0 {
+            return
+        }
+        guard let timelineMs = timeMapper.timelineTime(forSourceMs: settledStartMs) else { return }
+        isPlaying = false
+        hoverSkimTimelineMs = nil
+        seek(toTimelineMs: timelineMs)
     }
 
     public func setZoomScale(id: String, scale: Double) {

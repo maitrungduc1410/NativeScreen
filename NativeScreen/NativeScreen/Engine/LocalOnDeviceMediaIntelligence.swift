@@ -504,7 +504,7 @@ public enum LocalOnDeviceMediaIntelligence {
     // MARK: - 2. On-Device Camera Color Grading Looks
 
     /// Applies any of the 12 built-in filmic looks (or a user-created `CustomCameraColorPreset`) + Sharpen on the GPU via CoreImage.
-    public static func applyCameraGradeAndSharpen(
+    public nonisolated static func applyCameraGradeAndSharpen(
         to image: CIImage,
         preset: CameraColorGradePreset,
         customPreset: CustomCameraColorPreset? = nil,
@@ -744,15 +744,20 @@ public enum LocalOnDeviceMediaIntelligence {
 
     /// Segments the foreground person from the webcam background 100% locally on-device for `Camera cutout` mode,
     /// applying configurable `edgeSoftness` (`0.0 ... 1.0`) and `edgeInset` (`0.0 ... 1.0`).
-    public static func applyOnDevicePersonCutout(
+    /// Pass a long-lived `request` when segmenting a video stream so Vision keeps its model loaded and its temporal smoothing
+    /// state between frames instead of rebuilding both on every frame. A reused request must not be used from two threads at once.
+    public nonisolated static func applyOnDevicePersonCutout(
         to image: CIImage,
         edgeSoftness: Double = 0.20,
-        edgeInset: Double = 0.0
+        edgeInset: Double = 0.0,
+        reusing reusableRequest: VNGeneratePersonSegmentationRequest? = nil
     ) -> CIImage {
         if #available(macOS 12.0, *) {
-            let request = VNGeneratePersonSegmentationRequest()
-            request.qualityLevel = .balanced
-            request.outputPixelFormat = kCVPixelFormatType_OneComponent8
+            let request = reusableRequest ?? VNGeneratePersonSegmentationRequest()
+            if reusableRequest == nil {
+                request.qualityLevel = .balanced
+                request.outputPixelFormat = kCVPixelFormatType_OneComponent8
+            }
             let handler = VNImageRequestHandler(ciImage: image, options: [:])
             if (try? handler.perform([request])) != nil,
                let maskBuffer = request.results?.first?.pixelBuffer {

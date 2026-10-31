@@ -655,16 +655,20 @@ public struct ProjectEditorWindowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .zIndex(1)
 
-                InspectorSidebarView(session: session)
-                    .zIndex(90)
+                if EditorViewPreferences.shared.showEditorSidebar {
+                    InspectorSidebarView(session: session)
+                        .zIndex(90)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
+            if EditorViewPreferences.shared.showEditorTimeline {
+                Divider()
 
-            // 3. BOTTOM MULTI-TRACK NLE TIMELINE
-            MultiTrackTimelineView(session: session)
-                .frame(height: 245)
+                // 3. BOTTOM MULTI-TRACK NLE TIMELINE
+                MultiTrackTimelineView(session: session)
+                    .frame(height: 245)
+            }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .allowsHitTesting(!isModalOverlayActive)
@@ -777,9 +781,39 @@ public struct ProjectEditorWindowView: View {
         }
         .onAppear {
             installEditorKeyMonitor()
+            performPendingEditorCommand()
         }
         .onDisappear {
             removeEditorKeyMonitor()
+        }
+        .onChange(of: session.pendingEditorCommand) { _, _ in
+            performPendingEditorCommand()
+        }
+    }
+
+    /// Runs a command requested from the app menu (or by the recorder's `After Recording` setting).
+    private func performPendingEditorCommand() {
+        guard let command = session.pendingEditorCommand else { return }
+        session.pendingEditorCommand = nil
+        guard !isExporting else { return }
+        switch command {
+        case .showExportSheet:
+            session.isPlaying = false
+            withAnimation(.easeOut(duration: 0.14)) {
+                isShowingCommandMenu = false
+                isShowingExportSheet = true
+            }
+        case .quickExport(let target):
+            // Uses the settings last chosen in the Export modal, without showing it.
+            isShowingCommandMenu = false
+            exportConfig.target = target
+            runHardwareExport()
+        case .showCommandMenu:
+            withAnimation(.easeOut(duration: 0.14)) {
+                isShowingCommandMenu = true
+            }
+        case .removeProject:
+            moveProjectToTrash()
         }
     }
 
@@ -1011,9 +1045,9 @@ public struct ProjectEditorWindowView: View {
                 session.deleteSelectedTimelineItem()
                 return nil
 
-            case 8: // 'C' key: Split at current time (or Copy with ⌘C)
+            case 8: // 'C' key: Split at current time (or Copy with ⌘C; ⌥⌘C is `Quick export to clipboard` in the menu)
                 let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                if flags.contains(.command) {
+                if flags == .command {
                     if let mId = session.selectedMaskId {
                         session.copyMaskToClipboard(id: mId)
                         return nil
@@ -1220,7 +1254,7 @@ public struct ProjectEditorWindowView: View {
         if isClipboardExport {
             let ext = exportConfig.format.fileExtension
             let cleanName = session.document.name.replacingOccurrences(of: "/", with: "-")
-            outURL = FileManager.default.temporaryDirectory
+            outURL = ProjectWorkspaceStore.clipboardExportsDirectory
                 .appendingPathComponent("\(cleanName)-\(Int(Date().timeIntervalSince1970)).\(ext)")
             activeExportDestinationLabel = "Clipboard (\(cleanName).\(ext))"
         } else {

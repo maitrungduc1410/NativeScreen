@@ -75,6 +75,32 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         private var lastSeekedSourceMs: Double = -1.0
         private var isDecoderSeeking: Bool = false
         private var pendingSeekSourceMs: Double? = nil
+        /// Where each playing player's timebase was anchored at the last start / re-sync: item time `itemMs` at host time
+        /// `hostSec`, advancing at `rate`. This IS the player's clock, known exactly from the first frame after Play.
+        /// Asking AVPlayer instead is not free: `itemTime(forHostTime:)` stays invalid until the first decoded frame,
+        /// and `currentTime` blocks the main thread ~30ms on the first call after `setRate(_:time:atHostTime:)`.
+        private struct PlayerClockAnchor {
+            let hostSec: Double
+            let itemMs: Double
+            let rate: Double
+
+            func itemMs(atHostSec now: Double) -> Double {
+                itemMs + (now - hostSec) * 1000.0 * rate
+            }
+        }
+        private var playerAnchors: [ObjectIdentifier: PlayerClockAnchor] = [:]
+
+        private var videoClockAnchor: PlayerClockAnchor? {
+            player.flatMap { playerAnchors[ObjectIdentifier($0)] }
+        }
+
+        /// Current item time of a playing player, from its anchor when it has one.
+        private func playbackPositionMs(of player: AVPlayer) -> Double {
+            if let anchor = playerAnchors[ObjectIdentifier(player)] {
+                return anchor.itemMs(atHostSec: CACurrentMediaTime())
+            }
+            return max(0.0, CMTimeGetSeconds(player.currentTime()) * 1000.0)
+        }
 
         init(session: ProjectSession) {
             self.session = session
@@ -105,6 +131,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     mtkView.isPaused = false
                 }
             } else {
+                playerAnchors.removeAll()
                 if let micPlayer = micPlayer, micPlayer.rate != 0 {
                     micPlayer.pause()
                 }
@@ -142,6 +169,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         private func setupVideoDecoderIfNeeded(for url: URL) {
             guard loadedVideoURL != url else { return }
             loadedVideoURL = url
+            playerAnchors.removeAll()
             lastSeekedSourceMs = -1.0
             isDecoderSeeking = false
             pendingSeekSourceMs = nil
@@ -261,6 +289,40 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             }
         }
 
+        /// Starts `player` so that its item time is exactly `itemTime` at this host instant and advances at `rate` from here.
+        /// Unlike `seek` + `rate`, the player's timebase is anchored immediately: the playhead (which follows
+        /// `itemTime(forHostTime:)`) starts moving on the very first frame after Play, and decoded frames simply catch up
+        /// with the timebase a few frames later. Seeking first and then playing left the whole preview frozen for
+        /// ~165ms (exact seek from the previous keyframe + stall-avoidance buffering) after every Play.
+        private func startPlayerAnchoredToNow(
+            _ player: AVPlayer,
+            atItemTime itemTime: CMTime,
+            rate: Float,
+            onSeekStart: (() -> Void)? = nil,
+            onSeekDone: (@MainActor () -> Void)? = nil
+        ) {
+            playerAnchors[ObjectIdentifier(player)] = nil
+            guard player.currentItem?.status == .readyToPlay else {
+                // Not ready yet (just opened): fall back to a plain seek, the drift check re-anchors once it is ready.
+                onSeekStart?()
+                player.seek(to: itemTime, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                    Task { @MainActor in onSeekDone?() }
+                }
+                player.rate = rate
+                return
+            }
+            // Required by `setRate(_:time:atHostTime:)`; the preview never wants AVPlayer to delay start for buffering.
+            player.automaticallyWaitsToMinimizeStalling = false
+            let hostNow = CMClockGetTime(CMClockGetHostTimeClock())
+            player.setRate(rate, time: itemTime, atHostTime: hostNow)
+            playerAnchors[ObjectIdentifier(player)] = PlayerClockAnchor(
+                hostSec: CMTimeGetSeconds(hostNow),
+                itemMs: CMTimeGetSeconds(itemTime) * 1000.0,
+                rate: Double(rate)
+            )
+            onSeekDone?()
+        }
+
         // MARK: - MTKViewDelegate
 
         nonisolated public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
@@ -288,8 +350,34 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 let dtMs = max(0.0, min(50.0, (now - lastFrameTickUptime) * 1000.0)) * session.previewPlaybackRate
                 lastFrameTickUptime = now
 
-                let nextTimelineMs = session.playheadTimelineMs + dtMs
-                if nextTimelineMs >= session.timeMapper.totalTimelineDurationMs {
+                // The video decoder is the master clock: while `AVPlayer` is running inside the current slice, the playhead
+                // follows its item time, so cursor/zoom (drawn at `sourceMs`) and the decoded frame never drift apart and a
+                // main-thread hitch no longer loses timeline time. The wall clock is only the fallback (no video, cut
+                // boundaries, seeks), where the >180ms drift check below re-syncs the decoder.
+                var nextTimelineMs = session.playheadTimelineMs + dtMs
+                if let player = player, player.rate != 0, !isDecoderSeeking {
+                    let clockSourceMs: Double? = {
+                        if let anchor = videoClockAnchor {
+                            return anchor.itemMs(atHostSec: CACurrentMediaTime())
+                        }
+                        guard let output = videoOutput else { return nil }
+                        let hostItemTime = output.itemTime(forHostTime: CACurrentMediaTime())
+                        return hostItemTime.isValid ? CMTimeGetSeconds(hostItemTime) * 1000.0 : nil
+                    }()
+                    if let clockSourceMs,
+                       let clockTimelineMs = session.timeMapper.timelineTime(
+                           forSourceMs: clockSourceMs,
+                           withinSliceAtTimelineMs: session.playheadTimelineMs
+                       ),
+                       abs(clockTimelineMs - nextTimelineMs) < 250.0 {
+                        // Never step backwards.
+                        nextTimelineMs = max(session.playheadTimelineMs, clockTimelineMs)
+                    }
+                }
+                if nextTimelineMs >= session.timeMapper.totalTimelineDurationMs && EditorViewPreferences.shared.loopPlayback {
+                    // `View > Loop playback`: wrap to the start; the drift check below re-anchors every player there.
+                    session.playheadTimelineMs = 0.0
+                } else if nextTimelineMs >= session.timeMapper.totalTimelineDurationMs {
                     session.playheadTimelineMs = session.timeMapper.totalTimelineDurationMs
                     // Clear any leftover hover-skim timestamp when playback finishes so the preview stays settled
                     // at the final frame (`playheadTimelineMs`) until the user actively moves the mouse to skim again!
@@ -336,15 +424,29 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     player.isMuted = (effectiveVolume <= 0.001)
                     player.volume = effectiveVolume
 
+                    // Only seek AVPlayer when starting playback (`rate` changed) or jumping across a cut boundary (`drift > 180ms` while not actively seeking).
+                    // Never snap `sourceMs` to `displayTime` (which is quantized at 60Hz = 16.67ms steps), because the 120Hz spring camera & cursor
+                    // MUST advance at smooth 8.33ms steps (`session.currentSourceTimeMs`) to avoid 60Hz-vs-120Hz frame-doubling judder during zooms!
+                    let playerCurrentMs = playbackPositionMs(of: player)
+                    let driftMs = abs(playerCurrentMs - sourceMs)
+                    if abs(player.rate - desiredRate) > 0.05 || (!isDecoderSeeking && driftMs > 180.0) {
+                        pendingSeekSourceMs = nil // a scrub seek queued while paused must not fire after playback starts
+                        startPlayerAnchoredToNow(player, atItemTime: targetCMTime, rate: desiredRate) { [weak self] in
+                            self?.isDecoderSeeking = true
+                        } onSeekDone: { [weak self] in
+                            self?.isDecoderSeeking = false
+                        }
+                    }
+
+                    // Microphone and voiceovers are anchored to the same host time as the video, so they start in sync.
                     // Synchronize `micPlayer` (`microphone.m4a`) in lockstep with `player` (`display.mp4`)!
                     if let micPlayer = micPlayer {
                         micPlayer.isMuted = (effectiveMicVolume <= 0.001)
                         micPlayer.volume = effectiveMicVolume
-                        let micCurrentMs = max(0.0, CMTimeGetSeconds(micPlayer.currentTime()) * 1000.0)
+                        let micCurrentMs = playbackPositionMs(of: micPlayer)
                         let micDriftMs = abs(micCurrentMs - sourceMs)
                         if abs(micPlayer.rate - desiredRate) > 0.05 || micDriftMs > 180.0 {
-                            micPlayer.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero)
-                            micPlayer.rate = desiredRate
+                            startPlayerAnchoredToNow(micPlayer, atItemTime: targetCMTime, rate: desiredRate)
                         }
                     }
 
@@ -373,6 +475,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     for (voId, voPlayer) in voiceoverPlayersByID where !activeVOIDs.contains(voId) {
                         if voPlayer.rate != 0 {
                             voPlayer.pause()
+                            playerAnchors[ObjectIdentifier(voPlayer)] = nil
                         }
                     }
                     for vo in activeVOs {
@@ -391,28 +494,14 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                         let voVol = Float(min(1.0, max(0.0, vo.volume * masterVol)))
                         voPlayer.isMuted = (voVol <= 0.001)
                         voPlayer.volume = voVol
-                        let curSec = max(0.0, CMTimeGetSeconds(voPlayer.currentTime()))
+                        let curSec = playbackPositionMs(of: voPlayer) / 1000.0
                         if abs(voPlayer.rate - voRate) > 0.05 || abs(curSec - voOffsetSec) > 0.22 {
-                            voPlayer.seek(to: CMTime(seconds: voOffsetSec, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                            voPlayer.rate = voRate
+                            startPlayerAnchoredToNow(voPlayer, atItemTime: CMTime(seconds: voOffsetSec, preferredTimescale: 600), rate: voRate)
                         }
                     }
 
-                    // Only seek AVPlayer when starting playback (`rate` changed) or jumping across a cut boundary (`drift > 180ms` while not actively seeking).
-                    // Never snap `sourceMs` to `displayTime` (which is quantized at 60Hz = 16.67ms steps), because the 120Hz spring camera & cursor
-                    // MUST advance at smooth 8.33ms steps (`session.currentSourceTimeMs`) to avoid 60Hz-vs-120Hz frame-doubling judder during zooms!
-                    let playerCurrentMs = max(0.0, CMTimeGetSeconds(player.currentTime()) * 1000.0)
-                    let driftMs = abs(playerCurrentMs - sourceMs)
-                    if abs(player.rate - desiredRate) > 0.05 || (!isDecoderSeeking && driftMs > 180.0) {
-                        isDecoderSeeking = true
-                        player.seek(to: targetCMTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                            Task { @MainActor [weak self] in
-                                self?.isDecoderSeeking = false
-                            }
-                        }
-                        player.rate = desiredRate
-                    }
                 } else if !session.isPlaying {
+                    playerAnchors.removeAll()
                     if let player = player, player.rate != 0 {
                         player.pause()
                     }
