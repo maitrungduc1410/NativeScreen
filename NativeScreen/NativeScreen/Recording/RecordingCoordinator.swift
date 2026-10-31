@@ -1380,7 +1380,7 @@ public final class RecordingCoordinator {
                 maskTracks: []
             )
         )
-        if let defPreset = ProjectPresetsStore.shared.defaultPreset {
+        if let defPreset = AppSettings.shared.presetForNewProject() {
             defPreset.apply(to: &doc)
         }
 

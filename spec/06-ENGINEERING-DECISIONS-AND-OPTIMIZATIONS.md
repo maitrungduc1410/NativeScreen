@@ -19,6 +19,7 @@ This document records the core engineering decisions, mathematical calibrations,
 11. [ADR-11: WYSIWYG 3D Keycap Overlay & Non-Linear Export File Size / Live ETA Estimation](#11-adr-11-wysiwyg-3d-keycap-overlay--non-linear-export-file-size--live-eta-estimation)
 14. [ADR-14: Recording Integrity, Decoder-Clocked Playback & Export/Preview Parity](#14-adr-14-recording-integrity-decoder-clocked-playback--exportpreview-parity)
 15. [ADR-15: Menu Bar Command Routing](#15-adr-15-menu-bar-command-routing)
+16. [ADR-16: Light / Dark Appearance & Settings Window](#16-adr-16-light--dark-appearance--settings-window)
 
 ---
 
@@ -327,7 +328,8 @@ Users need studio-grade webcam layouts (`Camera overlay`, `Split screen`, `Camer
 4. **Export parity**: `MetalFrameCompositor.composeFrame(webcamVideoFrame:)` takes the real `webcam.mp4` frame (decoded side by side with the screen, honoring `delayAdjustmentMs`) and applies crop, mirror, Vision person cutout (one reused `VNGeneratePersonSegmentationRequest`), color grade and face-tracking punch-in. Captions use `CaptionLineLayout`, shared with the preview, rasterized with CoreGraphics (no TIFF round-trip) and cached until the visible words change.
 5. **Change-only mirrors for SwiftUI**: `ProjectSession` exposes `spokenTranscriptSegmentIds`, `activeMaskIdAtPreviewTime` and `isCursorHiddenAtPreviewTime`, recomputed in `didSet` of the playhead/skim/isPlaying properties and assigned only when they change. Views must read these instead of `currentSourceTimeMs`.
 6. **Cheaper solver rebuilds**: `scale`, `themeId`, `variantId` and `clickEffect` are excluded from the trajectory rebuild key; drags, clicks and ripple clicks are walked with sliding windows over sorted arrays (O(steps + events)).
-7. **Webcam preview filter thread safety**: the `AVVideoComposition` handler reads a lock-protected `WebcamFilterParamsBox` snapshot instead of main-actor view properties, and reuses one segmentation request.
+7. **One render path for preview and export**: the editor no longer draws the camera bubble, captions or keycaps as SwiftUI overlays. `MetalPreviewView` decodes `webcam.mp4` itself (anchored to the same host time as the screen player, seeked with the playhead while paused) and calls `composeFrame(includeShortcutOverlay: true, webcamVideoFrame:, isRealtimePreview: true)`, the same pass the exporter runs, so layout, styling and timing match the export frame for frame. Differences that remain are only resolution (drawable size vs export size). `isRealtimePreview` changes two things: person cutout uses `AsyncPersonSegmenter` (Vision on a background queue, newest finished mask, at most one in flight, redraw on completion) instead of segmenting synchronously, and hovered / selected keycaps are drawn brighter. Keycap interaction uses invisible SwiftUI hit targets placed from `MetalFrameCompositor.lastShortcutHitRects01`. Measured during playback: about 2 ms of main-thread compose work per frame (2.6 ms with cutout), no frame over 21 ms at 60 Hz.
+8. **Layout motion without SwiftUI**: screen and camera placement is a `StageLayout` (continuous rects, corner radius, opacity, shadow and border strength) resolved per frame in `resolvedStageLayout`. Timeline changes (camera layout segment boundaries, hide during silence, voiceover hide, screen-only) blend from the previous layout over 380 ms with smoothstep easing; the change point is found by binary-searching the discrete `StageLayout.Key` inside the window, so the result depends only on the project and the time and the export is identical to the preview (the screen also glides into and out of split screen). In the live preview only, edits made while paused spring toward the new layout (`SpringVector`, response 0.25 s, damping 0.82, like SwiftUI), and keycap groups spring their center and key height; a frame counts as an edit when the source time did not move, so playback and scrubbing follow the timeline exactly. `MetalPreviewView` keeps its render loop running while `isAnimatingPreviewOverlays` is true, then pauses again. `isCameraHiddenDuringSilence` uses a cached sorted transcript because the transition search calls it about ten times per frame.
 
 ---
 
@@ -344,4 +346,18 @@ Menu bar items are app-wide, but almost every action belongs to one project wind
 5. SwiftUI appends `CommandMenu`s after `View`; `MainMenuOrder` re-orders the top-level items (`File, Edit, Record, Export, View, Window, Help`) and re-applies it on `NSMenu.didAddItemNotification` when SwiftUI rebuilds the menu bar.
 6. View preferences (`EditorViewPreferences`) are app-wide and persisted, shared by every open editor window.
 7. Menu icons: macOS 27 hides `NSMenuItem.image` by default (`preferredImageVisibility = .automatic`) and SwiftUI has no modifier for it, so `Button(_:systemImage:)` icons never show. `MainMenuOrder` sets `.visible` on the app's own items when the menu bar starts tracking (SwiftUI may have rebuilt them); the application menu, `Help` and system `Window` items keep AppKit's default.
+
+---
+
+## 16. ADR-16: Light / Dark Appearance & Settings Window
+
+### Decision
+- **Appearance** (`Settings > General`, also `⌘K > Switch to light/dark appearance`) sets `NSApp.appearance` (System / Light / Dark). The editor chrome was designed dark with white-at-opacity foregrounds over near-black surfaces, so it was converted to two adaptive tokens (`Views/Theme.swift`) instead of hand-picked light colors:
+  - `Color.ink`: white in dark mode, near-black in light mode. Replaces chrome `.white` / `Color.white`.
+  - `Color.surface(red:green:blue:)`: takes the existing dark surface color; light mode mirrors its lightness (`1 - L * 0.7`) and keeps the channel offsets, so a cool dark gray becomes a cool light gray. Dark mode renders exactly as before.
+- Plain `.white` stays where content sits on a fixed colored background in both appearances: text on the solid accent purple (primary buttons), timeline segment labels, controls drawn over the video preview, the recording bar and tooltips. When adding a new purple button, use `.white`, not `.ink`.
+- The window background (`NSWindow.backgroundColor`) uses `NSColor.surface`, so it follows the appearance too.
+- **Settings window** (SwiftUI `Settings` scene, native toolbar tabs): General (launch at login via `SMAppService`, appearance, reset), Recording (projects folder, countdown, highlight area, hide desktop/Dock icons while recording, auto zooms, after-recording action, max camera resolution), Editing (start new projects from the last project's style, autosave on/off with a save prompt on close, presets folder), Quick export (format, fps, resolution, compression/codec, used by ⌥⌘C / ⌥⌘S and after-recording export), Shortcuts (read-only reference). `AppSettings` stores these; projects and presets folders are read straight from `UserDefaults` so non-main-actor code can resolve them.
+- **Document icon**: `CFBundleTypeIconSystemGenerated` plus `UTTypeIcons` (`UTTypeIconBadgeName = AppIcon`, `UTTypeIconText`) let macOS draw `.nativescreen` packages as a page with the app icon.
+- **Verification**: the editor, Settings tabs, Export modal and command menu were rendered offscreen in both appearances (`NSView.cacheDisplay`) and checked visually.
 

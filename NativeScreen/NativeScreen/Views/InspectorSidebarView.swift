@@ -71,7 +71,7 @@ public struct InspectorSidebarView: View {
                             .foregroundStyle(
                                 isSelected
                                     ? Color(red: 0.65, green: 0.58, blue: 0.99)
-                                    : .white.opacity(0.85)
+                                    : .ink.opacity(0.85)
                             )
                     }
                 }
@@ -80,7 +80,7 @@ public struct InspectorSidebarView: View {
             .padding(.vertical, 10)
             .padding(.horizontal, 6)
             .frame(maxHeight: .infinity)
-            .background(Color(red: 0.04, green: 0.04, blue: 0.055))
+            .background(Color.surface(red: 0.04, green: 0.04, blue: 0.055))
             .zIndex(50)
 
             // Active Inspector Content Panel (Wrapped in the rounded dark container with spacious 24pt section rhythm!)
@@ -129,13 +129,13 @@ public struct InspectorSidebarView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(red: 0.08, green: 0.08, blue: 0.10))
+                        .fill(Color.surface(red: 0.08, green: 0.08, blue: 0.10))
                 )
                 .padding(.vertical, 8)
                 .padding(.trailing, 8)
             }
             .frame(width: 344)
-            .background(Color(red: 0.04, green: 0.04, blue: 0.055))
+            .background(Color.surface(red: 0.04, green: 0.04, blue: 0.055))
         }
         .onAppear {
             if systemWallpapers.isEmpty {
@@ -185,7 +185,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Background")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 ScrollViewReader { modeProxy in
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -239,7 +239,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Wallpaper")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
 
                     ScrollViewReader { catProxy in
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -280,16 +280,16 @@ public struct InspectorSidebarView: View {
                             Text("Pick random wallpaper")
                                 .font(.system(size: 13, weight: .regular))
                         }
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(0.035))
+                                .fill(Color.ink.opacity(0.035))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -325,7 +325,7 @@ public struct InspectorSidebarView: View {
                                     .aspectRatio(1.0, contentMode: .fit)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                            .strokeBorder(isSelected ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
@@ -353,7 +353,7 @@ public struct InspectorSidebarView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                                .strokeBorder(isSelected ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                         )
                                         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
@@ -383,7 +383,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Background Gradient")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         HStack(spacing: 5) {
                             ColorSwatchPickerButton(
@@ -466,15 +466,15 @@ public struct InspectorSidebarView: View {
                             } label: {
                                 Image(systemName: "wand.and.stars")
                                     .font(.system(size: 13.0, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                                     .frame(width: 32, height: 32)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color.white.opacity(0.035))
+                                            .fill(Color.ink.opacity(0.035))
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                            .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
@@ -488,10 +488,10 @@ public struct InspectorSidebarView: View {
                         HStack(spacing: 7) {
                             Image(systemName: "paintpalette")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.90))
+                                .foregroundStyle(.ink.opacity(0.90))
                             Text("Hue")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                         }
 
                         Slider(
@@ -540,7 +540,7 @@ public struct InspectorSidebarView: View {
                                     .aspectRatio(1.0, contentMode: .fit)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                            .strokeBorder(isSelected ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
@@ -554,7 +554,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Background Color")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
 
                     HStack(spacing: 8) {
                         ColorSwatchPickerButton(
@@ -579,15 +579,15 @@ public struct InspectorSidebarView: View {
                         } label: {
                             Image(systemName: "wand.and.stars")
                                 .font(.system(size: 13.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.90))
+                                .foregroundStyle(.ink.opacity(0.90))
                                 .frame(width: 36, height: 36)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.white.opacity(0.035))
+                                        .fill(Color.ink.opacity(0.035))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
@@ -601,7 +601,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Background Image")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
 
                     Button {
                         let panel = NSOpenPanel()
@@ -614,11 +614,11 @@ public struct InspectorSidebarView: View {
                         VStack(spacing: 10) {
                             Image(systemName: "photo")
                                 .font(.system(size: 22, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.62))
+                                .foregroundStyle(.ink.opacity(0.62))
 
                             Text("Click to select, drop image, or press ⌘ V while\nhovering.")
                                 .font(.system(size: 12.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.46))
+                                .foregroundStyle(.ink.opacity(0.46))
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(2)
                         }
@@ -626,14 +626,14 @@ public struct InspectorSidebarView: View {
                         .frame(height: 112)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.white.opacity(isHoveringImageDropZone ? 0.05 : 0.025))
+                                .fill(Color.ink.opacity(isHoveringImageDropZone ? 0.05 : 0.025))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .strokeBorder(
                                     isHoveringImageDropZone
                                         ? Color(red: 0.44, green: 0.34, blue: 0.98)
-                                        : Color.white.opacity(0.08),
+                                        : Color.ink.opacity(0.08),
                                     lineWidth: 1
                                 )
                         )
@@ -804,7 +804,7 @@ public struct InspectorSidebarView: View {
                                 .controlSize(.small)
                             Text("Scanning recording for sensitive data on device…")
                                 .font(.system(size: 12, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .foregroundStyle(.ink.opacity(0.75))
                         }
                     }
 
@@ -848,16 +848,16 @@ public struct InspectorSidebarView: View {
                                 Text("Add custom phrases")
                                     .font(.system(size: 12.5, weight: .medium))
                             }
-                            .foregroundStyle(.white.opacity(0.90))
+                            .foregroundStyle(.ink.opacity(0.90))
                             .frame(maxWidth: .infinity)
                             .frame(height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.04))
+                                    .fill(Color.ink.opacity(0.04))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
@@ -866,11 +866,11 @@ public struct InspectorSidebarView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Custom phrases")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
 
                             Text("Names, clients or other words, separated by commas")
                                 .font(.system(size: 12, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.42))
+                                .foregroundStyle(.ink.opacity(0.42))
 
                             TextField(
                                 "Jane Appleseed, Acme Inc.",
@@ -888,16 +888,16 @@ public struct InspectorSidebarView: View {
                             )
                             .textFieldStyle(.plain)
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.ink)
                             .padding(.horizontal, 10)
                             .frame(height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.04))
+                                    .fill(Color.ink.opacity(0.04))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                             )
                             .onSubmit {
                                 session.updateSensitiveDataCustomPhrases(draftSensitiveCustomPhrases)
@@ -934,7 +934,7 @@ public struct InspectorSidebarView: View {
                                 .controlSize(.small)
                             Text("Detecting faces in recording on device…")
                                 .font(.system(size: 12, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .foregroundStyle(.ink.opacity(0.75))
                         }
                     }
 
@@ -983,17 +983,17 @@ public struct InspectorSidebarView: View {
                             .foregroundStyle(.yellow)
                         Text("Cursor is hidden in this part of the recording, so you will not see changes you make to it.")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.88))
+                            .foregroundStyle(.ink.opacity(0.88))
                     }
                     Button {
                         session.selectedInspectorTab = .audio
                     } label: {
                         Text("Open clip settings")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.ink)
                             .frame(maxWidth: .infinity)
                             .frame(height: 32)
-                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.ink.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -1032,7 +1032,7 @@ public struct InspectorSidebarView: View {
                     if cursor.scale < 0.75 {
                         Text("With small cursor size, consider disabling mouse cursor motion blur as it might reduce cursor visibility")
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(.ink.opacity(0.45))
                     }
                 }
 
@@ -1040,7 +1040,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Cursor style")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
 
                     ScrollViewReader { scrollProxy in
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -1101,7 +1101,7 @@ public struct InspectorSidebarView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Variant")
                                 .font(.system(size: 12.5, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(.ink.opacity(0.45))
 
                             ScrollViewReader { variantProxy in
                                 ScrollView(.horizontal, showsIndicators: false) {
@@ -1125,14 +1125,14 @@ public struct InspectorSidebarView: View {
                                                     .frame(width: 48, height: 48)
                                                     .background(
                                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                            .fill(Color.white.opacity(isVarSelected ? 0.08 : 0.04))
+                                                            .fill(Color.ink.opacity(isVarSelected ? 0.08 : 0.04))
                                                     )
                                                     .overlay(
                                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                                                             .strokeBorder(
                                                                 isVarSelected
                                                                     ? Color(red: 0.44, green: 0.34, blue: 0.98)
-                                                                    : Color.white.opacity(0.08),
+                                                                    : Color.ink.opacity(0.08),
                                                                 lineWidth: isVarSelected ? 1.5 : 1.0
                                                             )
                                                     )
@@ -1264,7 +1264,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Click effect")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         HStack(spacing: 6) {
                             let currentVisual: ClickEffectStyle = {
@@ -1290,7 +1290,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Click sound")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         let normalizedSoundSet: String? = {
                             switch cursor.clickEffect.soundSet {
@@ -1365,16 +1365,16 @@ public struct InspectorSidebarView: View {
                                     Text("Play click sound preview")
                                         .font(.system(size: 12.5, weight: .medium))
                                 }
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 36)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.white.opacity(0.04))
+                                        .fill(Color.ink.opacity(0.04))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
@@ -1405,15 +1405,15 @@ public struct InspectorSidebarView: View {
                             HStack(spacing: 7) {
                                 Image(systemName: "cursorarrow.motionlines")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .foregroundStyle(.ink.opacity(0.88))
                                 Text("Rotate while moving")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.92))
+                                    .foregroundStyle(.ink.opacity(0.92))
                             }
 
                             Text("How the cursor rotates as it chases the mouse.")
                                 .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(.ink.opacity(0.45))
 
                             HStack(spacing: 6) {
                                 ForEach(CursorRotationMode.allCases) { mode in
@@ -1430,7 +1430,7 @@ public struct InspectorSidebarView: View {
 
                             Text(cursor.rotationMode.descriptionText)
                                 .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(.ink.opacity(0.45))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
@@ -1438,10 +1438,10 @@ public struct InspectorSidebarView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Tilt amount")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.92))
+                                    .foregroundStyle(.ink.opacity(0.92))
                                 Text("How strongly horizontal movement leans the cursor.")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.white.opacity(0.45))
+                                    .foregroundStyle(.ink.opacity(0.45))
 
                                 coalescedSliderRowOnly(
                                     value: Binding(
@@ -1472,10 +1472,10 @@ public struct InspectorSidebarView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Stop cursor movement at the end of the video")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.92))
+                                    .foregroundStyle(.ink.opacity(0.92))
                                 Text("Near the end of the video, the last mouse movement often leads to clicking \"Stop Recording,\" which you might not want to be visible. Adjust how long before the end of the video the mouse cursor will stop moving.")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.white.opacity(0.45))
+                                    .foregroundStyle(.ink.opacity(0.45))
                                     .fixedSize(horizontal: false, vertical: true)
 
                                 coalescedSliderRowOnly(
@@ -1596,7 +1596,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Screen animation style")
                     .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 HStack(spacing: 8) {
                     animationPresetCardButton(
@@ -1636,7 +1636,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(desc)
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.48))
+                            .foregroundStyle(.ink.opacity(0.48))
                             .fixedSize(horizontal: false, vertical: true)
 
                         SpringPhysicsDemoDotView(spring: spring)
@@ -1651,7 +1651,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Cursor animation style")
                     .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 HStack(spacing: 8) {
                     animationPresetCardButton(
@@ -1740,11 +1740,11 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Motion blur")
                     .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 Text("Elements that are moving will have a cinematic motion blur effect applied")
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Slider(
@@ -1783,11 +1783,11 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.88))
+                    .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.88))
 
                 Text(title)
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.88))
+                    .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.88))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
@@ -1796,14 +1796,14 @@ public struct InspectorSidebarView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(isSelected ? 0.075 : 0.03))
+                    .fill(Color.ink.opacity(isSelected ? 0.075 : 0.03))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(
                         isSelected
                             ? Color(red: 0.44, green: 0.34, blue: 0.98)
-                            : Color.white.opacity(0.05),
+                            : Color.ink.opacity(0.05),
                         lineWidth: isSelected ? 1.3 : 1
                     )
             )
@@ -1961,7 +1961,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Microphone")
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
 
                 inspectorToggleRow(
                     title: "Mute microphone",
@@ -1977,7 +1977,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Microphone audio mode")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         ScrollViewReader { scrollProxy in
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -2004,7 +2004,7 @@ public struct InspectorSidebarView: View {
 
                         Text(session.document.audio.microphoneAudioPreset.descriptionText)
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.42))
+                            .foregroundStyle(.ink.opacity(0.42))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else if isCameraVisibleAndMicMuted {
@@ -2037,16 +2037,16 @@ public struct InspectorSidebarView: View {
                     } label: {
                         Text("Hide camera")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
                             .frame(maxWidth: .infinity)
                             .frame(height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.04))
+                                    .fill(Color.ink.opacity(0.04))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -2074,7 +2074,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("System audio")
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
 
                 inspectorToggleRow(
                     title: "Mute system audio",
@@ -2109,7 +2109,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Background audio")
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -2234,16 +2234,16 @@ public struct InspectorSidebarView: View {
                                 .font(.system(size: 13, weight: .medium))
                                 .lineLimit(1)
                         }
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.ink.opacity(0.88))
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                         .background(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.ink.opacity(0.04))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
@@ -2268,11 +2268,11 @@ public struct InspectorSidebarView: View {
                         .frame(height: 38)
                         .background(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(Color.white.opacity(0.035))
+                                .fill(Color.ink.opacity(0.035))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
@@ -2286,7 +2286,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Voiceovers")
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
 
                 HStack(spacing: 8) {
                     Button {
@@ -2298,7 +2298,7 @@ public struct InspectorSidebarView: View {
                             Text(session.isRecordingVoiceover ? "Stop Recording" : "Record voiceover")
                                 .font(.system(size: 12.5, weight: .medium))
                         }
-                        .foregroundStyle(session.isRecordingVoiceover ? Color.white : Color(red: 1.0, green: 0.45, blue: 0.45))
+                        .foregroundStyle(session.isRecordingVoiceover ? Color.ink : Color(red: 1.0, green: 0.45, blue: 0.45))
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                         .background(
@@ -2322,16 +2322,16 @@ public struct InspectorSidebarView: View {
                             Text("Upload audio…")
                                 .font(.system(size: 12.5, weight: .medium))
                         }
-                        .foregroundStyle(.white.opacity(0.90))
+                        .foregroundStyle(.ink.opacity(0.90))
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.ink.opacity(0.04))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -2369,7 +2369,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Default layout")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
 
                     HStack(spacing: 8) {
                         ForEach(CameraLayoutMode.allCases) { mode in
@@ -2392,7 +2392,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Camera Position")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         CameraPerimeterPositionGridPicker(
                             position01: Binding(
@@ -2410,7 +2410,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Camera aspect ratio")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         HStack(spacing: 6) {
                             ForEach(CameraAspectRatioPreset.allCases) { preset in
@@ -2471,7 +2471,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Split ratio")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         SplitScreenRatioCardsPicker(
                             ratio01: Binding(
@@ -2506,7 +2506,7 @@ public struct InspectorSidebarView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Fill")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
 
                             Text(
                                 cam.splitEnablePadding
@@ -2514,7 +2514,7 @@ public struct InspectorSidebarView: View {
                                     : "Split layout fills the entire screen."
                             )
                             .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.42))
+                            .foregroundStyle(.ink.opacity(0.42))
                             .fixedSize(horizontal: false, vertical: true)
                         }
 
@@ -2554,17 +2554,17 @@ public struct InspectorSidebarView: View {
                             HStack(spacing: 8) {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .fill(Color.white.opacity(0.06))
+                                        .fill(Color.ink.opacity(0.06))
                                         .frame(width: 24, height: 22)
                                     Image(systemName: "cube.transparent")
                                         .font(.system(size: 11.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.75))
+                                        .foregroundStyle(.ink.opacity(0.75))
                                 }
                                 .help("Padding value is shared across all layouts in the project.")
 
                                 Text("Padding")
                                     .font(.system(size: 13, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.92))
+                                    .foregroundStyle(.ink.opacity(0.92))
                             }
 
                             coalescedSliderRowOnly(
@@ -2581,7 +2581,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Camera Position")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         CameraCutoutPositionDotBarPicker(
                             positionX01: Binding(
@@ -2644,15 +2644,15 @@ public struct InspectorSidebarView: View {
                         HStack(spacing: 8) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(Color.white.opacity(0.06))
+                                    .fill(Color.ink.opacity(0.06))
                                     .frame(width: 24, height: 22)
                                 Image(systemName: "cube.transparent")
                                     .font(.system(size: 11.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.75))
+                                    .foregroundStyle(.ink.opacity(0.75))
                             }
                             Text("Edge softness")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                         }
 
                         coalescedSliderRowOnly(
@@ -2669,15 +2669,15 @@ public struct InspectorSidebarView: View {
                         HStack(spacing: 8) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(Color.white.opacity(0.06))
+                                    .fill(Color.ink.opacity(0.06))
                                     .frame(width: 24, height: 22)
                                 Image(systemName: "cube.transparent")
                                     .font(.system(size: 11.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.75))
+                                    .foregroundStyle(.ink.opacity(0.75))
                             }
                             Text("Edge inset")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                         }
 
                         coalescedSliderRowOnly(
@@ -2722,7 +2722,7 @@ public struct InspectorSidebarView: View {
                     if cam.layoutMode == .splitScreen && session.document.canvas.paddingRatio <= 0.005 {
                         Text("For split screen layout, when padding is 0, the camera border radius will only be applied during zoom.")
                             .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.42))
+                            .foregroundStyle(.ink.opacity(0.42))
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -2769,7 +2769,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Color grading")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7),
@@ -2797,7 +2797,7 @@ public struct InspectorSidebarView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .strokeBorder(
-                                        isSelected ? Color.white.opacity(0.95) : Color.white.opacity(0.10),
+                                        isSelected ? Color.ink.opacity(0.95) : Color.ink.opacity(0.10),
                                         lineWidth: isSelected ? 1.5 : 1.0
                                     )
                             )
@@ -2826,7 +2826,7 @@ public struct InspectorSidebarView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .strokeBorder(
-                                        isSelected ? Color.white.opacity(0.95) : Color.white.opacity(0.10),
+                                        isSelected ? Color.ink.opacity(0.95) : Color.ink.opacity(0.10),
                                         lineWidth: isSelected ? 1.5 : 1.0
                                     )
                             )
@@ -2857,12 +2857,12 @@ public struct InspectorSidebarView: View {
                     } label: {
                         ZStack {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.ink.opacity(0.04))
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1.0)
+                                .strokeBorder(Color.ink.opacity(0.14), lineWidth: 1.0)
                             Image(systemName: "plus")
                                 .font(.system(size: 13.5, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.88))
+                                .foregroundStyle(.ink.opacity(0.88))
                         }
                         .frame(width: 36, height: 36)
                         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -2889,10 +2889,10 @@ public struct InspectorSidebarView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "circle.hexagongrid")
                         .font(.system(size: 13.5, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.ink.opacity(0.88))
                     Text("Sharpen")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
                 }
 
                 coalescedSliderRowOnly(
@@ -2912,10 +2912,10 @@ public struct InspectorSidebarView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "crop")
                         .font(.system(size: 13.5, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.ink.opacity(0.88))
                     Text("Crop")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
                 }
 
                 HStack(spacing: 8) {
@@ -2924,16 +2924,16 @@ public struct InspectorSidebarView: View {
                     } label: {
                         Text(hasCrop ? "Edit crop" : "Crop camera")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
                             .frame(maxWidth: .infinity)
                             .frame(height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.04))
+                                    .fill(Color.ink.opacity(0.04))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -2945,16 +2945,16 @@ public struct InspectorSidebarView: View {
                         } label: {
                             Text("Reset")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.85))
+                                .foregroundStyle(.ink.opacity(0.85))
                                 .padding(.horizontal, 14)
                                 .frame(height: 36)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.white.opacity(0.04))
+                                        .fill(Color.ink.opacity(0.04))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
@@ -2997,15 +2997,15 @@ public struct InspectorSidebarView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "waveform.and.person.filled")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.ink.opacity(0.85))
                         Text("Camera delay (\(Int(round(cam.delayAdjustmentMs))) ms)")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
                     }
 
                     Text("If your lips look out of sync with your voice, raise it when they move after the words, lower it when they move before.")
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.42))
+                        .foregroundStyle(.ink.opacity(0.42))
                         .fixedSize(horizontal: false, vertical: true)
 
                     coalescedSliderRowOnly(
@@ -3041,7 +3041,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Captions")
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.ink.opacity(0.45))
 
                     inspectorToggleRow(
                         title: "Disable captions",
@@ -3072,7 +3072,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Font style")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         HStack(spacing: 6) {
                             ForEach(CaptionFontStyle.allCases) { style in
@@ -3090,7 +3090,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Word reveal")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         HStack(spacing: 6) {
                             ForEach(CaptionWordsReveal.allCases) { mode in
@@ -3105,7 +3105,7 @@ public struct InspectorSidebarView: View {
 
                         Text(cap.wordsReveal.descriptionText)
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.42))
+                            .foregroundStyle(.ink.opacity(0.42))
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -3114,7 +3114,7 @@ public struct InspectorSidebarView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Line growth")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
 
                             HStack(spacing: 6) {
                                 ForEach(CaptionLineGrowth.allCases) { growth in
@@ -3129,7 +3129,7 @@ public struct InspectorSidebarView: View {
 
                             Text(cap.lineGrowth.descriptionText)
                                 .font(.system(size: 12.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.42))
+                                .foregroundStyle(.ink.opacity(0.42))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
@@ -3137,7 +3137,7 @@ public struct InspectorSidebarView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Word animation")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
 
                             HStack(spacing: 6) {
                                 ForEach(CaptionWordAnimation.allCases) { anim in
@@ -3152,7 +3152,7 @@ public struct InspectorSidebarView: View {
 
                             Text(cap.wordAnimation.descriptionText)
                                 .font(.system(size: 12.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.42))
+                                .foregroundStyle(.ink.opacity(0.42))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -3161,7 +3161,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Color")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         HStack(spacing: 6) {
                             ForEach(CaptionColorTheme.allCases) { theme in
@@ -3183,7 +3183,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Caption position")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         let isCenteredY = abs(cap.position01.y - 0.50) < 0.15
                         HStack(spacing: 6) {
@@ -3210,16 +3210,16 @@ public struct InspectorSidebarView: View {
                 } label: {
                     Text("Export transcript")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.90))
+                        .foregroundStyle(.ink.opacity(0.90))
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.ink.opacity(0.04))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
@@ -3238,7 +3238,7 @@ public struct InspectorSidebarView: View {
                 // Initial Generate Transcript View (100% Local On-Device!)
                 Text("Generate transcript")
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
 
                 localTranscriptGeneratorControls(isRegenerating: false)
             }
@@ -3271,7 +3271,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Transcript method")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 ScrollViewReader { methodScrollProxy in
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -3306,7 +3306,7 @@ public struct InspectorSidebarView: View {
                                 HStack(spacing: 5) {
                                     Text("On-Device Whisper")
                                         .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(cap.localModelVariant != "system" ? 0.98 : 0.72))
+                                        .foregroundStyle(.ink.opacity(cap.localModelVariant != "system" ? 0.98 : 0.72))
                                         .lineLimit(1)
 
                                     if anyWhisperInstalled {
@@ -3347,7 +3347,7 @@ public struct InspectorSidebarView: View {
                         : "Transcript will be generated using open-source OpenAI Whisper AI model on your Mac. No data is sent to any server."
                 )
                 .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.white.opacity(0.42))
+                .foregroundStyle(.ink.opacity(0.42))
                 .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -3356,7 +3356,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("AI model to use")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
 
                     HStack(spacing: 6) {
                         ForEach(WhisperModelTier.allCases) { tier in
@@ -3375,7 +3375,7 @@ public struct InspectorSidebarView: View {
                                 HStack(spacing: 4) {
                                     Text(tier.label)
                                         .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(isTierSelected ? 0.98 : 0.72))
+                                        .foregroundStyle(.ink.opacity(isTierSelected ? 0.98 : 0.72))
 
                                     if isTierInstalled {
                                         Image(systemName: "checkmark.circle.fill")
@@ -3408,7 +3408,7 @@ public struct InspectorSidebarView: View {
 
                     Text(selectedWhisperTier.descriptionText)
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.42))
+                        .foregroundStyle(.ink.opacity(0.42))
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Live Download Progress Card with Cancel Button!
@@ -3424,7 +3424,7 @@ public struct InspectorSidebarView: View {
                                         .controlSize(.small)
                                     Text("Downloading Whisper \(activeTier.label) (\(activeTier.fileName))… \(pct)%")
                                         .font(.system(size: 12, weight: .medium).monospacedDigit())
-                                        .foregroundStyle(.white.opacity(0.92))
+                                        .foregroundStyle(.ink.opacity(0.92))
                                 }
                                 Spacer()
                                 Button {
@@ -3448,7 +3448,7 @@ public struct InspectorSidebarView: View {
                                 let fillW = max(6.0, geo.size.width * CGFloat(whisperManager.downloadProgress01))
                                 ZStack(alignment: .leading) {
                                     Capsule()
-                                        .fill(Color.white.opacity(0.12))
+                                        .fill(Color.ink.opacity(0.12))
                                         .frame(height: 6)
 
                                     Capsule()
@@ -3460,16 +3460,16 @@ public struct InspectorSidebarView: View {
 
                             Text(String(format: "%.1f MB of %.1f MB", mbWritten, mbTotal))
                                 .font(.system(size: 11, weight: .regular).monospacedDigit())
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(.ink.opacity(0.45))
                         }
                         .padding(12)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.ink.opacity(0.04))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                         )
                     } else if !isSelectedWhisperInstalled {
                         Button {
@@ -3486,11 +3486,11 @@ public struct InspectorSidebarView: View {
                             .frame(height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.04))
+                                    .fill(Color.ink.opacity(0.04))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
@@ -3503,7 +3503,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Language")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 Menu {
                     ForEach(locales.prefix(35)) { loc in
@@ -3518,24 +3518,24 @@ public struct InspectorSidebarView: View {
                     HStack(spacing: 6) {
                         Text(currentName)
                             .font(.system(size: 13.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.95))
+                            .foregroundStyle(.ink.opacity(0.95))
                             .lineLimit(1)
                             .contentTransition(.interpolate)
 
                         Image(systemName: "chevron.down")
                             .font(.system(size: 10.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(.ink.opacity(0.65))
                             .padding(.leading, 2)
                     }
                     .padding(.horizontal, 14)
                     .frame(height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(Color.white.opacity(0.04))
+                            .fill(Color.ink.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
@@ -3548,11 +3548,11 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Keyterms")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 Text("Comma-separated list of custom words or product names in your recording.")
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(.ink.opacity(0.42))
 
                 TextField(
                     "e.g. Native Screen, Swift, Metal",
@@ -3563,16 +3563,16 @@ public struct InspectorSidebarView: View {
                 )
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5, weight: .regular))
-                .foregroundStyle(.white)
+                .foregroundStyle(.ink)
                 .padding(.horizontal, 10)
                 .frame(height: 34)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
+                        .fill(Color.ink.opacity(0.04))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                 )
             }
 
@@ -3614,17 +3614,17 @@ public struct InspectorSidebarView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Edit by transcript")
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(.ink.opacity(0.45))
 
             if segments.isEmpty {
                 Text("Edit your video by editing its text: delete words to cut them out, remove filler words and long pauses in one click.")
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.ink.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("Generate a transcript first to get started.")
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(.ink.opacity(0.42))
 
                 Button {
                     session.generateLocalOnDeviceTranscript()
@@ -3662,16 +3662,16 @@ public struct InspectorSidebarView: View {
                                     Text("Remove \(fillerCount) filler \(fillerCount == 1 ? "word" : "words")")
                                         .font(.system(size: 12, weight: .medium))
                                 }
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                                 .padding(.horizontal, 10)
                                 .frame(height: 32)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.white.opacity(0.05))
+                                        .fill(Color.ink.opacity(0.05))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
@@ -3689,16 +3689,16 @@ public struct InspectorSidebarView: View {
                                     Text("Tighten \(pauseCount) \(pauseCount == 1 ? "pause" : "pauses")")
                                         .font(.system(size: 12, weight: .medium))
                                 }
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                                 .padding(.horizontal, 10)
                                 .frame(height: 32)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.white.opacity(0.05))
+                                        .fill(Color.ink.opacity(0.05))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
@@ -3727,12 +3727,12 @@ public struct InspectorSidebarView: View {
                             } label: {
                                 Text(seg.text)
                                     .font(.system(size: 13, weight: isSpokenNow ? .semibold : .regular))
-                                    .strikethrough(!isPresentInVideo || seg.isHidden, color: .white.opacity(0.55))
+                                    .strikethrough(!isPresentInVideo || seg.isHidden, color: .ink.opacity(0.55))
                                     .underline(isFiller && isPresentInVideo, pattern: .dot, color: Color(red: 0.58, green: 0.46, blue: 1.0))
                                     .foregroundStyle(
                                         !isPresentInVideo
                                             ? Color.red.opacity(0.65)
-                                            : (seg.isHidden ? .white.opacity(0.42) : .white.opacity(0.95))
+                                            : (seg.isHidden ? .ink.opacity(0.42) : .ink.opacity(0.95))
                                     )
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 2.5)
@@ -3771,13 +3771,13 @@ public struct InspectorSidebarView: View {
                                     } label: {
                                         Text(String(format: "··· %.1fs", gapMs / 1000.0))
                                             .font(.system(size: 11, weight: .medium).monospacedDigit())
-                                            .strikethrough(!isGapPresent, color: .white.opacity(0.5))
-                                            .foregroundStyle(.white.opacity(isGapPresent ? 0.55 : 0.32))
+                                            .strikethrough(!isGapPresent, color: .ink.opacity(0.5))
+                                            .foregroundStyle(.ink.opacity(isGapPresent ? 0.55 : 0.32))
                                             .padding(.horizontal, 7)
                                             .padding(.vertical, 2)
                                             .background(
                                                 Capsule()
-                                                    .fill(Color.white.opacity(0.06))
+                                                    .fill(Color.ink.opacity(0.06))
                                             )
                                             .contentShape(Capsule())
                                     }
@@ -3796,11 +3796,11 @@ public struct InspectorSidebarView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.025))
+                        .fill(Color.ink.opacity(0.025))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.06), lineWidth: 1)
                 )
 
                 // 3. Selected Word Action Bar
@@ -3819,12 +3819,12 @@ public struct InspectorSidebarView: View {
                             )
                             .textFieldStyle(.plain)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.ink)
                             .padding(.horizontal, 10)
                             .frame(height: 32)
                             .background(
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(Color.white.opacity(0.05))
+                                    .fill(Color.ink.opacity(0.05))
                             )
 
                             if isPresent {
@@ -3836,7 +3836,7 @@ public struct InspectorSidebarView: View {
                                 } label: {
                                     Label("Cut video", systemImage: "scissors")
                                         .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(.white.opacity(0.92))
+                                        .foregroundStyle(.ink.opacity(0.92))
                                         .padding(.horizontal, 10)
                                         .frame(height: 32)
                                         .background(
@@ -3853,12 +3853,12 @@ public struct InspectorSidebarView: View {
                             } label: {
                                 Label(selSeg.isHidden ? "Unhide" : "Cut transcript", systemImage: "text.badge.minus")
                                     .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .foregroundStyle(.ink.opacity(0.88))
                                     .padding(.horizontal, 10)
                                     .frame(height: 32)
                                     .background(
                                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .fill(Color.white.opacity(0.06))
+                                            .fill(Color.ink.opacity(0.06))
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
@@ -3879,7 +3879,7 @@ public struct InspectorSidebarView: View {
                                         .frame(height: 32)
                                         .background(
                                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                .fill(Color.white.opacity(0.06))
+                                                .fill(Color.ink.opacity(0.06))
                                         )
                                         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                                 }
@@ -3891,7 +3891,7 @@ public struct InspectorSidebarView: View {
 
                 Text("Click any word to edit or cut — Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only.")
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.38))
+                    .foregroundStyle(.ink.opacity(0.38))
                     .fixedSize(horizontal: false, vertical: true)
 
                 inspectorDivider
@@ -3945,7 +3945,7 @@ public struct InspectorSidebarView: View {
                     case .overlay:
                         // White screen card + bottom-right dark person badge
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.ink)
                             .padding(10)
                             .overlay {
                                 Image(systemName: "display")
@@ -3955,12 +3955,12 @@ public struct InspectorSidebarView: View {
 
                         ZStack {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color(red: 0.09, green: 0.09, blue: 0.12))
+                                .fill(Color.surface(red: 0.09, green: 0.09, blue: 0.12))
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.15), lineWidth: 1)
                             Image(systemName: "person")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                         }
                         .frame(width: 28, height: 26)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -3970,7 +3970,7 @@ public struct InspectorSidebarView: View {
                         // Left white screen half + right dark person half
                         HStack(spacing: 0) {
                             ZStack {
-                                Color.white
+                                Color.ink
                                 Image(systemName: "display")
                                     .font(.system(size: 12.5, weight: .medium))
                                     .foregroundStyle(.black.opacity(0.85))
@@ -3978,10 +3978,10 @@ public struct InspectorSidebarView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                             ZStack {
-                                Color(red: 0.07, green: 0.07, blue: 0.09)
+                                Color.surface(red: 0.07, green: 0.07, blue: 0.09)
                                 Image(systemName: "person")
                                     .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                             }
                             .frame(width: 34)
                         }
@@ -3989,7 +3989,7 @@ public struct InspectorSidebarView: View {
                     case .cutout:
                         // White screen card + bottom-right cutout silhouette
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.ink)
                             .padding(10)
                             .overlay {
                                 Image(systemName: "display")
@@ -3999,7 +3999,7 @@ public struct InspectorSidebarView: View {
 
                         Image(systemName: "person.fill")
                             .font(.system(size: 24, weight: .regular))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.ink)
                             .shadow(color: .black, radius: 1.5)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                             .offset(x: -4, y: 3)
@@ -4009,13 +4009,13 @@ public struct InspectorSidebarView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(isSelected ? Color.white.opacity(0.65) : Color.clear, lineWidth: 2.0)
+                        .strokeBorder(isSelected ? Color.ink.opacity(0.65) : Color.clear, lineWidth: 2.0)
                         .padding(-3)
                 )
 
                 Text(mode.label)
                     .font(.system(size: 11.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(isSelected ? 0.85 : 0.45))
+                    .foregroundStyle(.ink.opacity(isSelected ? 0.85 : 0.45))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
@@ -4044,9 +4044,9 @@ public struct InspectorSidebarView: View {
 
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.03))
+                        .fill(Color.ink.opacity(0.03))
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.06), lineWidth: 1)
 
                     ForEach(Array(points.enumerated()), id: \.offset) { _, pt in
                         let isSelected = (hypot(position01.x - pt.x, position01.y - pt.y) < 0.18)
@@ -4063,12 +4063,12 @@ public struct InspectorSidebarView: View {
                                     .fill(
                                         isSelected
                                             ? Color(red: 0.59, green: 0.48, blue: 0.98)
-                                            : Color.white.opacity(0.08)
+                                            : Color.ink.opacity(0.08)
                                     )
                                     .frame(width: 20, height: 20)
 
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(Color.ink)
                                     .frame(width: 4.5, height: 4.5)
                             }
                             .frame(width: 28, height: 28)
@@ -4099,9 +4099,9 @@ public struct InspectorSidebarView: View {
 
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.03))
+                        .fill(Color.ink.opacity(0.03))
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.06), lineWidth: 1)
 
                     ForEach(xStops, id: \.self) { stopX in
                         let isSelected = (abs(positionX01 - stopX) < 0.18)
@@ -4117,12 +4117,12 @@ public struct InspectorSidebarView: View {
                                     .fill(
                                         isSelected
                                             ? Color(red: 0.59, green: 0.48, blue: 0.98)
-                                            : Color.white.opacity(0.08)
+                                            : Color.ink.opacity(0.08)
                                     )
                                     .frame(width: 20, height: 20)
 
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(Color.ink)
                                     .frame(width: 4.5, height: 4.5)
                             }
                             .frame(width: 28, height: 28)
@@ -4164,7 +4164,7 @@ public struct InspectorSidebarView: View {
                         splitCardBackground(isSelected: isAutoSelected)
                         Text("Auto")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(isAutoSelected ? 0.96 : 0.72))
+                            .foregroundStyle(.ink.opacity(isAutoSelected ? 0.96 : 0.72))
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 60)
@@ -4235,14 +4235,14 @@ public struct InspectorSidebarView: View {
                 .fill(
                     isSelected
                         ? Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.22)
-                        : Color.white.opacity(0.035)
+                        : Color.ink.opacity(0.035)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(
                             isSelected
                                 ? Color(red: 0.48, green: 0.36, blue: 1.0)
-                                : Color.white.opacity(0.08),
+                                : Color.ink.opacity(0.08),
                             lineWidth: isSelected ? 1.5 : 1.0
                         )
                 )
@@ -4255,21 +4255,21 @@ public struct InspectorSidebarView: View {
                     .fill(
                         isSelected
                             ? Color(red: 0.38, green: 0.24, blue: 0.96).opacity(0.25)
-                            : Color.white.opacity(0.03)
+                            : Color.ink.opacity(0.03)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .strokeBorder(
                                 isSelected
                                     ? Color(red: 0.52, green: 0.40, blue: 1.0).opacity(0.45)
-                                    : Color.white.opacity(0.06),
+                                    : Color.ink.opacity(0.06),
                                 lineWidth: 1.0
                             )
                     )
 
                 Text(label)
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(isSelected ? 0.96 : 0.72))
+                    .foregroundStyle(.ink.opacity(isSelected ? 0.96 : 0.72))
             }
         }
     }
@@ -4295,16 +4295,16 @@ public struct InspectorSidebarView: View {
                     Text("Close Zoom editor")
                         .font(.system(size: 13, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .padding(.horizontal, 14)
                 .frame(height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
+                        .fill(Color.ink.opacity(0.04))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
@@ -4314,7 +4314,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Zoom style")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 HStack(spacing: 8) {
                     segmentLargeOptionButton(
@@ -4359,7 +4359,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Zoom position")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 if session.hasRecordedCursor {
                     HStack(spacing: 8) {
@@ -4394,7 +4394,7 @@ public struct InspectorSidebarView: View {
                             : "Drag the point to choose what the camera focuses on."
                     )
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(.ink.opacity(0.42))
                     .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -4408,11 +4408,11 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Zoom level")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 Text("How close to zoom on the cursor during this zoom phase")
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(.ink.opacity(0.42))
                     .fixedSize(horizontal: false, vertical: true)
 
                 coalescedSliderRowOnly(
@@ -4491,16 +4491,16 @@ public struct InspectorSidebarView: View {
                     } label: {
                         Text("Apply zoom level to all other zooms")
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.90))
+                            .foregroundStyle(.ink.opacity(0.90))
                             .frame(maxWidth: .infinity)
                             .frame(height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.05))
+                                    .fill(Color.ink.opacity(0.05))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -4530,16 +4530,16 @@ public struct InspectorSidebarView: View {
                     Text("Remove zoom")
                         .font(.system(size: 13, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .frame(maxWidth: .infinity)
                 .frame(height: 38)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.035))
+                        .fill(Color.ink.opacity(0.035))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
@@ -4569,16 +4569,16 @@ public struct InspectorSidebarView: View {
                     Text("Close Shortcut editor")
                         .font(.system(size: 13, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .padding(.horizontal, 14)
                 .frame(height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
+                        .fill(Color.ink.opacity(0.04))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
@@ -4589,7 +4589,7 @@ public struct InspectorSidebarView: View {
                 HStack {
                     Text("Shortcut keys")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
                     Spacer()
                     Text(cluster.compactTimelineLabel)
                         .font(.system(size: 12.5, weight: .medium))
@@ -4613,23 +4613,23 @@ public struct InspectorSidebarView: View {
                     HStack(spacing: 8) {
                         Image(systemName: isRecordingShortcutKeys ? "record.circle.fill" : "keyboard")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(isRecordingShortcutKeys ? Color.red : .white.opacity(0.90))
+                            .foregroundStyle(isRecordingShortcutKeys ? Color.red : .ink.opacity(0.90))
                         Text(isRecordingShortcutKeys ? "Press any shortcut on keyboard… (ESC to cancel)" : "Record shortcut keys…")
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(isRecordingShortcutKeys ? Color.red.opacity(0.16) : Color.white.opacity(0.04))
+                            .fill(isRecordingShortcutKeys ? Color.red.opacity(0.16) : Color.ink.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(
                                 isRecordingShortcutKeys
                                     ? Color.red.opacity(0.65)
-                                    : Color.white.opacity(0.08),
+                                    : Color.ink.opacity(0.08),
                                 lineWidth: 1
                             )
                     )
@@ -4660,18 +4660,18 @@ public struct InspectorSidebarView: View {
                     ))
                     .textFieldStyle(.plain)
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.ink)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 6)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(0.04))
+                            .fill(Color.ink.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                     )
                 }
             }
@@ -4746,16 +4746,16 @@ public struct InspectorSidebarView: View {
                         Text("Duplicate shortcut")
                             .font(.system(size: 13, weight: .regular))
                     }
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(Color.white.opacity(0.035))
+                            .fill(Color.ink.opacity(0.035))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
@@ -4860,16 +4860,16 @@ public struct InspectorSidebarView: View {
                     Text("Close Camera Layout editor")
                         .font(.system(size: 13, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .padding(.horizontal, 14)
                 .frame(height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
+                        .fill(Color.ink.opacity(0.04))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
@@ -4895,7 +4895,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Layout type")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
 
                     LazyVGrid(
                         columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
@@ -4925,7 +4925,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Camera Position")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         CameraPerimeterPositionGridPicker(
                             position01: Binding(
@@ -4946,7 +4946,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Camera Position")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         CameraCutoutPositionDotBarPicker(
                             positionX01: Binding(
@@ -4967,7 +4967,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Split ratio")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         SplitScreenRatioCardsPicker(
                             ratio01: Binding(
@@ -5010,16 +5010,16 @@ public struct InspectorSidebarView: View {
                     Text("Remove layout")
                         .font(.system(size: 13, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .frame(maxWidth: .infinity)
                 .frame(height: 38)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.035))
+                        .fill(Color.ink.opacity(0.035))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
@@ -5048,7 +5048,7 @@ public struct InspectorSidebarView: View {
                     switch type {
                     case .cameraOverlay:
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.ink)
                             .padding(10)
                             .overlay {
                                 Image(systemName: "display")
@@ -5058,12 +5058,12 @@ public struct InspectorSidebarView: View {
 
                         ZStack {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color(red: 0.09, green: 0.09, blue: 0.12))
+                                .fill(Color.surface(red: 0.09, green: 0.09, blue: 0.12))
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.15), lineWidth: 1)
                             Image(systemName: "person")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
                         }
                         .frame(width: 28, height: 26)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -5072,7 +5072,7 @@ public struct InspectorSidebarView: View {
                     case .splitScreen:
                         HStack(spacing: 0) {
                             ZStack {
-                                Color.white
+                                Color.ink
                                 Image(systemName: "display")
                                     .font(.system(size: 12.5, weight: .medium))
                                     .foregroundStyle(.black.opacity(0.85))
@@ -5080,17 +5080,17 @@ public struct InspectorSidebarView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                             ZStack {
-                                Color(red: 0.07, green: 0.07, blue: 0.09)
+                                Color.surface(red: 0.07, green: 0.07, blue: 0.09)
                                 Image(systemName: "person")
                                     .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                             }
                             .frame(width: 34)
                         }
 
                     case .cutoutCamera:
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.ink)
                             .padding(10)
                             .overlay {
                                 Image(systemName: "display")
@@ -5100,20 +5100,20 @@ public struct InspectorSidebarView: View {
 
                         Image(systemName: "person.fill")
                             .font(.system(size: 24, weight: .regular))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.ink)
                             .shadow(color: .black, radius: 1.5)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                             .offset(x: -4, y: 3)
 
                     case .fullscreenCamera:
-                        Color(red: 0.07, green: 0.07, blue: 0.09)
+                        Color.surface(red: 0.07, green: 0.07, blue: 0.09)
                         Image(systemName: "person")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                     case .screenOnly:
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.ink)
                             .padding(10)
                             .overlay {
                                 Image(systemName: "display")
@@ -5126,13 +5126,13 @@ public struct InspectorSidebarView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(isSelected ? Color.white.opacity(0.65) : Color.clear, lineWidth: 2.0)
+                        .strokeBorder(isSelected ? Color.ink.opacity(0.65) : Color.clear, lineWidth: 2.0)
                         .padding(-3)
                 )
 
                 Text(type.label)
                     .font(.system(size: 11.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(isSelected ? 0.88 : 0.45))
+                    .foregroundStyle(.ink.opacity(isSelected ? 0.88 : 0.45))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
@@ -5161,16 +5161,16 @@ public struct InspectorSidebarView: View {
                     Text("Close Voiceover editor")
                         .font(.system(size: 13, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .padding(.horizontal, 14)
                 .frame(height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
+                        .fill(Color.ink.opacity(0.04))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
@@ -5201,16 +5201,16 @@ public struct InspectorSidebarView: View {
                     } label: {
                         Text("Apply to other voiceovers")
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.90))
+                            .foregroundStyle(.ink.opacity(0.90))
                             .frame(maxWidth: .infinity)
                             .frame(height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.white.opacity(0.04))
+                                    .fill(Color.ink.opacity(0.04))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -5224,7 +5224,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Attach to recording")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 HStack(spacing: 6) {
                     ForEach(VoiceoverAttachMode.allCases) { mode in
@@ -5243,7 +5243,7 @@ public struct InspectorSidebarView: View {
 
                 Text(voiceover.attachMode.descriptionText)
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(.ink.opacity(0.42))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -5288,16 +5288,16 @@ public struct InspectorSidebarView: View {
                     Text("Remove voiceover")
                         .font(.system(size: 13, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .frame(maxWidth: .infinity)
                 .frame(height: 38)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.035))
+                        .fill(Color.ink.opacity(0.035))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
@@ -5371,7 +5371,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Device")
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
 
                 inspectorToggleRow(
                     title: "Use device mockup",
@@ -5400,7 +5400,7 @@ public struct InspectorSidebarView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Device frames")
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.ink.opacity(0.45))
 
                     HStack(spacing: 8) {
                         ForEach(DeviceFrameMatchMode.allCases) { mode in
@@ -5416,7 +5416,7 @@ public struct InspectorSidebarView: View {
 
                     Text(mockup.matchMode.descriptionText)
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.42))
+                        .foregroundStyle(.ink.opacity(0.42))
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Device Model Cards
@@ -5435,12 +5435,12 @@ public struct InspectorSidebarView: View {
                                 HStack(spacing: 10) {
                                     Image(systemName: dev.icon)
                                         .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.72))
+                                        .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.72))
                                         .frame(width: 22)
 
                                     Text(dev.name)
                                         .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                                        .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.80))
+                                        .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.80))
 
                                     Spacer()
 
@@ -5454,12 +5454,12 @@ public struct InspectorSidebarView: View {
                                 .frame(height: 38)
                                 .background(
                                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                        .fill(isSelected ? Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.22) : Color.white.opacity(0.035))
+                                        .fill(isSelected ? Color(red: 0.36, green: 0.22, blue: 0.98).opacity(0.22) : Color.ink.opacity(0.035))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                                         .strokeBorder(
-                                            isSelected ? Color(red: 0.48, green: 0.36, blue: 1.0) : Color.white.opacity(0.08),
+                                            isSelected ? Color(red: 0.48, green: 0.36, blue: 1.0) : Color.ink.opacity(0.08),
                                             lineWidth: isSelected ? 1.4 : 1.0
                                         )
                                 )
@@ -5475,10 +5475,10 @@ public struct InspectorSidebarView: View {
                             HStack(spacing: 7) {
                                 Image(systemName: "circle.lefthalf.filled.righthalf.striped.horizontal.inverse")
                                     .font(.system(size: 13, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.85))
+                                    .foregroundStyle(.ink.opacity(0.85))
                                 Text("Finish")
                                     .font(.system(size: 13, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.92))
+                                    .foregroundStyle(.ink.opacity(0.92))
                             }
 
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -5552,16 +5552,16 @@ public struct InspectorSidebarView: View {
                         Text("New track")
                             .font(.system(size: 12.5, weight: .regular))
                     }
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(0.04))
+                            .fill(Color.ink.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
@@ -5596,7 +5596,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Shortcut track")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.ink.opacity(0.92))
 
                         ScrollViewReader { trackProxy in
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -5656,7 +5656,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Position")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 HStack(spacing: 6) {
                     ForEach(ShortcutDockPosition.allCases) { pos in
@@ -5673,7 +5673,7 @@ public struct InspectorSidebarView: View {
                 if current.dockPosition.isVerticalStack {
                     Text("Keycaps are stacked vertically along the \(current.dockPosition.label.lowercased()) edge.")
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.42))
+                        .foregroundStyle(.ink.opacity(0.42))
                 }
             }
 
@@ -5704,7 +5704,7 @@ public struct InspectorSidebarView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Keycap color")
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
 
                 HStack(spacing: 6) {
                     ForEach(ShortcutColorMode.allCases) { mode in
@@ -5723,7 +5723,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Key background")
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(.ink.opacity(0.65))
 
                         HStack(spacing: 8) {
                             ColorSwatchPickerButton(
@@ -5748,15 +5748,15 @@ public struct InspectorSidebarView: View {
                             } label: {
                                 Image(systemName: "wand.and.stars")
                                     .font(.system(size: 13.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                                     .frame(width: 36, height: 36)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color.white.opacity(0.035))
+                                            .fill(Color.ink.opacity(0.035))
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                            .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
@@ -5765,7 +5765,7 @@ public struct InspectorSidebarView: View {
 
                         Text("Text color")
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(.ink.opacity(0.65))
 
                         HStack(spacing: 8) {
                             ColorSwatchPickerButton(
@@ -5788,7 +5788,7 @@ public struct InspectorSidebarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white.opacity(0.035))
+                            .fill(Color.ink.opacity(0.035))
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
 
@@ -5796,7 +5796,7 @@ public struct InspectorSidebarView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Key gradient")
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(.ink.opacity(0.65))
 
                         HStack(spacing: 5) {
                             ColorSwatchPickerButton(
@@ -5841,15 +5841,15 @@ public struct InspectorSidebarView: View {
                             } label: {
                                 Image(systemName: "wand.and.stars")
                                     .font(.system(size: 13.0, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                                     .frame(width: 32, height: 32)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color.white.opacity(0.035))
+                                            .fill(Color.ink.opacity(0.035))
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                            .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
@@ -5876,7 +5876,7 @@ public struct InspectorSidebarView: View {
                                         .aspectRatio(1.0, contentMode: .fit)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                                .strokeBorder(isSel ? Color.white : Color.white.opacity(0.12), lineWidth: isSel ? 1.4 : 0.8)
+                                                .strokeBorder(isSel ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSel ? 1.4 : 0.8)
                                         )
                                         .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                                 }
@@ -5886,7 +5886,7 @@ public struct InspectorSidebarView: View {
 
                         Text("Text color")
                             .font(.system(size: 12.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(.ink.opacity(0.65))
                             .padding(.top, 2)
 
                         HStack(spacing: 8) {
@@ -5910,7 +5910,7 @@ public struct InspectorSidebarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white.opacity(0.035))
+                            .fill(Color.ink.opacity(0.035))
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -5935,7 +5935,7 @@ public struct InspectorSidebarView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
-            .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.85))
+            .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.85))
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .background(
@@ -5943,7 +5943,7 @@ public struct InspectorSidebarView: View {
                     .fill(
                         isSelected
                             ? Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.16)
-                            : Color.white.opacity(0.035)
+                            : Color.ink.opacity(0.035)
                     )
             )
             .overlay(
@@ -5951,7 +5951,7 @@ public struct InspectorSidebarView: View {
                     .strokeBorder(
                         isSelected
                             ? Color(red: 0.44, green: 0.34, blue: 0.98)
-                            : Color.white.opacity(0.06),
+                            : Color.ink.opacity(0.06),
                         lineWidth: isSelected ? 1.3 : 1.0
                     )
             )
@@ -5985,7 +5985,7 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private var inspectorDivider: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.07))
+            .fill(Color.ink.opacity(0.07))
             .frame(height: 1)
     }
 
@@ -6002,16 +6002,16 @@ public struct InspectorSidebarView: View {
                     if let icon = icon {
                         Image(systemName: icon)
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.88))
+                            .foregroundStyle(.ink.opacity(0.88))
                     }
                     Text(title)
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
                 }
                 if let desc = description {
                     Text(desc)
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.ink.opacity(0.45))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -6035,7 +6035,7 @@ public struct InspectorSidebarView: View {
             ZStack {
                 Text(title)
                     .font(.system(size: 13.0, weight: .regular))
-                    .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.82))
+                    .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.82))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .opacity(isLoading ? 0.25 : 1.0)
@@ -6044,7 +6044,7 @@ public struct InspectorSidebarView: View {
                     ProgressView()
                         .controlSize(.small)
                         .scaleEffect(0.75)
-                        .tint(.white)
+                        .tint(.ink)
                         .transition(.opacity)
                 }
             }
@@ -6056,7 +6056,7 @@ public struct InspectorSidebarView: View {
                     .fill(
                         isSelected
                             ? Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.16)
-                            : Color.white.opacity(0.038)
+                            : Color.ink.opacity(0.038)
                     )
             )
             .overlay(
@@ -6064,7 +6064,7 @@ public struct InspectorSidebarView: View {
                     .strokeBorder(
                         isSelected
                             ? Color(red: 0.44, green: 0.34, blue: 0.98)
-                            : Color.white.opacity(0.06),
+                            : Color.ink.opacity(0.06),
                         lineWidth: isSelected ? 1.3 : 1.0
                     )
             )
@@ -6090,19 +6090,19 @@ public struct InspectorSidebarView: View {
                     if let icon {
                         Image(systemName: icon)
                             .font(.system(size: 13.5, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.ink.opacity(0.85))
                     }
                     Text(title)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
                     Spacer()
                     Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(.ink.opacity(0.85))
                         .frame(width: 26, height: 26)
                         .background(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(Color.white.opacity(0.06))
+                                .fill(Color.ink.opacity(0.06))
                         )
                 }
                 .contentShape(Rectangle())
@@ -6115,7 +6115,7 @@ public struct InspectorSidebarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white.opacity(0.035))
+                            .fill(Color.ink.opacity(0.035))
                     )
             }
         }
@@ -6135,11 +6135,11 @@ public struct InspectorSidebarView: View {
                 if let icon = icon {
                     Image(systemName: icon)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.ink.opacity(0.88))
                 }
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
             }
 
             coalescedSliderRowOnly(
@@ -6179,15 +6179,15 @@ public struct InspectorSidebarView: View {
                 } label: {
                     Text("Reset")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
+                        .foregroundStyle(isModified ? .ink.opacity(0.95) : .ink.opacity(0.28))
                         .frame(width: 66, height: 32)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
+                                .fill(Color.ink.opacity(isModified ? 0.07 : 0.03))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
@@ -6216,7 +6216,7 @@ private struct SpringPhysicsDemoDotView: View {
             let travelW = max(10.0, geo.size.width - dotSize)
 
             Circle()
-                .fill(Color.white.opacity(0.42))
+                .fill(Color.ink.opacity(0.42))
                 .frame(width: dotSize, height: dotSize)
                 .offset(x: CGFloat(position01) * travelW)
         }
@@ -6296,14 +6296,14 @@ private struct CursorStyleHorizontalCardView: View {
                 .frame(width: cardSize, height: cardSize)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(isSelected ? 0.08 : (isHovered ? 0.065 : 0.04)))
+                        .fill(Color.ink.opacity(isSelected ? 0.08 : (isHovered ? 0.065 : 0.04)))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(
                             isSelected
                                 ? Color(red: 0.44, green: 0.34, blue: 0.98)
-                                : Color.white.opacity(isHovered ? 0.16 : 0.08),
+                                : Color.ink.opacity(isHovered ? 0.16 : 0.08),
                             lineWidth: isSelected ? 1.5 : 1.0
                         )
                 )
@@ -6349,7 +6349,7 @@ private struct ColorSwatchPickerButton: View {
                 .frame(width: size, height: size)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1.2)
+                        .strokeBorder(Color.ink.opacity(0.28), lineWidth: 1.2)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -6369,18 +6369,18 @@ private struct HexInputBox: View {
         TextField("#4776E6", text: $hexColor)
             .textFieldStyle(.plain)
             .font(.system(size: 12.5, weight: .regular).monospacedDigit())
-            .foregroundStyle(.white.opacity(0.95))
+            .foregroundStyle(.ink.opacity(0.95))
             .lineLimit(1)
             .padding(.horizontal, 9)
             .frame(width: width, height: height)
             .frame(maxWidth: width == nil ? .infinity : nil)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.035))
+                    .fill(Color.ink.opacity(0.035))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
             )
     }
 }
@@ -6414,7 +6414,7 @@ private struct ColorPickerPopoverView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [.white, .white.opacity(0.0)],
+                                colors: [.ink, .ink.opacity(0.0)],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
@@ -6432,7 +6432,7 @@ private struct ColorPickerPopoverView: View {
 
                     // Circular thumb handle
                     Circle()
-                        .strokeBorder(Color.white, lineWidth: 2.2)
+                        .strokeBorder(Color.ink, lineWidth: 2.2)
                         .background(Circle().fill(Color(hex: hexColor)))
                         .frame(width: 14, height: 14)
                         .shadow(color: .black.opacity(0.5), radius: 3)
@@ -6444,7 +6444,7 @@ private struct ColorPickerPopoverView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                        .strokeBorder(Color.ink.opacity(0.14), lineWidth: 1)
                 )
                 .contentShape(Rectangle())
                 .gesture(
@@ -6476,7 +6476,7 @@ private struct ColorPickerPopoverView: View {
 
                     Circle()
                         .fill(Color(hue: hue, saturation: 1.0, brightness: 1.0))
-                        .overlay(Circle().strokeBorder(Color.white, lineWidth: 2))
+                        .overlay(Circle().strokeBorder(Color.ink, lineWidth: 2))
                         .frame(width: 16, height: 16)
                         .shadow(color: .black.opacity(0.45), radius: 2)
                         .offset(x: CGFloat(hue) * (w - 16.0))
@@ -6509,7 +6509,7 @@ private struct ColorPickerPopoverView: View {
                             .aspectRatio(1.0, contentMode: .fit)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .strokeBorder(isSel ? Color.white : Color.white.opacity(0.15), lineWidth: isSel ? 1.5 : 0.8)
+                                    .strokeBorder(isSel ? Color.ink : Color.ink.opacity(0.15), lineWidth: isSel ? 1.5 : 0.8)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
@@ -6524,22 +6524,22 @@ private struct ColorPickerPopoverView: View {
                     .frame(width: 28, height: 28)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.22), lineWidth: 1)
                     )
 
                 TextField("#4776E6", text: $hexColor)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.ink)
                     .padding(.horizontal, 10)
                     .frame(height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.05))
+                            .fill(Color.ink.opacity(0.05))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                     )
 
                 Button {
@@ -6559,15 +6559,15 @@ private struct ColorPickerPopoverView: View {
                 } label: {
                     Image(systemName: "eyedropper")
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.90))
+                        .foregroundStyle(.ink.opacity(0.90))
                         .frame(width: 28, height: 28)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.white.opacity(0.06))
+                                .fill(Color.ink.opacity(0.06))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
@@ -6577,8 +6577,7 @@ private struct ColorPickerPopoverView: View {
         }
         .padding(14)
         .frame(width: 252)
-        .background(Color(red: 0.075, green: 0.075, blue: 0.09))
-        .preferredColorScheme(.dark)
+        .background(Color.surface(red: 0.075, green: 0.075, blue: 0.09))
         .onAppear {
             let hsb = Color.hsbComponents(fromHex: hexColor)
             hue = hsb.h
@@ -6713,7 +6712,7 @@ private struct ZoomPositionPadView: View {
                         Image(decorative: thumbnail, scale: 1.0)
                             .resizable()
                     } else {
-                        Color.white.opacity(0.05)
+                        Color.ink.opacity(0.05)
                     }
                 }
                 .frame(width: padSize.width, height: padSize.height)
@@ -6726,13 +6725,13 @@ private struct ZoomPositionPadView: View {
                 .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
 
                 Rectangle()
-                    .strokeBorder(Color.white.opacity(0.75), lineWidth: 1)
+                    .strokeBorder(Color.ink.opacity(0.75), lineWidth: 1)
                     .frame(width: viewport.width, height: viewport.height)
                     .offset(x: viewport.minX, y: viewport.minY)
 
                 Circle()
-                    .fill(Color(red: 0.16, green: 0.17, blue: 0.22).opacity(0.92))
-                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 2))
+                    .fill(Color.surface(red: 0.16, green: 0.17, blue: 0.22).opacity(0.92))
+                    .overlay(Circle().strokeBorder(Color.ink, lineWidth: 2))
                     .frame(width: 26, height: 26)
                     .shadow(color: .black.opacity(0.45), radius: 4, y: 1)
                     .scaleEffect(isDragging ? 1.12 : 1.0)
@@ -6744,7 +6743,7 @@ private struct ZoomPositionPadView: View {
                 if isDragging || isHovering {
                     Text("Left \(Int((center.x * 100).rounded()))% · Top \(Int((center.y * 100).rounded()))%")
                         .font(.system(size: 11.5, weight: .medium).monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.95))
+                        .foregroundStyle(.ink.opacity(0.95))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
@@ -6783,11 +6782,11 @@ private struct ZoomPositionPadView: View {
         .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+                .fill(Color.ink.opacity(0.04))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
         )
         .task(id: zoom.id) {
             thumbnail = await Self.loadThumbnail(

@@ -75,6 +75,18 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         private var lastSeekedSourceMs: Double = -1.0
         private var isDecoderSeeking: Bool = false
         private var pendingSeekSourceMs: Double? = nil
+
+        // Recorded camera (`webcam.mp4`), decoded here so the compositor draws the camera bubble into the same Metal frame
+        // as the screen (identical to export, and never a frame out of sync like a separate SwiftUI layer).
+        private var webcamPlayer: AVPlayer?
+        private var webcamOutput: AVPlayerItemVideoOutput?
+        private var webcamStatusObserver: NSKeyValueObservation?
+        private var loadedWebcamURL: URL?
+        private var lastWebcamFrame: CIImage?
+        private var lastWebcamSeekedMs: Double = -1.0
+        private var isWebcamSeeking: Bool = false
+        private var pendingWebcamSeekMs: Double?
+
         /// Where each playing player's timebase was anchored at the last start / re-sync: item time `itemMs` at host time
         /// `hostSec`, advancing at `rate`. This IS the player's clock, known exactly from the first frame after Play.
         /// Asking AVPlayer instead is not free: `itemTime(forHostTime:)` stays invalid until the first decoded frame,
@@ -108,6 +120,10 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             setupVideoDecoderIfNeeded(for: session.videoFileURL)
             setupMicrophonePlayerIfNeeded(for: session.microphoneAudioFileURL)
             setupBackgroundMusicPlayerIfNeeded(for: session.resolvedBackgroundAudioFileURL())
+            setupWebcamDecoderIfNeeded(for: session.webcamVideoFileURL)
+            compositor?.realtimePersonSegmenter.onMaskUpdated = { [weak self] in
+                self?.mtkView?.needsDisplay = true
+            }
         }
 
         func attach(mtkView: MTKView) {
@@ -120,6 +136,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             setupVideoDecoderIfNeeded(for: newSession.videoFileURL)
             setupMicrophonePlayerIfNeeded(for: newSession.microphoneAudioFileURL)
             setupBackgroundMusicPlayerIfNeeded(for: newSession.resolvedBackgroundAudioFileURL())
+            setupWebcamDecoderIfNeeded(for: newSession.webcamVideoFileURL)
 
             if newSession.isPlaying {
                 if newSession.isPreviewingBackgroundAudio {
@@ -132,6 +149,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 }
             } else {
                 playerAnchors.removeAll()
+                if let webcam = webcamPlayer, webcam.rate != 0 {
+                    webcam.pause()
+                }
                 if let micPlayer = micPlayer, micPlayer.rate != 0 {
                     micPlayer.pause()
                 }
@@ -141,7 +161,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 for voPlayer in voiceoverPlayersByID.values where voPlayer.rate != 0 {
                     voPlayer.pause()
                 }
-                let animatingBg = compositor?.isAnimatingBackgroundTransition ?? false
+                let animatingBg = (compositor?.isAnimatingBackgroundTransition ?? false) || (compositor?.isAnimatingPreviewOverlays ?? false)
                 if !animatingBg && !mtkView.isPaused {
                     mtkView.isPaused = true
                     mtkView.enableSetNeedsDisplay = true
@@ -160,6 +180,10 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     if abs(targetSourceMs - lastSeekedSourceMs) > 0.5 {
                         let isHoverSkim = (newSession.hoverSkimTimelineMs != nil)
                         seekDecoderCoalesced(toSourceMs: targetSourceMs, fastSkim: isHoverSkim)
+                    }
+                    let webcamTargetMs = webcamSourceMs(forSourceMs: targetSourceMs)
+                    if abs(webcamTargetMs - lastWebcamSeekedMs) > 0.5 {
+                        seekWebcamCoalesced(toMs: webcamTargetMs, fastSkim: newSession.hoverSkimTimelineMs != nil)
                     }
                     mtkView.needsDisplay = true
                 }
@@ -222,6 +246,93 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     self.isDecoderSeeking = false
                     self.seekDecoderCoalesced(toSourceMs: self.session.currentSourceTimeMs, fastSkim: false)
                 }
+            }
+        }
+
+        private func webcamSourceMs(forSourceMs sourceMs: Double) -> Double {
+            max(0.0, sourceMs + session.document.camera.delayAdjustmentMs)
+        }
+
+        private func setupWebcamDecoderIfNeeded(for url: URL?) {
+            guard loadedWebcamURL != url else { return }
+            loadedWebcamURL = url
+            webcamStatusObserver?.invalidate()
+            webcamStatusObserver = nil
+            webcamPlayer?.pause()
+            webcamPlayer = nil
+            webcamOutput = nil
+            lastWebcamFrame = nil
+            lastWebcamSeekedMs = -1.0
+            isWebcamSeeking = false
+            pendingWebcamSeekMs = nil
+            guard let url, FileManager.default.fileExists(atPath: url.path) else { return }
+
+            let item = AVPlayerItem(asset: AVURLAsset(url: url))
+            let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferMetalCompatibilityKey as String: true
+            ])
+            item.add(output)
+            let webcam = AVPlayer(playerItem: item)
+            webcam.isMuted = true
+            webcamPlayer = webcam
+            webcamOutput = output
+            webcamStatusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] observedItem, _ in
+                guard observedItem.status == .readyToPlay else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.lastWebcamSeekedMs = -1.0
+                    self.isWebcamSeeking = false
+                    self.seekWebcamCoalesced(toMs: self.webcamSourceMs(forSourceMs: self.session.currentSourceTimeMs), fastSkim: false)
+                }
+            }
+        }
+
+        private func seekWebcamCoalesced(toMs ms: Double, fastSkim: Bool) {
+            guard let webcam = webcamPlayer else { return }
+            if isWebcamSeeking {
+                pendingWebcamSeekMs = ms
+                return
+            }
+            isWebcamSeeking = true
+            lastWebcamSeekedMs = ms
+            let tolerance = fastSkim ? CMTime(seconds: 0.05, preferredTimescale: 600) : .zero
+            webcam.seek(to: CMTime(seconds: ms / 1000.0, preferredTimescale: 600), toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.isWebcamSeeking = false
+                    let time = CMTime(seconds: self.lastWebcamSeekedMs / 1000.0, preferredTimescale: 600)
+                    if let pb = self.webcamOutput?.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) {
+                        self.lastWebcamFrame = CIImage(cvPixelBuffer: pb)
+                        self.mtkView?.needsDisplay = true
+                    }
+                    if let next = self.pendingWebcamSeekMs {
+                        self.pendingWebcamSeekMs = nil
+                        if abs(next - self.lastWebcamSeekedMs) > 0.5 {
+                            self.seekWebcamCoalesced(toMs: next, fastSkim: self.session.hoverSkimTimelineMs != nil)
+                        }
+                    }
+                }
+            }
+        }
+
+        /// Keeps the camera player running with the screen player (anchored to the same host time) while playing,
+        /// and pulls the frame for this display refresh.
+        private func syncWebcamForPlayback(sourceMs: Double, rate: Float) {
+            guard let webcam = webcamPlayer, let output = webcamOutput else { return }
+            let targetMs = webcamSourceMs(forSourceMs: sourceMs)
+            if abs(webcam.rate - rate) > 0.05 || abs(playbackPositionMs(of: webcam) - targetMs) > 180.0 {
+                pendingWebcamSeekMs = nil
+                startPlayerAnchoredToNow(webcam, atItemTime: CMTime(seconds: targetMs / 1000.0, preferredTimescale: 600), rate: rate)
+            }
+            let hostItemTime = output.itemTime(forHostTime: CACurrentMediaTime())
+            let queryTime = (hostItemTime.isValid && abs(CMTimeGetSeconds(hostItemTime) * 1000.0 - targetMs) < 150.0)
+                ? hostItemTime
+                : CMTime(seconds: targetMs / 1000.0, preferredTimescale: 600)
+            if output.hasNewPixelBuffer(forItemTime: queryTime),
+               let pb = output.copyPixelBuffer(forItemTime: queryTime, itemTimeForDisplay: nil) {
+                lastWebcamFrame = CIImage(cvPixelBuffer: pb)
+                lastWebcamSeekedMs = targetMs
             }
         }
 
@@ -438,6 +549,8 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                         }
                     }
 
+                    syncWebcamForPlayback(sourceMs: sourceMs, rate: desiredRate)
+
                     // Microphone and voiceovers are anchored to the same host time as the video, so they start in sync.
                     // Synchronize `micPlayer` (`microphone.m4a`) in lockstep with `player` (`display.mp4`)!
                     if let micPlayer = micPlayer {
@@ -505,6 +618,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     if let player = player, player.rate != 0 {
                         player.pause()
                     }
+                    if let webcam = webcamPlayer, webcam.rate != 0 {
+                        webcam.pause()
+                    }
                     if let micPlayer = micPlayer, micPlayer.rate != 0 {
                         micPlayer.pause()
                     }
@@ -538,12 +654,19 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             let drawableSize = view.drawableSize
             guard drawableSize.width > 4 && drawableSize.height > 4 else { return }
 
+            // Camera, captions and keycaps are drawn here by the same pass the exporter uses (WYSIWYG).
             let finalCIImage = compositor.composeFrame(
                 sourceVideoFrame: lastDecodedFrame,
                 sourceTimeMs: sourceMs,
                 session: session,
-                outputSize: drawableSize
+                outputSize: drawableSize,
+                includeShortcutOverlay: true,
+                webcamVideoFrame: lastWebcamFrame,
+                isRealtimePreview: true
             )
+            if compositor.lastShortcutHitRects01 != session.previewShortcutHitRects01 {
+                session.previewShortcutHitRects01 = compositor.lastShortcutHitRects01
+            }
 
             let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
             compositor.ciContext.render(
@@ -558,7 +681,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             commandBuffer.commit()
 
             if !session.isPlaying {
-                if compositor.isAnimatingBackgroundTransition {
+                if compositor.isAnimatingBackgroundTransition || compositor.isAnimatingPreviewOverlays {
                     if view.isPaused {
                         view.enableSetNeedsDisplay = false
                         view.isPaused = false

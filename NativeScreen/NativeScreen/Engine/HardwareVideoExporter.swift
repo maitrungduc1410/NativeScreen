@@ -219,7 +219,7 @@ public final class HardwareVideoExporter {
         }
     }
 
-    public struct ExportConfiguration: Equatable {
+    public struct ExportConfiguration: Equatable, Codable {
         public var format: ExportFormat = .mp4
         public var fps: Int = 60
         public var resolutionHeight: Int = 2160

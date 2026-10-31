@@ -8,6 +8,7 @@ import AppKit
 final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         MainMenuOrder.install()
+        AppSettings.shared.applyAppearance()
         if let appMenuItem = NSApp.mainMenu?.items.first {
             appMenuItem.title = "Native Screen"
             appMenuItem.submenu?.title = "Native Screen"
@@ -77,9 +78,9 @@ struct NativeScreenApp: App {
             .keyboardShortcut("q", modifiers: [.command])
         }
 
-        // Settings scene keeps the app running without spawning any unwanted placeholder window on launch
+        // `Native Screen > Settings…` (⌘,); the Settings scene also keeps the app running without a placeholder window
         Settings {
-            EmptyView()
+            SettingsView()
         }
         .commands {
             AppMenuCommands(workspace: workspace, recorder: recorder, preferences: EditorViewPreferences.shared)

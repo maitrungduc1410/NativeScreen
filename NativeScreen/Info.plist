@@ -4,11 +4,11 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>Native Screen</string>
-	<key>CFBundleName</key>
-	<string>Native Screen</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 			<key>CFBundleTypeName</key>
 			<string>Native Screen Project</string>
 			<key>CFBundleTypeRole</key>
@@ -23,6 +23,8 @@
 			<true/>
 		</dict>
 	</array>
+	<key>CFBundleName</key>
+	<string>Native Screen</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -33,6 +35,13 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Native Screen Project</string>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconBadgeName</key>
+				<string>AppIcon</string>
+				<key>UTTypeIconText</key>
+				<string>NATIVESCREEN</string>
+			</dict>
 			<key>UTTypeIdentifier</key>
 			<string>com.nativescreen.project</string>
 			<key>UTTypeTagSpecification</key>

@@ -86,6 +86,10 @@ public final class MetalFrameCompositor {
     // Pass 6 (3D Shortcut Keycap Sprite Cache) — avoids re-rasterizing keycap graphics on every frame!
     private var keycapSpriteCache: [String: CIImage] = [:]
 
+    /// Where each visible keycap group was drawn in the last composed frame, normalized `0...1` with a top-left origin.
+    /// The preview uses it to place hover / click targets over keycaps it no longer draws itself.
+    public private(set) var lastShortcutHitRects01: [String: CGRect] = [:]
+
     public var isAnimatingBackgroundTransition: Bool {
         guard previousUnblurredBackgroundImage != nil else { return false }
         let elapsed = ProcessInfo.processInfo.systemUptime - backgroundTransitionStartUptime
@@ -114,7 +118,8 @@ public final class MetalFrameCompositor {
         session: ProjectSession,
         outputSize: CGSize,
         includeShortcutOverlay: Bool = false,
-        webcamVideoFrame: CIImage? = nil
+        webcamVideoFrame: CIImage? = nil,
+        isRealtimePreview: Bool = false
     ) -> CIImage {
         let doc = session.document
         let canvasRect = CGRect(origin: .zero, size: outputSize)
@@ -170,70 +175,19 @@ public final class MetalFrameCompositor {
         }
 
         // --- PASS 3: Screen Rounded Corners, Device Mockup Bezel, Drop Shadow & Camera Zoom/Pan Transform ---
-        let activeLayoutSeg = session.activeCameraLayoutSegment(atSourceMs: sourceTimeMs)
-        let isFullscreenCamera = (activeLayoutSeg?.layoutType == .fullscreenCamera)
-        let isScreenOnly = (activeLayoutSeg?.layoutType == .screenOnly)
-        let isHiddenByVoiceover = session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: sourceTimeMs)
-
-        let effectiveCameraConfig: CameraConfig = {
-            var c = doc.camera
-            if let seg = activeLayoutSeg {
-                switch seg.layoutType {
-                case .cameraOverlay:
-                    c.layoutMode = .overlay
-                    if let pos = seg.overlayPosition01 {
-                        c.position01 = pos
-                    }
-                case .splitScreen:
-                    c.layoutMode = .splitScreen
-                case .cutoutCamera:
-                    c.layoutMode = .cutout
-                    if let x01 = seg.cutoutPositionX01 {
-                        c.cutoutPositionX01 = x01
-                    }
-                case .fullscreenCamera, .screenOnly:
-                    break
-                }
-            }
-            return c
-        }()
-
-        let isSplitScreenActive: Bool = {
-            guard doc.camera.enabled
-                && session.hasRecordedCamera
-                && !isScreenOnly
-                && !isFullscreenCamera
-                && !isHiddenByVoiceover
-                && effectiveCameraConfig.layoutMode == .splitScreen else {
-                return false
-            }
-            if session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
-                return false
-            }
-            return true
-        }()
-
-        let effectivePaddingRatio: CGFloat = doc.frameStyle.deviceMockup.enabled
-            ? max(0.08, CGFloat(doc.canvas.paddingRatio))
-            : CGFloat(doc.canvas.paddingRatio)
-
-        let screenFrameRect: CGRect = {
-            if isSplitScreenActive {
-                let splitGeo = Self.computeSplitScreenGeometry(
-                    canvasSize: outputSize,
-                    sourceScreenSize: maskedScreen.extent.size,
-                    cameraConfig: effectiveCameraConfig,
-                    canvasPaddingRatio: doc.canvas.paddingRatio
-                )
-                return splitGeo.screenRect
-            } else {
-                return calculateFittedScreenRect(
-                    sourceSize: maskedScreen.extent.size,
-                    inCanvas: canvasRect,
-                    paddingRatio: effectivePaddingRatio
-                )
-            }
-        }()
+        // Screen and camera placement, including timeline transitions (identical in preview and export) and, in the
+        // live preview only, a spring toward the new placement when a setting is edited.
+        let targetStage = resolvedStageLayout(
+            session: session,
+            sourceTimeMs: sourceTimeMs,
+            canvasRect: canvasRect,
+            screenSourceSize: maskedScreen.extent.size,
+            zoomScale: cameraState.scale
+        )
+        let stage = isRealtimePreview
+            ? animatedPreviewStage(target: targetStage, sourceTimeMs: sourceTimeMs, canvasSize: outputSize)
+            : targetStage
+        let screenFrameRect = stage.screenRect
 
         let scaleX = screenFrameRect.width / max(1.0, maskedScreen.extent.width)
         let scaleY = screenFrameRect.height / max(1.0, maskedScreen.extent.height)
@@ -355,12 +309,10 @@ public final class MetalFrameCompositor {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
             let zoomInterp01 = min(1.0, max(0.0, (zoomScale - 1.0) / 0.5))
-            let canvasCenterX = isSplitScreenActive
-                ? (screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zoomInterp01)
-                : canvasRect.midX
-            let canvasCenterY = isSplitScreenActive
-                ? (screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zoomInterp01)
-                : canvasRect.midY
+            // Zooming moves the focus from the screen's center to the canvas center (the same point unless the
+            // screen is offset, e.g. in split screen or mid layout transition).
+            let canvasCenterX = screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zoomInterp01
+            let canvasCenterY = screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zoomInterp01
 
             var cameraTransform = CGAffineTransform.identity
             cameraTransform = cameraTransform.translatedBy(x: canvasCenterX, y: canvasCenterY)
@@ -409,12 +361,8 @@ public final class MetalFrameCompositor {
                 let fx = screenFrameRect.minX + CGFloat(cam.center01.x) * screenFrameRect.width
                 let fy = screenFrameRect.minY + CGFloat(1.0 - cam.center01.y) * screenFrameRect.height
                 let zInterp = min(1.0, max(0.0, (s - 1.0) / 0.5))
-                let cx = isSplitScreenActive
-                    ? (screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zInterp)
-                    : canvasRect.midX
-                let cy = isSplitScreenActive
-                    ? (screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zInterp)
-                    : canvasRect.midY
+                let cx = screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zInterp
+                let cy = screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zInterp
 
                 let newMinX = (screenFrameRect.minX - fx) * s + cx
                 let newMinY = (screenFrameRect.minY - fy) * s + cy
@@ -474,19 +422,12 @@ public final class MetalFrameCompositor {
 
         // --- PASS 6: 3D Keyboard Shortcut Keycaps + Camera & Captions Overlay (For Video/GIF/Still-Frame Export!) ---
         if includeShortcutOverlay {
-            if doc.camera.enabled
-                && session.hasRecordedCamera
-                && !isScreenOnly
-                && !isHiddenByVoiceover
-                && !session.isCameraHiddenDuringSilence(atSourceMs: sourceTimeMs) {
-                composite = renderWebcamOverlayForExport(
+            if session.hasRecordedCamera && stage.camera.opacity > 0.004 {
+                composite = renderWebcamOverlay(
                     over: composite,
                     webcamFrame: webcamVideoFrame,
-                    camCfg: effectiveCameraConfig,
-                    isFullscreenCamera: isFullscreenCamera,
-                    sourceScreenSize: maskedScreen.extent.size,
-                    canvasPaddingRatio: doc.canvas.paddingRatio,
-                    currentZoomScale: cameraState.scale,
+                    placement: stage.camera,
+                    isRealtimePreview: isRealtimePreview,
                     canvasRect: canvasRect
                 )
             }
@@ -501,13 +442,23 @@ public final class MetalFrameCompositor {
             }
 
             let activeShortcuts = session.activeShortcutClustersWithStyles(atSourceMs: sourceTimeMs)
-            if !activeShortcuts.isEmpty {
+            lastShortcutHitRects01 = [:]
+            if activeShortcuts.isEmpty {
+                isAnimatingPreviewKeycaps = false
+                keycapSprings.removeAll()
+            } else {
+                // Live preview brightens the hovered / selected keycaps; exports never do.
+                let highlighted: Set<String> = isRealtimePreview
+                    ? Set([session.hoveredShortcutId, session.selectedShortcutId].compactMap { $0 })
+                    : []
                 composite = renderShortcutKeycapsOverlay(
                     over: composite,
                     activeItems: activeShortcuts,
                     sourceTimeMs: sourceTimeMs,
                     shortcutsSizeRatio: doc.captions.shortcutsSizeRatio,
-                    canvasRect: canvasRect
+                    canvasRect: canvasRect,
+                    highlightedClusterIds: highlighted,
+                    isRealtimePreview: isRealtimePreview
                 )
             }
         }
@@ -1112,7 +1063,7 @@ public final class MetalFrameCompositor {
     // MARK: - Pass 6: 3D Keyboard Shortcut Keycaps Renderer (`renderShortcutKeycapsOverlay`)
 
     /// Computes the deterministic WYSIWYG fade-in & fade-out envelope (`opacity`, `scale`, `slideProgress`) for a shortcut cluster at `sourceTimeMs`,
-    /// used identically by both `PreviewShortcutKeycapsOverlayView` (Preview) and `MetalFrameCompositor` (Export)!
+    /// used by the compositor for both the live preview and exports.
     public static func shortcutTransitionEnvelope(
         for cluster: ProjectSession.ShortcutPressCluster,
         atSourceMs sourceTimeMs: Double
@@ -1137,9 +1088,20 @@ public final class MetalFrameCompositor {
         activeItems: [(cluster: ProjectSession.ShortcutPressCluster, style: ShortcutStyleConfig)],
         sourceTimeMs: Double,
         shortcutsSizeRatio: Double,
-        canvasRect: CGRect
+        canvasRect: CGRect,
+        highlightedClusterIds: Set<String> = [],
+        isRealtimePreview: Bool = false
     ) -> CIImage {
         var output = baseImage
+        var keycapsAnimating = false
+        defer {
+            isAnimatingPreviewKeycaps = keycapsAnimating
+            // Forget springs of keycaps that are no longer on screen.
+            if isRealtimePreview {
+                let visible = Set(activeItems.map(\.cluster.id))
+                keycapSprings = keycapSprings.filter { visible.contains($0.key) }
+            }
+        }
         let keyHeight = max(34.0, round(canvasRect.height * CGFloat(shortcutsSizeRatio)))
         let spacing = round(keyHeight * 0.10)
         let edgeMargin = max(16.0, round(canvasRect.height * 0.05))
@@ -1198,19 +1160,53 @@ public final class MetalFrameCompositor {
             contentOriginX += CGFloat(style.offsetX) * canvasRect.width
             contentOriginY -= CGFloat(style.offsetY) * canvasRect.height
 
-            let spriteOriginX = contentOriginX - shadowPad
-            let spriteOriginY = contentOriginY - shadowPad
             let spriteCenterX = groupSprite.extent.width * 0.5
             let spriteCenterY = groupSprite.extent.height * 0.5
 
-            var transform = CGAffineTransform.identity
-            transform = transform.translatedBy(x: spriteOriginX + spriteCenterX, y: spriteOriginY + spriteCenterY)
-            if abs(env.scale - 1.0) > 0.001 {
-                transform = transform.scaledBy(x: env.scale, y: env.scale)
+            // Edits in the live preview (position, offsets, size) glide: the keycap center and key height spring
+            // toward their new values. Playback and exports place them exactly.
+            var centerX = contentOriginX + contentW * 0.5
+            var centerY = contentOriginY + contentH * 0.5
+            var sizeScale: CGFloat = 1.0
+            if isRealtimePreview {
+                let target = [Double(centerX), Double(centerY), Double(keyHeight)]
+                var spring = keycapSprings[cluster.id] ?? SpringVector(target)
+                if previewFrameIsEdit {
+                    if spring.step(toward: target, dt: previewFrameDt) {
+                        keycapsAnimating = true
+                    }
+                } else {
+                    spring.snap(to: target)
+                }
+                keycapSprings[cluster.id] = spring
+                centerX = CGFloat(spring.values[0])
+                centerY = CGFloat(spring.values[1])
+                sizeScale = CGFloat(spring.values[2]) / max(1.0, keyHeight)
             }
-            transform = transform.translatedBy(x: -spriteCenterX, y: -spriteCenterY)
+
+            let isHighlighted = highlightedClusterIds.contains(cluster.id)
+            let totalScale = CGFloat(env.scale) * sizeScale * (isHighlighted ? 1.02 : 1.0)
+            let transform = CGAffineTransform(translationX: centerX, y: centerY)
+                .scaledBy(x: totalScale, y: totalScale)
+                .translatedBy(x: -spriteCenterX, y: -spriteCenterY)
+
+            let contentRect = CGRect(
+                x: centerX - contentW * sizeScale * 0.5,
+                y: centerY - contentH * sizeScale * 0.5,
+                width: contentW * sizeScale,
+                height: contentH * sizeScale
+            )
+            lastShortcutHitRects01[cluster.id] = CGRect(
+                x: contentRect.minX / canvasRect.width,
+                y: 1.0 - contentRect.maxY / canvasRect.height,
+                width: contentRect.width / canvasRect.width,
+                height: contentRect.height / canvasRect.height
+            )
 
             var positioned = groupSprite.transformed(by: transform)
+            if isHighlighted {
+                positioned = positioned.applyingFilter("CIColorControls", parameters: [kCIInputBrightnessKey: 0.08])
+            }
             if env.opacity < 0.995 {
                 positioned = positioned.applyingFilter("CIColorMatrix", parameters: [
                     "inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(env.opacity))
@@ -1611,27 +1607,179 @@ public final class MetalFrameCompositor {
         return materialized
     }
 
-    private func renderWebcamOverlayForExport(
-        over background: CIImage,
-        webcamFrame: CIImage?,
-        camCfg: CameraConfig,
-        isFullscreenCamera: Bool = false,
-        sourceScreenSize: CGSize,
-        canvasPaddingRatio: Double,
-        currentZoomScale: Double,
+    // MARK: - Stage Layout (screen + camera placement)
+
+    /// The camera settings in effect at `sourceTimeMs` (project camera config with the active layout segment applied).
+    private static func effectiveCameraConfig(
+        session: ProjectSession,
+        segment: CameraLayoutSegment?
+    ) -> CameraConfig {
+        var c = session.document.camera
+        guard let seg = segment else { return c }
+        switch seg.layoutType {
+        case .cameraOverlay:
+            c.layoutMode = .overlay
+            if let pos = seg.overlayPosition01 {
+                c.position01 = pos
+            }
+        case .splitScreen:
+            c.layoutMode = .splitScreen
+        case .cutoutCamera:
+            c.layoutMode = .cutout
+            if let x01 = seg.cutoutPositionX01 {
+                c.cutoutPositionX01 = x01
+            }
+        case .fullscreenCamera, .screenOnly:
+            break
+        }
+        return c
+    }
+
+    private static func stageKey(session: ProjectSession, at t: Double) -> StageLayout.Key {
+        let segment = session.activeCameraLayoutSegment(atSourceMs: t)
+        let isScreenOnly = segment?.layoutType == .screenOnly
+        let visible = session.document.camera.enabled
+            && session.hasRecordedCamera
+            && !isScreenOnly
+            && !session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: t)
+            && !session.isCameraHiddenDuringSilence(atSourceMs: t)
+        return StageLayout.Key(
+            config: effectiveCameraConfig(session: session, segment: segment),
+            isFullscreenCamera: segment?.layoutType == .fullscreenCamera,
+            isCameraVisible: visible
+        )
+    }
+
+    /// Placement for one discrete set of settings (no transition).
+    private func rawStageLayout(
+        key: StageLayout.Key,
+        session: ProjectSession,
+        canvasRect: CGRect,
+        screenSourceSize: CGSize,
+        zoomScale: Double
+    ) -> StageLayout {
+        let doc = session.document
+        let cfg = key.config
+        let isSplit = key.isCameraVisible && !key.isFullscreenCamera && cfg.layoutMode == .splitScreen
+        let splitGeo = Self.computeSplitScreenGeometry(
+            canvasSize: canvasRect.size,
+            sourceScreenSize: screenSourceSize,
+            cameraConfig: cfg,
+            canvasPaddingRatio: doc.canvas.paddingRatio
+        )
+        let screenRect: CGRect = {
+            if isSplit {
+                return splitGeo.screenRect
+            }
+            let padding: CGFloat = doc.frameStyle.deviceMockup.enabled
+                ? max(0.08, CGFloat(doc.canvas.paddingRatio))
+                : CGFloat(doc.canvas.paddingRatio)
+            return calculateFittedScreenRect(sourceSize: screenSourceSize, inCanvas: canvasRect, paddingRatio: padding)
+        }()
+
+        var camera = Self.cameraPlacement(
+            config: cfg,
+            isFullscreenCamera: key.isFullscreenCamera,
+            splitGeo: splitGeo,
+            zoomScale: zoomScale,
+            canvasRect: canvasRect
+        )
+        if !key.isCameraVisible {
+            // Hidden cameras fade out while shrinking slightly toward their center.
+            camera.opacity = 0.0
+            camera.rect = camera.rect.insetBy(dx: camera.rect.width * 0.03, dy: camera.rect.height * 0.03)
+        }
+        return StageLayout(screenRect: screenRect, camera: camera)
+    }
+
+    /// How long a timeline layout change (segment boundary, silence hide, voiceover hide) takes to animate.
+    private static let stageTransitionMs = 380.0
+
+    /// Placement at `sourceTimeMs`, blending from the previous layout for `stageTransitionMs` after a change on the
+    /// timeline. Depends only on the project and the time, so preview and export produce the same frames.
+    private func resolvedStageLayout(
+        session: ProjectSession,
+        sourceTimeMs: Double,
+        canvasRect: CGRect,
+        screenSourceSize: CGSize,
+        zoomScale: Double
+    ) -> StageLayout {
+        let keyNow = Self.stageKey(session: session, at: sourceTimeMs)
+        let current = rawStageLayout(key: keyNow, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
+        let windowStart = sourceTimeMs - Self.stageTransitionMs
+        guard windowStart > 0 else { return current }
+        let keyBefore = Self.stageKey(session: session, at: windowStart)
+        guard keyBefore != keyNow else { return current }
+
+        // Binary-search the change point inside the window (to ~1 ms).
+        var lo = windowStart
+        var hi = sourceTimeMs
+        while hi - lo > 1.0 {
+            let mid = (lo + hi) * 0.5
+            if Self.stageKey(session: session, at: mid) == keyNow {
+                hi = mid
+            } else {
+                lo = mid
+            }
+        }
+        let previousKey = Self.stageKey(session: session, at: lo)
+        let previous = rawStageLayout(key: previousKey, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
+        let progress = StageLayout.ease(CGFloat((sourceTimeMs - hi) / Self.stageTransitionMs))
+        return StageLayout.blend(previous, current, progress)
+    }
+
+    // Live preview spring state (edits glide; playback and scrubbing follow the timeline exactly).
+    private var previewStageSpring: SpringVector?
+    private var previewStageLastSourceMs: Double = -1.0
+    private var previewStageLastUptime: TimeInterval = 0.0
+    private var previewStageLastCanvas: CGSize = .zero
+    public private(set) var isAnimatingPreviewLayout: Bool = false
+    public private(set) var isAnimatingPreviewKeycaps: Bool = false
+    private var keycapSprings: [String: SpringVector] = [:]
+    /// Set by `animatedPreviewStage` for the frame being composed: `true` when the time did not move (an edit).
+    private var previewFrameIsEdit = false
+    private var previewFrameDt: Double = 0.0
+
+    /// The live preview must keep redrawing (even while paused) until these settle.
+    public var isAnimatingPreviewOverlays: Bool {
+        isAnimatingPreviewLayout || isAnimatingPreviewKeycaps
+    }
+
+    /// Springs toward `target` only when the time is unchanged since the last preview frame, i.e. the change came from
+    /// an edit. Playback, scrubbing and window resizes follow the target exactly.
+    private func animatedPreviewStage(target: StageLayout, sourceTimeMs: Double, canvasSize: CGSize) -> StageLayout {
+        let now = ProcessInfo.processInfo.systemUptime
+        let dt = min(1.0 / 30.0, max(0.0, now - previewStageLastUptime))
+        previewStageLastUptime = now
+        let timeChanged = abs(sourceTimeMs - previewStageLastSourceMs) > 0.01
+        previewStageLastSourceMs = sourceTimeMs
+        let canvasChanged = canvasSize != previewStageLastCanvas
+        previewStageLastCanvas = canvasSize
+
+        previewFrameIsEdit = !timeChanged && !canvasChanged
+        previewFrameDt = dt
+        let targetValues = target.animatableValues
+        if previewStageSpring == nil || timeChanged || canvasChanged {
+            previewStageSpring = SpringVector(targetValues)
+            isAnimatingPreviewLayout = false
+            return target
+        }
+        isAnimatingPreviewLayout = previewStageSpring!.step(toward: targetValues, dt: dt)
+        return target.applying(previewStageSpring!.values)
+    }
+
+    /// Camera rectangle, corner radius and chrome for one camera configuration.
+    private static func cameraPlacement(
+        config camCfg: CameraConfig,
+        isFullscreenCamera: Bool,
+        splitGeo: SplitScreenStageGeometry,
+        zoomScale: Double,
         canvasRect: CGRect
-    ) -> CIImage {
-        let zoomProgress01 = max(0.0, min(1.0, (currentZoomScale - 1.0) / 0.8))
+    ) -> StageLayout.CameraPlacement {
+        let zoomProgress01 = max(0.0, min(1.0, (zoomScale - 1.0) / 0.8))
         let zoomScaleMultiplier: CGFloat = camCfg.makeSmallerDuringZoom
             ? CGFloat(1.0 - (1.0 - camCfg.scaleWhenZoomed) * zoomProgress01)
             : 1.0
-
-        let splitGeo = Self.computeSplitScreenGeometry(
-            canvasSize: canvasRect.size,
-            sourceScreenSize: sourceScreenSize,
-            cameraConfig: camCfg,
-            canvasPaddingRatio: canvasPaddingRatio
-        )
 
         let aspect = CGFloat(camCfg.aspectRatioPreset.aspectValue)
         let baseRef = min(canvasRect.width, canvasRect.height)
@@ -1679,7 +1827,8 @@ public final class MetalFrameCompositor {
             case .overlay:
                 return margin + CGFloat(1.0 - max(0.0, min(1.0, camCfg.position01.y))) * availH
             case .cutout:
-                return 0.0
+                // Sits on the bottom edge with 4% of its height cropped off, so the cutout reads as standing in frame.
+                return -pipHeight * 0.04
             case .splitScreen:
                 let baseOriginY = splitGeo.cameraRect.minY
                 let zoomedOriginY = margin
@@ -1687,46 +1836,76 @@ public final class MetalFrameCompositor {
             }
         }()
 
+        let baseRadius = min(pipWidth, pipHeight) * CGFloat(max(0.0, min(0.50, camCfg.borderRadiusRatio)))
+        let cornerRadius: CGFloat = {
+            if isFullscreenCamera {
+                return 0.0
+            }
+            switch camCfg.layoutMode {
+            case .cutout:
+                return pipWidth * 0.36
+            case .splitScreen:
+                // With no padding, split screen only rounds the camera while zoomed.
+                return splitGeo.hasPadding ? baseRadius : (baseRadius * CGFloat(zoomProgress01))
+            case .overlay:
+                return baseRadius
+            }
+        }()
+
+        // Edge-to-edge camera (fullscreen, or unzoomed split screen without padding) has no border or shadow.
+        let isEdgeToEdge = isFullscreenCamera
+            || (camCfg.layoutMode == .splitScreen && !splitGeo.hasPadding && zoomProgress01 < 0.02)
+        let isCutout = !isFullscreenCamera && camCfg.layoutMode == .cutout
+        return StageLayout.CameraPlacement(
+            rect: CGRect(x: originX, y: originY, width: pipWidth, height: pipHeight),
+            cornerRadius: cornerRadius,
+            opacity: 1.0,
+            shadowOpacity: isEdgeToEdge ? 0.0 : (isCutout ? 0.35 : 0.45),
+            borderOpacity: (isEdgeToEdge || isCutout) ? 0.0 : 0.14,
+            isCutout: isCutout,
+            config: camCfg
+        )
+    }
+
+    private func renderWebcamOverlay(
+        over background: CIImage,
+        webcamFrame: CIImage?,
+        placement: StageLayout.CameraPlacement,
+        isRealtimePreview: Bool,
+        canvasRect: CGRect
+    ) -> CIImage {
+        let camCfg = placement.config
+        let pipRect = placement.rect
+        let baseRef = min(canvasRect.width, canvasRect.height)
         let activeCustomPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
             camCfg.customColorPresets.first(where: { $0.id == id })
         }
-        let isCutout = !isFullscreenCamera && camCfg.layoutMode == .cutout
         guard let rawCI = webcamFrame.map({
-            self.prepareRecordedWebcamFrame($0, camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: isCutout)
-        }) ?? Self.placeholderWebcamImage(camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: isCutout) else {
+            self.prepareRecordedWebcamFrame($0, camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: placement.isCutout, isRealtimePreview: isRealtimePreview)
+        }) ?? Self.placeholderWebcamImage(camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: placement.isCutout) else {
             return background
         }
 
         // Aspect-fill crop inside `pipRect` so portrait/landscape split-screen camera frames never stretch!
         // Face tracking adds the same 1.16x punch-in the preview applies.
         let faceZoom: CGFloat = camCfg.enableFaceTracking ? 1.16 : 1.0
-        let scale = max(pipWidth / max(1.0, rawCI.extent.width), pipHeight / max(1.0, rawCI.extent.height)) * faceZoom
+        let scale = max(pipRect.width / max(1.0, rawCI.extent.width), pipRect.height / max(1.0, rawCI.extent.height)) * faceZoom
         let scaledW = rawCI.extent.width * scale
         let scaledH = rawCI.extent.height * scale
-        let pipRect = CGRect(x: originX, y: originY, width: pipWidth, height: pipHeight)
         let scaled = rawCI
             .transformed(by: CGAffineTransform(translationX: -rawCI.extent.minX, y: -rawCI.extent.minY))
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             .transformed(by: CGAffineTransform(
-                translationX: originX + (pipWidth - scaledW) * 0.5,
-                y: originY + (pipHeight - scaledH) * 0.5
+                translationX: pipRect.minX + (pipRect.width - scaledW) * 0.5,
+                y: pipRect.minY + (pipRect.height - scaledH) * 0.5
             ))
             .cropped(to: pipRect)
 
-        let baseRadius = min(pipWidth, pipHeight) * CGFloat(max(0.0, min(0.50, camCfg.borderRadiusRatio)))
-        let cornerRadius: CGFloat = {
-            if isFullscreenCamera {
-                return 0.0
-            }
-            if camCfg.layoutMode == .splitScreen {
-                return splitGeo.hasPadding ? baseRadius : (baseRadius * CGFloat(zoomProgress01))
-            }
-            return baseRadius
-        }()
-        if cornerRadius > 0.5,
+        var pip = scaled
+        if placement.cornerRadius > 0.5,
            let mask = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
                "inputExtent": CIVector(cgRect: pipRect),
-               "inputRadius": cornerRadius,
+               "inputRadius": placement.cornerRadius,
                "inputColor": CIColor.white
            ])?.outputImage?.cropped(to: pipRect),
            let masked = CIFilter(name: "CIBlendWithAlphaMask", parameters: [
@@ -1734,14 +1913,44 @@ public final class MetalFrameCompositor {
                kCIInputBackgroundImageKey: CIImage.empty(),
                kCIInputMaskImageKey: mask
            ])?.outputImage?.cropped(to: pipRect) {
-            return masked.composited(over: background).cropped(to: canvasRect)
+            pip = masked
         }
 
-        return scaled.composited(over: background).cropped(to: canvasRect)
+        var layer = CIImage.empty()
+        if placement.shadowOpacity > 0.004 {
+            // Soft drop shadow following the camera's alpha (the person's silhouette in cutout mode).
+            let shadow = pip
+                .applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: placement.shadowOpacity)
+                ])
+                .applyingGaussianBlur(sigma: Double(baseRef * 0.011))
+                .transformed(by: CGAffineTransform(translationX: 0, y: -baseRef * 0.008))
+            layer = shadow
+        }
+        layer = pip.composited(over: layer)
+        if placement.borderOpacity > 0.004,
+           let border = CIFilter(name: "CIRoundedRectangleStrokeGenerator", parameters: [
+               "inputExtent": CIVector(cgRect: pipRect.insetBy(dx: 0.5, dy: 0.5)),
+               "inputRadius": max(0.0, placement.cornerRadius - 0.5),
+               "inputColor": CIColor(red: 1, green: 1, blue: 1, alpha: placement.borderOpacity),
+               "inputWidth": max(1.0, baseRef * 0.0014)
+           ])?.outputImage {
+            layer = border.cropped(to: pipRect).composited(over: layer)
+        }
+        if placement.opacity < 0.996 {
+            layer = layer.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: placement.opacity, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: placement.opacity, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: placement.opacity, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: placement.opacity)
+            ])
+        }
+        return layer.composited(over: background).cropped(to: canvasRect)
     }
 
-    /// Applies the same per-frame camera styling the live preview applies to the recorded `webcam.mp4` frame:
-    /// `Crop camera` rect, `Mirror horizontally`, on-device person cutout, color grade and sharpen.
     /// One segmentation request reused across exported frames (keeps the Vision model and its temporal state warm).
     private lazy var webcamSegmentationRequest: VNGeneratePersonSegmentationRequest = {
         let request = VNGeneratePersonSegmentationRequest()
@@ -1750,12 +1959,18 @@ public final class MetalFrameCompositor {
         return request
     }()
 
+    /// Person segmentation for the live preview: runs off the main thread and applies the newest finished mask, so a
+    /// 120Hz preview never waits on Vision. Exports segment every frame synchronously instead (exact mask per frame).
+    public let realtimePersonSegmenter = AsyncPersonSegmenter()
+
     private func prepareRecordedWebcamFrame(
         _ frame: CIImage,
         camCfg: CameraConfig,
         customPreset: CustomCameraColorPreset?,
-        isCutoutMode: Bool
+        isCutoutMode: Bool,
+        isRealtimePreview: Bool
     ) -> CIImage {
+        let frameIdentity = ObjectIdentifier(frame)
         var img = frame.transformed(by: CGAffineTransform(translationX: -frame.extent.minX, y: -frame.extent.minY))
         let ext = img.extent
         let crop = camCfg.cropRect01
@@ -1774,7 +1989,16 @@ public final class MetalFrameCompositor {
         if !camCfg.mirror {
             img = img.transformed(by: CGAffineTransform(scaleX: -1.0, y: 1.0).translatedBy(x: -img.extent.width, y: 0.0))
         }
-        if isCutoutMode {
+        if isCutoutMode && isRealtimePreview {
+            if let mask = realtimePersonSegmenter.latestMask(segmenting: img, frameIdentity: frameIdentity) {
+                img = LocalOnDeviceMediaIntelligence.applyPersonCutout(
+                    to: img,
+                    mask: mask,
+                    edgeSoftness: camCfg.cutoutEdgeSoftness,
+                    edgeInset: camCfg.cutoutEdgeInset
+                )
+            }
+        } else if isCutoutMode {
             img = LocalOnDeviceMediaIntelligence.applyOnDevicePersonCutout(
                 to: img,
                 edgeSoftness: camCfg.cutoutEdgeSoftness,
@@ -1972,3 +2196,62 @@ extension CIColor {
         self.init(red: r, green: g, blue: b, alpha: a)
     }
 }
+
+// MARK: - Async Person Segmentation (live preview)
+
+/// Segments at most one webcam frame at a time on a background queue and hands out the newest finished mask.
+/// The mask is copied out of Vision's reusable buffer, so it stays valid while the next frame is being segmented.
+public nonisolated final class AsyncPersonSegmenter: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "com.nativescreen.preview.segmentation", qos: .userInitiated)
+    private let lock = NSLock()
+    private var mask: CIImage?
+    private var isBusy = false
+    private var lastSubmittedFrame: ObjectIdentifier?
+    private let context = CIContext(options: [.useSoftwareRenderer: false])
+    private lazy var request: VNGeneratePersonSegmentationRequest = {
+        let request = VNGeneratePersonSegmentationRequest()
+        request.qualityLevel = .balanced
+        request.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        return request
+    }()
+
+    /// Called on the main queue when a new mask is ready (the paused preview redraws on demand only).
+    public var onMaskUpdated: (@MainActor () -> Void)?
+
+    /// Returns the newest mask (possibly one frame old) and starts segmenting `image` if idle and it is a new frame.
+    func latestMask(segmenting image: CIImage, frameIdentity: ObjectIdentifier) -> CIImage? {
+        lock.lock()
+        let current = mask
+        let shouldSubmit = !isBusy && lastSubmittedFrame != frameIdentity
+        if shouldSubmit {
+            isBusy = true
+            lastSubmittedFrame = frameIdentity
+        }
+        lock.unlock()
+
+        if shouldSubmit {
+            nonisolated(unsafe) let frame = image
+            queue.async { [weak self] in
+                guard let self else { return }
+                var copied: CIImage?
+                if let raw = LocalOnDeviceMediaIntelligence.personSegmentationMask(for: frame, reusing: self.request),
+                   let cg = self.context.createCGImage(raw, from: raw.extent) {
+                    copied = CIImage(cgImage: cg)
+                }
+                self.lock.lock()
+                if let copied {
+                    self.mask = copied
+                }
+                self.isBusy = false
+                self.lock.unlock()
+                if copied != nil, let callback = self.onMaskUpdated {
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { callback() }
+                    }
+                }
+            }
+        }
+        return current
+    }
+}
+

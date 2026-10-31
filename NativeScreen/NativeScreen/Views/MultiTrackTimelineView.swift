@@ -58,15 +58,15 @@ public struct MultiTrackTimelineView: View {
                             HStack {
                                 Text("Tracks")
                                     .font(.system(size: 10.5, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.32))
+                                    .foregroundStyle(.ink.opacity(0.32))
                                     .padding(.leading, 14)
                                 Spacer()
                             }
                             .frame(width: labelColumnWidth, height: rulerHeight)
-                            .background(Color(red: 0.04, green: 0.04, blue: 0.06))
+                            .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
                             .overlay(alignment: .trailing) {
                                 Rectangle()
-                                    .fill(Color.white.opacity(0.06))
+                                    .fill(Color.ink.opacity(0.06))
                                     .frame(width: 1)
                             }
                             .zIndex(20)
@@ -121,7 +121,7 @@ public struct MultiTrackTimelineView: View {
                             )
                         }
                         .frame(height: rulerHeight)
-                        .background(Color(red: 0.04, green: 0.04, blue: 0.06))
+                        .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
 
                         // B. VERTICALLY SCROLLABLE BODY (Fixed Left Labels + Horizontally Scrollable Track Lanes)
                         let typingSuggestions = session.activeTypingSuggestions
@@ -144,7 +144,7 @@ public struct MultiTrackTimelineView: View {
                                         HStack(spacing: 6) {
                                             Text("Clip")
                                                 .font(.system(size: 11, weight: .medium))
-                                                .foregroundStyle(.white.opacity(0.65))
+                                                .foregroundStyle(.ink.opacity(0.65))
                                         }
                                         .padding(.leading, 14)
                                         .frame(width: labelColumnWidth, height: clipRowHeight, alignment: .leading)
@@ -157,7 +157,7 @@ public struct MultiTrackTimelineView: View {
                                             } label: {
                                                 Image(systemName: zoomHidden ? "eye.slash" : "eye")
                                                     .font(.system(size: 10, weight: .medium))
-                                                    .foregroundStyle(Color.white.opacity(zoomHidden ? 0.28 : 0.65))
+                                                    .foregroundStyle(Color.ink.opacity(zoomHidden ? 0.28 : 0.65))
                                                     .frame(width: 22, height: 22)
                                                     .contentShape(Rectangle())
                                             }
@@ -165,7 +165,7 @@ public struct MultiTrackTimelineView: View {
 
                                             Text("Zoom")
                                                 .font(.system(size: 11, weight: .medium))
-                                                .foregroundStyle(Color.white.opacity(zoomHidden ? 0.30 : 0.65))
+                                                .foregroundStyle(Color.ink.opacity(zoomHidden ? 0.30 : 0.65))
                                         }
                                         .padding(.leading, 10)
                                         .frame(width: labelColumnWidth, height: zoomRowHeight, alignment: .leading)
@@ -179,7 +179,7 @@ public struct MultiTrackTimelineView: View {
                                                 } label: {
                                                     Image(systemName: layoutsHidden ? "eye.slash" : "eye")
                                                         .font(.system(size: 10, weight: .medium))
-                                                        .foregroundStyle(Color.white.opacity(layoutsHidden ? 0.28 : 0.65))
+                                                        .foregroundStyle(Color.ink.opacity(layoutsHidden ? 0.28 : 0.65))
                                                         .frame(width: 22, height: 22)
                                                         .contentShape(Rectangle())
                                                 }
@@ -187,7 +187,7 @@ public struct MultiTrackTimelineView: View {
 
                                                 Text("Layouts")
                                                     .font(.system(size: 11, weight: .medium))
-                                                    .foregroundStyle(Color.white.opacity(layoutsHidden ? 0.30 : 0.65))
+                                                    .foregroundStyle(Color.ink.opacity(layoutsHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
                                             }
                                             .padding(.leading, 10)
@@ -203,7 +203,7 @@ public struct MultiTrackTimelineView: View {
                                                 } label: {
                                                     Image(systemName: maskHidden ? "eye.slash" : "eye")
                                                         .font(.system(size: 10, weight: .medium))
-                                                        .foregroundStyle(Color.white.opacity(maskHidden ? 0.28 : 0.65))
+                                                        .foregroundStyle(Color.ink.opacity(maskHidden ? 0.28 : 0.65))
                                                         .frame(width: 22, height: 22)
                                                         .contentShape(Rectangle())
                                                 }
@@ -211,7 +211,7 @@ public struct MultiTrackTimelineView: View {
 
                                                 Text(track.name)
                                                     .font(.system(size: 11, weight: .medium))
-                                                    .foregroundStyle(Color.white.opacity(maskHidden ? 0.30 : 0.65))
+                                                    .foregroundStyle(Color.ink.opacity(maskHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
                                             }
                                             .padding(.leading, 10)
@@ -227,7 +227,7 @@ public struct MultiTrackTimelineView: View {
                                                 } label: {
                                                     Image(systemName: voHidden ? "eye.slash" : "eye")
                                                         .font(.system(size: 10, weight: .medium))
-                                                        .foregroundStyle(Color.white.opacity(voHidden ? 0.28 : 0.65))
+                                                        .foregroundStyle(Color.ink.opacity(voHidden ? 0.28 : 0.65))
                                                         .frame(width: 22, height: 22)
                                                         .contentShape(Rectangle())
                                                 }
@@ -235,7 +235,7 @@ public struct MultiTrackTimelineView: View {
 
                                                 Text("Voiceovers")
                                                     .font(.system(size: 11, weight: .medium))
-                                                    .foregroundStyle(Color.white.opacity(voHidden ? 0.30 : 0.65))
+                                                    .foregroundStyle(Color.ink.opacity(voHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
                                             }
                                             .padding(.leading, 10)
@@ -255,7 +255,7 @@ public struct MultiTrackTimelineView: View {
                                                     } label: {
                                                         Image(systemName: isTrackHidden ? "eye.slash" : "eye")
                                                             .font(.system(size: 10, weight: .medium))
-                                                            .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.28 : 0.65))
+                                                            .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.28 : 0.65))
                                                             .frame(width: 22, height: 22)
                                                             .contentShape(Rectangle())
                                                     }
@@ -267,7 +267,7 @@ public struct MultiTrackTimelineView: View {
                                                     } label: {
                                                         Text(session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts")
                                                             .font(.system(size: 11, weight: .medium))
-                                                            .foregroundStyle(Color.white.opacity(isTrackHidden ? 0.30 : 0.65))
+                                                            .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.30 : 0.65))
                                                             .lineLimit(1)
                                                             .minimumScaleFactor(0.85)
                                                             .frame(maxHeight: .infinity)
@@ -282,10 +282,10 @@ public struct MultiTrackTimelineView: View {
                                         }
                                     }
                                     .padding(.vertical, 8)
-                                    .background(Color(red: 0.04, green: 0.04, blue: 0.06))
+                                    .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
                                     .overlay(alignment: .trailing) {
                                         Rectangle()
-                                            .fill(Color.white.opacity(0.06))
+                                            .fill(Color.ink.opacity(0.06))
                                             .frame(width: 1)
                                     }
                                     .zIndex(15)
@@ -455,7 +455,7 @@ public struct MultiTrackTimelineView: View {
                             Spacer()
                             HStack {
                                 Capsule()
-                                    .fill(Color.white.opacity(0.24))
+                                    .fill(Color.ink.opacity(0.24))
                                     .frame(width: thumbW, height: 4)
                                     .offset(x: thumbX)
                                 Spacer()
@@ -477,7 +477,7 @@ public struct MultiTrackTimelineView: View {
                             Spacer()
                             VStack {
                                 Capsule()
-                                    .fill(Color.white.opacity(0.24))
+                                    .fill(Color.ink.opacity(0.24))
                                     .frame(width: 4, height: thumbH)
                                     .offset(y: thumbY)
                                 Spacer()
@@ -514,7 +514,7 @@ public struct MultiTrackTimelineView: View {
                 )
             }
         }
-        .background(Color(red: 0.04, green: 0.04, blue: 0.06))
+        .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
     }
 
     private struct ScrollMetrics: Equatable {
@@ -666,7 +666,7 @@ public struct MultiTrackTimelineView: View {
             if session.document.timeline.zooms.isEmpty && addPreview == nil {
                 Text("Click or drag to add zoom on cursor")
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(.ink.opacity(0.35))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -694,7 +694,7 @@ public struct MultiTrackTimelineView: View {
 
                         Image(systemName: "plus")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.96))
+                            .foregroundStyle(.ink.opacity(0.96))
                     }
                     .frame(width: previewW, height: zoomRowHeight)
                     .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -880,7 +880,7 @@ public struct MultiTrackTimelineView: View {
 
                         Image(systemName: "plus")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.96))
+                            .foregroundStyle(.ink.opacity(0.96))
                     }
                     .frame(width: previewW, height: maskRowHeight)
                     .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -1110,7 +1110,7 @@ public struct MultiTrackTimelineView: View {
 
                         Image(systemName: "plus")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.88))
+                            .foregroundStyle(.ink.opacity(0.88))
                     }
                     .frame(width: pW, height: maskRowHeight)
                     .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -1235,7 +1235,7 @@ public struct MultiTrackTimelineView: View {
 
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.96))
+                            .foregroundStyle(.ink.opacity(0.96))
                     }
                     .frame(width: previewW, height: maskRowHeight)
                     .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -1394,7 +1394,7 @@ public struct MultiTrackTimelineView: View {
                         .frame(width: 7, height: 7)
                     Text("Recording voiceover…")
                         .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.ink)
                 }
                 .padding(.horizontal, 10)
                 .frame(width: recW, height: maskRowHeight, alignment: .leading)
@@ -1854,7 +1854,7 @@ private struct SmoothTimeRulerView: View {
                 // Crisp circular dot (`4px` diameter -> radius `2.0pt`, `opacity: 0.30`)
                 let dotRadius: CGFloat = 1.8
                 let dotRect = CGRect(x: x - dotRadius, y: dotY - dotRadius, width: dotRadius * 2, height: dotRadius * 2)
-                context.fill(Path(ellipseIn: dotRect), with: .color(.white.opacity(0.32)))
+                context.fill(Path(ellipseIn: dotRect), with: .color(.ink.opacity(0.32)))
 
                 // Draw time label ONLY when `timeMs % 1000 == 0`!
                 if isWholeSecond && x >= 14 && x <= size.width - 14 {
@@ -1865,7 +1865,7 @@ private struct SmoothTimeRulerView: View {
 
                     let text = Text(labelStr)
                         .font(.system(size: 11, weight: .semibold, design: .default).monospacedDigit())
-                        .foregroundColor(.white.opacity(0.34))
+                        .foregroundColor(.ink.opacity(0.34))
                     context.draw(text, at: CGPoint(x: x, y: dotY - 10))
                 }
 
@@ -2844,20 +2844,20 @@ private struct SpeedUpTypingPopoverView: View {
             HStack(spacing: 8) {
                 Image(systemName: "keyboard")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
                 Text("Speed up typing")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.96))
+                    .foregroundStyle(.ink.opacity(0.96))
                 Spacer()
                 Text(String(format: "%.1f×", preferredSpeed))
                     .font(.system(size: 12.5, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.ink.opacity(0.55))
             }
 
             // 2. Description
             Text("You are typing during this part of the recording. Speed it up using options below.")
                 .font(.system(size: 12.5, weight: .regular))
-                .foregroundStyle(.white.opacity(0.46))
+                .foregroundStyle(.ink.opacity(0.46))
                 .fixedSize(horizontal: false, vertical: true)
 
             // 3. Purple Slider (`1.5× ... 8.0×`, reset value `3.0×`) + Reset Button
@@ -2879,15 +2879,15 @@ private struct SpeedUpTypingPopoverView: View {
                 } label: {
                     Text("Reset")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isModified ? .white.opacity(0.95) : .white.opacity(0.28))
+                        .foregroundStyle(isModified ? .ink.opacity(0.95) : .ink.opacity(0.28))
                         .frame(width: 64, height: 30)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(isModified ? 0.07 : 0.03))
+                                .fill(Color.ink.opacity(isModified ? 0.07 : 0.03))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(isModified ? 0.14 : 0.06), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
@@ -2911,11 +2911,11 @@ private struct SpeedUpTypingPopoverView: View {
                         .frame(height: 34)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.ink.opacity(0.04))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -2947,16 +2947,16 @@ private struct SpeedUpTypingPopoverView: View {
                 Button(action: onRemove) {
                     Text("Remove suggestion")
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.90))
+                        .foregroundStyle(.ink.opacity(0.90))
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.ink.opacity(0.04))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
@@ -2965,8 +2965,7 @@ private struct SpeedUpTypingPopoverView: View {
         }
         .padding(18)
         .frame(width: 356)
-        .background(Color(red: 0.07, green: 0.07, blue: 0.09))
-        .preferredColorScheme(.dark)
+        .background(Color.surface(red: 0.07, green: 0.07, blue: 0.09))
     }
 }
 

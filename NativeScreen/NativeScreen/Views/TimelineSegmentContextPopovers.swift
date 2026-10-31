@@ -737,12 +737,12 @@ private struct ZoomPaletteHeaderRowView: View {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
         }
-        .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .white.opacity(0.88))
+        .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .ink.opacity(0.88))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             isSelected
                 ? kNativeScreenPurpleAccent.opacity(0.28)
-                : Color.white.opacity(0.05),
+                : Color.ink.opacity(0.05),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay(
@@ -804,12 +804,12 @@ private struct MaskPaletteHeaderRowView: View {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
         }
-        .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .white.opacity(0.88))
+        .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .ink.opacity(0.88))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             isSelected
                 ? kNativeScreenPurpleAccent.opacity(0.28)
-                : Color.white.opacity(0.05),
+                : Color.ink.opacity(0.05),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay(
@@ -850,7 +850,7 @@ private struct MenuImmediateClickOverlay: NSViewRepresentable {
 }
 
 /// Native AppKit `NSSlider` Row for `NSMenuItem.view` — works 100% natively during `NSMenu` event tracking
-/// and uses `darkAqua` appearance + `trackFillColor` so the slider track stays true purple!
+/// and uses `trackFillColor` so the slider track stays purple in both appearances.
 private struct MenuEmbeddedSliderRowView: View {
     let title: String
     @State var currentValue: Double
@@ -883,11 +883,11 @@ private struct MenuEmbeddedSliderRowView: View {
             HStack {
                 Text(title)
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.95))
+                    .foregroundStyle(.ink.opacity(0.95))
                 Spacer()
                 Text(formatValue(currentValue))
                     .font(.system(size: 13, weight: .regular).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.50))
+                    .foregroundStyle(.ink.opacity(0.50))
             }
 
             NativeMenuAppKitSlider(
@@ -926,7 +926,6 @@ private struct NativeMenuAppKitSlider: NSViewRepresentable {
         )
         slider.isContinuous = true
         slider.controlSize = .regular
-        slider.appearance = NSAppearance(named: .darkAqua)
         slider.trackFillColor = NSColor(red: 0.44, green: 0.34, blue: 0.98, alpha: 1.0)
         return slider
     }
@@ -1138,18 +1137,18 @@ public struct AspectIconView: View {
         Canvas { context, size in
             let outerRect = CGRect(x: 1, y: 2, width: size.width - 2, height: size.height - 4)
             let outerPath = Path(roundedRect: outerRect, cornerRadius: 2.2)
-            context.stroke(outerPath, with: .color(.white.opacity(0.92)), lineWidth: 1.4)
+            context.stroke(outerPath, with: .color(.ink.opacity(0.92)), lineWidth: 1.4)
 
             var inner1 = Path()
             inner1.move(to: CGPoint(x: outerRect.minX, y: outerRect.minY + outerRect.height * 0.42))
             inner1.addLine(to: CGPoint(x: outerRect.minX + outerRect.width * 0.68, y: outerRect.minY + outerRect.height * 0.42))
             inner1.addLine(to: CGPoint(x: outerRect.minX + outerRect.width * 0.68, y: outerRect.maxY))
-            context.stroke(inner1, with: .color(.white.opacity(0.85)), lineWidth: 1.2)
+            context.stroke(inner1, with: .color(.ink.opacity(0.85)), lineWidth: 1.2)
 
             var inner2 = Path()
             inner2.move(to: CGPoint(x: outerRect.minX + outerRect.width * 0.44, y: outerRect.minY + outerRect.height * 0.42))
             inner2.addLine(to: CGPoint(x: outerRect.minX + outerRect.width * 0.44, y: outerRect.maxY))
-            context.stroke(inner2, with: .color(.white.opacity(0.85)), lineWidth: 1.2)
+            context.stroke(inner2, with: .color(.ink.opacity(0.85)), lineWidth: 1.2)
         }
         .frame(width: 16, height: 15)
     }
@@ -1163,7 +1162,7 @@ public struct ReelPhoneIconView: View {
     }
 
     public var body: some View {
-        let color = isActive ? Color(red: 0.58, green: 0.52, blue: 1.0) : Color.white.opacity(0.88)
+        let color = isActive ? Color(red: 0.58, green: 0.52, blue: 1.0) : Color.ink.opacity(0.88)
         ZStack(alignment: .bottom) {
             RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                 .strokeBorder(color, lineWidth: 1.4)

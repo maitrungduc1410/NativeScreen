@@ -102,7 +102,7 @@ enum VideoProjectImporter {
                 maskTracks: []
             )
         )
-        if let defaultPreset = ProjectPresetsStore.shared.defaultPreset {
+        if let defaultPreset = AppSettings.shared.presetForNewProject() {
             defaultPreset.apply(to: &doc)
         }
 

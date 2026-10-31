@@ -752,49 +752,64 @@ public enum LocalOnDeviceMediaIntelligence {
         edgeInset: Double = 0.0,
         reusing reusableRequest: VNGeneratePersonSegmentationRequest? = nil
     ) -> CIImage {
-        if #available(macOS 12.0, *) {
-            let request = reusableRequest ?? VNGeneratePersonSegmentationRequest()
-            if reusableRequest == nil {
-                request.qualityLevel = .balanced
-                request.outputPixelFormat = kCVPixelFormatType_OneComponent8
-            }
-            let handler = VNImageRequestHandler(ciImage: image, options: [:])
-            if (try? handler.perform([request])) != nil,
-               let maskBuffer = request.results?.first?.pixelBuffer {
-                let rawMask = CIImage(cvPixelBuffer: maskBuffer)
-                let scaleX = image.extent.width / max(1.0, rawMask.extent.width)
-                let scaleY = image.extent.height / max(1.0, rawMask.extent.height)
-                var scaledMask = rawMask
-                    .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-                    .transformed(by: CGAffineTransform(translationX: image.extent.minX, y: image.extent.minY))
-                    .cropped(to: image.extent)
+        guard let mask = personSegmentationMask(for: image, reusing: reusableRequest) else { return image }
+        return applyPersonCutout(to: image, mask: mask, edgeSoftness: edgeSoftness, edgeInset: edgeInset)
+    }
 
-                if edgeInset > 0.01 {
-                    let radius = max(1.0, min(12.0, edgeInset * 10.0))
-                    scaledMask = scaledMask
-                        .clampedToExtent()
-                        .applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: radius])
-                        .cropped(to: image.extent)
-                }
-                if edgeSoftness > 0.01 {
-                    let blurRadius = max(0.5, min(14.0, edgeSoftness * 10.0))
-                    scaledMask = scaledMask
-                        .clampedToExtent()
-                        .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blurRadius])
-                        .cropped(to: image.extent)
-                }
-
-                let clearBg = CIImage(color: .clear).cropped(to: image.extent)
-                if let blend = CIFilter(name: "CIBlendWithMask", parameters: [
-                    kCIInputImageKey: image,
-                    kCIInputBackgroundImageKey: clearBg,
-                    kCIInputMaskImageKey: scaledMask
-                ])?.outputImage {
-                    return blend.cropped(to: image.extent)
-                }
-            }
+    /// Runs Vision person segmentation and returns the raw mask (`1` = person). The mask's pixel buffer belongs to
+    /// Vision and may be reused by the next `perform`, so keep it only until the next call on the same request.
+    public nonisolated static func personSegmentationMask(
+        for image: CIImage,
+        reusing reusableRequest: VNGeneratePersonSegmentationRequest? = nil
+    ) -> CIImage? {
+        let request = reusableRequest ?? VNGeneratePersonSegmentationRequest()
+        if reusableRequest == nil {
+            request.qualityLevel = .balanced
+            request.outputPixelFormat = kCVPixelFormatType_OneComponent8
         }
-        return image
+        let handler = VNImageRequestHandler(ciImage: image, options: [:])
+        guard (try? handler.perform([request])) != nil,
+              let maskBuffer = request.results?.first?.pixelBuffer else { return nil }
+        return CIImage(cvPixelBuffer: maskBuffer)
+    }
+
+    /// Cuts the person out of `image` with a mask from `personSegmentationMask` (any resolution, stretched to the image).
+    public nonisolated static func applyPersonCutout(
+        to image: CIImage,
+        mask rawMask: CIImage,
+        edgeSoftness: Double,
+        edgeInset: Double
+    ) -> CIImage {
+        let scaleX = image.extent.width / max(1.0, rawMask.extent.width)
+        let scaleY = image.extent.height / max(1.0, rawMask.extent.height)
+        var scaledMask = rawMask
+            .transformed(by: CGAffineTransform(translationX: -rawMask.extent.minX, y: -rawMask.extent.minY))
+            .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+            .transformed(by: CGAffineTransform(translationX: image.extent.minX, y: image.extent.minY))
+            .cropped(to: image.extent)
+
+        if edgeInset > 0.01 {
+            let radius = max(1.0, min(12.0, edgeInset * 10.0))
+            scaledMask = scaledMask
+                .clampedToExtent()
+                .applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: radius])
+                .cropped(to: image.extent)
+        }
+        if edgeSoftness > 0.01 {
+            let blurRadius = max(0.5, min(14.0, edgeSoftness * 10.0))
+            scaledMask = scaledMask
+                .clampedToExtent()
+                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blurRadius])
+                .cropped(to: image.extent)
+        }
+
+        let clearBg = CIImage(color: .clear).cropped(to: image.extent)
+        guard let blend = CIFilter(name: "CIBlendWithMask", parameters: [
+            kCIInputImageKey: image,
+            kCIInputBackgroundImageKey: clearBg,
+            kCIInputMaskImageKey: scaledMask
+        ])?.outputImage else { return image }
+        return blend.cropped(to: image.extent)
     }
 
     // MARK: - 4. On-Device Sensitive Data OCR (`VNRecognizeTextRequest`) & Face Detection (`VNDetectFaceRectanglesRequest`)

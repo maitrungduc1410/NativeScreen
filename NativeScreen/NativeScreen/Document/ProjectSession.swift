@@ -55,7 +55,24 @@ public final class ProjectSession: Identifiable {
     public var selectedCameraLayoutId: String?
     public var selectedMaskId: String?
     public var selectedVoiceoverId: String?
-    public var selectedShortcutId: String?
+    public var selectedShortcutId: String? {
+        didSet {
+            // The preview draws the selected keycaps highlighted.
+            if selectedShortcutId != oldValue && !isPlaying {
+                renderRevision &+= 1
+            }
+        }
+    }
+    /// Keycap group under the mouse in the preview (drawn brighter by the compositor).
+    public var hoveredShortcutId: String? {
+        didSet {
+            if hoveredShortcutId != oldValue && !isPlaying {
+                renderRevision &+= 1
+            }
+        }
+    }
+    /// Keycap hit areas from the last preview frame, normalized with a top-left origin. Updated only when they change.
+    public var previewShortcutHitRects01: [String: CGRect] = [:]
     public var pendingAddMaskType: MaskType? = nil
     public var pendingAddMaskStyle: MaskStyle = .gaussian
     public var isDraggingTimelineSegment: Bool = false
@@ -298,6 +315,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func saveNow() throws {
+        hasUnsavedChanges = false
         var updatedDoc = document
         updatedDoc.updatedAt = ISO8601DateFormatter().string(from: Date())
 
@@ -332,7 +350,26 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    /// Edits made while autosave is off and not yet saved.
+    public private(set) var hasUnsavedChanges = false
+
+    /// Reloads the project from disk, dropping edits that were never saved (autosave off, `Don’t Save`).
+    public func discardUnsavedChanges() {
+        hasUnsavedChanges = false
+        saveTask?.cancel()
+        let projectURL = packageURL.appendingPathComponent("project.json")
+        if let data = try? Data(contentsOf: projectURL),
+           let saved = try? JSONDecoder().decode(ProjectDocument.self, from: data) {
+            document = saved
+            rebuildDerivedState(forceSpringRebuild: true)
+        }
+    }
+
     private func scheduleAutoSave() {
+        guard AppSettings.shared.autosaveEnabled else {
+            hasUnsavedChanges = true
+            return
+        }
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
@@ -462,6 +499,16 @@ public final class ProjectSession: Identifiable {
     @ObservationIgnored private var sortedTranscriptSegmentsSource: [CaptionSegment] = []
     @ObservationIgnored private var sortedTranscriptSegments: [CaptionSegment] = []
 
+    /// Caption words sorted by start time, re-sorted only when the transcript changes (`Array ==` is O(1) on shared storage).
+    private func sortedCaptionSegments() -> [CaptionSegment] {
+        let segments = document.captions.segments
+        if segments != sortedTranscriptSegmentsSource {
+            sortedTranscriptSegmentsSource = segments
+            sortedTranscriptSegments = segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        }
+        return sortedTranscriptSegments
+    }
+
     private func refreshPreviewTimeDerivedState() {
         let sourceMs = currentSourceTimeMs
 
@@ -475,11 +522,7 @@ public final class ProjectSession: Identifiable {
             activeMaskIdAtPreviewTime = maskId
         }
 
-        let segments = document.captions.segments
-        if segments != sortedTranscriptSegmentsSource {
-            sortedTranscriptSegmentsSource = segments
-            sortedTranscriptSegments = segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
-        }
+        let sortedTranscriptSegments = sortedCaptionSegments()
         // Binary search the first word starting after `sourceMs`, then walk back over words still inside their +80ms tail.
         var lo = 0
         var hi = sortedTranscriptSegments.count
@@ -3102,7 +3145,7 @@ public final class ProjectSession: Identifiable {
         }
 
         // 1. Check transcript inter-word gaps when >= 2 caption segments exist
-        let segs = document.captions.segments.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        let segs = sortedCaptionSegments()
         if segs.count >= 2 {
             for i in 0..<(segs.count - 1) {
                 let gapStart = segs[i].sourceEndMs

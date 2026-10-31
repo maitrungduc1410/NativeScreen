@@ -39,9 +39,10 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         !editorWindowsBySessionID.isEmpty
     }
 
+    /// `Settings > Recording > Save new projects to` (defaults to `~/Native Screen Projects`).
     public static var defaultProjectsDirectory: URL {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let dir = homeDir.appendingPathComponent("Native Screen Projects", isDirectory: true)
+        let path = UserDefaults.standard.string(forKey: AppSettings.Keys.projectsDirectory) ?? AppSettings.defaultProjectsDirectoryPath
+        let dir = URL(fileURLWithPath: path, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -121,7 +122,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         window.title = "\(session.document.name).nativescreen"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.07, alpha: 1.0)
+        window.backgroundColor = NSColor.surface(red: 0.05, green: 0.05, blue: 0.07)
         window.isMovableByWindowBackground = false
 
         // Match NativeScreen:
@@ -383,6 +384,30 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
+    /// With autosave off, closing an editor with unsaved edits asks whether to save them.
+    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard let (sessionID, _) = editorWindowsBySessionID.first(where: { $0.value === sender }),
+              let session = sessionsByID[sessionID],
+              session.hasUnsavedChanges else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Do you want to save the changes made to “\(session.document.name)”?"
+        alert.informativeText = "Your changes will be lost if you don’t save them."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        let dontSave = alert.addButton(withTitle: "Don’t Save")
+        dontSave.hasDestructiveAction = true
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            try? session.saveNow()
+            return true
+        case .alertThirdButtonReturn:
+            session.discardUnsavedChanges()
+            return true
+        default:
+            return false
+        }
+    }
+
     public func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
               let (sessionID, _) = editorWindowsBySessionID.first(where: { $0.value === window }) else { return }
@@ -417,7 +442,10 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
             closeColorPresetStudioWindow(for: sessionID)
             if let session = sessionsByID[sessionID] {
                 session.isPlaying = false
-                try? session.saveNow()
+                if AppSettings.shared.autosaveEnabled {
+                    try? session.saveNow()
+                }
+                AppSettings.shared.rememberLastProjectStyle(session.document)
             }
         }
 
@@ -685,10 +713,10 @@ public final class ProjectPresetsStore {
 
     private let defaultPresetDefaultsKey = "NativeScreen.DefaultPresetID"
 
+    /// `Settings > Editing > Save presets in`.
     public nonisolated static var presetsDirectoryURL: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let dir = appSupport.appendingPathComponent("NativeScreen/Presets", isDirectory: true)
+        let path = UserDefaults.standard.string(forKey: "NativeScreen.Settings.PresetsDirectory") ?? AppSettings.defaultPresetsDirectoryPath
+        let dir = URL(fileURLWithPath: path, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

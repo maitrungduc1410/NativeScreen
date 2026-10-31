@@ -64,7 +64,7 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             Image(systemName: "folder")
                                 .font(.system(size: 15.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.85))
+                                .foregroundStyle(.ink.opacity(0.85))
                         }
 
                         InstantTooltipButton(
@@ -77,7 +77,7 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 15.0, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.78))
+                                .foregroundStyle(.ink.opacity(0.78))
                         }
 
                         Spacer()
@@ -94,7 +94,7 @@ public struct ProjectEditorWindowView: View {
                                 TextField("Project name", text: $draftProjectName)
                                     .textFieldStyle(.plain)
                                     .font(.system(size: 13.5, weight: .medium))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(.ink)
                                     .fixedSize(horizontal: true, vertical: false)
                                     .focused($isTitleFieldFocused)
                                     .onSubmit {
@@ -103,14 +103,14 @@ public struct ProjectEditorWindowView: View {
 
                                 Text(".nativescreen")
                                     .font(.system(size: 13.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.38))
+                                    .foregroundStyle(.ink.opacity(0.38))
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(
                                 GeometryReader { proxy in
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .fill(Color.white.opacity(0.10))
+                                        .fill(Color.ink.opacity(0.10))
                                         .onAppear {
                                             titleBarFrameInWindow = proxy.frame(in: .global)
                                         }
@@ -134,17 +134,17 @@ public struct ProjectEditorWindowView: View {
                                 HStack(spacing: 2) {
                                     Text(session.document.name)
                                         .font(.system(size: 13.5, weight: .medium))
-                                        .foregroundStyle(.white.opacity(0.95))
+                                        .foregroundStyle(.ink.opacity(0.95))
 
                                     Text(".nativescreen")
                                         .font(.system(size: 13.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.38))
+                                        .foregroundStyle(.ink.opacity(0.38))
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .fill(isHoveringTitle ? Color.white.opacity(0.08) : Color.clear)
+                                        .fill(isHoveringTitle ? Color.ink.opacity(0.08) : Color.clear)
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
@@ -179,11 +179,11 @@ public struct ProjectEditorWindowView: View {
                         } label: {
                             Image(systemName: "command.circle")
                                 .font(.system(size: 16.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.88))
+                                .foregroundStyle(.ink.opacity(0.88))
                         }
 
                         Rectangle()
-                            .fill(Color.white.opacity(0.12))
+                            .fill(Color.ink.opacity(0.12))
                             .frame(width: 1, height: 18)
 
                         // 2. Undo & Redo Buttons (36pt hitbox, 6pt radius & 15.5pt icons)
@@ -200,7 +200,7 @@ public struct ProjectEditorWindowView: View {
                             } label: {
                                 Image(systemName: "arrow.uturn.backward")
                                     .font(.system(size: 15.0, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                             }
                             .keyboardShortcut("z", modifiers: [.command])
 
@@ -216,13 +216,13 @@ public struct ProjectEditorWindowView: View {
                             } label: {
                                 Image(systemName: "arrow.uturn.forward")
                                     .font(.system(size: 15.0, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                             }
                             .keyboardShortcut("Z", modifiers: [.command, .shift])
                         }
 
                         Rectangle()
-                            .fill(Color.white.opacity(0.12))
+                            .fill(Color.ink.opacity(0.12))
                             .frame(width: 1, height: 18)
 
                         // 2B. Presets Button
@@ -240,13 +240,13 @@ public struct ProjectEditorWindowView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 13.0, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                                 Text("Presets")
                                     .font(.system(size: 13.0, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.92))
+                                    .foregroundStyle(.ink.opacity(0.92))
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 10.0, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.55))
+                                    .foregroundStyle(.ink.opacity(0.55))
                             }
                             .fixedSize()
                         }
@@ -255,7 +255,7 @@ public struct ProjectEditorWindowView: View {
                         }
 
                         Rectangle()
-                            .fill(Color.white.opacity(0.12))
+                            .fill(Color.ink.opacity(0.12))
                             .frame(width: 1, height: 18)
 
                         // 3. Prominent Purple Export Button (`height: 36`, `radius: 6`, `#4D2FF5`)
@@ -287,7 +287,7 @@ public struct ProjectEditorWindowView: View {
                     .padding(.top, max(6.0, centerY - 18.0))
                 }
                 .frame(height: max(52.0, centerY + 26.0))
-                .background(Color(red: 0.05, green: 0.05, blue: 0.07))
+                .background(Color.surface(red: 0.05, green: 0.05, blue: 0.07))
                 .background(
                     HeaderDoubleClickZoomView()
                 )
@@ -318,22 +318,22 @@ public struct ProjectEditorWindowView: View {
                                 if session.document.canvas.aspectRatioMode == .auto {
                                     Text("Auto")
                                         .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.92))
+                                        .foregroundStyle(.ink.opacity(0.92))
                                 } else {
                                     HStack(spacing: 4) {
                                         Text(session.document.canvas.aspectRatioPreset.titleName)
                                             .font(.system(size: 12.5, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.95))
+                                            .foregroundStyle(.ink.opacity(0.95))
 
                                         Text(session.document.canvas.aspectRatioPreset.ratioString)
                                             .font(.system(size: 12.5, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.45))
+                                            .foregroundStyle(.ink.opacity(0.45))
                                     }
                                 }
 
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.50))
+                                    .foregroundStyle(.ink.opacity(0.50))
                             }
                             .fixedSize()
                         }
@@ -351,11 +351,11 @@ public struct ProjectEditorWindowView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "crop")
                                     .font(.system(size: 12.5, weight: .regular))
-                                    .foregroundStyle(hasCustomCrop ? Color(red: 0.58, green: 0.52, blue: 1.0) : .white.opacity(0.88))
+                                    .foregroundStyle(hasCustomCrop ? Color(red: 0.58, green: 0.52, blue: 1.0) : .ink.opacity(0.88))
 
                                 Text("Crop")
                                     .font(.system(size: 12.5, weight: .regular))
-                                    .foregroundStyle(hasCustomCrop ? Color(red: 0.58, green: 0.52, blue: 1.0) : .white.opacity(0.88))
+                                    .foregroundStyle(hasCustomCrop ? Color(red: 0.58, green: 0.52, blue: 1.0) : .ink.opacity(0.88))
                             }
                             .fixedSize()
                         }
@@ -378,7 +378,7 @@ public struct ProjectEditorWindowView: View {
                                         .foregroundStyle(
                                             session.isReelModeActive
                                                 ? Color(red: 0.58, green: 0.52, blue: 1.0)
-                                                : .white.opacity(0.88)
+                                                : .ink.opacity(0.88)
                                         )
                                 }
                                 .fixedSize()
@@ -398,11 +398,11 @@ public struct ProjectEditorWindowView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "camera.viewfinder")
                                     .font(.system(size: 12.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .foregroundStyle(.ink.opacity(0.88))
 
                                 Text("Export frame")
                                     .font(.system(size: 12.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .foregroundStyle(.ink.opacity(0.88))
                             }
                             .fixedSize()
                         }
@@ -418,7 +418,7 @@ public struct ProjectEditorWindowView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 6)
                     .frame(maxWidth: .infinity)
-                    .background(Color(red: 0.03, green: 0.03, blue: 0.04))
+                    .background(Color.surface(red: 0.03, green: 0.03, blue: 0.04))
                     .zIndex(75)
 
                     GeometryReader { geo in
@@ -428,7 +428,7 @@ public struct ProjectEditorWindowView: View {
                         )
 
                         ZStack {
-                            Color(red: 0.03, green: 0.03, blue: 0.04)
+                            Color.surface(red: 0.03, green: 0.03, blue: 0.04)
 
                             AnimatableAspectCanvasContainer(
                                 session: session,
@@ -511,12 +511,12 @@ public struct ProjectEditorWindowView: View {
                                 }
                                 .padding(6)
                                 .background(
-                                    Color(red: 0.11, green: 0.11, blue: 0.13).opacity(0.94),
+                                    Color.surface(red: 0.11, green: 0.11, blue: 0.13).opacity(0.94),
                                     in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+                                        .strokeBorder(.ink.opacity(0.10), lineWidth: 1)
                                 )
                                 .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
                                 .padding(.leading, 14)
@@ -551,7 +551,7 @@ public struct ProjectEditorWindowView: View {
                                     .foregroundStyle(
                                         session.isSplitModeActive
                                             ? Color(red: 0.65, green: 0.58, blue: 1.0)
-                                            : .white.opacity(0.88)
+                                            : .ink.opacity(0.88)
                                     )
                             }
 
@@ -574,7 +574,7 @@ public struct ProjectEditorWindowView: View {
                             } label: {
                                 Image(systemName: "backward.end")
                                     .font(.system(size: 14.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .foregroundStyle(.ink.opacity(0.88))
                             }
 
                             InstantTooltipButton(
@@ -587,7 +587,7 @@ public struct ProjectEditorWindowView: View {
                             } label: {
                                 Image(systemName: session.isPlaying ? "pause.circle" : "play.circle")
                                     .font(.system(size: 25, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.95))
+                                    .foregroundStyle(.ink.opacity(0.95))
                             }
                             .keyboardShortcut(.space, modifiers: [])
 
@@ -602,7 +602,7 @@ public struct ProjectEditorWindowView: View {
                             } label: {
                                 Image(systemName: "forward.end")
                                     .font(.system(size: 14.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .foregroundStyle(.ink.opacity(0.88))
                             }
 
                             let totalTimeText = formatTimecode(session.timeMapper.totalTimelineDurationMs)
@@ -637,7 +637,7 @@ public struct ProjectEditorWindowView: View {
                             } label: {
                                 Text(String(format: "%gx", session.previewPlaybackRate))
                                     .font(.system(size: 12.5, weight: .regular).monospacedDigit())
-                                    .foregroundStyle(.white.opacity(0.92))
+                                    .foregroundStyle(.ink.opacity(0.92))
                             }
 
                             Slider(value: $session.timelineZoom, in: 1.0...6.0)
@@ -649,7 +649,7 @@ public struct ProjectEditorWindowView: View {
                     }
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
-                    .background(Color(red: 0.03, green: 0.03, blue: 0.04))
+                    .background(Color.surface(red: 0.03, green: 0.03, blue: 0.04))
                     .zIndex(70)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -763,7 +763,6 @@ public struct ProjectEditorWindowView: View {
                 }
             }
         )
-        .preferredColorScheme(.dark)
         .sheet(isPresented: $session.isShowingStillFrameExportModal) {
             ExportStillFrameModalView(session: session) {
                 session.isShowingStillFrameExportModal = false
@@ -804,10 +803,13 @@ public struct ProjectEditorWindowView: View {
                 isShowingExportSheet = true
             }
         case .quickExport(let target):
-            // Uses the settings last chosen in the Export modal, without showing it.
+            // Uses `Settings > Quick export`, without showing the Export modal (whose own settings are kept).
             isShowingCommandMenu = false
+            let modalConfig = exportConfig
+            exportConfig = AppSettings.shared.quickExportConfig
             exportConfig.target = target
             runHardwareExport()
+            exportConfig = modalConfig
         case .showCommandMenu:
             withAnimation(.easeOut(duration: 0.14)) {
                 isShowingCommandMenu = true
@@ -1238,7 +1240,7 @@ public struct ProjectEditorWindowView: View {
         ) {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(isActive ? Color(red: 0.72, green: 0.64, blue: 1.0) : .white.opacity(0.95))
+                .foregroundStyle(isActive ? Color(red: 0.72, green: 0.64, blue: 1.0) : .ink.opacity(0.95))
         }
     }
 
@@ -1488,10 +1490,10 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
         let fittedSize = fitCanvas(in: containerSize, aspect: aspect)
 
         ZStack {
+            // Camera, captions and keycaps are rendered inside the Metal frame (same pass as export).
             MetalPreviewView(session: session, canvasAspect: aspect)
-            PreviewCameraAndCaptionsOverlayView(session: session, canvasSize: fittedSize)
             InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
-            PreviewShortcutKeycapsOverlayView(session: session, canvasSize: fittedSize)
+            ShortcutKeycapHitTargetsView(session: session, canvasSize: fittedSize)
 
             ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
                 .opacity(session.isReelModeActive ? 1.0 : 0.0)
@@ -1499,7 +1501,7 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
                 .animation(.easeInOut(duration: 0.22), value: session.isReelModeActive)
 
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(isHoveringPreviewCanvas ? 0.035 : 0.0))
+                .fill(Color.ink.opacity(isHoveringPreviewCanvas ? 0.035 : 0.0))
                 .allowsHitTesting(false)
         }
         .frame(width: fittedSize.width, height: fittedSize.height)
@@ -1507,7 +1509,7 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(
-                    Color.white.opacity(isHoveringPreviewCanvas ? 0.28 : 0.08),
+                    Color.ink.opacity(isHoveringPreviewCanvas ? 0.28 : 0.08),
                     lineWidth: isHoveringPreviewCanvas ? 1.5 : 1.0
                 )
         )
@@ -1534,251 +1536,39 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
 
 // MARK: - Interactive 3D Keycap Overlay on Video Preview
 
-private struct PreviewShortcutKeycapsOverlayView: View {
+/// Invisible hover / click targets over the keycaps the Metal preview draws, placed from the compositor's last frame.
+/// Hover brightens the keycaps (drawn by the compositor); click opens the shortcut editor.
+private struct ShortcutKeycapHitTargetsView: View {
     @Bindable var session: ProjectSession
     let canvasSize: CGSize
 
-    @State private var hoveredClusterId: String?
-
     var body: some View {
-        let sourceMs = session.currentSourceTimeMs
-        let activeItems = session.activeShortcutClustersWithStyles(atSourceMs: sourceMs)
-        let keyHeight = max(34.0, canvasSize.height * CGFloat(session.document.captions.shortcutsSizeRatio))
-        let spacing = keyHeight * 0.10
-        let edgeMargin = max(16.0, canvasSize.height * 0.05)
-
-        ZStack {
+        ZStack(alignment: .topLeading) {
             Color.clear
-
-            ForEach(activeItems, id: \.cluster.id) { entry in
-                let cluster = entry.cluster
-                let style = entry.style
-                let env = MetalFrameCompositor.shortcutTransitionEnvelope(for: cluster, atSourceMs: sourceMs)
-                let isHovered = (hoveredClusterId == cluster.id)
-                let isSelected = (session.selectedShortcutId == cluster.id)
-                let slideDistance = keyHeight * 0.10 * env.slideOffsetMultiplier
-                let slideX: CGFloat = {
-                    switch style.dockPosition {
-                    case .left: return -slideDistance
-                    case .right: return slideDistance
-                    default: return 0
-                    }
-                }()
-                let slideY: CGFloat = {
-                    switch style.dockPosition {
-                    case .bottom: return slideDistance
-                    case .top: return -slideDistance
-                    default: return 0
-                    }
-                }()
-                let offsetXPt = CGFloat(style.offsetX) * canvasSize.width + slideX
-                let offsetYPt = CGFloat(style.offsetY) * canvasSize.height + slideY
-
-                ZStack(alignment: dockAlignment(for: style.dockPosition)) {
-                    Color.clear
-
-                    Group {
-                        if style.dockPosition.isVerticalStack {
-                            VStack(spacing: spacing) {
-                                ForEach(cluster.keyCaps) { cap in
-                                    NativeScreen3DKeycapView(
-                                        cap: cap,
-                                        style: style,
-                                        keyHeight: keyHeight,
-                                        isHovered: isHovered || isSelected
-                                    )
-                                }
-                            }
-                        } else {
-                            HStack(spacing: spacing) {
-                                ForEach(cluster.keyCaps) { cap in
-                                    NativeScreen3DKeycapView(
-                                        cap: cap,
-                                        style: style,
-                                        keyHeight: keyHeight,
-                                        isHovered: isHovered || isSelected
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    .padding(.bottom, style.dockPosition == .bottom ? edgeMargin : 0)
-                    .padding(.top, style.dockPosition == .top ? edgeMargin : 0)
-                    .padding(.leading, style.dockPosition == .left ? edgeMargin : 0)
-                    .padding(.trailing, style.dockPosition == .right ? edgeMargin : 0)
-                    .scaleEffect(env.scale * (isHovered ? 1.02 : 1.0))
-                    .opacity(env.opacity)
-                    .offset(x: offsetXPt, y: offsetYPt)
-                    .brightness(isHovered ? 0.08 : 0.0)
-                    .shadow(color: .black.opacity(0.42 * env.opacity), radius: keyHeight * 0.22, y: keyHeight * 0.10)
+            ForEach(session.previewShortcutHitRects01.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
+                let rect = entry.value
+                Color.clear
                     .contentShape(Rectangle())
+                    .frame(width: rect.width * canvasSize.width, height: rect.height * canvasSize.height)
+                    .offset(x: rect.minX * canvasSize.width, y: rect.minY * canvasSize.height)
                     .onHover { hovering in
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            if hovering {
-                                hoveredClusterId = cluster.id
-                            } else if hoveredClusterId == cluster.id {
-                                hoveredClusterId = nil
-                            }
+                        if hovering {
+                            session.hoveredShortcutId = entry.key
+                        } else if session.hoveredShortcutId == entry.key {
+                            session.hoveredShortcutId = nil
                         }
                     }
                     .onTapGesture {
                         withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                            session.selectShortcut(cluster.id)
+                            session.selectShortcut(entry.key)
                         }
                     }
-                }
             }
         }
         .frame(width: canvasSize.width, height: canvasSize.height)
     }
-
-    private func dockAlignment(for pos: ShortcutDockPosition) -> Alignment {
-        switch pos {
-        case .bottom: return .bottom
-        case .top: return .top
-        case .left: return .leading
-        case .right: return .trailing
-        }
-    }
 }
 
-private struct NativeScreen3DKeycapView: View {
-    let cap: ProjectSession.ShortcutKeyCap
-    let style: ShortcutStyleConfig
-    let keyHeight: CGFloat
-    let isHovered: Bool
-
-    var body: some View {
-        let keyWidth = keyHeight * CGFloat(cap.widthRatio)
-        let outerRadius = keyHeight * 0.125 // `qg / Gg = 32 / 256 = 0.125`
-        let borderThickness = max(1.2, keyHeight * (3.0 / 256.0))
-        let innerRadius = max(2.0, outerRadius - borderThickness)
-        let innerPad = (keyHeight - borderThickness * 2.0) * 0.125
-        let textCol: Color = (style.colorMode == .defaultDark) ? .white : Color(hex: style.textColorHex)
-
-        let bodyTopColor: Color = {
-            switch style.colorMode {
-            case .defaultDark:
-                return isHovered ? Color(red: 0.22, green: 0.22, blue: 0.24) : Color(red: 0.169, green: 0.169, blue: 0.169)
-            case .solid:
-                return Color(hex: style.solidColorHex)
-            case .gradient:
-                return Color(hex: style.gradientStartHex)
-            }
-        }()
-
-        let bodyBottomColor: Color = {
-            switch style.colorMode {
-            case .defaultDark:
-                return isHovered ? Color(red: 0.13, green: 0.13, blue: 0.15) : Color(red: 0.098, green: 0.098, blue: 0.098)
-            case .solid:
-                return Color(hex: style.solidColorHex).opacity(0.76)
-            case .gradient:
-                return Color(hex: style.gradientEndHex)
-            }
-        }()
-
-        let bevelTopColor: Color = {
-            switch style.colorMode {
-            case .defaultDark:
-                return Color(red: 0.396, green: 0.396, blue: 0.396).opacity(isHovered ? 1.0 : 0.92)
-            case .solid, .gradient:
-                return Color.white.opacity(isHovered ? 0.55 : 0.38)
-            }
-        }()
-
-        let bevelBottomColor: Color = {
-            switch style.colorMode {
-            case .defaultDark:
-                return Color(red: 0.098, green: 0.098, blue: 0.098)
-            case .solid, .gradient:
-                return Color.black.opacity(0.55)
-            }
-        }()
-
-        ZStack {
-            if style.colorMode != .defaultDark {
-                RoundedRectangle(cornerRadius: outerRadius, style: .continuous)
-                    .fill(Color(red: 0.08, green: 0.08, blue: 0.10))
-            }
-
-            // 1. Outer 3D Bevel Border Gradient (`#656565` top -> `#191919` bottom)
-            RoundedRectangle(cornerRadius: outerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [bevelTopColor, bevelBottomColor],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-
-            // 2. Inner Keycap Body Gradient (`#2B2B2B` top -> `#191919` bottom or custom Solid/Gradient!)
-            RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [bodyTopColor, bodyBottomColor],
-                        startPoint: style.colorMode == .gradient ? .topLeading : .top,
-                        endPoint: style.colorMode == .gradient ? .bottomTrailing : .bottom
-                    )
-                )
-                .padding(borderThickness)
-
-            // 3. Keycap Symbol & Label Typography
-            Group {
-                switch cap.labelPlacement {
-                case .center:
-                    Text(cap.label)
-                        .font(.system(size: keyHeight * 0.33, weight: .regular))
-                        .foregroundStyle(textCol)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .padding(.horizontal, innerPad)
-
-                case .bottomLeft:
-                    VStack(alignment: .leading, spacing: 0) {
-                        if let sym = cap.symbol, !sym.isEmpty {
-                            Text(sym)
-                                .font(.system(size: keyHeight * 0.31, weight: .regular))
-                                .foregroundStyle(textCol)
-                        }
-                        Spacer(minLength: 0)
-                        if !cap.label.isEmpty {
-                            Text(cap.label)
-                                .font(.system(size: keyHeight * 0.215, weight: .medium))
-                                .foregroundStyle(textCol.opacity(0.96))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .padding(borderThickness + innerPad)
-
-                case .bottomCenter:
-                    VStack(alignment: .center, spacing: 0) {
-                        if let sym = cap.symbol, !sym.isEmpty {
-                            Text(sym)
-                                .font(.system(size: keyHeight * 0.31, weight: .regular))
-                                .foregroundStyle(textCol)
-                        }
-                        Spacer(minLength: 0)
-                        if !cap.label.isEmpty {
-                            Text(cap.label)
-                                .font(.system(size: keyHeight * 0.215, weight: .medium))
-                                .foregroundStyle(textCol.opacity(0.96))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .padding(borderThickness + innerPad)
-                }
-            }
-        }
-        .frame(width: keyWidth, height: keyHeight)
-    }
-}
-
-/// Handles dragging the window by its custom header bar AND zooming immediately on double-click!
 private struct HeaderDoubleClickZoomView: NSViewRepresentable {
     func makeNSView(context: Context) -> HeaderDragAndZoomNSView {
         HeaderDragAndZoomNSView()
@@ -1886,6 +1676,8 @@ private struct CommandMenuOverlayView: View {
 
     @State private var searchText: String = ""
     @State private var selectedIndex: Int = 0
+    /// Bumped only by arrow-key navigation: hovering a row must never scroll the list under the mouse.
+    @State private var keyboardScrollRequest: Int = 0
     @FocusState private var isSearchFocused: Bool
 
     private var allCommands: [EditorCommandItem] {
@@ -2010,6 +1802,19 @@ private struct CommandMenuOverlayView: View {
                 session.redo()
             })
         }
+
+        let isDarkNow = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        items.append(EditorCommandItem(
+            id: "toggleAppearance",
+            group: "Editor",
+            title: isDarkNow ? "Switch to light appearance" : "Switch to dark appearance",
+            icon: isDarkNow ? "sun.max" : "moon",
+            shortcutBadge: nil
+        ) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                AppSettings.shared.toggleAppearance()
+            }
+        })
 
         items.append(EditorCommandItem(
             id: "toggleSplit",
@@ -2455,7 +2260,7 @@ private struct CommandMenuOverlayView: View {
     var body: some View {
         ZStack(alignment: .top) {
             // Dimmed Backdrop (`#08090D` at 0.82 opacity — click outside to dismiss)
-            Color(red: 0.03, green: 0.035, blue: 0.05).opacity(0.82)
+            Color.surface(red: 0.03, green: 0.035, blue: 0.05).opacity(0.82)
                 .ignoresSafeArea()
                 .onTapGesture {
                     onClose()
@@ -2468,13 +2273,14 @@ private struct CommandMenuOverlayView: View {
                     TextField("Type to find a command", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 17, weight: .regular))
-                        .foregroundStyle(Color(red: 0.89, green: 0.90, blue: 0.91))
+                        .foregroundStyle(.ink.opacity(0.92))
                         .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
                         .focused($isSearchFocused)
                         .onKeyPress(.downArrow) {
                             let count = filteredCommands.count
                             if count > 0 {
                                 selectedIndex = (selectedIndex + 1) % count
+                                keyboardScrollRequest &+= 1
                             }
                             return .handled
                         }
@@ -2482,6 +2288,7 @@ private struct CommandMenuOverlayView: View {
                             let count = filteredCommands.count
                             if count > 0 {
                                 selectedIndex = (selectedIndex - 1 + count) % count
+                                keyboardScrollRequest &+= 1
                             }
                             return .handled
                         }
@@ -2500,7 +2307,7 @@ private struct CommandMenuOverlayView: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 14))
-                                .foregroundStyle(.white.opacity(0.42))
+                                .foregroundStyle(.ink.opacity(0.42))
                                 .frame(width: 26, height: 26)
                                 .contentShape(Rectangle())
                         }
@@ -2511,16 +2318,16 @@ private struct CommandMenuOverlayView: View {
                 .frame(height: 60)
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.10))
+                    .fill(Color.ink.opacity(0.10))
                     .frame(height: 1)
 
                 // 2. Scrollable Grouped Command List (`max-height: 360px`)
                 ScrollViewReader { scrollProxy in
-                    ScrollView(.vertical, showsIndicators: false) {
+                    ScrollView(.vertical, showsIndicators: true) {
                         if filteredCommands.isEmpty {
                             Text("No matching commands")
                                 .font(.system(size: 13.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(.ink.opacity(0.45))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 36)
                         } else {
@@ -2528,14 +2335,14 @@ private struct CommandMenuOverlayView: View {
                                 ForEach(Array(groupedFilteredCommands.enumerated()), id: \.element.group) { groupIdx, section in
                                     if groupIdx > 0 {
                                         Rectangle()
-                                            .fill(Color.white.opacity(0.08))
+                                            .fill(Color.ink.opacity(0.08))
                                             .frame(height: 1)
                                             .padding(.vertical, 4)
                                     }
 
                                     Text(section.group)
                                         .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(.white.opacity(0.45))
+                                        .foregroundStyle(.ink.opacity(0.45))
                                         .padding(.horizontal, 20)
                                         .padding(.top, groupIdx == 0 ? 6 : 2)
                                         .padding(.bottom, 2)
@@ -2563,9 +2370,10 @@ private struct CommandMenuOverlayView: View {
                         }
                     }
                     .frame(maxHeight: 360)
-                    .onChange(of: selectedIndex) { _, newIdx in
+                    .onChange(of: keyboardScrollRequest) { _, _ in
+                        // Scroll just enough to reveal the keyboard-selected row (no recentering).
                         withAnimation(.easeOut(duration: 0.10)) {
-                            scrollProxy.scrollTo(newIdx, anchor: .center)
+                            scrollProxy.scrollTo(selectedIndex)
                         }
                     }
                 }
@@ -2573,11 +2381,11 @@ private struct CommandMenuOverlayView: View {
             .frame(width: 616)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(red: 0.118, green: 0.118, blue: 0.125).opacity(0.96))
+                    .fill(Color.surface(red: 0.118, green: 0.118, blue: 0.125).opacity(0.96))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    .strokeBorder(Color.ink.opacity(0.18), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.65), radius: 28, y: 12)
             .padding(.top, 140)
@@ -2616,7 +2424,7 @@ private struct CommandMenuRowView: View {
                     .foregroundStyle(
                         item.isDestructive
                             ? Color(red: 1.0, green: 0.35, blue: 0.32)
-                            : .white.opacity(0.88)
+                            : .ink.opacity(0.88)
                     )
                     .frame(width: 20, alignment: .center)
 
@@ -2625,7 +2433,7 @@ private struct CommandMenuRowView: View {
                     .foregroundStyle(
                         item.isDestructive
                             ? Color(red: 1.0, green: 0.35, blue: 0.32)
-                            : .white.opacity(0.95)
+                            : .ink.opacity(0.95)
                     )
                     .lineLimit(1)
 
@@ -2634,16 +2442,16 @@ private struct CommandMenuRowView: View {
                 if let badge = item.shortcutBadge, !badge.isEmpty {
                     Text(badge)
                         .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.78))
+                        .foregroundStyle(.ink.opacity(0.78))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(Color.white.opacity(0.08))
+                                .fill(Color.ink.opacity(0.08))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                                .strokeBorder(Color.ink.opacity(0.10), lineWidth: 0.8)
                         )
                 }
             }
@@ -2652,7 +2460,7 @@ private struct CommandMenuRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isHighlighted ? Color.white.opacity(0.09) : Color.clear)
+                    .fill(isHighlighted ? Color.ink.opacity(0.09) : Color.clear)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -2769,24 +2577,24 @@ private struct ExportSettingsModalView: View {
                                 HStack(spacing: 5) {
                                     Text("\(config.fps)")
                                         .font(.system(size: 13.5, weight: .regular).monospacedDigit())
-                                        .foregroundStyle(.white.opacity(0.95))
+                                        .foregroundStyle(.ink.opacity(0.95))
                                     Text("FPS")
                                         .font(.system(size: 13.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.42))
+                                        .foregroundStyle(.ink.opacity(0.42))
                                     Image(systemName: "chevron.down")
                                         .font(.system(size: 10.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.65))
+                                        .foregroundStyle(.ink.opacity(0.65))
                                         .padding(.leading, 4)
                                 }
                                 .padding(.horizontal, 14)
                                 .frame(height: 36)
                                 .background(
                                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                        .fill(Color.white.opacity(0.04))
+                                        .fill(Color.ink.opacity(0.04))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                                 )
                             }
                             .buttonStyle(.plain)
@@ -2818,12 +2626,12 @@ private struct ExportSettingsModalView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("\(outputPixels.width)px × \(outputPixels.height)px")
                                     .font(.system(size: 13, weight: .regular).monospacedDigit())
-                                    .foregroundStyle(.white.opacity(0.36))
+                                    .foregroundStyle(.ink.opacity(0.36))
 
                                 if config.format == .gif && config.resolutionHeight >= 1080 {
                                     Text("Will result in a large file size")
                                         .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.36))
+                                        .foregroundStyle(.ink.opacity(0.36))
                                 }
                             }
                             .padding(.top, 2)
@@ -2854,13 +2662,13 @@ private struct ExportSettingsModalView: View {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text(config.compression.descriptionText)
                                             .font(.system(size: 13, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.36))
+                                            .foregroundStyle(.ink.opacity(0.36))
                                             .fixedSize(horizontal: false, vertical: true)
                                             .lineSpacing(2)
 
                                         Text("Quality setting does not impact export speed.")
                                             .font(.system(size: 13, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.36))
+                                            .foregroundStyle(.ink.opacity(0.36))
                                     }
                                     .padding(.top, 2)
                                 }
@@ -2875,21 +2683,21 @@ private struct ExportSettingsModalView: View {
                                         HStack {
                                             Text("Advanced")
                                                 .font(.system(size: 13.5, weight: .regular))
-                                                .foregroundStyle(.white.opacity(0.90))
+                                                .foregroundStyle(.ink.opacity(0.90))
 
                                             Spacer()
 
                                             Image(systemName: isAdvancedExpanded ? "chevron.up" : "chevron.down")
                                                 .font(.system(size: 11, weight: .regular))
-                                                .foregroundStyle(.white.opacity(0.75))
+                                                .foregroundStyle(.ink.opacity(0.75))
                                                 .frame(width: 26, height: 26)
                                                 .background(
                                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                        .fill(Color.white.opacity(isHoveringAdvancedToggle ? 0.10 : 0.06))
+                                                        .fill(Color.ink.opacity(isHoveringAdvancedToggle ? 0.10 : 0.06))
                                                 )
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                                                 )
                                         }
                                         .contentShape(Rectangle())
@@ -2918,7 +2726,7 @@ private struct ExportSettingsModalView: View {
 
                                             Text(config.mp4Codec.descriptionText)
                                                 .font(.system(size: 12.5, weight: .regular))
-                                                .foregroundStyle(.white.opacity(0.36))
+                                                .foregroundStyle(.ink.opacity(0.36))
                                                 .fixedSize(horizontal: false, vertical: true)
                                         }
                                         .padding(.top, 2)
@@ -2944,7 +2752,7 @@ private struct ExportSettingsModalView: View {
 
                                     Text(config.proResProfile.descriptionText)
                                         .font(.system(size: 13, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.36))
+                                        .foregroundStyle(.ink.opacity(0.36))
                                         .fixedSize(horizontal: false, vertical: true)
                                         .padding(.top, 2)
                                 }
@@ -2955,10 +2763,10 @@ private struct ExportSettingsModalView: View {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text("High quality")
                                                 .font(.system(size: 13.5, weight: .regular))
-                                                .foregroundStyle(.white.opacity(0.92))
+                                                .foregroundStyle(.ink.opacity(0.92))
                                             Text("Keeps more detail and fewer compression artifacts, for a larger file. Turn off for the best balance of file size and quality.")
                                                 .font(.system(size: 12.5, weight: .regular))
-                                                .foregroundStyle(.white.opacity(0.38))
+                                                .foregroundStyle(.ink.opacity(0.38))
                                                 .fixedSize(horizontal: false, vertical: true)
                                         }
                                     }
@@ -2969,10 +2777,10 @@ private struct ExportSettingsModalView: View {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text("Disable loop")
                                                 .font(.system(size: 13.5, weight: .regular))
-                                                .foregroundStyle(.white.opacity(0.92))
+                                                .foregroundStyle(.ink.opacity(0.92))
                                             Text("Exported GIF will only play once and then stop.")
                                                 .font(.system(size: 12.5, weight: .regular))
-                                                .foregroundStyle(.white.opacity(0.38))
+                                                .foregroundStyle(.ink.opacity(0.38))
                                         }
                                     }
                                     .toggleStyle(.switch)
@@ -3002,7 +2810,7 @@ private struct ExportSettingsModalView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Export to")
                         .font(.system(size: 13.5, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.90))
+                        .foregroundStyle(.ink.opacity(0.90))
 
                     HStack(spacing: 10) {
                         // Left: `File` | `Clipboard` Target Pills
@@ -3050,16 +2858,16 @@ private struct ExportSettingsModalView: View {
                             Button(action: onCancel) {
                                 Text("Cancel")
                                     .font(.system(size: 13.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                                     .padding(.horizontal, 18)
                                     .frame(height: 38)
                                     .background(
                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                            .fill(Color.white.opacity(isHoveringCancel ? 0.09 : 0.04))
+                                            .fill(Color.ink.opacity(isHoveringCancel ? 0.09 : 0.04))
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                            .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                             }
@@ -3074,16 +2882,16 @@ private struct ExportSettingsModalView: View {
                         VStack(alignment: .trailing, spacing: 3) {
                             Text("Estimation — Export time \(estimatedTimeText) — Output size \(estimatedSizeText)")
                                 .font(.system(size: 12.5, weight: .regular).monospacedDigit())
-                                .foregroundStyle(.white.opacity(0.30))
+                                .foregroundStyle(.ink.opacity(0.30))
 
                             if config.format == .gif {
                                 Text("GIF files are much larger than MP4 files. Use MP4 when you can.")
                                     .font(.system(size: 12.0, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.26))
+                                    .foregroundStyle(.ink.opacity(0.26))
                             } else if config.format == .prores {
                                 Text("ProRes is made for editing apps. Use MP4 to share.")
                                     .font(.system(size: 12.0, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.26))
+                                    .foregroundStyle(.ink.opacity(0.26))
                             }
                         }
                     }
@@ -3095,11 +2903,11 @@ private struct ExportSettingsModalView: View {
             .frame(width: 740)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(red: 0.067, green: 0.067, blue: 0.078))
+                    .fill(Color.surface(red: 0.067, green: 0.067, blue: 0.078))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                    .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.68), radius: 38, x: 0, y: 18)
         }
@@ -3120,17 +2928,17 @@ private struct ExportSettingsModalView: View {
                     .frame(width: 17, height: 15)
                     .background(
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.white.opacity(0.92))
+                            .fill(Color.ink.opacity(0.92))
                     )
             } else {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.ink.opacity(0.92))
             }
 
             Text(title)
                 .font(.system(size: 13.5, weight: .regular))
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
         }
     }
 
@@ -3154,8 +2962,8 @@ private struct ExportSettingsModalView: View {
             }
             .foregroundStyle(
                 isDisabled
-                    ? .white.opacity(0.28)
-                    : (isSelected ? .white : .white.opacity(0.86))
+                    ? .ink.opacity(0.28)
+                    : (isSelected ? .ink : .ink.opacity(0.86))
             )
             .padding(.horizontal, 14)
             .frame(height: height)
@@ -3164,7 +2972,7 @@ private struct ExportSettingsModalView: View {
                     .fill(
                         isSelected
                             ? purpleAccent.opacity(0.18)
-                            : Color.white.opacity(0.038)
+                            : Color.ink.opacity(0.038)
                     )
             )
             .overlay(
@@ -3172,7 +2980,7 @@ private struct ExportSettingsModalView: View {
                     .strokeBorder(
                         isSelected
                             ? purpleBorder
-                            : Color.white.opacity(0.06),
+                            : Color.ink.opacity(0.06),
                         lineWidth: isSelected ? 1.35 : 1.0
                     )
             )
@@ -3354,7 +3162,7 @@ private struct PresetsPopoverView: View {
             if store.presets.isEmpty {
                 Text("Presets will help you re-use the same project settings across projects")
                     .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.ink.opacity(0.55))
                     .padding(.vertical, 8)
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -3368,7 +3176,7 @@ private struct PresetsPopoverView: View {
 
                 Text("Presets are not auto-updated. If you apply preset and then modify project settings - remember to update presets to reflect those changes.")
                     .font(.system(size: 11.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.ink.opacity(0.45))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -3377,16 +3185,16 @@ private struct PresetsPopoverView: View {
                 TextField("New preset name...", text: $newPresetName)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.0, weight: .regular))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.ink)
                     .padding(.horizontal, 10)
                     .frame(height: 34)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(0.05))
+                            .fill(Color.ink.opacity(0.05))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                     )
                     .onSubmit {
                         createNewPreset()
@@ -3413,8 +3221,7 @@ private struct PresetsPopoverView: View {
         .padding(.top, 14)
         .padding(.bottom, 18)
         .frame(width: 420)
-        .background(Color(red: 0.08, green: 0.08, blue: 0.10))
-        .preferredColorScheme(.dark)
+        .background(Color.surface(red: 0.08, green: 0.08, blue: 0.10))
     }
 
     private func createNewPreset() {
@@ -3435,7 +3242,7 @@ private struct PresetsPopoverView: View {
                 TextField("Preset name", text: $editingPresetName)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.0, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.ink)
                     .padding(.leading, 12)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -3450,7 +3257,7 @@ private struct PresetsPopoverView: View {
                     HStack(spacing: 8) {
                         Text(preset.name)
                             .font(.system(size: 13.0, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.95))
+                            .foregroundStyle(.ink.opacity(0.95))
                             .lineLimit(1)
 
                         Spacer(minLength: 4)
@@ -3508,7 +3315,7 @@ private struct PresetsPopoverView: View {
             } label: {
                 Image(systemName: "gear")
                     .font(.system(size: 13.0, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.68))
+                    .foregroundStyle(.ink.opacity(0.68))
                     .frame(width: 34, height: 36)
                     .contentShape(Rectangle())
             }
@@ -3519,7 +3326,7 @@ private struct PresetsPopoverView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHovered ? Color.white.opacity(0.07) : Color.clear)
+                .fill(isHovered ? Color.ink.opacity(0.07) : Color.clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { hovering in
@@ -3531,12 +3338,12 @@ private struct PresetsPopoverView: View {
     private func presetBadge(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 11.0, weight: .medium))
-            .foregroundStyle(.white.opacity(0.58))
+            .foregroundStyle(.ink.opacity(0.58))
             .padding(.horizontal, 7)
             .padding(.vertical, 2.5)
             .background(
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
+                    .fill(Color.ink.opacity(0.08))
             )
     }
 }
