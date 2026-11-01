@@ -1,0 +1,10 @@
+<Window
+    x:Class="NativeScreen.App.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Settings">
+    <StackPanel Padding="24" Spacing="12">
+        <TextBlock Text="Appearance" FontSize="20" />
+        <ToggleSwitch x:Name="DarkTheme" Header="Dark theme" IsOn="True" Toggled="ThemeToggled" />
+    </StackPanel>
+</Window>

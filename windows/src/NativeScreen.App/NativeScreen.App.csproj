@@ -16,5 +16,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     <ProjectReference Include="..\NativeScreen.Core\NativeScreen.Core.csproj" />
+    <ProjectReference Include="..\NativeScreen.Media\NativeScreen.Media.csproj" />
+    <ProjectReference Include="..\NativeScreen.Rendering\NativeScreen.Rendering.csproj" />
   </ItemGroup>
 </Project>
