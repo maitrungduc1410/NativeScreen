@@ -4,6 +4,7 @@
     <RootNamespace>NativeScreen.Media</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Vortice.MediaFoundation" />
     <ProjectReference Include="..\NativeScreen.Core\NativeScreen.Core.csproj" />
   </ItemGroup>
 </Project>

@@ -35,7 +35,7 @@ public sealed class CompositionSwapChain : IDisposable
         // Present(0) stays on the render thread. Do not call ResizeBuffers on the UI thread.
     }
 
-    public void Present() => SwapChain.Present(0, PresentFlags.None);
+    public void Present() => SwapChain.Present(1, PresentFlags.None);
 
     public void Dispose() => SwapChain.Dispose();
 }
