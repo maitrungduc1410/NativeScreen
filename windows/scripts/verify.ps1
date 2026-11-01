@@ -34,13 +34,38 @@ try {
     Invoke-Check "Debug x64" { dotnet build $solution -c Debug -p:Platform=x64 --nologo }
     Invoke-Check "Release x64" { dotnet build $solution -c Release -p:Platform=x64 --nologo }
     Invoke-Check "Tests" { dotnet test $solution -c Debug -p:Platform=x64 --nologo --no-build }
-    $shaders = Get-ChildItem -Path (Join-Path $windows "src") -Recurse -Filter *.hlsl -ErrorAction SilentlyContinue
-    if ($shaders) {
-        $results.Add("- **Shaders:** FAIL (compiler hook is not wired yet; $($shaders.Count) file(s) found)")
-        $failed = $true
+    $shaders = @(Get-ChildItem -Path (Join-Path $windows "src") -Recurse -Filter *.hlsl -ErrorAction SilentlyContinue)
+    if ($shaders.Count -eq 0) {
+        $results.Add("- **Shaders:** skipped (no .hlsl files yet)")
     }
     else {
-        $results.Add("- **Shaders:** skipped (no .hlsl files yet)")
+        $dxc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter dxc.exe -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+        if (-not $dxc) {
+            $results.Add("- **Shaders:** FAIL (dxc.exe not found; $($shaders.Count) file(s))")
+            $failed = $true
+        }
+        else {
+            $shaderFailed = $false
+            $outDir = Join-Path $reportDir "shaders"
+            New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+            foreach ($shader in $shaders) {
+                $profile = "ps_5_0"
+                $head = Get-Content -Path $shader.FullName -TotalCount 1
+                if ($head -match "dxc:\s*(\S+)") { $profile = $Matches[1] }
+                $outFile = Join-Path $outDir ($shader.BaseName + ".dxo")
+                & $dxc.FullName -T $profile -E main -O3 -Fo $outFile $shader.FullName
+                if ($LASTEXITCODE -ne 0) { $shaderFailed = $true }
+            }
+            if ($shaderFailed) {
+                $results.Add("- **Shaders:** FAIL ($($shaders.Count) file(s), dxc $($dxc.FullName))")
+                $failed = $true
+            }
+            else {
+                $results.Add("- **Shaders:** PASS ($($shaders.Count) file(s), dxc)")
+            }
+        }
     }
 }
 catch {
