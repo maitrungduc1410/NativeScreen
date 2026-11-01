@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NativeScreen.Core/NativeScreen.Core.csproj" />
+    <Project Path="src/NativeScreen.Intelligence/NativeScreen.Intelligence.csproj" />
+    <Project Path="src/NativeScreen.Media/NativeScreen.Media.csproj" />
+    <Project Path="src/NativeScreen.Rendering/NativeScreen.Rendering.csproj" />
+    <Project Path="src/NativeScreen.App/NativeScreen.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NativeScreen.Core.Tests/NativeScreen.Core.Tests.csproj" />
+  </Folder>
+</Solution>

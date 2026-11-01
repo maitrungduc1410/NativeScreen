@@ -1,0 +1,66 @@
+namespace NativeScreen.Core;
+
+public sealed class LoadedProject
+{
+    public ProjectDocument Document { get; }
+    public RecordingMetadata Metadata { get; }
+    public IReadOnlyList<CursorSampleEvent> CursorEvents { get; }
+    public IReadOnlyList<ClickEvent> ClickEvents { get; }
+    public IReadOnlyList<KeyStrokeEvent> KeyEvents { get; }
+    public NLETimeMapper TimeMapper { get; }
+    public SpringTrajectorySolver Trajectory { get; }
+    public bool HasRecordedCamera { get; }
+
+    public LoadedProject(string packageDirectory)
+    {
+        var projectPath = Path.Combine(packageDirectory, "project.json");
+        var recording = Path.Combine(packageDirectory, "recording");
+        Document = ProjectJson.Deserialize<ProjectDocument>(File.ReadAllText(projectPath));
+        var metadataPath = Path.Combine(recording, "metadata.json");
+        Metadata = File.Exists(metadataPath)
+            ? ProjectJson.Deserialize<RecordingMetadata>(File.ReadAllText(metadataPath))
+            : new RecordingMetadata { DurationMs = Document.Timeline.Slices.Count == 0 ? 10000 : Document.Timeline.Slices.Max(slice => slice.SourceEndMs) };
+
+        Document.Timeline.Zooms = AutoZoomClusterGenerator.NormalizeNonOverlappingZooms(Document.Timeline.Zooms, Metadata.DurationMs);
+        Document.Timeline.MaskTracks.RemoveAll(track => track.Items.Count == 0);
+        CursorEvents = JsonLines.Load<CursorSampleEvent>(Path.Combine(recording, Metadata.Tracks.CursorTelemetry));
+        ClickEvents = JsonLines.Load<ClickEvent>(Path.Combine(recording, Metadata.Tracks.ClicksTelemetry));
+        KeyEvents = JsonLines.Load<KeyStrokeEvent>(Path.Combine(recording, Metadata.Tracks.KeysTelemetry));
+        TimeMapper = new NLETimeMapper(Document.Timeline.Slices);
+        Trajectory = new SpringTrajectorySolver(Metadata.DurationMs, CursorEvents, ClickEvents, Document);
+        var webcam = Metadata.Tracks.WebcamVideo;
+        HasRecordedCamera = webcam is not null || File.Exists(Path.Combine(recording, "webcam.mp4"));
+
+        var clusters = ShortcutEngine.Detect(Document, KeyEvents);
+        if (clusters.Count > 0 && Document.Captions.ShortcutTracks.Count == 0)
+        {
+            Document.Captions.ShortcutTracks.Add(new ShortcutTrackConfig
+            {
+                Id = "default-shortcuts-track",
+                Name = "Shortcuts",
+                Style = Document.Captions.DefaultShortcutStyle
+            });
+        }
+        else if (clusters.Count == 0 && Document.Captions.CustomShortcuts.Count == 0)
+        {
+            Document.Captions.ShortcutTracks.Clear();
+        }
+    }
+
+    public StageFrame StageAt(double sourceMs, double canvasWidth, double canvasHeight)
+    {
+        var crop = Document.Canvas.CropRect01;
+        var sourceW = Math.Max(16, Metadata.CaptureTarget.PixelSize.Width * crop.Width);
+        var sourceH = Math.Max(16, Metadata.CaptureTarget.PixelSize.Height * crop.Height);
+        var zoom = Trajectory.Evaluate(sourceMs).Camera.Scale;
+        return new StageLayoutEngine().Resolve(
+            Document,
+            sourceMs,
+            canvasWidth,
+            canvasHeight,
+            sourceW,
+            sourceH,
+            zoom,
+            HasRecordedCamera);
+    }
+}
