@@ -88,7 +88,7 @@ Both macOS and Windows implementations share the same logical 5-layer architectu
 ## 4. Non-Linear Editing (NLE) & Undo/Redo Architecture
 
 ### 4.1. Strict Non-Destructive Principle
-- Raw recorded files inside `project.nativescreen/recording/` (`display.m3u8` / `display.mp4`, `mic.m4a`, `system-audio.m4a`, `cursor.jsonl`, `clicks.jsonl`, `keys.jsonl`) are **strictly read-only and immutable** once recording finishes.
+- Raw recorded files inside `project.nativescreen/recording/` (`display.mp4`, `webcam.mp4`, `microphone.m4a`, `cursor.jsonl`, `clicks.jsonl`, `keys.jsonl`) are **strictly read-only and immutable** once recording finishes.
 - Splitting a clip, trimming dead air, changing playback speed (`0.25x` – `8.0x`), adding zooms, or adding multiple blur masks **never modifies the underlying video or telemetry files**.
 - All edits only mutate the in-memory `ProjectDocument` struct, which serializes to `project.json`.
 

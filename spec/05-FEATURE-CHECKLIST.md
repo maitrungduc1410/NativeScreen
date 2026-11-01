@@ -146,10 +146,18 @@
 ---
 
 ## Phase 5: NativeScreen for Windows (WinUI 3 + Direct3D 11 + Media Foundation)
-*Goal: Bring the exact same `.nativescreen` project compatibility and native performance to Windows 11.*
+*Goal: the same `.nativescreen` projects, the same output frames and the same smoothness on Windows 11.*
 
-- [ ] Initialize `NativeScreenWindows` solution (C# / .NET 9 / Windows App SDK / WinUI 3).
-- [ ] Shared `.nativescreen` (`project.json` + `.jsonl` + `.mp4`/`.m3u8`) reader/writer in C#.
-- [ ] Native capture engine using `Windows.Graphics.Capture` (cursor exclusion + window/monitor picker) + `WASAPI` process-loopback audio + `SetWindowsHookEx` mouse/key telemetry.
-- [ ] Direct3D 11 / Win2D HLSL shader compositor matching all 6 render passes of the macOS Metal pipeline.
-- [ ] Hardware-accelerated MP4/HEVC exporter via `Media Foundation` (`IMFSinkWriter` NVENC / AMF / QuickSync).
+Plan, porting map and acceptance checks: [`spec/08-WINDOWS-PORT-PLAN.md`](./08-WINDOWS-PORT-PLAN.md). Implementation guide:
+[`platforms/windows-d3d11-mediafoundation.md`](./platforms/windows-d3d11-mediafoundation.md). Tick an item only after the
+Windows verifier recorded `PASS` for it in `windows/HANDOFF.md`.
+
+- [ ] **5.0 Foundations:** macOS conformance generator (`--generate-conformance`) and committed `conformance/`; `windows/` solution, central package versions, `verify.ps1`, empty WinUI window.
+- [ ] **5.1 Core:** models + JSON round-trip with macOS projects, `NLETimeMapper`, spring solvers and auto zoom, stage layout and split screen, captions layout, shortcut clustering, export estimators, snapshot undo.
+- [ ] **5.2 Rendering:** D3D11 compositor (all passes in `spec/07`), DirectWrite captions and keycaps, SVG cursors, lens and motion blur kernels, LUT camera looks, cutout post-process.
+- [ ] **5.3 Playback:** `IMFSourceReader` decode, audio master clock, `SwapChainPanel` preview at display rate, 0% idle CPU.
+- [ ] **5.4 Export:** hardware H.264 / HEVC via `IMFSinkWriter`, audio mix, GIF, even progress, cancel.
+- [ ] **5.5 Recording:** `Windows.Graphics.Capture` display / window / area, telemetry hooks, mic + system + per-app audio, webcam, HUD excluded from capture, pause, fragmented MP4.
+- [ ] **5.6 Editor UI:** welcome, editor, inspector tabs, timeline, command menu, menus, settings, presets, multi-window, light/dark.
+- [ ] **5.7 Intelligence:** Whisper captions and transcript editing, person cutout (ONNX), OCR and face masks, face tracking.
+- [ ] **5.8 Packaging:** MSIX, `.nativescreen` file association and icon, signing.

@@ -361,3 +361,25 @@ Menu bar items are app-wide, but almost every action belongs to one project wind
 - **Document icon**: `CFBundleTypeIconSystemGenerated` plus `UTTypeIcons` (`UTTypeIconBadgeName = AppIcon`, `UTTypeIconText`) let macOS draw `.nativescreen` packages as a page with the app icon.
 - **Verification**: the editor, Settings tabs, Export modal and command menu were rendered offscreen in both appearances (`NSView.cacheDisplay`) and checked visually.
 
+
+---
+
+## 17. ADR-17: Windows Port Strategy
+
+### Context
+The macOS app is complete and tuned. Windows code is written on macOS (where it cannot run) and verified on a Windows
+machine by a second agent.
+
+### Decision
+- **Separate C# implementation**, no shared native core. The Swift code is the reference; C# ports keep its names,
+  constants and formulas (`spec/08` §1). Rust or C++ only with a measured reason and its own ADR.
+- **Correctness by fixtures, not by eye:** the macOS app generates `conformance/` (numbers and frames from synthetic
+  projects); Windows tests must match them within fixed tolerances (`spec/08` §2).
+- **Implicit CoreImage behavior is written down** (`spec/07`): compositing happens in gamma-encoded sRGB with
+  premultiplied alpha (the macOS `CIContext` working space), so Windows uses `B8G8R8A8_UNORM` targets and never `_SRGB`.
+  Built-in camera looks travel as LUTs exported from macOS instead of re-deriving undocumented filters.
+- **Writer / verifier workflow** (`windows/AGENTS.md`): the writer compiles everything that compiles on macOS
+  (`EnableWindowsTargeting`) and marks unverified Windows API details with `// VERIFY:`; the verifier runs
+  `verify.ps1`, measures the phase acceptance checks and records `PASS` / `FAIL` in `windows/HANDOFF.md`.
+- **Hybrid encoding is not ported by default.** It solved a VideoToolbox throughput limit; Windows hardware encoders are
+  measured first (`spec/platforms/windows-d3d11-mediafoundation.md` §6).

@@ -1,48 +1,197 @@
-# Windows Platform Implementation Guide — WinUI 3, Direct3D 11 & Media Foundation
+# Windows Implementation Guide: WinUI 3, Direct3D 11 & Media Foundation
 
-This guide translates the architectural decisions and performance lessons learned on macOS (`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md` and `spec/platforms/macos-metal-videotoolbox.md`) directly into their **Windows 11 (`WinUI 3` / `Direct3D 11` / `HLSL` / `Windows.Graphics.Capture` / `Media Foundation`)** equivalents for Phase 5 (`NativeScreenWindows/`).
+How to build the Windows app (`windows/`) so it matches the macOS app in behavior, output and smoothness. Read together
+with `spec/07-RENDERING-PARITY.md` (what each pixel must look like) and `spec/08-WINDOWS-PORT-PLAN.md` (what to port, in
+which order, and how each phase is verified). Agent rules and commands are in `windows/AGENTS.md`.
+
+The macOS app is finished and stays Swift. Windows is a separate C# implementation that reads and writes the same
+`.nativescreen` projects. There is no shared native core. Rust or C++ is allowed only when a C# path is proven
+insufficient (measured), and must be recorded as an ADR in `spec/06`.
 
 ---
 
-## 1. Cross-Platform Architecture Mapping (macOS $\leftrightarrow$ Windows)
+## 1. Stack
 
-| Subsystem | macOS Implementation | Windows Implementation |
+| Concern | Choice |
+| :--- | :--- |
+| Runtime | .NET 10 (LTS), C# latest, nullable enabled, `x64` and `arm64` |
+| UI | WinUI 3 (Windows App SDK, latest stable), unpackaged during development (`WindowsPackageType=None`), MSIX later |
+| MVVM | `CommunityToolkit.Mvvm` (source-generated observable properties and commands) |
+| Direct3D 11, DXGI, Direct2D, DirectWrite, Media Foundation | `Vortice.Windows` (`Vortice.Direct3D11`, `Vortice.DXGI`, `Vortice.D3DCompiler`, `Vortice.Direct2D1`, `Vortice.MediaFoundation`, `Vortice.WinUI` for `ISwapChainPanelNative`) |
+| Win32 (hooks, DPI, window styles, cursor, QPC) | `Microsoft.Windows.CsWin32` (generated P/Invoke from `NativeMethods.txt`) |
+| WinRT (`Windows.Graphics.Capture`, `Windows.Media.Ocr`, `FaceDetector`) | Direct projection via the `net10.0-windows10.0.22621.0` target framework |
+| Audio capture / render | WASAPI through CsWin32 (process loopback needs `ActivateAudioInterfaceAsync`); `NAudio.Wasapi` is acceptable for mic and system loopback |
+| Speech to text | `Whisper.net` + its native runtime package, same `ggml-*.bin` models as macOS (downloaded on demand, with consent) |
+| Person segmentation | `Microsoft.ML.OnnxRuntime.DirectML` with a portrait segmentation model downloaded on demand |
+| Timeline / 2D drawing in XAML | `Microsoft.Graphics.Win2D` (`CanvasControl` / `CanvasVirtualControl`) |
+| JSON | `System.Text.Json` with source generation, property names matching `spec/schemas/project.schema.json` |
+| Tests | xUnit |
+
+Pin every package version in `windows/Directory.Packages.props` (central package management). Never add a package
+without pinning it there.
+
+---
+
+## 2. Solution Layout
+
+```text
+windows/
+├── AGENTS.md                      # Agent rules, commands, handoff protocol
+├── HANDOFF.md                     # Current task log between the macOS writer and the Windows verifier
+├── NativeScreen.Windows.slnx
+├── Directory.Build.props          # LangVersion, Nullable, TreatWarningsAsErrors (nullable + CA rules), EnableWindowsTargeting
+├── Directory.Packages.props       # All package versions
+├── src/
+│   ├── NativeScreen.Core/         # net10.0: no Windows APIs. Models, JSON, time mapping, solvers, layout, clustering,
+│   │                              #   estimators, undo stack. Builds and tests on macOS too.
+│   ├── NativeScreen.Rendering/    # net10.0-windows: D3D11 device, compositor passes, HLSL (Shaders/*.hlsl as
+│   │                              #   EmbeddedResource), DirectWrite text, Direct2D SVG, texture caches
+│   ├── NativeScreen.Media/        # net10.0-windows: decode, playback engine, export, capture (WGC), audio (WASAPI),
+│   │                              #   telemetry hooks, webcam
+│   ├── NativeScreen.Intelligence/ # net10.0-windows: Whisper, segmentation, OCR, face detection
+│   └── NativeScreen.App/          # WinUI 3 app: windows, views, view models, HUD, menus, settings
+├── tests/
+│   ├── NativeScreen.Core.Tests/       # net10.0: conformance numbers; runs on macOS and Windows
+│   ├── NativeScreen.Rendering.Tests/  # Windows: shader compilation, golden frames (SSIM)
+│   └── NativeScreen.Media.Tests/      # Windows: decode/encode/mux/fMP4 round trips with generated clips
+└── scripts/
+    └── verify.ps1                 # Build + test + report; the Windows verifier runs this first
+```
+
+Rules:
+- Dependencies point one way: `App → Intelligence/Media/Rendering → Core`. Core never references Windows types.
+- Everything that is math or data goes in Core, so it is testable on macOS. If a Swift type mixes logic and UI state
+  (for example `ProjectSession`), split it: logic into Core services, UI state into a view model.
+- `EnableWindowsTargeting=true` in `Directory.Build.props` lets the `-windows` class libraries compile on macOS. The
+  WinUI 3 app project only builds on Windows.
+
+---
+
+## 3. Threads and Clocks
+
+| Thread | Work | Never does |
 | :--- | :--- | :--- |
-| **UI Framework** | `SwiftUI` + `AppKit` (`NSWindow`, `NSPanel`, `NSMenu`) | `WinUI 3` (Windows App SDK) + `AppWindow` (`OverlappedPresenter`) |
-| **Window Materials** | `NSVisualEffectView` (`.popover`, `.hudWindow`, `.darkAqua`) | `MicaBackdrop` (Main Editor) & `DesktopAcrylicBackdrop` (HUD / Tooltips) |
-| **Exclude HUD from Capture** | `panel.sharingType = .none` | `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` |
-| **Screen & Window Capture** | `ScreenCaptureKit` (`SCStream`, `SCContentFilter`) | `Windows.Graphics.Capture` (`Direct3D11CaptureFramePool`) |
-| **Window Corner Radius Probe** | `CGWindowListCopyWindowInfo` + `AXUIElement` | `DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS)` (`8px` Win11 standard) |
-| **Input Telemetry Tap** | `CGEventTap` / `NSEvent` (`cursor.jsonl`, `clicks.jsonl`, `keys.jsonl`) | Low-level hooks `SetWindowsHookEx(WH_MOUSE_LL / WH_KEYBOARD_LL)` or `RawInput` |
-| **GPU Compositor** | `Metal` (`MTLDevice`, `CIContext`, `MTLComputePipelineState`) | `Direct3D 11` + `Direct2D 1.3` (`ID3D11Device`, `ID2D1DeviceContext`, `HLSL`) |
-| **Sequential Video Decoder** | `AVAssetReader` + `AVAssetReaderTrackOutput` (`420v`) | `IMFSourceReader` with `IMFDXGIDeviceManager` (`MFVideoFormat_NV12`) |
-| **Hardware/Hybrid Encoder** | `VideoToolbox` (`VTCompressionSession` HW + SW) | `Media Foundation` Hardware MFT (`NVENC` / `AMF` / `QSV`) + CPU MFT/x264 |
+| UI thread (DispatcherQueue) | XAML, input, view models | Decoding, compositing, file I/O, waiting on GPU or locks held by the render thread |
+| Render thread (one per editor window) | Composites and presents to the `SwapChainPanel` swap chain | Touch XAML objects |
+| Decode threads | `IMFSourceReader` per video track, read ahead into a small texture ring | Block on the UI |
+| Audio thread | WASAPI render (playback) or capture (recording), event-driven | Allocate per buffer |
+| Export worker | Sequential decode → compose → encode → mux, bounded queues | Use the preview's resources |
+
+- **Clock:** `Stopwatch` (QPC) everywhere. Convert WGC `SystemRelativeTime` (100 ns, QPC-based) and WASAPI QPC
+  positions to the same timeline.
+- **Playback master clock:** the audio render clock when any audio track plays (`IAudioClock` position, corrected by
+  device latency), otherwise QPC. Video frames are chosen from the clock; never the other way around. This is the
+  Windows equivalent of anchoring every `AVPlayer` to one host time (`spec/06`, ADR on playback start).
+- **Start of playback:** prime decoders and audio buffers first, then start the clock at an explicit QPC instant, so the
+  first frames are never late (the macOS "playhead hitch" was caused by starting before the pipeline was primed).
+- **Hot path budget:** do not call anything that can block for milliseconds on the 120 Hz path (on macOS
+  `AVPlayer.currentTime()` blocked ~30 ms; the Windows equivalent is any synchronous MF call or a lock shared with a decoder).
 
 ---
 
-## 2. Critical Lessons to Apply on Windows from Day One
+## 4. Preview (`SwapChainPanel`)
 
-### 2.1. Telemetry Clock Synchronization (`t = 0.0 ms`)
-- Just like `SCStream` on macOS, `Direct3D11CaptureFramePool.FrameArrived` on Windows has a `30–150 ms` initialization delay after starting the capture session.
-- **Rule:** Record the `QueryPerformanceCounter` (QPC) timestamp of the **first arrived `Direct3D11CaptureFrame`** (`SystemRelativeTime`) and use that exact timestamp as `t = 0.0 ms` for `cursor.jsonl`, `clicks.jsonl`, and `keys.jsonl`.
-- Implement the exact same **Lookahead Phase-Lag Compensation** (`t + min(75ms, damping / stiffness * 1000)`) and **Active Drag Speed Multiplier (`s = 1.85`)** documented in `spec/03-CINEMATIC-ENGINE-AND-MATH.md` §1.2.
+- Create the swap chain with `CreateSwapChainForComposition`, `B8G8R8A8_UNORM`, flip model, 2 buffers,
+  `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`, max latency 1. Attach with `ISwapChainPanelNative.SetSwapChain`.
+- Render thread loop: wait on the latency waitable object, compose, `Present(1, 0)`. Matches the display refresh (60–240 Hz).
+- **Idle = 0% CPU:** when not playing and nothing animates (layout springs, keycap springs, background crossfade), the
+  loop blocks on an event. Any edit or scrub signals one redraw.
+- Handle `CompositionScaleChanged` and size changes by resizing buffers on the render thread (rasterization scale × size).
+- 120 Hz values (playhead, magnet hover) must not flow through `INotifyPropertyChanged` bindings. Drive them with
+  Composition visuals or Win2D invalidation of a small region (`spec/06` ADR on isolating the 120 Hz playhead).
 
-### 2.2. Sequential `IMFSourceReader` Decoding (Never Seek Per-Frame)
-- When exporting a timeline, configure `IMFSourceReader` with `MF_SOURCE_READER_D3D_MANAGER` (`IMFDXGIDeviceManager`) and output subtype `MFVideoFormat_NV12`.
-- Call `ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, ...)` sequentially in a forward loop and wrap the returned `IMFDXGIBuffer` into an `ID3D11Texture2D` (Zero-Copy GPU texture).
-- Never call `SetCurrentPosition` on every frame; only seek when jumping across a non-contiguous `ClipSlice` cut boundary.
+---
 
-### 2.3. Bake Static 4K Drop Shadows & Rounded Stencils into `ID3D11Texture2D`
-- In Direct2D (`ID2D1Effect` Gaussian Blur / Shadow), chaining an uncached `CLSID_D2D1GaussianBlur` node at 4K resolution on every frame wastes ~6–8 ms/frame of GPU time.
-- **Rule:** Render the **Background Layer**, **4K Blurred Drop Shadow**, and **Rounded-Corner Alpha Mask** into dedicated `D3D11_USAGE_DEFAULT` `ID3D11Texture2D` targets whenever `CanvasConfig` or `FrameStyleConfig` changes, and sample those pre-baked textures in the per-frame HLSL compositor pass in `< 0.05 ms`.
+## 5. Decode and Playback
 
-### 2.4. Constant-Quality I-Frame Budgeting & `ITU-R BT.709` Tags in Media Foundation
-- When configuring the hardware H.264/HEVC encoder MFT (NVIDIA `NVENC`, AMD `AMF`, or Intel `QSV`) via `ICodecAPI`:
-  - Prefer `CODECAPI_AVEncCommonRateControlMode = eAVEncCommonRateControlMode_Quality` (with `CODECAPI_AVEncCommonQuality` set to `87` for `Studio`, `72` for `Social Media`, `58` for `Web`, `42` for `Web (Low)`) rather than strict 1-second CBR caps so 4K keyframes receive full `600–950 KB` sharpness for small UI text.
-  - Set `MF_MT_YUV_MATRIX = MFVideoTransferMatrix_BT709`, `MF_MT_TRANSFER_FUNCTION = MFVideoTransFunc_709`, and `MF_MT_VIDEO_PRIMARIES = MFVideoPrimaries_BT709` on the output `IMFMediaType`.
-  - If running on a system where a single hardware MFT is bottlenecked below 100 fps at 4K, use the same **2-second closed-GOP Hybrid Parallel Encoding** architecture (`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md` §1) to split GOP chunks across the hardware MFT and a multi-core CPU encoder worker.
+- `IMFSourceReader` with `MF_SOURCE_READER_D3D_MANAGER` (`IMFDXGIDeviceManager` on the compositor's device),
+  `MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS`, `MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING = false`, output `NV12`.
+  Samples come back as `IMFDXGIBuffer` → `ID3D11Texture2D` + subresource index. Convert to RGB on the GPU (§1 of `spec/07`).
+- Read forward sequentially. Seek only at slice boundaries or user scrubs; coalesce scrub seeks (latest wins).
+- Read ahead 3–6 frames per track into a ring; the render thread picks the newest frame with `pts <= clock`.
+- Timeline slices with `speed != 1`: map timeline time → source time with the ported `NLETimeMapper`, and resample
+  audio (WASAPI render path) with a high-quality resampler; keep pitch (time-stretch) only if macOS does.
+- Webcam, microphone and system audio are separate tracks: one reader each, all driven by the same clock.
 
-### 2.5. Retained-Layer `.hover-magnet` & Standalone Callout Tooltip Window
-- In WinUI 3, do **not** bind 120Hz button hover-magnet coordinates or playhead positions to C# `INotifyPropertyChanged` properties on the main XAML tree.
-- Instead, drive `.hover-magnet` button highlights using **`Windows.UI.Composition.SpriteVisual`** (`ElementCompositionPreview.GetElementVisual`) and `CompositionScopedBatch` / 120Hz spring animations on the Composition thread.
-- Render floating tooltips in a borderless, click-through popup window (`WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`) using Direct2D geometry union (`ID2D1PathGeometry::CombineWithGeometry(D2D1_COMBINE_MODE_UNION)`) and inherit `WDA_EXCLUDEFROMCAPTURE` whenever the owner window is the Recording HUD.
+---
+
+## 6. Export
+
+Pipeline: decode (same reader setup, sequential) → compose into an offscreen `B8G8R8A8` texture → convert to NV12 with
+`ID3D11VideoProcessor` → `IMFSinkWriter` (`MF_SINK_WRITER_D3D_MANAGER`, hardware transforms enabled) → `.mp4`.
+
+- **Encoder:** hardware H.264 / HEVC MFT (NVENC, Quick Sync, AMF) chosen by `MFTEnumEx` with `MFT_ENUM_FLAG_HARDWARE`.
+  Configure through `ICodecAPI` from `GetServiceForStream`: `CODECAPI_AVEncCommonRateControlMode = Quality` with
+  `CODECAPI_AVEncCommonQuality` 87 / 72 / 58 / 42 for Studio / Social Media / Web / Web (Low) (start values; tune against
+  the macOS file sizes from `HardwareVideoExporter.ExportCompression.referenceBitsPerPixel`). If the driver rejects
+  Quality mode, fall back to VBR with the reference bits-per-pixel. GOP 2 s, closed. BT.709 tags (`spec/07` §1).
+- **Hybrid encoding** (HW + SW lanes, `spec/06` ADR-01) is **not** a default on Windows. Build it only if a single
+  hardware encoder measures below 1.5× realtime at 4K on the target machines.
+- **Audio:** decode all audio tracks, mix exactly like the macOS exporter (volumes, mute ranges, voiceovers, background
+  music, fades), encode AAC 48 kHz stereo through the same sink writer.
+- **Back-pressure:** bounded queues between stages (max ~8 frames). Memory must stay flat for any duration.
+- **Progress:** encoded frames / total frames (not submitted frames), so progress moves evenly.
+- **GIF:** WIC GIF encoder, palette per frame or global (match macOS frame rates and sizes in `allowedFPSModes`,
+  `allResolutionHeights`). Stream frames; never hold the whole animation in memory.
+- **ProRes:** not available natively on Windows. Hide the option (or offer HEVC 10-bit as the high-quality format).
+- **Cancel:** stop immediately, finalize nothing, delete the partial file.
+
+---
+
+## 7. Recording
+
+Output must match the macOS package layout (`spec/02` §1) so projects open on either platform.
+
+| Track | Windows source | Format |
+| :--- | :--- | :--- |
+| `display.mp4` | `Windows.Graphics.Capture` (`Direct3D11CaptureFramePool.CreateFreeThreaded`, BGRA) → `ID3D11VideoProcessor` NV12 → sink writer | H.264, bitrate `max(8 Mbps, w × h × 4)`, up to 60 fps, **fragmented MP4** (`MFTranscodeContainerType_FMPEG4`, 2 s fragments) |
+| system audio | WASAPI loopback (all apps) or process loopback (per app, `AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`) | AAC 48 kHz stereo 192 kbps, muxed into `display.mp4` (`tracks.systemAudio = "display.mp4"`) |
+| `microphone.m4a` | WASAPI capture on the chosen device | AAC 48 kHz mono 128 kbps |
+| `webcam.mp4` | `IMFSourceReader` on the camera (or `MediaCapture` frame reader) | H.264, bitrate `max(10 Mbps, w × h × 5)` |
+| `telemetry/*.jsonl` | Low-level hooks (`WH_MOUSE_LL`, `WH_KEYBOARD_LL`) on a dedicated thread with a message loop, plus `GetCursorInfo` sampling | Same schemas as macOS (`spec/02` §3) |
+
+Rules:
+- **Cursor excluded from video:** `GraphicsCaptureSession.IsCursorCaptureEnabled = false`. The cursor is drawn later from telemetry.
+- **Yellow capture border:** request `GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless)`
+  and set `IsBorderRequired = false` (Windows 11). If access is denied, keep recording with the border.
+- **HUD excluded from capture:** `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` on the HUD and every other app window that may overlap.
+- **t = 0:** the QPC time of the first captured frame (`SystemRelativeTime`). Telemetry and audio are offset to it (`spec/03` §2.1).
+- **Hook timestamps:** call `QueryPerformanceCounter` inside the hook callback; `KBDLLHOOKSTRUCT.time` is `GetTickCount`
+  based and must not be used. Keep hook callbacks tiny (enqueue and return), or Windows silently removes the hook.
+- **Coordinates:** process is per-monitor DPI aware v2. Normalize cursor positions by the captured monitor or window
+  rect in physical pixels (top-left origin). Window capture: follow window moves/resizes and write `window.jsonl`.
+- **Cursor kind:** compare `CURSORINFO.hCursor` with the system cursors (`IDC_ARROW`, `IDC_HAND`, `IDC_IBEAM`, `IDC_CROSS`,
+  `IDC_SIZEALL`, …) and write the same kind names macOS writes.
+- **Pause / resume:** same pause-interval timeline as macOS (`ScreenCaptureEngine.pausedOffset(forHostPTS:)`): every
+  track subtracts the accumulated paused time.
+- **Crash safety:** fragmented MP4 for video tracks; audio-only tracks flush regularly. A crash loses at most ~2 s.
+- **`metadata.json`:** `platform = "windows"`, `scaleFactor` = monitor DPI / 96, `refreshRate` from the display mode,
+  `windowBorderRadius` 8 on Windows 11 (0 for maximized windows).
+
+---
+
+## 8. UI (WinUI 3)
+
+- Match the macOS layout and behavior (`spec/04`, macOS views as reference), with Windows conventions: Mica on the
+  editor window, Desktop Acrylic on HUD and popups, custom title bar with the app menu (`MenuBar`) since Windows has no
+  global menu bar, keyboard accelerators with `Ctrl` instead of `Cmd`.
+- Timeline: one Win2D `CanvasVirtualControl` per track area (or one for all lanes), redrawn only in dirty regions;
+  playhead as a separate Composition visual.
+- Tooltips and hover magnet: Composition animations (`spec/06` ADR on retained-layer hover physics).
+- Multiple projects open at once, each in its own window with its own session, undo stack and render thread.
+- Light and dark themes (`RequestedTheme`), driven by settings.
+
+---
+
+## 9. Known Windows Pitfalls
+
+| Pitfall | Rule |
+| :--- | :--- |
+| Mixed-DPI multi-monitor setups, negative coordinates | Per-monitor DPI v2; use physical pixels end to end; test on a secondary monitor left of the primary. |
+| Hybrid GPU laptops | Create the D3D11 device on the adapter that drives the captured monitor; WGC frames from another adapter need a copy. |
+| Encoder differences (NVENC / QSV / AMF) | Never assume an `ICodecAPI` property is supported; check `IsSupported` and log the fallback. |
+| Sink writer silently falls back to software | Verify the active transform is hardware (`MFT_ENUM_HARDWARE_URL_Attribute`) and log it. |
+| Low-level hook timeouts | Callbacks over ~1 s get the hook removed; never do I/O in the callback. |
+| `SwapChainPanel` and XAML airspace | Popups over the preview must be XAML `Popup` or separate windows, not other swap chains. |
+| WASAPI device changes | Handle `IMMNotificationClient` (device removed / default changed) during recording and playback. |
+| Timer resolution | Do not use `Thread.Sleep` for pacing; use waitable objects (swap chain latency, WASAPI events, `CreateWaitableTimerEx` high resolution). |

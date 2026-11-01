@@ -13,15 +13,11 @@ MyDemo.nativescreen/
 │   ├── background.jpg            # Copy of the chosen wallpaper/custom image (if image/wallpaper mode)
 │   └── custom-audio.mp3          # Copy of custom background music (if imported)
 └── recording/                    # Immutable raw capture outputs
-    ├── metadata.json             # Capture hardware info, dimensions, scale, channels
-    ├── display.m3u8              # (Or display.mp4) HLS playlist for crash-safe segmented fMP4
-    ├── display-init.mp4          # fMP4 initialization header (ftyp + moov)
-    ├── display-0001.m4s          # 2-second fMP4 media segments (moof + mdat)
-    ├── webcam.m3u8               # Optional webcam track (or webcam.mp4)
-    ├── mic.m4a                   # Optional microphone audio track
-    ├── system-audio.m4a          # Optional app/system audio track
-    ├── cursors/                  # Captured custom cursor images (PNG) keyed by hash/id
-    │   └── arrow.png
+    ├── metadata.json             # Capture hardware info, dimensions, scale, track file names
+    ├── display.mp4               # Screen video, H.264, fragmented MP4 (2 s fragments, crash safe).
+    │                             #   System audio (AAC 48 kHz stereo) is muxed into this file when recorded.
+    ├── webcam.mp4                # Optional webcam video, H.264, fragmented MP4
+    ├── microphone.m4a            # Optional microphone audio, AAC 48 kHz mono
     └── telemetry/                # Append-only JSON Lines (.jsonl) recorded during capture
         ├── cursor.jsonl          # 60Hz–120Hz mouse positions & cursor shape IDs
         ├── clicks.jsonl          # Mouse button down/up & scroll wheel events
@@ -35,7 +31,9 @@ audio), `captureTarget.mode` is `display` with the movie's pixel size and `scale
 `null`, and `cursor.jsonl` / `clicks.jsonl` / `keys.jsonl` are empty files. Readers must treat an empty `cursor.jsonl` as
 "no cursor recorded": zooms are `manual` (`manualCenter01`) and the cursor layer is not drawn.
 
-> **Backward/Direct MP4 Compatibility:** The NativeScreen video reader checks the extension of `outputFilename` in `recording/metadata.json`. If it ends in `.m3u8`, it loads the segmented fMP4 stream; if it ends in `.mp4` or `.mov`, it reads the standalone video file directly.
+> **Track names come from `metadata.json`.** Readers must open the files named in `tracks` (`displayVideo`, `webcamVideo`,
+> `microphoneAudio`, `systemAudio`) instead of assuming the names above. `systemAudio` usually points at the display video
+> file because the system audio track is muxed into it. Imported projects may use `.mov` or other container extensions.
 
 ---
 
@@ -117,10 +115,10 @@ Recorded if the user moves or resizes the target window while recording in Windo
     "windowBorderRadius": 16.0
   },
   "tracks": {
-    "displayVideo": "display.m3u8",
+    "displayVideo": "display.mp4",
     "webcamVideo": null,
-    "microphoneAudio": "mic.m4a",
-    "systemAudio": "system-audio.m4a",
+    "microphoneAudio": "microphone.m4a",
+    "systemAudio": "display.mp4",
     "cursorTelemetry": "telemetry/cursor.jsonl",
     "clicksTelemetry": "telemetry/clicks.jsonl",
     "keysTelemetry": "telemetry/keys.jsonl",

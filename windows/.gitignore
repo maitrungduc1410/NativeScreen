@@ -1,0 +1,10 @@
+# Windows app (.NET / Visual Studio)
+bin/
+obj/
+.vs/
+*.user
+*.suo
+AppPackages/
+BundleArtifacts/
+artifacts/
+TestResults/

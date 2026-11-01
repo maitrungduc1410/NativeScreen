@@ -11,6 +11,8 @@ Before implementing features or modifying data structures, consult the specifica
 - [`spec/04-UI-UX-AND-LEGAL-GUIDELINES.md`](./spec/04-UI-UX-AND-LEGAL-GUIDELINES.md) — "80% OS Native + 20% Custom Pro" UI guidelines, Window Picker Z-order overlay, and copyright & asset rules.
 - [`spec/05-FEATURE-CHECKLIST.md`](./spec/05-FEATURE-CHECKLIST.md) — Master feature checklist ordered by priority.
 - [`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`](./spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md) — Architectural Decision Records (ADRs), root-cause analyses, mathematical trade-offs, and performance optimizations across the engine and UI.
+- [`spec/07-RENDERING-PARITY.md`](./spec/07-RENDERING-PARITY.md) — Every compositor pass and CoreImage behavior stated explicitly so the Windows renderer produces the same frames.
+- [`spec/08-WINDOWS-PORT-PLAN.md`](./spec/08-WINDOWS-PORT-PLAN.md) — Swift → C# porting map, conformance fixtures, Windows phases and acceptance checks.
 - [`spec/platforms/macos-metal-videotoolbox.md`](./spec/platforms/macos-metal-videotoolbox.md) & [`spec/platforms/windows-d3d11-mediafoundation.md`](./spec/platforms/windows-d3d11-mediafoundation.md) — Platform-specific GPU compositor, hardware video decode/encode, and windowing blueprints.
 
 ## 2. Core Engineering Rules (All Platforms)
@@ -32,3 +34,4 @@ Before implementing features or modifying data structures, consult the specifica
 ## 3. Platform-Specific Agent Guides
 
 - **macOS App (`NativeScreen/`):** Read [`NativeScreen/AGENTS.md`](./NativeScreen/AGENTS.md) before editing Swift/macOS code.
+- **Windows App (`windows/`):** Read [`windows/AGENTS.md`](./windows/AGENTS.md) before editing C#/Windows code. It defines the writer (macOS) and verifier (Windows) roles.
