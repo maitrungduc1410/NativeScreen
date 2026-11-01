@@ -428,3 +428,54 @@ OS theme rather than the app theme, so their glyphs disappeared on the dark titl
   solid background, shadow, screen rect, inset and camera placement from the ported layout engine. Video, cursor, masks,
   captions and keycaps are not composited yet, and the shadow is a feathered rounded rect rather than the baked Gaussian
   of `spec/07`, so these frames are not expected to pass the conformance fixtures.
+
+---
+
+## 20. ADR-20: macOS Behaviors the Fixtures Exposed
+
+### Context
+Measuring the Windows compositor against `conformance/` found two things the code and `spec/07` did not state.
+
+### Findings
+- **Baked layers are flipped vertically.** `materializeToGPUTexture` renders into a Metal texture and flips the result back
+  with an extra transform, so the background and the screen shadow come out mirrored. A shadow configured to fall
+  downward falls upward, and a top-left to bottom-right gradient runs bottom-left to top-right. The screen, cursor and
+  overlays are not baked and are not flipped. Windows reproduces this (`FrameCompositor.VerticallyFlipped`) because frames
+  must match macOS. If macOS is fixed, remove the flip and regenerate the fixtures in the same change.
+- **The fixtures leak backgrounds between cases.** The generator shares one `MetalFrameCompositor` across all cases, and
+  its background crossfade runs on wall-clock time for 320 ms, including during export. Frames rendered right after a
+  background change therefore contain the previous case's background: `masks` declares a solid background and its frames
+  show the mesh of the case before it. These pixels also depend on machine speed. Until the generator creates a
+  compositor per case and the fixtures are regenerated on macOS, only the screen region is enforced, and full-frame numbers
+  are reported but not enforced.
+
+### Decision
+`Rendering.Tests` enforces the `spec/08` §2.4 tolerances (SSIM 0.985, 99.5% of pixels within 6/255) on the screen region
+of the cases whose passes exist, leaving out frames that show keycaps until that pass lands. Acceptance still needs the
+full frame, which depends on regenerated fixtures.
+
+---
+
+## 21. ADR-21: Windows Decode and Export Start in System Memory
+
+### Context
+`spec/platforms/windows-d3d11-mediafoundation.md` describes zero-copy decode (`IMFDXGIBuffer` on the compositor's device) and
+`ID3D11VideoProcessor` for BGRA to NV12. Both need a device shared across threads and make failures depend on the driver.
+
+### Decision
+- Decode with hardware transforms but receive NV12 in system memory, upload to a dynamic NV12 texture on the render thread,
+  and convert with `Nv12ToRgb.hlsl`. No device is shared with the decode thread, and the render thread never waits on it.
+- Export reads each composed frame back and converts with `Nv12Converter` (fixed-point BT.709 limited range), then encodes
+  through `IMFSinkWriter` with hardware transforms.
+- Export lives in `NativeScreen.Export`, the one library allowed to depend on both `Media` and `Rendering`, so it runs in
+  tests without the WinUI app.
+- This costs copies at high resolution. Move to the zero-copy path when a measurement at 4K misses the `spec/08` phase 3 or
+  phase 4 targets. Neither has been measured yet.
+
+### Notes
+- NV12 chroma starts two thirds into the decoder's buffer, not at `stride * height`: decoders pad rows to the macroblock
+  height and the media type does not report it.
+- WIC's metadata API rejects the byte vectors of the GIF `NETSCAPE2.0` extension, so the loop block is added to the finished file.
+- Open question: under the xUnit test host, a fragmented clip reads back 100 ms late from frame 27. A standalone process
+  never showed it across fast, real-time, long and worker-thread writes. `MF_LOW_LATENCY` did not change it. The recording
+  acceptance check in `spec/08` phase 5 must confirm cursor sync on a real recording.

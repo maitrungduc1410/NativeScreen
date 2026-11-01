@@ -63,6 +63,7 @@ Work is split between two agents on two machines. Know which one you are.
 | Build solution (Windows) | `dotnet build windows/NativeScreen.Windows.slnx -c Debug -p:Platform=x64` |
 | Run the app (Windows) | `dotnet run --project windows/src/NativeScreen.App -c Debug -p:Platform=x64` |
 | Core tests (macOS or Windows) | `dotnet test windows/tests/NativeScreen.Core.Tests` |
+| Frame fixture tests (Windows) | `dotnet test windows/tests/NativeScreen.Rendering.Tests -c Debug -p:Platform=x64`. Scores per frame go to `%TEMP%\ns-frame-report.txt`; set `NS_DUMP_FRAMES=<folder>` to write the composed PNGs. |
 | Regenerate conformance fixtures (macOS) | `"Native Screen.app/Contents/MacOS/Native Screen" --generate-conformance conformance` |
 
 If a command changes, update this table in the same commit.

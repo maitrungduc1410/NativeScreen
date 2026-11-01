@@ -95,6 +95,11 @@ public sealed class EditorSession
     private long coalesceAt;
     private bool interactiveEditActive;
     private bool interactiveEditCommitted;
+    private ProjectDocument? renderDocument;
+    private SpringTrajectorySolver? trajectory;
+    private string? trajectoryKey;
+    private ProjectDocument? shortcutsDocument;
+    private IReadOnlyList<ShortcutCluster> shortcuts = [];
 
     public EditorSession(ProjectDocument? document = null, double durationMs = 6000, PlaybackClock? clock = null)
     {
@@ -156,6 +161,40 @@ public sealed class EditorSession
     }
 
     public double SourceAtPlayhead => Mapper.SourceTime(PlayheadTimelineMs).SourceMs;
+
+    /// <summary>Telemetry the trajectory is solved from. Empty for a project with no recording.</summary>
+    public IReadOnlyList<CursorSampleEvent> CursorEvents { get; init; } = [];
+
+    public IReadOnlyList<ClickEvent> ClickEvents { get; init; } = [];
+
+    public IReadOnlyList<KeyStrokeEvent> KeyEvents { get; init; } = [];
+
+    /// <summary>Shortcut clusters of the current document, rebuilt only after an edit.</summary>
+    public IReadOnlyList<ShortcutCluster> Shortcuts()
+    {
+        var (document, _) = RenderSnapshot();
+        if (!ReferenceEquals(shortcutsDocument, document))
+        {
+            shortcutsDocument = document;
+            shortcuts = ShortcutEngine.Detect(document, KeyEvents);
+        }
+
+        return shortcuts;
+    }
+
+    /// <summary>A frozen copy for the render thread, rebuilt only after an edit.</summary>
+    public (ProjectDocument Document, SpringTrajectorySolver Trajectory) RenderSnapshot()
+    {
+        renderDocument ??= ProjectJson.Clone(Document);
+        var key = ProjectJson.Serialize(new object[] { renderDocument.Cursor, renderDocument.Motion, renderDocument.Timeline.Zooms, renderDocument.Timeline.Slices });
+        if (trajectory is null || key != trajectoryKey)
+        {
+            trajectoryKey = key;
+            trajectory = new SpringTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, renderDocument);
+        }
+
+        return (renderDocument, trajectory);
+    }
 
     public void TogglePlayback()
     {
@@ -236,6 +275,7 @@ public sealed class EditorSession
 
         coalesceKey = interactiveKey;
         coalesceAt = now;
+        renderDocument = null;
         NormalizeMaskTracks();
         Mapper = new NLETimeMapper(History.Current.Timeline.Slices);
         PlayheadTimelineMs = Math.Clamp(PlayheadTimelineMs, 0, DurationMs);
@@ -438,6 +478,7 @@ public sealed class EditorSession
     private void AfterHistoryMove()
     {
         coalesceKey = null;
+        renderDocument = null;
         Mapper = new NLETimeMapper(History.Current.Timeline.Slices);
         PlayheadTimelineMs = Math.Clamp(PlayheadTimelineMs, 0, DurationMs);
         if (SelectedZoom is null)

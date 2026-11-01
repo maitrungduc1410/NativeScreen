@@ -1,14 +1,12 @@
 // dxc: ps_5_0
 // Premultiplied rounded rect. Blend state is ONE / INV_SRC_ALPHA.
-// softness 1 is the anti-aliased edge; larger values feather it for the drop shadow.
-// ringWidth above 0 draws only an inner border of that width.
+// ringWidth above 0 cuts a disc of radius - ringWidth out of the middle, for the click ripple.
 cbuffer Box : register(b0)
 {
     float4 rect;
     float radius;
-    float softness;
     float ringWidth;
-    float pad;
+    float2 pad;
     float4 color;
 };
 
@@ -21,8 +19,8 @@ float sdRoundRect(float2 p, float2 halfSize, float radius)
 float4 main(float4 position : SV_Position) : SV_Target
 {
     float2 center = rect.xy + rect.zw * 0.5;
-    float dist = sdRoundRect(position.xy - center, rect.zw * 0.5, radius);
-    float coverage = saturate(0.5 - dist / max(softness, 1.0));
+    float dist = sdRoundRect(position.xy - center, rect.zw * 0.5, min(radius, min(rect.z, rect.w) * 0.5));
+    float coverage = saturate(0.5 - dist);
     if (ringWidth > 0.0)
     {
         coverage *= saturate(dist + ringWidth + 0.5);

@@ -27,6 +27,20 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-01, Phase 1, 2 and 6: saving and the compositor (verifier work on Windows)
+
+### Verifier
+- **Result:** Phase 2 FAIL (partial). Phase 1 project round trip PASS.
+- **Done:** Autosave after 350 ms, atomic `project.json`, flush on close, and a real Showcase package on disk. Round trip across all 26 macOS fixtures keeps every value of `project.json` and `metadata.json`. Compositor: background (solid, gradient, mesh, blur), masks (blur, pixelate, solid, spotlight), Lanczos downscale, corners, inset, baked shadow, cursor SVG sprites with drop shadow, click effects, classic zoom, motion blur and lens.
+- **Measurements:** Screen region against macOS frames, enforced in `Rendering.Tests` for `basic`, `drag-sync`, `masks`, `mesh`, `slices-speed-cut`, `wallpaper-blur`: SSIM 0.997 or more and 99.6 to 99.9% of pixels within 6/255, except the keycap frame at 2600 ms, which is excluded until keycaps are composited. Other cases are reported and not enforced. Full-frame scores are not meaningful until the fixtures are regenerated. No GPU timing yet.
+- **Added after that:** camera overlay with built-in and custom looks, captions, keycaps, device mockup bezel, wallpaper and image backgrounds. Video decode into the preview, scrubbing and seeking. Export to MP4 (H.264, HEVC) and GIF with audio mix, progress and cancel, in `NativeScreen.Export`. `Media.Tests` round trips real clips; `Rendering.Tests` exports a real package and checks frame count, pixels against the compositor, audio, GIF frames and that cancel leaves no file.
+- **Measured:** Playing a 1280×720 clip at 30 fps in a 2400×1500 window: about 40 to 46% of one core, 0 ms CPU over 4 s paused. Windows 10, one machine. No late-frame ratio, A/V offset, GPU timing, export speed or 4K numbers yet.
+- **Not done in the compositor:** cutout mask, camera sharpen, live background crossfade, keycap and layout springs during edits. `custom-look-warmth` is at 95.4% in the screen region and `camera-cutout` at 94%; both stay out of the enforced list.
+- **Not done at all:** audio during preview playback, recording, intelligence, crop, presets, most settings, copy to clipboard, ProRes-equivalent options, waveform.
+- **Unexplained:** a fragmented clip reads back 100 ms late under the test host only (`spec/06` ADR-21).
+- **Needs macOS:** regenerate the fixtures after making the generator use one compositor per case (`spec/06` ADR-20). Decide whether the vertical flip of baked layers is a bug to fix on macOS.
+- **Spec updates:** `spec/06` ADR-20, `spec/07` Pass 1 and Pass 3, `spec/08` §2.4, `windows/AGENTS.md` commands.
+
 ## 2026-11-01, Phase 6: editor shell
 
 ### Writer

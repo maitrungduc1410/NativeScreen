@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using NativeScreen.Core;
+using NativeScreen.Export;
+using NativeScreen.Media;
 using NativeScreen.Rendering;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -13,12 +15,9 @@ using Windows.UI.Core;
 namespace NativeScreen.App;
 
 /// <summary>What an editor window opens: a loaded package, or an in-memory project with no files behind it.</summary>
-public sealed record EditorSource(ProjectDocument? Document, double DurationMs, double SourceWidth, double SourceHeight, bool HasCamera, string? PackagePath)
+public sealed record EditorSource(ProjectDocument? Document, double DurationMs, double SourceWidth, double SourceHeight, bool HasCamera, string? PackagePath, LoadedProject? Project = null)
 {
     public static EditorSource Empty { get; } = new(null, 6000, ShowcaseProject.SourceWidth, ShowcaseProject.SourceHeight, false, null);
-
-    public static EditorSource Showcase() => new(
-        ShowcaseProject.Create(), ShowcaseProject.DurationMs, ShowcaseProject.SourceWidth, ShowcaseProject.SourceHeight, true, null);
 
     public static EditorSource Package(string path, LoadedProject project) => new(
         project.Document,
@@ -26,7 +25,8 @@ public sealed record EditorSource(ProjectDocument? Document, double DurationMs, 
         project.Metadata.CaptureTarget.PixelSize.Width,
         project.Metadata.CaptureTarget.PixelSize.Height,
         project.HasRecordedCamera,
-        path);
+        path,
+        project);
 }
 
 public sealed partial class EditorWindow : Window
@@ -66,12 +66,18 @@ public sealed partial class EditorWindow : Window
     private readonly EditorSession session;
     private readonly DispatcherTimer clockTimer;
     private readonly DispatcherTimer toastTimer;
+    private readonly DispatcherTimer saveTimer;
+    private Task pendingWrite = Task.CompletedTask;
+    private bool hasUnsavedChanges;
     private readonly InspectorPanel inspector;
     private readonly TimelineView timeline;
     private readonly ExportSettings exportSettings = new();
     private FrameCompositor? compositor;
     private CompositionSwapChain? swapChain;
     private PreviewRenderer? renderer;
+    private VideoPlaybackSource? screenPlayback;
+    private VideoPlaybackSource? webcamPlayback;
+    private CancellationTokenSource? exportCancel;
     private bool closed;
 
     public EditorWindow(EditorSource? editorSource = null)
@@ -83,7 +89,7 @@ public sealed partial class EditorWindow : Window
         AppTheme.Register(this);
         Ui.SizeWindow(this, 1600, 1000, 1180, 720);
 
-        session = new EditorSession(source.Document, source.DurationMs);
+        session = new EditorSession(source.Document, source.DurationMs) { CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [] };
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera);
         timeline = new TimelineView(session, TimelineHost);
 
@@ -121,6 +127,8 @@ public sealed partial class EditorWindow : Window
             toastTimer.Stop();
             Toast.Visibility = Visibility.Collapsed;
         };
+        saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        saveTimer.Tick += (_, _) => SaveNow();
         Closed += ReleasePreview;
     }
 
@@ -331,8 +339,64 @@ public sealed partial class EditorWindow : Window
 
     // MARK: Session events
 
+    private void ScheduleSave()
+    {
+        if (source.PackagePath is null)
+        {
+            return;
+        }
+
+        hasUnsavedChanges = true;
+        if (AppSettings.Shared.AutosaveEnabled)
+        {
+            saveTimer.Stop();
+            saveTimer.Start();
+        }
+    }
+
+    /// <summary>Serializes here so the snapshot is consistent; the file write never blocks the UI thread.</summary>
+    private void SaveNow(bool waitForDisk = false)
+    {
+        saveTimer.Stop();
+        if (source.PackagePath is not { } path || !hasUnsavedChanges)
+        {
+            return;
+        }
+
+        hasUnsavedChanges = false;
+        var json = ProjectStore.Serialize(session.Document, DateTimeOffset.UtcNow);
+        var previous = pendingWrite;
+        pendingWrite = Task.Run(async () =>
+        {
+            await previous;
+            ProjectStore.WriteProjectJson(path, json);
+        });
+        if (waitForDisk)
+        {
+            pendingWrite.Wait();
+        }
+        else
+        {
+            _ = ReportSaveFailure(pendingWrite);
+        }
+    }
+
+    private async Task ReportSaveFailure(Task write)
+    {
+        try
+        {
+            await write;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            hasUnsavedChanges = true;
+            ShowToast($"Could not save the project: {exception.Message}");
+        }
+    }
+
     private void DocumentChanged(bool structural)
     {
+        ScheduleSave();
         RefreshChrome();
         FitPreview();
         if (structural)
@@ -379,8 +443,37 @@ public sealed partial class EditorWindow : Window
         swapChain = compositor.CreateSwapChain(width, height);
         SwapChainPanelInterop.SetSwapChain(Preview, swapChain.SwapChain.NativePointer);
         renderer = new PreviewRenderer(compositor, swapChain, width, height);
+        screenPlayback = OpenPlayback(source.Project?.Metadata.Tracks.DisplayVideo);
+        webcamPlayback = OpenPlayback(source.Project?.Metadata.Tracks.WebcamVideo);
         FitPreview();
         DrawPreview();
+    }
+
+    private VideoPlaybackSource? OpenPlayback(string? track)
+    {
+        if (track is null || source.PackagePath is null)
+        {
+            return null;
+        }
+
+        var path = Path.Combine(source.PackagePath, "recording", track);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var playback = new VideoPlaybackSource(path);
+            // A seek finishes after the render thread already drew; show its frame as soon as it exists.
+            playback.FrameDecoded += () => DispatcherQueue.TryEnqueue(DrawPreview);
+            return playback;
+        }
+        catch (SharpGen.Runtime.SharpGenException exception)
+        {
+            ShowToast($"Could not open {track}: {exception.Message}");
+            return null;
+        }
     }
 
     private (int Width, int Height) PreviewPixels()
@@ -414,17 +507,34 @@ public sealed partial class EditorWindow : Window
         }
 
         var (width, height) = PreviewPixels();
-        var scene = StageScene.Build(session.Document, session.SourceAtPlayhead, width, height, source.SourceWidth, source.SourceHeight, source.HasCamera);
-        renderer.Submit(scene, width, height, Preview.CompositionScaleX);
+        var (document, trajectory) = session.RenderSnapshot();
+        var request = new ComposeRequest
+        {
+            Document = document,
+            Trajectory = trajectory,
+            SourceMs = session.SourceAtPlayhead,
+            ScreenSource = screenPlayback,
+            WebcamSource = webcamPlayback,
+            Shortcuts = session.Shortcuts(),
+            ScreenWidth = (int)source.SourceWidth,
+            ScreenHeight = (int)source.SourceHeight,
+            HasCamera = source.HasCamera,
+            PackageDirectory = source.PackagePath
+        };
+        renderer.Submit(request, width, height, Preview.CompositionScaleX);
     }
 
     private void ReleasePreview(object sender, WindowEventArgs args)
     {
         closed = true;
+        exportCancel?.Cancel();
+        SaveNow(waitForDisk: true);
         clockTimer.Stop();
         toastTimer.Stop();
         AppTheme.Changed -= ThemeChanged;
         renderer?.Dispose();
+        screenPlayback?.Dispose();
+        webcamPlayback?.Dispose();
         if (swapChain is not null)
         {
             SwapChainPanelInterop.SetSwapChain(Preview, 0);
@@ -466,6 +576,7 @@ public sealed partial class EditorWindow : Window
         session.SamplePlayhead();
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         timeline.UpdatePlayhead();
+        DrawPreview();
         if (!session.IsPlaying)
         {
             clockTimer.Stop();
@@ -737,12 +848,78 @@ public sealed partial class EditorWindow : Window
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right };
         var cancel = Ui.Option("Cancel", false, () => ExportOverlay.Visibility = Visibility.Collapsed);
-        var start = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = "Export", IsEnabled = false };
-        ToolTipService.SetToolTip(start, Ui.FeatureNotReady);
+        var start = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = "Export" };
+        start.Click += (_, _) => _ = StartExport();
         buttons.Children.Add(cancel);
         buttons.Children.Add(start);
         ExportBody.Children.Add(buttons);
         ExportOverlay.Visibility = Visibility.Visible;
+    }
+
+    private async Task StartExport()
+    {
+        var gif = exportSettings.Format == ExportFormat.Gif;
+        var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedFileName = session.Document.Name };
+        picker.FileTypeChoices.Add(gif ? "GIF" : "MP4", new List<string> { gif ? ".gif" : ".mp4" });
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSaveFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        var cancel = new CancellationTokenSource();
+        exportCancel = cancel;
+        var started = DateTime.UtcNow;
+        ExportBody.Children.Clear();
+        var title = Ui.Text("Exporting video • 0%", 18, "Ink95", true);
+        var bar = new ProgressBar { Minimum = 0, Maximum = 1, Value = 0 };
+        var time = Ui.Text("Preparing export...", 12.5, "Ink60");
+        var stop = Ui.Option("Stop export", false, cancel.Cancel);
+        ExportBody.Children.Add(title);
+        ExportBody.Children.Add(bar);
+        ExportBody.Children.Add(time);
+        ExportBody.Children.Add(stop);
+        var progress = new Progress<ExportProgress>(update =>
+        {
+            var share = update.Encoded / (double)Math.Max(1, update.Total);
+            bar.Value = share;
+            title.Text = $"Exporting video • {share:P0}";
+            var elapsed = DateTime.UtcNow - started;
+            var left = share > 0 ? elapsed * (1 / share - 1) : TimeSpan.Zero;
+            time.Text = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00} • {(int)left.TotalMinutes:00}:{left.Seconds:00} left";
+        });
+        var (document, _) = session.RenderSnapshot();
+        var exporter = new ProjectExporter(new ExportSource(
+            document,
+            source.PackagePath,
+            source.Project?.Metadata.Tracks ?? new RecordingTracksMetadata(),
+            source.DurationMs,
+            source.SourceWidth,
+            source.SourceHeight,
+            source.HasCamera,
+            session.CursorEvents,
+            session.ClickEvents,
+            session.Shortcuts()));
+        try
+        {
+            await exporter.RunAsync(file.Path, exportSettings, progress, cancel.Token);
+            ShowToast($"Exported {file.Name}");
+        }
+        catch (OperationCanceledException)
+        {
+            ShowToast("Export stopped");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
+        {
+            ShowToast($"Export failed: {exception.Message}");
+        }
+        finally
+        {
+            exportCancel = null;
+            cancel.Dispose();
+            ExportOverlay.Visibility = Visibility.Collapsed;
+        }
     }
 
     private static Grid ExportRow(string title, UIElement options)

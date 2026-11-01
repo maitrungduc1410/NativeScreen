@@ -88,7 +88,11 @@ public sealed partial class WelcomeWindow : Window
         }
     }
 
-    private void CreateShowcase(object sender, RoutedEventArgs e) => new EditorWindow(EditorSource.Showcase()).Activate();
+    private async void CreateShowcase(object sender, RoutedEventArgs e)
+    {
+        var directory = AppSettings.Shared.ProjectsDirectory;
+        await OpenPackage(ShowcaseProject.WritePackage(directory));
+    }
 
     private void OpenEmptyEditor(object sender, RoutedEventArgs e) => new EditorWindow().Activate();
 

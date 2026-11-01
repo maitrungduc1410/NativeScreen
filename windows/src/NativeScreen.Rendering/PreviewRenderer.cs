@@ -11,7 +11,7 @@ public sealed class PreviewRenderer : IDisposable
     private readonly ManualResetEvent latency;
     private readonly Thread thread;
     private readonly object gate = new();
-    private StageScene? scene;
+    private ComposeRequest? request;
     private int pixelWidth;
     private int pixelHeight;
     private float scale = 1;
@@ -29,11 +29,12 @@ public sealed class PreviewRenderer : IDisposable
         thread.Start();
     }
 
-    public void Submit(StageScene next, int width, int height, float rasterScale)
+    /// <summary>The newest request wins; the document inside must be a snapshot the UI thread no longer mutates.</summary>
+    public void Submit(ComposeRequest next, int width, int height, float rasterScale)
     {
         lock (gate)
         {
-            scene = next;
+            request = next;
             if (width != pixelWidth || height != pixelHeight || rasterScale != scale)
             {
                 pixelWidth = width;
@@ -65,14 +66,14 @@ public sealed class PreviewRenderer : IDisposable
                 return;
             }
 
-            StageScene? current;
+            ComposeRequest? current;
             int width;
             int height;
             float rasterScale;
             bool needsResize;
             lock (gate)
             {
-                current = scene;
+                current = request;
                 width = pixelWidth;
                 height = pixelHeight;
                 rasterScale = scale;
@@ -91,7 +92,7 @@ public sealed class PreviewRenderer : IDisposable
             }
 
             latency.WaitOne(100);
-            compositor.DrawStage(swapChain, current, width, height);
+            compositor.Present(swapChain, current, width, height);
             swapChain.Present();
         }
     }

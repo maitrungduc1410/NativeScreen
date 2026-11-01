@@ -89,6 +89,10 @@ spotlight, keyframed) Â· `zoom-follow` (auto zoom, cursor follow, motion blur) Â
 
 The Windows tests (`Core.Tests`, `Rendering.Tests`) read `conformance/` directly and fail with a per-field diff.
 
+**Known fixture defect:** frames currently contain backgrounds leaked from the previous case, so `Rendering.Tests` enforces
+the screen region only (`spec/06` ADR-20). To fix it, create a `MetalFrameCompositor` per case in
+`ConformanceFixtureGenerator` and regenerate on macOS.
+
 ---
 
 ## 3. Phases

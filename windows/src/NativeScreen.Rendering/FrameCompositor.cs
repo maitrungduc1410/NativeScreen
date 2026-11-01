@@ -1,13 +1,11 @@
-using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.D3DCompiler;
-using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 
 namespace NativeScreen.Rendering;
 
-public sealed class FrameCompositor : IDisposable
+public sealed partial class FrameCompositor : IDisposable
 {
     public const Format WorkingFormat = Format.B8G8R8A8_UNorm;
 
@@ -16,6 +14,10 @@ public sealed class FrameCompositor : IDisposable
         ("Nv12ToRgb", "ps_5_0"),
         ("RoundedRect", "ps_5_0"),
         ("MeshBackground", "ps_5_0"),
+        ("TexturedQuad", "ps_5_0"),
+        ("GaussianBlur", "ps_5_0"),
+        ("MaskEffect", "ps_5_0"),
+        ("LanczosScale", "ps_5_0"),
         ("MagnifierLens", "cs_5_0"),
         ("CameraMotionBlur", "cs_5_0"),
         ("Lut3D", "cs_5_0"),
@@ -28,6 +30,14 @@ public sealed class FrameCompositor : IDisposable
     private readonly ID3D11VertexShader _fullscreen;
     private readonly ID3D11PixelShader _mesh;
     private readonly ID3D11PixelShader _box;
+    private readonly ID3D11PixelShader _quad;
+    private readonly ID3D11PixelShader _gaussian;
+    private readonly ID3D11PixelShader _maskEffect;
+    private readonly ID3D11PixelShader _lanczos;
+    private readonly ID3D11PixelShader _nv12;
+    private readonly ID3D11ComputeShader _motionBlur;
+    private readonly ID3D11ComputeShader _lens;
+    private readonly ID3D11ComputeShader _lut;
     private readonly ID3D11Buffer _meshConstants;
     private readonly ID3D11Buffer _boxConstants;
 
@@ -54,11 +64,23 @@ public sealed class FrameCompositor : IDisposable
         _fullscreen = (ID3D11VertexShader)shaders["FullscreenTriangle"];
         _mesh = (ID3D11PixelShader)shaders["MeshBackground"];
         _box = (ID3D11PixelShader)shaders["RoundedRect"];
-        _meshConstants = CreateConstants(Marshal.SizeOf<MeshConstants>());
+        _quad = (ID3D11PixelShader)shaders["TexturedQuad"];
+        _gaussian = (ID3D11PixelShader)shaders["GaussianBlur"];
+        _maskEffect = (ID3D11PixelShader)shaders["MaskEffect"];
+        _lanczos = (ID3D11PixelShader)shaders["LanczosScale"];
+        _nv12 = (ID3D11PixelShader)shaders["Nv12ToRgb"];
+        _motionBlur = (ID3D11ComputeShader)shaders["CameraMotionBlur"];
+        _lens = (ID3D11ComputeShader)shaders["MagnifierLens"];
+        _lut = (ID3D11ComputeShader)shaders["Lut3D"];
+        _meshConstants = CreateConstants(Marshal.SizeOf<BackgroundConstants>());
         _boxConstants = CreateConstants(Marshal.SizeOf<BoxConstants>());
     }
 
     public int CompiledShaderCount => _shaders.Count;
+
+    public ID3D11Device Device => _graphics.Device;
+
+    public ID3D11DeviceContext Context => _graphics.Context;
 
     public ID3D11Texture2D CreateTarget(int width, int height) => _graphics.CreateWorkingTexture(width, height);
 
@@ -78,40 +100,48 @@ public sealed class FrameCompositor : IDisposable
         swapChain.Resize(width, height, rasterScale);
     }
 
-    /// <summary>Render thread only.</summary>
-    public void DrawStage(CompositionSwapChain swapChain, StageScene scene, int width, int height)
+    /// <summary>Render thread only. Composes the frame and copies it to the back buffer.</summary>
+    public void Present(CompositionSwapChain swapChain, ComposeRequest request, int width, int height)
     {
-        var context = _graphics.Context;
+        var frame = Compose(request, width, height);
         using var backBuffer = swapChain.SwapChain.GetBuffer<ID3D11Texture2D>(0);
-        using var target = _graphics.Device.CreateRenderTargetView(backBuffer);
-        context.OMSetRenderTargets(target);
-        context.RSSetViewport(0, 0, width, height);
-        context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
-        context.VSSetShader(_fullscreen);
-
-        context.OMSetBlendState(null);
-        context.PSSetShader(_mesh);
-        var mesh = new MeshConstants(scene.Color0, scene.Color1, scene.Color2, new Vector2(width, height), scene.RadialAmount, 0);
-        context.UpdateSubresource(in mesh, _meshConstants);
-        context.PSSetConstantBuffer(0, _meshConstants);
-        context.Draw(3, 0);
-
-        BindSourceOver();
-        context.PSSetShader(_box);
-        context.PSSetConstantBuffer(0, _boxConstants);
-        foreach (var box in scene.Boxes)
-        {
-            var constants = new BoxConstants(box.Rect, box.Radius, box.Softness, box.RingWidth, 0, box.Color);
-            context.UpdateSubresource(in constants, _boxConstants);
-            context.Draw(3, 0);
-        }
-
+        _graphics.Context.CopyResource(backBuffer, frame.Texture);
         // Drops the back buffer reference so a later ResizeBuffers can succeed.
-        context.ClearState();
+        _graphics.Context.ClearState();
     }
 
     public void Dispose()
     {
+        foreach (var layer in layers.Values)
+        {
+            layer.Dispose();
+        }
+
+        foreach (var upload in nv12Uploads.Values)
+        {
+            upload.Dispose();
+        }
+
+        overlays?.Dispose();
+        foreach (var view in lutViews.Values)
+        {
+            view.Dispose();
+        }
+
+        foreach (var sprite in keycapSprites.Values)
+        {
+            sprite.Dispose();
+        }
+
+        lutConstants?.Dispose();
+        wallpaperView?.Dispose();
+
+        linearClamp?.Dispose();
+        quadConstants?.Dispose();
+        blurConstants?.Dispose();
+        maskConstants?.Dispose();
+        motionConstants?.Dispose();
+        lensConstants?.Dispose();
         _meshConstants.Dispose();
         _boxConstants.Dispose();
         foreach (var shader in _shaders)
@@ -124,7 +154,7 @@ public sealed class FrameCompositor : IDisposable
     }
 
     private ID3D11Buffer CreateConstants(int size) =>
-        _graphics.Device.CreateBuffer(new BufferDescription((uint)size, BindFlags.ConstantBuffer));
+        _graphics.Device.CreateBuffer(new BufferDescription((uint)((size + 15) / 16 * 16), BindFlags.ConstantBuffer));
 
     private static ID3D11BlendState CreateSourceOver(ID3D11Device device)
     {
@@ -154,10 +184,4 @@ public sealed class FrameCompositor : IDisposable
         using var reader = new StreamReader(resource);
         return reader.ReadToEnd();
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct MeshConstants(Vector4 Color0, Vector4 Color1, Vector4 Color2, Vector2 OutputSize, float RadialAmount, float Pad);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct BoxConstants(Vector4 Rect, float Radius, float Softness, float RingWidth, float Pad, Vector4 Color);
 }

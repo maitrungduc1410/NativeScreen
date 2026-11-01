@@ -50,6 +50,7 @@ windows/
 │   │                              #   telemetry hooks, webcam
 │   ├── NativeScreen.Intelligence/ # net10.0-windows: Whisper, segmentation, OCR, face detection
 │   └── NativeScreen.App/          # WinUI 3 app: windows, views, view models, HUD, menus, settings
+│   ├── NativeScreen.Export/       # Export worker and audio mix; the one library using both Media and Rendering
 ├── tests/
 │   ├── NativeScreen.Core.Tests/       # net10.0: conformance numbers; runs on macOS and Windows
 │   ├── NativeScreen.Rendering.Tests/  # Windows: shader compilation, golden frames (SSIM)
@@ -103,6 +104,9 @@ Rules:
 ---
 
 ## 5. Decode and Playback
+
+> **Current state:** decode and export use system-memory frames rather than the zero-copy path below (`spec/06` ADR-21). The
+> rest of this section and §6 remain the target if measurements require them.
 
 - `IMFSourceReader` with `MF_SOURCE_READER_D3D_MANAGER` (`IMFDXGIDeviceManager` on the compositor's device),
   `MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS`, `MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING = false`, output `NV12`.

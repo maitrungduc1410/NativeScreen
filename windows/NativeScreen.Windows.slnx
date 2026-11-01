@@ -10,6 +10,9 @@
     <Project Path="src/NativeScreen.Core/NativeScreen.Core.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="src/NativeScreen.Export/NativeScreen.Export.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="src/NativeScreen.Intelligence/NativeScreen.Intelligence.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
@@ -21,6 +24,12 @@
     </Project>
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/NativeScreen.Media.Tests/NativeScreen.Media.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/NativeScreen.Rendering.Tests/NativeScreen.Rendering.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tests/NativeScreen.Core.Tests/NativeScreen.Core.Tests.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>

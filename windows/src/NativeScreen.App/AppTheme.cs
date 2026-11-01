@@ -11,6 +11,10 @@ public sealed class AppSettings
 {
     public string Appearance { get; set; } = "dark";
     public List<string> RecentProjects { get; set; } = [];
+    public bool AutosaveEnabled { get; set; } = true;
+
+    public string ProjectsDirectory { get; set; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Native Screen Projects");
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "settings.json");

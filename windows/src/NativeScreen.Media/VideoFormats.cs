@@ -6,3 +6,9 @@ public static class VideoFormats
     public static readonly Guid H264 = new("34363248-0000-0010-8000-00AA00389B71");
     public static readonly Guid Hevc = new("43564548-0000-0010-8000-00AA00389B71");
 }
+
+public static class AudioFormats
+{
+    public static readonly Guid Aac = new("00001610-0000-0010-8000-00AA00389B71");
+    public static readonly Guid Pcm = new("00000001-0000-0010-8000-00AA00389B71");
+}
