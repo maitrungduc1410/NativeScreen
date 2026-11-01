@@ -35,6 +35,12 @@ public sealed partial class WelcomeWindow : Window
         editor.Activate();
     }
 
+    private void OpenEmptyEditor(object sender, RoutedEventArgs e)
+    {
+        var editor = new EditorWindow();
+        editor.Activate();
+    }
+
     private void OpenSettings(object sender, RoutedEventArgs e)
     {
         var settings = new SettingsWindow();
