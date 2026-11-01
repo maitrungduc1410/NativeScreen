@@ -175,8 +175,8 @@ Rules:
 - Match the macOS layout and behavior (`spec/04`, macOS views as reference), with Windows conventions: Mica on the
   editor window, Desktop Acrylic on HUD and popups, custom title bar with the app menu (`MenuBar`) since Windows has no
   global menu bar, keyboard accelerators with `Ctrl` instead of `Cmd`.
-- Timeline: one Win2D `CanvasVirtualControl` per track area (or one for all lanes), redrawn only in dirty regions;
-  playhead as a separate Composition visual.
+- Timeline: retained XAML blocks on a `Canvas`, with the playhead moved by transform (`spec/06` ADR-19). Move to Win2D
+  `CanvasVirtualControl` when waveforms need a drawn surface or a stall is measured.
 - Tooltips and hover magnet: Composition animations (`spec/06` ADR on retained-layer hover physics).
 - Multiple projects open at once, each in its own window with its own session, undo stack and render thread.
 - Light and dark themes (`RequestedTheme`), driven by settings.
@@ -192,6 +192,9 @@ Rules:
 | Encoder differences (NVENC / QSV / AMF) | Never assume an `ICodecAPI` property is supported; check `IsSupported` and log the fallback. |
 | Sink writer silently falls back to software | Verify the active transform is hardware (`MFT_ENUM_HARDWARE_URL_Attribute`) and log it. |
 | Low-level hook timeouts | Callbacks over ~1 s get the hook removed; never do I/O in the callback. |
+| Casting a projected WinUI object to a `[ComImport]` interface | Always throws `InvalidCastException` (projected objects are not COM wrappers). Call `QueryInterface` on `IWinRTObject.NativeObject.ThisPtr` (`spec/06` ADR-18). |
+| Caption buttons and window sizes | Set `AppWindowTitleBar` button colors from the app theme; `AppWindow` sizes are physical pixels, so scale DIPs by the window DPI (`spec/06` ADR-19). |
+| `SwapChainPanel` before the first opaque present | The panel shows what is behind the window, even after presenting alpha 0. Present an opaque frame right after `SetSwapChain` (`spec/06` ADR-18). |
 | `SwapChainPanel` and XAML airspace | Popups over the preview must be XAML `Popup` or separate windows, not other swap chains. |
 | WASAPI device changes | Handle `IMMNotificationClient` (device removed / default changed) during recording and playback. |
 | Timer resolution | Do not use `Thread.Sleep` for pacing; use waitable objects (swap chain latency, WASAPI events, `CreateWaitableTimerEx` high resolution). |

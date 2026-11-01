@@ -383,3 +383,48 @@ machine by a second agent.
   `verify.ps1`, measures the phase acceptance checks and records `PASS` / `FAIL` in `windows/HANDOFF.md`.
 - **Hybrid encoding is not ported by default.** It solved a VideoToolbox throughput limit; Windows hardware encoders are
   measured first (`spec/platforms/windows-d3d11-mediafoundation.md` §6).
+
+---
+
+## 18. ADR-18: Attaching a Swap Chain to a WinUI `SwapChainPanel`
+
+### Context
+A managed cast from `SwapChainPanel` to a `[ComImport]` `ISwapChainPanelNative` compiles but always throws
+`InvalidCastException`: C#/WinRT projected objects are not COM wrappers. Once attached, a swap chain that has not
+presented opaque pixels leaves the panel see-through, so the window behind shows inside the preview. Presenting alpha 0
+does not change that.
+
+### Decision
+- `SwapChainPanelInterop` calls `QueryInterface` on `IWinRTObject.NativeObject.ThisPtr` and invokes `SetSwapChain`
+  (vtable slot 3) through a function pointer, checking the `HRESULT`. No extra package is needed for one call.
+- The first frame presented after attaching is the opaque stage from `PreviewRenderer`, so the panel never shows through.
+- The editor window stops the render thread, detaches the swap chain (`SetSwapChain(0)`) and disposes it and the
+  compositor when it closes.
+
+---
+
+## 19. ADR-19: Windows Editor Chrome Rebuilt Against the macOS Views
+
+### Context
+The first WinUI shell used default controls and looked nothing like the macOS editor. Default caption buttons follow the
+OS theme rather than the app theme, so their glyphs disappeared on the dark title bar.
+
+### Decision
+- **Same tokens and metrics as the Swift views:** surfaces, ink opacities, the `#4D2FF5` accent, the 52 / 245 header and
+  timeline heights, the 344 inspector and the track row heights are copied, with the light theme from the same mirrored
+  lightness formula as `Theme.swift`.
+- **Caption buttons are colored explicitly** on `AppWindowTitleBar` whenever the app theme changes. The title bar is a
+  drag region with `InputNonClientPointerSource` passthrough rects over its controls.
+- **`AppWindow` sizes are physical pixels.** `Ui.SizeWindow` takes DIPs and fits the work area; passing DIPs directly made
+  windows two thirds of the intended size at 150% scale, and the title bar controls overlapped.
+- **Timeline blocks are retained XAML elements, not Win2D.** A project has few blocks and they change only on edits. The
+  playhead moves by transform with no layout pass. Revisit with a measured stall (`spec/08` phase 6 allows 8 ms) or when
+  waveforms need a drawn surface.
+- **A timeline drag never rebuilds the tree.** Selecting a block rebuilds every block, and a rebuild during a press
+  cancels the drag, so selection waits for release and a drag moves its one element in place.
+  `BeginInteractiveEdit` / `EndInteractiveEdit` make the whole drag one undo step, like `ProjectSession`.
+- **A feature with no Windows backend is disabled with a tooltip, never a control that silently does nothing.**
+- **The preview draws the real stage** on one render thread that blocks on an event while idle: the mesh, gradient or
+  solid background, shadow, screen rect, inset and camera placement from the ported layout engine. Video, cursor, masks,
+  captions and keycaps are not composited yet, and the shadow is a feathered rounded rect rather than the baked Gaussian
+  of `spec/07`, so these frames are not expected to pass the conformance fixtures.

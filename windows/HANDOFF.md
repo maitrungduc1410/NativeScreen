@@ -37,12 +37,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Risks / unsure:** The 16 ms dispatcher timer only updates the time label. The 120 Hz playhead still needs a Composition visual. Inspector pages show the tab title, not the full macOS control set.
 
 ### Verifier
-- **Result:**
-- **verify.ps1:**
-- **Measurements:**
-- **Changes made:**
-- **Spec updates:**
-- **Next:**
+- **Result:** FAIL. The chrome now follows the macOS layout, but phases 3 to 5 and 7 have no backend behind it. See Next.
+- **verify.ps1:** PASS under Windows PowerShell 5.1: Debug and Release x64, Core tests 52 passed, 7 shaders compiled with dxc.
+- **Measurements:** Windows 10 19045, 150% scale. Driven through UI Automation and real input: every inspector tab, command menu, export sheet, play and pause, split, undo, zoom drag, light theme, opening a package. No crashes. 0 ms CPU over 5 s idle after a static stage was drawn. No frame timing or drag stall measurement yet.
+- **Changes made:** `SwapChainPanelInterop.cs` uses native `QueryInterface`. Editor, Welcome and Settings rebuilt from the Swift views (`App.xaml`, `Ui.cs`, `InspectorPanel.cs`, `TimelineView.cs`). `EditorSession` gained undoable edits: add zoom and mask, split, delete, interactive edits. Timeline duration now comes from the slices. `ShowcaseProject` is in-memory. `PreviewRenderer` and `StageScene` draw the background, shadow, screen, inset and camera placement on a render thread. Open project uses a folder picker, shows a dialog on failure, and no longer resolves the wrong directory.
+- **Spec updates:** `spec/06` ADR-18 and ADR-19, `spec/platforms/windows-d3d11-mediafoundation.md` §8 and §9.
+- **Next:** Edits are not saved: no `project.json` write exists, and a round trip against macOS projects must be proven before adding one. Inspector values outside the stage (cursor, camera style, captions, masks, device frames) change the document but draw nothing. Then decode and playback, full compositor passes, export, recording, intelligence. Disabled with a tooltip until then: recording, presets, crop, export frame, export start, playback speed, voiceover, image background, transcript generation, sensitive data and face detection, remove project. Missing from the timeline: waveform, hover add, typing suggestions, shortcut blocks from telemetry. System wallpapers and most Settings tabs are absent. Windows 11 behavior was not checked on this machine.
 
 ## 2026-11-01, Phase 5: recording timeline and capture policy
 

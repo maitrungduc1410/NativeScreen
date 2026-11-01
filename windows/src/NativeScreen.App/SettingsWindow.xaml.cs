@@ -1,5 +1,4 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 namespace NativeScreen.App;
 
@@ -8,13 +7,29 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
-        AppTheme.Apply(this);
-        DarkTheme.IsOn = AppTheme.Current == ElementTheme.Dark;
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(DragBar);
+        AppTheme.Register(this);
+        Ui.SizeWindow(this, 640, 420, 520, 360);
+        Tabs.Children.Add(Ui.Option("General", true, () => { }));
+        foreach (var title in new[] { "Recording", "Editing", "Quick export", "Shortcuts" })
+        {
+            Tabs.Children.Add(Ui.Option(title, false, null));
+        }
+
+        FillAppearance();
     }
 
-    private void ThemeToggled(object sender, RoutedEventArgs e)
+    private void FillAppearance()
     {
-        AppTheme.Current = DarkTheme.IsOn ? ElementTheme.Dark : ElementTheme.Light;
-        AppTheme.Apply(this);
+        Appearance.Children.Clear();
+        Appearance.Children.Add(Ui.Option("Dark", AppTheme.Current == ElementTheme.Dark, () => Change(ElementTheme.Dark)));
+        Appearance.Children.Add(Ui.Option("Light", AppTheme.Current == ElementTheme.Light, () => Change(ElementTheme.Light)));
+    }
+
+    private void Change(ElementTheme theme)
+    {
+        AppTheme.Set(theme);
+        FillAppearance();
     }
 }

@@ -1,13 +1,15 @@
 // dxc: ps_5_0
 // Mesh: linear colors[0] top-left to colors[1] bottom-right, then radial colors[2]
 // at top-down (0.78 W, 0.28 H), alpha 1 inside 0.05 W and 0 at 0.75 W.
+// radialAmount 0 leaves the plain linear gradient used by gradient and solid backgrounds.
 cbuffer Mesh : register(b0)
 {
     float4 color0;
     float4 color1;
     float4 color2;
     float2 outputSize;
-    float2 pad;
+    float radialAmount;
+    float pad;
 };
 
 float4 main(float4 position : SV_Position) : SV_Target
@@ -19,6 +21,6 @@ float4 main(float4 position : SV_Position) : SV_Target
     float inner = outputSize.x * 0.05;
     float outer = outputSize.x * 0.75;
     float radial = 1.0 - saturate((dist - inner) / max(outer - inner, 1.0));
-    rgb = lerp(rgb, color2.rgb, radial);
+    rgb = lerp(rgb, color2.rgb, radial * radialAmount);
     return float4(rgb, 1);
 }

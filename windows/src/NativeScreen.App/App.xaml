@@ -7,6 +7,171 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Same surfaces as the macOS editor chrome; light values use its mirrored lightness formula. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="SurfaceHeader" Color="#0D0D12" />
+                    <SolidColorBrush x:Key="SurfaceCanvas" Color="#08080A" />
+                    <SolidColorBrush x:Key="SurfaceRail" Color="#0A0A0E" />
+                    <SolidColorBrush x:Key="SurfacePanel" Color="#141419" />
+                    <SolidColorBrush x:Key="SurfaceDock" Color="#F01C1C21" />
+                    <SolidColorBrush x:Key="SurfaceModal" Color="#17171C" />
+                    <SolidColorBrush x:Key="Ink95" Color="#F2FFFFFF" />
+                    <SolidColorBrush x:Key="Ink88" Color="#E0FFFFFF" />
+                    <SolidColorBrush x:Key="Ink60" Color="#99FFFFFF" />
+                    <SolidColorBrush x:Key="Ink45" Color="#73FFFFFF" />
+                    <SolidColorBrush x:Key="Ink28" Color="#47FFFFFF" />
+                    <SolidColorBrush x:Key="Ink14" Color="#24FFFFFF" />
+                    <SolidColorBrush x:Key="Ink10" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="Ink07" Color="#12FFFFFF" />
+                    <SolidColorBrush x:Key="Ink04" Color="#0AFFFFFF" />
+                    <SolidColorBrush x:Key="InkSolid" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackFill" Color="#24FFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#2EFFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#2EFFFFFF" />
+                    <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#24FFFFFF" />
+                    <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#2EFFFFFF" />
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="Transparent" />
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOffPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOffPointerOver" Color="#FFFFFF" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="SurfaceHeader" Color="#F4F4F6" />
+                    <SolidColorBrush x:Key="SurfaceCanvas" Color="#F8F8F9" />
+                    <SolidColorBrush x:Key="SurfaceRail" Color="#F6F6F7" />
+                    <SolidColorBrush x:Key="SurfacePanel" Color="#EEEEF0" />
+                    <SolidColorBrush x:Key="SurfaceDock" Color="#F0E9E9EB" />
+                    <SolidColorBrush x:Key="SurfaceModal" Color="#F7F7F8" />
+                    <SolidColorBrush x:Key="Ink95" Color="#F2121217" />
+                    <SolidColorBrush x:Key="Ink88" Color="#E0121217" />
+                    <SolidColorBrush x:Key="Ink60" Color="#99121217" />
+                    <SolidColorBrush x:Key="Ink45" Color="#73121217" />
+                    <SolidColorBrush x:Key="Ink28" Color="#47121217" />
+                    <SolidColorBrush x:Key="Ink14" Color="#24121217" />
+                    <SolidColorBrush x:Key="Ink10" Color="#1A121217" />
+                    <SolidColorBrush x:Key="Ink07" Color="#12121217" />
+                    <SolidColorBrush x:Key="Ink04" Color="#0A121217" />
+                    <SolidColorBrush x:Key="InkSolid" Color="#121217" />
+                    <SolidColorBrush x:Key="SliderTrackFill" Color="#24121217" />
+                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#2E121217" />
+                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#2E121217" />
+                    <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#24121217" />
+                    <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#2E121217" />
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="Transparent" />
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOffPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOffPointerOver" Color="#FFFFFF" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- Accent shared by every default control. -->
+            <Color x:Key="SystemAccentColor">#4D2FF5</Color>
+            <Color x:Key="SystemAccentColorLight1">#7057FA</Color>
+            <Color x:Key="SystemAccentColorLight2">#8B78F9</Color>
+            <Color x:Key="SystemAccentColorLight3">#A091FA</Color>
+            <Color x:Key="SystemAccentColorDark1">#4D2FF5</Color>
+            <Color x:Key="SystemAccentColorDark2">#3A1FD8</Color>
+            <Color x:Key="SystemAccentColorDark3">#2B0BDF</Color>
+
+            <SolidColorBrush x:Key="AccentBrushNs" Color="#4D2FF5" />
+            <SolidColorBrush x:Key="AccentActiveNs" Color="#A695FD" />
+            <SolidColorBrush x:Key="SliderTrackValueFill" Color="#7057FA" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#7057FA" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#7057FA" />
+            <SolidColorBrush x:Key="SliderThumbBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#F0F0F0" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#7057FA" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#7F68FB" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#6348F0" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#FFFFFF" />
+
+            <FontFamily x:Key="NsIconFont">Segoe Fluent Icons,Segoe MDL2 Assets</FontFamily>
+
+            <!-- Flat button used across the chrome: a hover layer instead of the default control frame. -->
+            <ControlTemplate x:Key="NsButtonTemplate" TargetType="Button">
+                <Grid
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverLayer.Opacity" Value="0.08" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="HoverLayer.Opacity" Value="0.14" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="Presenter.Opacity" Value="0.32" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                    <Border x:Name="HoverLayer" Background="{ThemeResource InkSolid}" Opacity="0" />
+                    <ContentPresenter
+                        x:Name="Presenter"
+                        Padding="{TemplateBinding Padding}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                        Foreground="{TemplateBinding Foreground}" />
+                </Grid>
+            </ControlTemplate>
+
+            <Style x:Key="NsIconButton" TargetType="Button">
+                <Setter Property="Template" Value="{StaticResource NsButtonTemplate}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource Ink88}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Width" Value="36" />
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="13" />
+            </Style>
+
+            <Style x:Key="NsPillButton" TargetType="Button" BasedOn="{StaticResource NsIconButton}">
+                <Setter Property="Width" Value="NaN" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="11,0" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="FontSize" Value="12.5" />
+            </Style>
+
+            <Style x:Key="NsOptionButton" TargetType="Button" BasedOn="{StaticResource NsIconButton}">
+                <Setter Property="Width" Value="NaN" />
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Padding" Value="14,0" />
+                <Setter Property="CornerRadius" Value="9" />
+                <Setter Property="Background" Value="{ThemeResource Ink04}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource Ink07}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{ThemeResource Ink88}" />
+            </Style>
+
+            <Style x:Key="NsPrimaryButton" TargetType="Button" BasedOn="{StaticResource NsIconButton}">
+                <Setter Property="Width" Value="NaN" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="Background" Value="#4D2FF5" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="13.5" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

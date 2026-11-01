@@ -3,8 +3,19 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Settings">
-    <StackPanel Padding="24" Spacing="12" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        <TextBlock Text="Appearance" FontSize="20" />
-        <ToggleSwitch x:Name="DarkTheme" Header="Dark theme" IsOn="True" Toggled="ThemeToggled" />
-    </StackPanel>
+    <Grid x:Name="Root" Background="{ThemeResource SurfacePanel}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid x:Name="DragBar" Padding="16,0" Background="Transparent">
+            <TextBlock Text="Settings" FontSize="13" VerticalAlignment="Center" Foreground="{ThemeResource Ink60}" />
+        </Grid>
+        <StackPanel x:Name="Tabs" Grid.Row="1" Orientation="Horizontal" Spacing="6" Padding="16,4" />
+        <StackPanel Grid.Row="2" Padding="24,20" Spacing="12">
+            <TextBlock Text="Appearance" FontSize="13" FontWeight="Medium" Foreground="{ThemeResource Ink95}" />
+            <StackPanel x:Name="Appearance" Orientation="Horizontal" Spacing="6" />
+        </StackPanel>
+    </Grid>
 </Window>

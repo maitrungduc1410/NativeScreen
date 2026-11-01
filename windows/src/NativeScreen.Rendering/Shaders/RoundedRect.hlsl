@@ -1,10 +1,14 @@
 // dxc: ps_5_0
 // Premultiplied rounded rect. Blend state is ONE / INV_SRC_ALPHA.
+// softness 1 is the anti-aliased edge; larger values feather it for the drop shadow.
+// ringWidth above 0 draws only an inner border of that width.
 cbuffer Box : register(b0)
 {
     float4 rect;
     float radius;
-    float3 pad;
+    float softness;
+    float ringWidth;
+    float pad;
     float4 color;
 };
 
@@ -18,7 +22,12 @@ float4 main(float4 position : SV_Position) : SV_Target
 {
     float2 center = rect.xy + rect.zw * 0.5;
     float dist = sdRoundRect(position.xy - center, rect.zw * 0.5, radius);
-    float coverage = saturate(0.5 - dist);
+    float coverage = saturate(0.5 - dist / max(softness, 1.0));
+    if (ringWidth > 0.0)
+    {
+        coverage *= saturate(dist + ringWidth + 0.5);
+    }
+
     float alpha = color.a * coverage;
     return float4(color.rgb * alpha, alpha);
 }

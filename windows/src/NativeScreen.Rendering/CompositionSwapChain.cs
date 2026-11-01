@@ -37,5 +37,13 @@ public sealed class CompositionSwapChain : IDisposable
 
     public void Present() => SwapChain.Present(1, PresentFlags.None);
 
+    // Buffers hold physical pixels; the inverse transform stops the panel scaling them a second time.
+    public void Resize(int width, int height, float rasterScale)
+    {
+        SwapChain.ResizeBuffers(2, (uint)width, (uint)height, Format.B8G8R8A8_UNorm, SwapChainFlags.FrameLatencyWaitableObject).CheckError();
+        using var swapChain2 = SwapChain.QueryInterface<IDXGISwapChain2>();
+        swapChain2.MatrixTransform = System.Numerics.Matrix3x2.CreateScale(1 / rasterScale);
+    }
+
     public void Dispose() => SwapChain.Dispose();
 }
