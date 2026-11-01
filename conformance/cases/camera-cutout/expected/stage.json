@@ -1,0 +1,808 @@
+[
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 0
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 200
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 400
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 600
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 800
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 1000
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 1200
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 1400
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 1600
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 1800
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 2000
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 2200
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 2400
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 2600
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 2800
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 3000
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 3200
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 3400
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 3600
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 3800
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 4000
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 4200
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 4400
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 4600
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 4800
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 5000
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 5200
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 5400
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 5600
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 5800
+  },
+  {
+    "camera" : {
+      "borderOpacity" : 0,
+      "cornerRadius" : 84.18816000000001,
+      "isCutout" : true,
+      "opacity" : 1,
+      "rect" : {
+        "height" : 233.85600000000002,
+        "width" : 233.85600000000002,
+        "x" : 174.5616,
+        "y" : 495.49824
+      },
+      "shadowOpacity" : 0.35
+    },
+    "canvas" : [
+      1280,
+      720
+    ],
+    "screenRect" : {
+      "height" : 600,
+      "width" : 1066.6666666666665,
+      "x" : 106.66666666666674,
+      "y" : 60
+    },
+    "sourceMs" : 6000
+  }
+]

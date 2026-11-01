@@ -1,0 +1,81 @@
+{
+  "clusters" : [
+    {
+      "displayEndMs" : 4180,
+      "displayStartMs" : 2420,
+      "id" : "telemetry_2500",
+      "keyCaps" : [
+        {
+          "key" : "Meta",
+          "label" : "command",
+          "symbol" : "⌘",
+          "widthRatio" : 1.33
+        },
+        {
+          "key" : "Shift",
+          "label" : "shift",
+          "symbol" : "⇧",
+          "widthRatio" : 1.33
+        },
+        {
+          "key" : "P",
+          "label" : "P",
+          "widthRatio" : 1
+        }
+      ],
+      "label" : "⌘ ⇧ P",
+      "modifiers" : [
+        "Meta",
+        "Shift"
+      ],
+      "primaryKey" : "P"
+    }
+  ],
+  "envelopes" : [
+    {
+      "clusterId" : "telemetry_2500",
+      "opacity" : 0,
+      "scale" : 0.95,
+      "slide" : 1,
+      "sourceMs" : 2420
+    },
+    {
+      "clusterId" : "telemetry_2500",
+      "opacity" : 0.5,
+      "scale" : 0.975,
+      "slide" : 0.5,
+      "sourceMs" : 2495
+    },
+    {
+      "clusterId" : "telemetry_2500",
+      "opacity" : 1,
+      "scale" : 1,
+      "slide" : 0,
+      "sourceMs" : 2570
+    },
+    {
+      "clusterId" : "telemetry_2500",
+      "opacity" : 1,
+      "scale" : 1,
+      "slide" : 0,
+      "sourceMs" : 3300
+    },
+    {
+      "clusterId" : "telemetry_2500",
+      "opacity" : 0.5,
+      "scale" : 0.975,
+      "slide" : 0.5,
+      "sourceMs" : 4090
+    },
+    {
+      "clusterId" : "telemetry_2500",
+      "opacity" : 0,
+      "scale" : 0.95,
+      "slide" : 1,
+      "sourceMs" : 4180
+    }
+  ],
+  "typingSuggestions" : [
+
+  ]
+}

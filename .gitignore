@@ -6,8 +6,9 @@
 Thumbs.db
 desktop.ini
 
-# Sample / test recordings
-*.nativescreen/
+# Sample / test recordings. Conformance packages under conformance/ stay tracked.
+*.nativescreen/**
+!conformance/**/*.nativescreen/**
 *.mp4
 *.mov
 *.m4s

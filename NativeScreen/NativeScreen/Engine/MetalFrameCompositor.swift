@@ -1685,7 +1685,7 @@ public final class MetalFrameCompositor {
 
     /// Placement at `sourceTimeMs`, blending from the previous layout for `stageTransitionMs` after a change on the
     /// timeline. Depends only on the project and the time, so preview and export produce the same frames.
-    private func resolvedStageLayout(
+    func resolvedStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
         canvasRect: CGRect,

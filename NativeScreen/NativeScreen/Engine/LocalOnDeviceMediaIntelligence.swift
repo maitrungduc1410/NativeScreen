@@ -577,7 +577,7 @@ public enum LocalOnDeviceMediaIntelligence {
         return img.cropped(to: baseExtent)
     }
 
-    private static func applyBuiltInLook(to input: CIImage, preset: CameraColorGradePreset) -> CIImage {
+    public static func applyBuiltInLook(to input: CIImage, preset: CameraColorGradePreset) -> CIImage {
         switch preset {
         case .original:
             return input

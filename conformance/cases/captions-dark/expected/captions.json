@@ -1,0 +1,280 @@
+[
+  {
+    "sourceMs" : 0,
+    "words" : [
+
+    ]
+  },
+  {
+    "sourceMs" : 200,
+    "words" : [
+
+    ]
+  },
+  {
+    "sourceMs" : 400,
+    "words" : [
+
+    ]
+  },
+  {
+    "sourceMs" : 600,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "Native"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 800,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "Native"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 1000,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "Native"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 1200,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "Screen"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 1400,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "Screen"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 1600,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "renders"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 1800,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "renders"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 2000,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "the"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 2200,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "the"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 2400,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "same"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 2600,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "same"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 2800,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "frame"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 3000,
+    "words" : [
+      {
+        "isSpokenNow" : false,
+        "opacity" : 0.25,
+        "text" : "on"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 3200,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "on"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 3400,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "on"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 3600,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "every"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 3800,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "every"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 4000,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "platform"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 4200,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "platform"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 4400,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "today"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 4600,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "today"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 4800,
+    "words" : [
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "today"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 5000,
+    "words" : [
+      {
+        "isSpokenNow" : false,
+        "opacity" : 1,
+        "text" : "today"
+      }
+    ]
+  },
+  {
+    "sourceMs" : 5200,
+    "words" : [
+
+    ]
+  },
+  {
+    "sourceMs" : 5400,
+    "words" : [
+
+    ]
+  },
+  {
+    "sourceMs" : 5600,
+    "words" : [
+
+    ]
+  },
+  {
+    "sourceMs" : 5800,
+    "words" : [
+
+    ]
+  },
+  {
+    "sourceMs" : 6000,
+    "words" : [
+
+    ]
+  }
+]

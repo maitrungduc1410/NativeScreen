@@ -42,6 +42,21 @@ struct NativeScreenApp: App {
     @Bindable private var workspace = ProjectWorkspaceStore.shared
     @Bindable private var recorder = RecordingCoordinator.shared
 
+    init() {
+        let args = CommandLine.arguments
+        if let idx = args.firstIndex(of: "--generate-conformance"), idx + 1 < args.count {
+            let outputPath = args[idx + 1]
+            let outputURL = URL(fileURLWithPath: outputPath, isDirectory: true)
+            do {
+                try ConformanceFixtureGenerator.generateAll(to: outputURL)
+                exit(0)
+            } catch {
+                fputs("Failed to generate conformance fixtures: \(error)\n", stderr)
+                exit(1)
+            }
+        }
+    }
+
     var body: some Scene {
         // Menu Bar Extra Icon (Like the top-right macOS Menu Bar icon!)
         MenuBarExtra("Native Screen", systemImage: "record.circle") {

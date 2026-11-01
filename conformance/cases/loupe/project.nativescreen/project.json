@@ -1,0 +1,294 @@
+{
+  "audio" : {
+    "backgroundMusic" : {
+      "duckDuringSpeech" : true,
+      "muted" : false,
+      "volume" : 0.08
+    },
+    "masterVolume" : 1,
+    "microphoneAudioPreset" : "voice",
+    "microphoneVolume" : 1,
+    "muteMicrophone" : false,
+    "muteSystemAudio" : false,
+    "systemAudioVolume" : 1,
+    "voiceEnhancement" : true
+  },
+  "background" : {
+    "blurRadius" : 0,
+    "gradient" : {
+      "end01" : {
+        "x" : 1,
+        "y" : 1
+      },
+      "start01" : {
+        "x" : 0,
+        "y" : 0
+      },
+      "stops" : [
+        {
+          "color" : "#4776E6",
+          "location" : 0
+        },
+        {
+          "color" : "#8E54E9",
+          "location" : 1
+        }
+      ],
+      "type" : "linear"
+    },
+    "hideFaces" : false,
+    "hideSensitiveData" : false,
+    "meshPresetId" : "spring-aurora",
+    "noiseIntensity" : 0.02,
+    "sensitiveDataCustomPhrases" : [
+
+    ],
+    "solidColor" : "#1E1E2E",
+    "type" : "gradient"
+  },
+  "camera" : {
+    "aiPersonCutout" : false,
+    "aspectRatioPreset" : "1:1",
+    "backgroundBlur" : 0,
+    "borderRadiusRatio" : 0.22,
+    "colorGradeIntensity" : 1,
+    "colorGradePreset" : "Original",
+    "cropRect01" : {
+      "height" : 1,
+      "width" : 1,
+      "x" : 0,
+      "y" : 0
+    },
+    "customColorPresets" : [
+
+    ],
+    "cutoutAvoidEmptyArea" : false,
+    "cutoutEdgeInset" : 0,
+    "cutoutEdgeSoftness" : 0.2,
+    "cutoutPositionX01" : 0,
+    "delayAdjustmentMs" : 0,
+    "enableFaceTracking" : false,
+    "enabled" : false,
+    "layoutMode" : "overlay",
+    "makeSmallerDuringZoom" : true,
+    "mirror" : false,
+    "position01" : {
+      "x" : 1,
+      "y" : 1
+    },
+    "scaleWhenZoomed" : 0.66,
+    "shadowIntensity" : 0.35,
+    "shape" : "squircle",
+    "sharpen01" : 0,
+    "sizeRatio" : 0.56,
+    "splitEnablePadding" : false,
+    "splitFlip" : false,
+    "splitScreenRatio01" : 0.5
+  },
+  "canvas" : {
+    "aspectRatioMode" : "preset",
+    "aspectRatioPreset" : "16:9",
+    "cropRect01" : {
+      "height" : 1,
+      "width" : 1,
+      "x" : 0,
+      "y" : 0
+    },
+    "customAspectRatio" : {
+      "height" : 9,
+      "width" : 16
+    },
+    "paddingRatio" : 0.1
+  },
+  "captions" : {
+    "animationStyle" : "word-by-word",
+    "backgroundColor" : "#000000CC",
+    "colorTheme" : "dark",
+    "customPrompt" : "",
+    "customShortcuts" : [
+
+    ],
+    "defaultShortcutStyle" : {
+      "colorMode" : "default",
+      "dockPosition" : "bottom",
+      "gradientEndHex" : "#8E54E9",
+      "gradientStartHex" : "#4776E6",
+      "offsetX" : 0,
+      "offsetY" : 0,
+      "solidColorHex" : "#4D2FF5",
+      "textColorHex" : "#FFFFFF"
+    },
+    "deletedShortcutStartMs" : [
+
+    ],
+    "enabled" : false,
+    "fontFamily" : "SF Pro Rounded",
+    "fontSizeRatio" : 0.045,
+    "fontStyle" : "sans-serif",
+    "hiddenShortcutStartMs" : [
+
+    ],
+    "keystrokesPosition01" : {
+      "x" : 0.5,
+      "y" : 0.9
+    },
+    "lineGrowth" : "left-anchored",
+    "localModelVariant" : "system",
+    "position01" : {
+      "x" : 0.5,
+      "y" : 0.88
+    },
+    "segments" : [
+
+    ],
+    "shortcutKeyOverrides" : {
+
+    },
+    "shortcutStyleOverrides" : {
+
+    },
+    "shortcutTimingOverrides" : {
+
+    },
+    "shortcutTracks" : [
+      {
+        "id" : "default-shortcuts-track",
+        "isHidden" : false,
+        "name" : "Shortcuts",
+        "style" : {
+          "colorMode" : "default",
+          "dockPosition" : "bottom",
+          "gradientEndHex" : "#8E54E9",
+          "gradientStartHex" : "#4776E6",
+          "offsetX" : 0,
+          "offsetY" : 0,
+          "solidColorHex" : "#4D2FF5",
+          "textColorHex" : "#FFFFFF"
+        }
+      }
+    ],
+    "shortcutsSizeRatio" : 0.11,
+    "showDeletedTextInTranscript" : true,
+    "showHiddenWordsInTranscript" : true,
+    "showKeystrokes" : true,
+    "showSingleKeyShortcuts" : false,
+    "textColor" : "#FFFFFF",
+    "transcriptLocale" : "en_US",
+    "whisperModelTier" : "small",
+    "wordAnimation" : "appear",
+    "wordsReveal" : "line-by-line"
+  },
+  "createdAt" : "2026-01-01T00:00:00Z",
+  "cursor" : {
+    "alwaysUsePointer" : false,
+    "baseRotationDegrees" : 0,
+    "clickEffect" : {
+      "color" : "#FFFFFF",
+      "soundVolume" : 0.5,
+      "visualStyle" : "none"
+    },
+    "hidden" : false,
+    "keepInSyncWithHovers" : true,
+    "optimizeCursorChanges" : true,
+    "removeShakeThresholdPx" : 4,
+    "rotationMode" : "velocity",
+    "scale" : 1.6,
+    "smoothMovementEnabled" : true,
+    "spring" : {
+      "damping" : 70,
+      "mass" : 3,
+      "stiffness" : 470
+    },
+    "stopMovementInLastPartMs" : 0,
+    "themeId" : "arrow",
+    "velocityRotationEnabled" : true,
+    "velocityRotationIntensity" : 0.5
+  },
+  "frameStyle" : {
+    "borderRadius" : 16,
+    "deviceMockup" : {
+      "colorVariantId" : "space-black",
+      "deviceId" : "macbook-pro-16",
+      "enabled" : false,
+      "matchMode" : "flexible"
+    },
+    "inset" : {
+      "color" : "#FFFFFF",
+      "enabled" : true,
+      "opacity" : 0.18,
+      "size" : 1.5
+    },
+    "shadow" : {
+      "angleDegrees" : 90,
+      "blur" : 36,
+      "distance" : 22,
+      "enabled" : true,
+      "intensity" : 0.42,
+      "isDirectional" : true
+    }
+  },
+  "id" : "case-loupe",
+  "motion" : {
+    "avoidEmptyBoundsWhenZooming" : true,
+    "cameraSpring" : {
+      "damping" : 50,
+      "mass" : 3,
+      "stiffness" : 170
+    },
+    "motionBlurIntensity" : 1
+  },
+  "name" : "loupe",
+  "schemaVersion" : "1.0.0",
+  "timeline" : {
+    "cameraLayouts" : [
+
+    ],
+    "dismissedTypingSuggestionStarts" : [
+
+    ],
+    "isCameraLayoutsTrackHidden" : false,
+    "isShortcutsTrackHidden" : false,
+    "isVoiceoversTrackHidden" : false,
+    "isZoomTrackHidden" : false,
+    "maskTracks" : [
+
+    ],
+    "slices" : [
+      {
+        "disableSmoothCursor" : false,
+        "hideCursor" : false,
+        "id" : "slice-1",
+        "muted" : false,
+        "sourceEndMs" : 6000,
+        "sourceStartMs" : 0,
+        "speed" : 1,
+        "systemAudioVolume" : 1
+      }
+    ],
+    "voiceovers" : [
+
+    ],
+    "zooms" : [
+      {
+        "disabled" : false,
+        "id" : "zoom-1",
+        "instantAnimation" : false,
+        "loupe" : {
+          "bevelRatio" : 0.22,
+          "chromaticAberration" : 0.6,
+          "radius01" : 0.32
+        },
+        "manualCenter01" : {
+          "x" : 0.5,
+          "y" : 0.5
+        },
+        "mode" : "follow-cursor",
+        "presentation" : "loupe",
+        "scale" : 2.4,
+        "sourceEndMs" : 4600,
+        "sourceStartMs" : 900
+      }
+    ]
+  },
+  "updatedAt" : "2026-01-01T00:00:00Z"
+}

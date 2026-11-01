@@ -1,0 +1,157 @@
+[
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 0,
+    "timelineMs" : 0
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 200,
+    "timelineMs" : 200
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 400,
+    "timelineMs" : 400
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 600,
+    "timelineMs" : 600
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 800,
+    "timelineMs" : 800
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1000,
+    "timelineMs" : 1000
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1200,
+    "timelineMs" : 1200
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1400,
+    "timelineMs" : 1400
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1600,
+    "timelineMs" : 1600
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1800,
+    "timelineMs" : 1800
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2000,
+    "timelineMs" : 2000
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2200,
+    "timelineMs" : 2200
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2400,
+    "timelineMs" : 2400
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2600,
+    "timelineMs" : 2600
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2800,
+    "timelineMs" : 2800
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 3000,
+    "timelineMs" : 3000
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 3200,
+    "timelineMs" : 3200
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 3400,
+    "timelineMs" : 3400
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 3600,
+    "timelineMs" : 3600
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 3800,
+    "timelineMs" : 3800
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 4000,
+    "timelineMs" : 4000
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 4200,
+    "timelineMs" : 4200
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 4400,
+    "timelineMs" : 4400
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 4600,
+    "timelineMs" : 4600
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 4800,
+    "timelineMs" : 4800
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 5000,
+    "timelineMs" : 5000
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 5200,
+    "timelineMs" : 5200
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 5400,
+    "timelineMs" : 5400
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 5600,
+    "timelineMs" : 5600
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 5800,
+    "timelineMs" : 5800
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 6000,
+    "timelineMs" : 6000
+  }
+]

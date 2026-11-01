@@ -1,0 +1,1092 @@
+[
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 720,
+    "size" : "1.1–2.5MB",
+    "videoBitrate" : 2193904
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 1080,
+    "size" : "2.0–4.7MB",
+    "videoBitrate" : 4140342
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 1080,
+    "size" : "550KB–1.3MB",
+    "videoBitrate" : 1121343
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "7 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 2160,
+    "size" : "5.9–13.7MB",
+    "videoBitrate" : 12192293
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "7 seconds",
+    "format" : "mp4",
+    "fps" : 60,
+    "height" : 2160,
+    "size" : "1.6–3.7MB",
+    "videoBitrate" : 3302079
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 720,
+    "size" : "960KB–2.2MB",
+    "videoBitrate" : 1977354
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 1080,
+    "size" : "1.8–4.2MB",
+    "videoBitrate" : 3731667
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 1080,
+    "size" : "490KB–1.1MB",
+    "videoBitrate" : 1010660
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "5 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 2160,
+    "size" : "5.4–12.4MB",
+    "videoBitrate" : 10988846
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "6 seconds",
+    "format" : "mp4",
+    "fps" : 50,
+    "height" : 2160,
+    "size" : "1.5–3.3MB",
+    "videoBitrate" : 2976146
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 720,
+    "size" : "720KB–1.7MB",
+    "videoBitrate" : 1477851
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 1080,
+    "size" : "1.4–3.1MB",
+    "videoBitrate" : 2789004
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 1080,
+    "size" : "370–850KB",
+    "videoBitrate" : 755355
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "4 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 2160,
+    "size" : "4.0–9.2MB",
+    "videoBitrate" : 8212934
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "4 seconds",
+    "format" : "mp4",
+    "fps" : 30,
+    "height" : 2160,
+    "size" : "1.1–2.5MB",
+    "videoBitrate" : 2224336
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 720,
+    "size" : "650KB–1.5MB",
+    "videoBitrate" : 1331979
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 1080,
+    "size" : "1.2–2.8MB",
+    "videoBitrate" : 2513714
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 1080,
+    "size" : "330–770KB",
+    "videoBitrate" : 680797
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 2160,
+    "size" : "3.6–8.3MB",
+    "videoBitrate" : 7402271
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 25,
+    "height" : 2160,
+    "size" : "980KB–2.3MB",
+    "videoBitrate" : 2004782
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 720,
+    "size" : "630KB–1.5MB",
+    "videoBitrate" : 1301343
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 1080,
+    "size" : "1.2–2.8MB",
+    "videoBitrate" : 2455899
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 1080,
+    "size" : "320–750KB",
+    "videoBitrate" : 665139
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 2160,
+    "size" : "3.5–8.1MB",
+    "videoBitrate" : 7232020
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "3 seconds",
+    "format" : "mp4",
+    "fps" : 24,
+    "height" : 2160,
+    "size" : "950KB–2.2MB",
+    "videoBitrate" : 1958672
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 720,
+    "size" : "570KB–1.3MB",
+    "videoBitrate" : 1172894
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 1080,
+    "size" : "1.1–2.5MB",
+    "videoBitrate" : 2213488
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 2160,
+    "size" : "3.2–7.3MB",
+    "videoBitrate" : 6518179
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "2 seconds",
+    "format" : "mp4",
+    "fps" : 20,
+    "height" : 2160,
+    "size" : "860KB–2.0MB",
+    "videoBitrate" : 1765340
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 720,
+    "size" : "390–890KB",
+    "videoBitrate" : 790081
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 720,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 1080,
+    "size" : "730KB–1.7MB",
+    "videoBitrate" : 1491042
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-high",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "web-low",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 1080,
+    "size" : "290–680KB",
+    "videoBitrate" : 600000
+  },
+  {
+    "codec" : "h264",
+    "compression" : "studio",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 2160,
+    "size" : "2.1–4.9MB",
+    "videoBitrate" : 4390755
+  },
+  {
+    "codec" : "h264",
+    "compression" : "social-media",
+    "duration" : "1 second",
+    "format" : "mp4",
+    "fps" : 10,
+    "height" : 2160,
+    "size" : "580KB–1.3MB",
+    "videoBitrate" : 1189163
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "6 seconds",
+    "format" : "prores",
+    "fps" : 60,
+    "height" : 720,
+    "size" : "35–50MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "6 seconds",
+    "format" : "prores",
+    "fps" : 60,
+    "height" : 1080,
+    "size" : "85–110MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "7 seconds",
+    "format" : "prores",
+    "fps" : 60,
+    "height" : 2160,
+    "size" : "330–460MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "5 seconds",
+    "format" : "prores",
+    "fps" : 50,
+    "height" : 720,
+    "size" : "30–40MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "5 seconds",
+    "format" : "prores",
+    "fps" : 50,
+    "height" : 1080,
+    "size" : "70–95MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "6 seconds",
+    "format" : "prores",
+    "fps" : 50,
+    "height" : 2160,
+    "size" : "280–380MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "3 seconds",
+    "format" : "prores",
+    "fps" : 30,
+    "height" : 720,
+    "size" : "18.5–25MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "3 seconds",
+    "format" : "prores",
+    "fps" : 30,
+    "height" : 1080,
+    "size" : "40–55MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "4 seconds",
+    "format" : "prores",
+    "fps" : 30,
+    "height" : 2160,
+    "size" : "170–230MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "3 seconds",
+    "format" : "prores",
+    "fps" : 25,
+    "height" : 720,
+    "size" : "15.4–21.2MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "3 seconds",
+    "format" : "prores",
+    "fps" : 25,
+    "height" : 1080,
+    "size" : "35–50MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "3 seconds",
+    "format" : "prores",
+    "fps" : 25,
+    "height" : 2160,
+    "size" : "140–190MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "2 seconds",
+    "format" : "prores",
+    "fps" : 24,
+    "height" : 720,
+    "size" : "14.8–20.4MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "2 seconds",
+    "format" : "prores",
+    "fps" : 24,
+    "height" : 1080,
+    "size" : "35–45MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "3 seconds",
+    "format" : "prores",
+    "fps" : 24,
+    "height" : 2160,
+    "size" : "130–180MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "2 seconds",
+    "format" : "prores",
+    "fps" : 20,
+    "height" : 720,
+    "size" : "12.3–17.0MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "2 seconds",
+    "format" : "prores",
+    "fps" : 20,
+    "height" : 1080,
+    "size" : "30–40MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "2 seconds",
+    "format" : "prores",
+    "fps" : 20,
+    "height" : 2160,
+    "size" : "110–150MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "1 second",
+    "format" : "prores",
+    "fps" : 10,
+    "height" : 720,
+    "size" : "6.2–8.5MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "1 second",
+    "format" : "prores",
+    "fps" : 10,
+    "height" : 1080,
+    "size" : "13.9–19.2MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "prores",
+    "compression" : "422-hq",
+    "duration" : "1 second",
+    "format" : "prores",
+    "fps" : 10,
+    "height" : 2160,
+    "size" : "55–75MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "6 seconds",
+    "format" : "gif",
+    "fps" : 50,
+    "height" : 480,
+    "size" : "860KB–3.9MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "6 seconds",
+    "format" : "gif",
+    "fps" : 50,
+    "height" : 720,
+    "size" : "1.6–7.5MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "6 seconds",
+    "format" : "gif",
+    "fps" : 50,
+    "height" : 1080,
+    "size" : "3.1–14.3MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "4 seconds",
+    "format" : "gif",
+    "fps" : 30,
+    "height" : 480,
+    "size" : "510KB–2.4MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "4 seconds",
+    "format" : "gif",
+    "fps" : 30,
+    "height" : 720,
+    "size" : "980KB–4.5MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "4 seconds",
+    "format" : "gif",
+    "fps" : 30,
+    "height" : 1080,
+    "size" : "1.9–8.6MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "4 seconds",
+    "format" : "gif",
+    "fps" : 25,
+    "height" : 480,
+    "size" : "430KB–2.0MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "4 seconds",
+    "format" : "gif",
+    "fps" : 25,
+    "height" : 720,
+    "size" : "820KB–3.7MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "4 seconds",
+    "format" : "gif",
+    "fps" : 25,
+    "height" : 1080,
+    "size" : "1.6–7.2MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "2 seconds",
+    "format" : "gif",
+    "fps" : 20,
+    "height" : 480,
+    "size" : "340KB–1.6MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "2 seconds",
+    "format" : "gif",
+    "fps" : 20,
+    "height" : 720,
+    "size" : "650KB–3.0MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "2 seconds",
+    "format" : "gif",
+    "fps" : 20,
+    "height" : 1080,
+    "size" : "1.3–5.7MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "2 seconds",
+    "format" : "gif",
+    "fps" : 15,
+    "height" : 480,
+    "size" : "260KB–1.2MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "2 seconds",
+    "format" : "gif",
+    "fps" : 15,
+    "height" : 720,
+    "size" : "490KB–2.2MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "2 seconds",
+    "format" : "gif",
+    "fps" : 15,
+    "height" : 1080,
+    "size" : "940KB–4.3MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "1 second",
+    "format" : "gif",
+    "fps" : 10,
+    "height" : 480,
+    "size" : "170–780KB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "1 second",
+    "format" : "gif",
+    "fps" : 10,
+    "height" : 720,
+    "size" : "330KB–1.5MB",
+    "videoBitrate" : 0
+  },
+  {
+    "codec" : "gif",
+    "compression" : "standard",
+    "duration" : "1 second",
+    "format" : "gif",
+    "fps" : 10,
+    "height" : 1080,
+    "size" : "630KB–2.9MB",
+    "videoBitrate" : 0
+  }
+]
