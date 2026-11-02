@@ -59,7 +59,18 @@ internal sealed class InspectorPanel
         {
             MaskEditor(mask);
         }
-        else
+        else if (session.SelectedSlice is { } slice)
+        {
+            ClipEditor(slice);
+        }
+        else if (session.SelectedLayout is { } layout)
+        {
+            LayoutEditor(layout);
+        }
+        else if (session.SelectedShortcut is { } shortcut)
+        {
+            ShortcutEditor(shortcut);
+        }        else
         {
             switch (session.SelectedTab)
             {
@@ -299,6 +310,12 @@ internal sealed class InspectorPanel
                 Slider("Size during zoom", () => Doc.Camera.ScaleWhenZoomed, (d, v) => d.Camera.ScaleWhenZoomed = v, 0.25, 0.85, 0.66))));
         }
 
+        Add(Labeled("Add layout at playhead", 10, OptionsWrap(
+            ("Overlay", false, () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.CameraOverlay)),
+            ("Split", false, () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.SplitScreen)),
+            ("Cutout", false, () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.CutoutCamera)),
+            ("Fullscreen", false, () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.FullscreenCamera)),
+            ("Only screen", false, () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.ScreenOnly)))));
         Add(Slider("Camera rounded corners", () => Doc.Camera.BorderRadiusRatio, (d, v) => d.Camera.BorderRadiusRatio = v, 0, 0.5, 0.22));
         Add(Toggle("Hide during silence", null, () => Doc.Camera.HideDuringSilenceMs is not null, (d, v) => d.Camera.HideDuringSilenceMs = v ? 2000 : null));
     }
@@ -503,6 +520,8 @@ internal sealed class InspectorPanel
 
     private void Shortcuts()
     {
+        Add(Action("Add shortcut", () => session.AddCustomShortcut(null, session.SourceAtPlayhead)));
+        Add(Action("Add shortcut track", () => Edit(d => TimelineEdits.AddShortcutTrack(d))));
         Add(Toggle("Show shortcuts", null, () => Doc.Captions.ShowKeystrokes, (d, v) => d.Captions.ShowKeystrokes = v));
         Add(Slider("Shortcut labels size", () => Doc.Captions.ShortcutsSizeRatio, (d, v) => d.Captions.ShortcutsSizeRatio = v, 0.075, 0.25, 0.11));
         Add(Toggle("Show single key shortcuts", null, () => Doc.Captions.ShowSingleKeyShortcuts, (d, v) => d.Captions.ShowSingleKeyShortcuts = v));
@@ -567,8 +586,93 @@ internal sealed class InspectorPanel
 
     // MARK: Block editors
 
-    private void ZoomEditor(ZoomBlock zoom)
+    private void ClipEditor(ClipSlice slice)
     {
+        var id = slice.Id;
+        ClipSlice Find(ProjectDocument d) => d.Timeline.Slices.First(item => item.Id == id);
+        Add(CloseEditor("Close clip editor", () => session.SelectSlice(null)));
+        Add(Slider("Speed", () => session.SelectedSlice?.Speed ?? 1, (d, v) => Find(d).Speed = Math.Round(v * 20) / 20, 0.25, 8, 1));
+        Add(Slider("Clip audio volume", () => session.SelectedSlice?.SystemAudioVolume ?? 1, (d, v) => Find(d).SystemAudioVolume = v, 0, 1, 1));
+        Add(Toggle("Mute clip", null, () => session.SelectedSlice?.Muted ?? false, (d, v) => Find(d).Muted = v));
+        Add(Toggle("Hide cursor in this clip", null, () => session.SelectedSlice?.HideCursor ?? false, (d, v) => Find(d).HideCursor = v));
+        Add(Toggle("Disable smooth cursor", null, () => session.SelectedSlice?.DisableSmoothCursor ?? false, (d, v) => Find(d).DisableSmoothCursor = v));
+        Add(Action("Delete clip", Doc.Timeline.Slices.Count > 1 ? session.DeleteSelected : null));
+    }
+
+    private void LayoutEditor(CameraLayoutSegment layout)
+    {
+        var id = layout.Id;
+        CameraLayoutSegment Find(ProjectDocument d) => d.Timeline.CameraLayouts.First(item => item.Id == id);
+        Add(CloseEditor("Close layout editor", () => session.SelectLayout(null)));
+        Add(Labeled("Layout", 10, OptionsWrap(
+            ("Camera overlay", layout.LayoutType == CameraTimelineLayoutType.CameraOverlay, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.CameraOverlay)),
+            ("Split screen", layout.LayoutType == CameraTimelineLayoutType.SplitScreen, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.SplitScreen)),
+            ("Camera cutout", layout.LayoutType == CameraTimelineLayoutType.CutoutCamera, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.CutoutCamera)),
+            ("Fullscreen camera", layout.LayoutType == CameraTimelineLayoutType.FullscreenCamera, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.FullscreenCamera)),
+            ("Only screen", layout.LayoutType == CameraTimelineLayoutType.ScreenOnly, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.ScreenOnly)))));
+        Add(Toggle("Disable layout", null, () => session.SelectedLayout?.Disabled ?? false, (d, v) => Find(d).Disabled = v));
+        Add(Action("Remove layout", session.DeleteSelected));
+    }
+
+    private void ShortcutEditor(ShortcutCluster cluster)
+    {
+        Add(CloseEditor("Close Shortcut editor", () => session.SelectShortcut(null)));
+        var key = new TextBox { Text = cluster.PrimaryKey, PlaceholderText = "Key" };
+        AutomationName(key, "Shortcut key");
+        void Save(List<string> modifiers, string primary)
+        {
+            if (primary.Trim().Length > 0)
+            {
+                session.Mutate(document => TimelineEdits.SetShortcutKeys(document, cluster, modifiers, primary.Trim()));
+            }
+        }
+
+        key.LostFocus += (_, _) =>
+        {
+            if (key.Text != cluster.PrimaryKey)
+            {
+                Save(cluster.Modifiers.ToList(), key.Text);
+            }
+        };
+        Add(Labeled("Key", 8, key));
+        var row = new List<(string, bool, Action?)>();
+        foreach (var modifier in new[] { "Ctrl", "Shift", "Alt", "Meta" })
+        {
+            var name = modifier;
+            var on = cluster.Modifiers.Contains(name);
+            row.Add((name == "Meta" ? "Win" : name, on, () =>
+            {
+                var next = cluster.Modifiers.ToList();
+                if (on)
+                {
+                    next.Remove(name);
+                }
+                else
+                {
+                    next.Add(name);
+                }
+
+                Save(next, cluster.PrimaryKey);
+            }));
+        }
+
+        Add(Labeled("Modifiers", 10, OptionsWrap(row.ToArray())));
+        var style = Doc.Captions.ShortcutStyleOverrides.GetValueOrDefault(cluster.Id) ?? Doc.Captions.DefaultShortcutStyle;
+        void SetDock(ShortcutDockPosition dock) => Edit(d =>
+        {
+            var copy = ProjectJson.Clone(style);
+            copy.DockPosition = dock;
+            d.Captions.ShortcutStyleOverrides[cluster.Id] = copy;
+        });
+        Add(Labeled("Position", 10, Options(
+            ("Bottom", style.DockPosition == ShortcutDockPosition.Bottom, () => SetDock(ShortcutDockPosition.Bottom)),
+            ("Top", style.DockPosition == ShortcutDockPosition.Top, () => SetDock(ShortcutDockPosition.Top)),
+            ("Left", style.DockPosition == ShortcutDockPosition.Left, () => SetDock(ShortcutDockPosition.Left)),
+            ("Right", style.DockPosition == ShortcutDockPosition.Right, () => SetDock(ShortcutDockPosition.Right)))));
+        Add(Action("Remove shortcut", session.DeleteSelected));
+    }
+
+    private void ZoomEditor(ZoomBlock zoom)    {
         var id = zoom.Id;
         ZoomBlock Find(ProjectDocument document) => document.Timeline.Zooms.First(item => item.Id == id);
         Add(CloseEditor("Close Zoom editor", () => session.SelectZoom(null)));

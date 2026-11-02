@@ -1,0 +1,218 @@
+using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using NativeScreen.Core;
+
+namespace NativeScreen.App;
+
+/// <summary>
+/// XAML above the preview: handles for the masks under a paused playhead, and the short-video safe zones. It draws only when
+/// paused and only after an edit or a seek, so it costs nothing during playback.
+/// </summary>
+internal sealed class PreviewOverlay
+{
+    private const double HandleSize = 14;
+    private const double MinimumSize01 = 0.02;
+    private const double SafeTop = 0.12;
+    private const double SafeBottom = 0.22;
+    private const double SafeRight = 0.14;
+
+    private static readonly Brush Accent = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 124, 92, 252));
+    private static readonly Brush Shade = new SolidColorBrush(Windows.UI.Color.FromArgb(90, 255, 80, 80));
+
+    private readonly EditorSession session;
+    private readonly Canvas canvas;
+    private readonly Func<(double SourceWidth, double SourceHeight, bool HasCamera)> source;
+    private Interaction? active;
+
+    public PreviewOverlay(EditorSession session, Canvas canvas, Func<(double, double, bool)> source)
+    {
+        this.session = session;
+        this.canvas = canvas;
+        this.source = source;
+        canvas.PointerMoved += Moved;
+        canvas.PointerReleased += Released;
+        canvas.PointerCaptureLost += (_, _) => Finish();
+    }
+
+    public bool ShowSafeZones { get; set; }
+
+    public void Refresh()
+    {
+        if (active is not null)
+        {
+            return;
+        }
+
+        canvas.Children.Clear();
+        var (width, height) = (canvas.ActualWidth, canvas.ActualHeight);
+        if (width < 2 || height < 2)
+        {
+            return;
+        }
+
+        if (ShowSafeZones)
+        {
+            DrawSafeZones(width, height);
+        }
+
+        if (session.IsPlaying || !session.Document.Timeline.MaskTracks.Exists(track => !track.IsHidden))
+        {
+            return;
+        }
+
+        var map = Transform(width, height);
+        var at = session.SourceAtPlayhead;
+        foreach (var track in session.Document.Timeline.MaskTracks.Where(track => !track.IsHidden))
+        {
+            foreach (var mask in track.Items.Where(item => !item.Disabled && at >= item.SourceStartMs && at <= item.SourceEndMs))
+            {
+                DrawMask(mask, map, at);
+            }
+        }
+    }
+
+    private CanvasCoordinateTransform Transform(double width, double height)
+    {
+        var (document, trajectory) = session.RenderSnapshot();
+        var (sourceWidth, sourceHeight, hasCamera) = source();
+        var crop = document.Canvas.CropRect01;
+        var at = session.SourceAtPlayhead;
+        var camera = trajectory.Evaluate(at).Camera;
+        var stage = new StageLayoutEngine().Resolve(document, at, width, height, Math.Max(16, sourceWidth * crop.Width), Math.Max(16, sourceHeight * crop.Height), camera.Scale, hasCamera);
+        return camera.IsLoupeMode
+            ? new CanvasCoordinateTransform(width, height, stage.ScreenRect, Point01.Center, 1)
+            : new CanvasCoordinateTransform(width, height, stage.ScreenRect, camera.Center01, camera.Scale);
+    }
+
+    private void DrawSafeZones(double width, double height)
+    {
+        Zone(0, 0, width, height * SafeTop);
+        Zone(0, height * (1 - SafeBottom), width, height * SafeBottom);
+        Zone(width * (1 - SafeRight), height * SafeTop, width * SafeRight, height * (1 - SafeTop - SafeBottom));
+    }
+
+    private void Zone(double x, double y, double width, double height)
+    {
+        var zone = new Border { Width = width, Height = height, Background = Shade, IsHitTestVisible = false };
+        Canvas.SetLeft(zone, x);
+        Canvas.SetTop(zone, y);
+        canvas.Children.Add(zone);
+    }
+
+    private void DrawMask(MaskItem mask, CanvasCoordinateTransform map, double at)
+    {
+        var rect = mask.InterpolatedRect(at);
+        var (x, y, width, height) = map.ToCanvas(rect);
+        var selected = mask.Id == session.SelectedMaskId;
+        var body = new Border
+        {
+            Width = Math.Max(1, width),
+            Height = Math.Max(1, height),
+            BorderBrush = selected ? Accent : new SolidColorBrush(Windows.UI.Color.FromArgb(150, 255, 255, 255)),
+            BorderThickness = new Thickness(selected ? 2 : 1),
+            Background = new SolidColorBrush(Colors.Transparent),
+            CornerRadius = new CornerRadius(4)
+        };
+        Canvas.SetLeft(body, x);
+        Canvas.SetTop(body, y);
+        canvas.Children.Add(body);
+        Begin(body, mask, map, rect, at, moveX: 1, moveY: 1, sizeX: 0, sizeY: 0);
+        if (!selected)
+        {
+            return;
+        }
+
+        Handle(mask, map, rect, at, x, y, 1, 1, -1, -1);
+        Handle(mask, map, rect, at, x + width, y, 0, 1, 1, -1);
+        Handle(mask, map, rect, at, x, y + height, 1, 0, -1, 1);
+        Handle(mask, map, rect, at, x + width, y + height, 0, 0, 1, 1);
+    }
+
+    private void Handle(MaskItem mask, CanvasCoordinateTransform map, Rect01 rect, double at, double x, double y, double moveX, double moveY, double sizeX, double sizeY)
+    {
+        var handle = new Border { Width = HandleSize, Height = HandleSize, CornerRadius = new CornerRadius(HandleSize / 2), Background = new SolidColorBrush(Colors.White), BorderBrush = Accent, BorderThickness = new Thickness(2) };
+        Canvas.SetLeft(handle, x - HandleSize / 2);
+        Canvas.SetTop(handle, y - HandleSize / 2);
+        canvas.Children.Add(handle);
+        Begin(handle, mask, map, rect, at, moveX, moveY, sizeX, sizeY);
+    }
+
+    private void Begin(FrameworkElement element, MaskItem mask, CanvasCoordinateTransform map, Rect01 rect, double at, double moveX, double moveY, double sizeX, double sizeY)
+    {
+        var id = mask.Id;
+        var start = new Rect01(rect.X, rect.Y, rect.Width, rect.Height);
+        element.PointerPressed += (_, args) =>
+        {
+            var point = args.GetCurrentPoint(canvas).Position;
+            active = new Interaction(id, element, start, map, at, point.X, point.Y, moveX, moveY, sizeX, sizeY, false);
+            session.BeginInteractiveEdit();
+            canvas.CapturePointer(args.Pointer);
+            args.Handled = true;
+        };
+    }
+
+    private void Moved(object sender, PointerRoutedEventArgs args)
+    {
+        if (active is not { } drag)
+        {
+            return;
+        }
+
+        var point = args.GetCurrentPoint(canvas).Position;
+        var (dx, dy) = drag.Map.DeltaToSource(point.X - drag.PressX, point.Y - drag.PressY);
+        var start = drag.Start;
+        var width = Math.Max(MinimumSize01, start.Width + dx * drag.SizeX);
+        var height = Math.Max(MinimumSize01, start.Height + dy * drag.SizeY);
+        var x = drag.SizeX == 0 ? start.X + dx : drag.MoveX == 1 ? start.X + start.Width - width : start.X;
+        var y = drag.SizeY == 0 ? start.Y + dy : drag.MoveY == 1 ? start.Y + start.Height - height : start.Y;
+        if (drag.SizeX == 0 && drag.SizeY == 0)
+        {
+            x = Math.Clamp(x, 0, 1 - start.Width);
+            y = Math.Clamp(y, 0, 1 - start.Height);
+        }
+
+        var next = new Rect01(x, y, width, height).Clamped();
+        active = drag with { Changed = true };
+        session.Mutate(
+            document =>
+            {
+                if (document.Timeline.MaskTracks.SelectMany(track => track.Items).FirstOrDefault(item => item.Id == drag.MaskId) is { } mask)
+                {
+                    TimelineEdits.SetMaskRect(mask, next, drag.AtMs);
+                }
+            },
+            structural: false);
+        var (left, top, drawnWidth, drawnHeight) = drag.Map.ToCanvas(next);
+        if (drag.SizeX == 0 && drag.SizeY == 0)
+        {
+            Canvas.SetLeft(drag.Element, left);
+            Canvas.SetTop(drag.Element, top);
+            drag.Element.Width = Math.Max(1, drawnWidth);
+            drag.Element.Height = Math.Max(1, drawnHeight);
+        }
+    }
+
+    private void Released(object sender, PointerRoutedEventArgs args)
+    {
+        canvas.ReleasePointerCaptures();
+        Finish();
+    }
+
+    private void Finish()
+    {
+        if (active is not { } drag)
+        {
+            return;
+        }
+
+        active = null;
+        session.EndInteractiveEdit();
+        session.SelectMask(drag.MaskId);
+        Refresh();
+    }
+
+    private sealed record Interaction(string MaskId, FrameworkElement Element, Rect01 Start, CanvasCoordinateTransform Map, double AtMs, double PressX, double PressY, double MoveX, double MoveY, double SizeX, double SizeY, bool Changed);
+}

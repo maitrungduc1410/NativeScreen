@@ -139,9 +139,17 @@ public sealed class EditorSession
     public string? SelectedSliceId { get; private set; }
     public string? SelectedZoomId { get; private set; }
     public string? SelectedMaskId { get; private set; }
+    public string? SelectedLayoutId { get; private set; }
+    public string? SelectedShortcutId { get; private set; }
     public bool IsSplitModeActive { get; set; }
 
-    public ZoomBlock? SelectedZoom => Document.Timeline.Zooms.Find(zoom => zoom.Id == SelectedZoomId);
+    public ClipSlice? SelectedSlice => Document.Timeline.Slices.Find(slice => slice.Id == SelectedSliceId);
+
+    public CameraLayoutSegment? SelectedLayout => Document.Timeline.CameraLayouts.Find(layout => layout.Id == SelectedLayoutId);
+
+    public ShortcutCluster? SelectedShortcut => SelectedShortcutId is null ? null : Shortcuts().FirstOrDefault(cluster => cluster.Id == SelectedShortcutId);
+
+    public ZoomBlock? SelectedZoom =>Document.Timeline.Zooms.Find(zoom => zoom.Id == SelectedZoomId);
 
     public MaskItem? SelectedMask
     {
@@ -331,15 +339,53 @@ public sealed class EditorSession
         SelectionChanged?.Invoke();
     }
 
-    public void ClearSelection()
+    public void SelectLayout(string? id)
     {
+        ClearSelectionState();
+        SelectedLayoutId = id;
+        SelectedTab = id is null ? SelectedTab : InspectorTab.CameraLayout;
+        SelectionChanged?.Invoke();
+    }
+
+    public void SelectShortcut(string? id)
+    {
+        ClearSelectionState();
+        SelectedShortcutId = id;
+        SelectedTab = id is null ? SelectedTab : InspectorTab.Shortcuts;
+        SelectionChanged?.Invoke();
+    }
+
+    public void AddCameraLayoutAtPlayhead(CameraTimelineLayoutType type)
+    {
+        string? id = null;
+        var at = SourceAtPlayhead;
+        Mutate(document => id = TimelineEdits.AddCameraLayout(document, at, SourceDurationMs, type));
+        if (id is not null)
+        {
+            SelectLayout(id);
+        }
+    }
+
+    public void AddCustomShortcut(string? trackId, double sourceMs)
+    {
+        string? id = null;
+        var clusters = Shortcuts();
+        Mutate(document => id = TimelineEdits.AddCustomShortcut(document, clusters, trackId, sourceMs, SourceDurationMs));
+        if (id is not null)
+        {
+            SelectShortcut(id);
+        }
+    }
+
+    public void ClearSelection()    {
         ClearSelectionState();
         SelectionChanged?.Invoke();
     }
 
-    public void AddZoomAtPlayhead(ZoomPresentation presentation)
+    public void AddZoomAtPlayhead(ZoomPresentation presentation) => AddZoomAt(presentation, SourceAtPlayhead);
+
+    public void AddZoomAt(ZoomPresentation presentation, double source)
     {
-        var source = SourceAtPlayhead;
         var sorted = Document.Timeline.Zooms.OrderBy(zoom => zoom.SourceStartMs).ToList();
         var containing = sorted.Find(zoom => source >= zoom.SourceStartMs && source <= zoom.SourceEndMs);
         if (containing is not null)
@@ -382,9 +428,10 @@ public sealed class EditorSession
         SelectZoom(created.Id);
     }
 
-    public void AddMaskAtPlayhead(MaskType type)
+    public void AddMaskAtPlayhead(MaskType type) => AddMaskAt(type, SourceAtPlayhead);
+
+    public void AddMaskAt(MaskType type, double start)
     {
-        var start = SourceAtPlayhead;
         var end = Math.Min(SourceDurationMs, start + 3000);
         if (end - start < 200)
         {
@@ -463,8 +510,16 @@ public sealed class EditorSession
                 }
             });
         }
-        else if (SelectedSliceId is { } sliceId && Document.Timeline.Slices.Count > 1)
+        else if (SelectedLayoutId is { } layoutId)
         {
+            Mutate(document => document.Timeline.CameraLayouts.RemoveAll(layout => layout.Id == layoutId));
+        }
+        else if (SelectedShortcut is { } cluster)
+        {
+            var clusters = Shortcuts();
+            Mutate(document => TimelineEdits.DeleteShortcut(document, cluster, clusters));
+        }
+        else if (SelectedSliceId is { } sliceId && Document.Timeline.Slices.Count > 1)        {
             Mutate(document => document.Timeline.Slices.RemoveAll(slice => slice.Id == sliceId));
         }
         else
@@ -493,6 +548,21 @@ public sealed class EditorSession
             SelectedMaskId = null;
         }
 
+        if (SelectedLayout is null)
+        {
+            SelectedLayoutId = null;
+        }
+
+        if (SelectedSlice is null)
+        {
+            SelectedSliceId = null;
+        }
+
+        if (SelectedShortcut is null)
+        {
+            SelectedShortcutId = null;
+        }
+
         DocumentChanged?.Invoke(true);
     }
 
@@ -511,5 +581,7 @@ public sealed class EditorSession
         SelectedSliceId = null;
         SelectedZoomId = null;
         SelectedMaskId = null;
+        SelectedLayoutId = null;
+        SelectedShortcutId = null;
     }
 }

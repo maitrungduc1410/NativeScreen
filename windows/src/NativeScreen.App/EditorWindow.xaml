@@ -120,7 +120,7 @@
 
                 <Grid x:Name="PreviewHost" Grid.Row="1">
                     <Border x:Name="PreviewFrame" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="10">
-                        <SwapChainPanel x:Name="Preview" />
+                        <Grid><SwapChainPanel x:Name="Preview" /><Canvas x:Name="PreviewCanvas" Background="Transparent" /></Grid>
                     </Border>
                     <Border
                         HorizontalAlignment="Left"

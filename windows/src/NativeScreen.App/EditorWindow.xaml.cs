@@ -72,6 +72,7 @@ public sealed partial class EditorWindow : Window
     private readonly InspectorPanel inspector;
     private readonly EditorTools tools;
     private readonly TimelineView timeline;
+    private readonly PreviewOverlay overlay;
     private readonly ExportSettings exportSettings = new();
     private FrameCompositor? compositor;
     private CompositionSwapChain? swapChain;
@@ -98,6 +99,8 @@ public sealed partial class EditorWindow : Window
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
         tools.Changed += inspector.Rebuild;
         timeline = new TimelineView(session, TimelineHost);
+        overlay = new PreviewOverlay(session, PreviewCanvas, () => (source.SourceWidth, source.SourceHeight, source.HasCamera));
+        PreviewCanvas.SizeChanged += (_, _) => overlay.Refresh();
 
         SetTitleBar(TitleBar);
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
@@ -139,6 +142,14 @@ public sealed partial class EditorWindow : Window
         };
         saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         saveTimer.Tick += (_, _) => SaveNow();
+        timeline.PlayheadScrubbed += () =>
+        {
+            playRequest++;
+            clockTimer.Stop();
+            StopAudio();
+            RefreshTransport();
+            DrawPreview();
+        };
         Closed += ReleasePreview;
     }
 
@@ -245,6 +256,11 @@ public sealed partial class EditorWindow : Window
         }
 
         view.Items.Add(new MenuFlyoutSeparator());
+        view.Items.Add(Menu("Show safe zones for short videos", () =>
+        {
+            overlay.ShowSafeZones = !overlay.ShowSafeZones;
+            overlay.Refresh();
+        }));
         view.Items.Add(Menu("Command menu", ToggleCommandMenu, "Ctrl+K"));
         AppMenu.Items.Add(file);
         AppMenu.Items.Add(edit);
@@ -295,8 +311,8 @@ public sealed partial class EditorWindow : Window
             Ui.IconButton(Ui.Icon("", 16), "Sensitive data mask", () => session.AddMaskAtPlayhead(MaskType.Blur)),
             Ui.IconButton(Ui.Icon("", 16), "Highlight mask", () => session.AddMaskAtPlayhead(MaskType.Spotlight))));
         QuickDock.Children.Add(DockGroup(
-            Ui.IconButton(Ui.Icon("", 16), "Add shortcut track", () => session.SelectTab(InspectorTab.Shortcuts)),
-            Ui.IconButton(Ui.Icon("", 16), "Record voiceover: not available on Windows yet", null)));
+            Ui.IconButton(Ui.Icon("", 16), "Add shortcut", () => session.AddCustomShortcut(null, session.SourceAtPlayhead)),
+            Ui.IconButton(Ui.Icon("", 16), "Upload a voiceover", tools.UploadVoiceover)));
     }
 
     private static StackPanel DockGroup(params UIElement[] buttons)
@@ -526,6 +542,11 @@ public sealed partial class EditorWindow : Window
 
     private void DrawPreview()
     {
+        if (!session.IsPlaying)
+        {
+            overlay.Refresh();
+        }
+
         if (renderer is null || double.IsNaN(PreviewFrame.Width))
         {
             return;
@@ -626,6 +647,7 @@ public sealed partial class EditorWindow : Window
         audio?.Start();
         session.TogglePlayback();
         clockTimer.Start();
+        overlay.Refresh();
         RefreshTransport();
     }
 

@@ -299,8 +299,8 @@ public sealed partial class FrameCompositor
     // Pass 2. Works in source pixels, before scaling and zoom.
     private (ID3D11ShaderResourceView? View, int Width, int Height) MaskedScreen(ComposeRequest request, int canvasWidth, int canvasHeight)
     {
-        var width = request.Screen is null ? canvasWidth : request.ScreenWidth;
-        var height = request.Screen is null ? canvasHeight : request.ScreenHeight;
+        var width = request.Screen is null && request.ScreenWidth <= 0 ? canvasWidth : request.ScreenWidth;
+        var height = request.Screen is null && request.ScreenHeight <= 0 ? canvasHeight : request.ScreenHeight;
         if (request.Screen is null)
         {
             return (null, width, height);

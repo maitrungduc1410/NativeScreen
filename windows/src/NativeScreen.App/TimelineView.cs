@@ -84,6 +84,9 @@ internal sealed class TimelineView
 
     private double TrackWidth => Math.Max(260, viewportWidth - TrackInset * 2) * zoom;
 
+    /// <summary>The playhead was moved by hand, so the clock label and the preview must follow it.</summary>
+    public event Action? PlayheadScrubbed;
+
     public void SetWaveform(float[] peaks)
     {
         waveform = peaks;
@@ -195,19 +198,27 @@ internal sealed class TimelineView
                 false);
             AddWaveform(block, slice.SourceStartMs, slice.SourceEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
             var id = slice.Id;
+            var blockWidth = X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs);
             block.PointerPressed += (_, args) =>
             {
                 if (session.IsSplitModeActive)
                 {
                     session.SplitSlice(TimeAt(args.GetCurrentPoint(canvas).Position.X));
+                    args.Handled = true;
                 }
-                else
-                {
-                    session.SelectSlice(id);
-                }
-
-                args.Handled = true;
             };
+            Draggable(
+                block,
+                blockWidth,
+                () => session.SelectSlice(id),
+                (start, end) => session.Mutate(document => TimelineEdits.SetSliceRange(document, id, start, end, session.SourceDurationMs), structural: false),
+                () =>
+                {
+                    var current = session.Document.Timeline.Slices.First(other => other.Id == id);
+                    var (low, high) = TimelineEdits.SliceBounds(session.Document, id, session.SourceDurationMs);
+                    return (current.SourceStartMs, current.SourceEndMs, low, high);
+                },
+                canMove: false);
         }
 
         return y + ClipRowHeight + RowSpacing;
@@ -305,12 +316,15 @@ internal sealed class TimelineView
             var width = X(TimelineOf(voiceover.SourceEndMs)) - left;
             var block = Block(left, y, width, MaskRowHeight, Palette.Layout, "Voiceover", null, false, voiceover.Disabled || timeline.IsVoiceoversTrackHidden);
             var id = voiceover.Id;
-            block.PointerPressed += (_, args) =>
-            {
-                session.SelectTab(InspectorTab.Audio);
-                args.Handled = true;
-            };
             ToolTipService.SetToolTip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
+            Draggable(block, width, () => session.SelectTab(InspectorTab.Audio), (start, end) =>
+            {
+                session.Mutate(document => document.Timeline.Voiceovers.First(other => other.Id == id).SourceStartMs = start, structural: false);
+            }, () =>
+            {
+                var current = session.Document.Timeline.Voiceovers.First(other => other.Id == id);
+                return (current.SourceStartMs, current.SourceEndMs, 0, session.SourceDurationMs);
+            });
         }
 
         return y + MaskRowHeight + RowSpacing;
@@ -318,6 +332,7 @@ internal sealed class TimelineView
 
     private double DrawZooms(double y)    {
         var timeline = session.Document.Timeline;
+        AddRowTarget(y, ZoomRowHeight, Palette.Zoom, time => session.AddZoomAt(ZoomPresentation.Screen, time));
         AddLabel("Zoom", y, ZoomRowHeight, eye: true, timeline.IsZoomTrackHidden, () =>
             session.Mutate(document => document.Timeline.IsZoomTrackHidden = !document.Timeline.IsZoomTrackHidden));
         foreach (var item in timeline.Zooms)
@@ -369,7 +384,25 @@ internal sealed class TimelineView
         foreach (var layout in timeline.CameraLayouts)
         {
             var left = X(TimelineOf(layout.SourceStartMs));
-            Block(left, y, X(TimelineOf(layout.SourceEndMs)) - left, MaskRowHeight, Palette.Layout, "Layout", null, false, layout.Disabled);
+            var width = X(TimelineOf(layout.SourceEndMs)) - left;
+            var block = Block(left, y, width, MaskRowHeight, Palette.Layout, LayoutTitle(layout.LayoutType), null, layout.Id == session.SelectedLayoutId, layout.Disabled);
+            var id = layout.Id;
+            Draggable(block, width, () => session.SelectLayout(id), (start, end) =>
+            {
+                session.Mutate(document =>
+                {
+                    var target = document.Timeline.CameraLayouts.First(other => other.Id == id);
+                    target.SourceStartMs = start;
+                    target.SourceEndMs = end;
+                }, structural: false);
+            }, () =>
+            {
+                var current = session.Document.Timeline.CameraLayouts.First(other => other.Id == id);
+                var others = session.Document.Timeline.CameraLayouts.Where(other => other.Id != id).ToList();
+                var low = others.Where(other => other.SourceEndMs <= current.SourceStartMs).Select(other => other.SourceEndMs).DefaultIfEmpty(0).Max();
+                var high = others.Where(other => other.SourceStartMs >= current.SourceEndMs).Select(other => other.SourceStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
+                return (current.SourceStartMs, current.SourceEndMs, low, high);
+            });
         }
 
         return y + MaskRowHeight + RowSpacing;
@@ -380,6 +413,7 @@ internal sealed class TimelineView
         foreach (var track in session.Document.Timeline.MaskTracks)
         {
             var trackId = track.Id;
+            AddRowTarget(y, MaskRowHeight, Palette.Mask, time => session.AddMaskAt(MaskType.Blur, time));
             AddLabel(track.Name, y, MaskRowHeight, eye: true, track.IsHidden, () =>
                 session.Mutate(document =>
                 {
@@ -435,11 +469,31 @@ internal sealed class TimelineView
         var captions = session.Document.Captions;
         foreach (var track in captions.ShortcutTracks)
         {
+            var trackId = track.Id;
+            AddRowTarget(y, MaskRowHeight, Palette.Layout, time => session.AddCustomShortcut(trackId, time));
             AddLabel(track.Name, y, MaskRowHeight, eye: false);
-            foreach (var shortcut in captions.CustomShortcuts.Where(item => item.TrackId == track.Id))
+            var clusters = session.Shortcuts().Where(item => item.TrackId == track.Id).OrderBy(item => item.DisplayStartMs).ToList();
+            foreach (var shortcut in clusters)
             {
-                var left = X(TimelineOf(shortcut.SourceStartMs));
-                Block(left, y, X(TimelineOf(shortcut.SourceEndMs)) - left, MaskRowHeight, Palette.Layout, shortcut.PrimaryKey, null, false, shortcut.IsHidden);
+                var left = X(TimelineOf(shortcut.DisplayStartMs));
+                var width = X(TimelineOf(shortcut.DisplayEndMs)) - left;
+                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, false);
+                var id = shortcut.Id;
+                Draggable(block, width, () => session.SelectShortcut(id), (start, end) =>
+                {
+                    var current = session.Shortcuts().FirstOrDefault(item => item.Id == id);
+                    if (current is not null)
+                    {
+                        session.Mutate(document => TimelineEdits.SetShortcutRange(document, current, start, end), structural: false);
+                    }
+                }, () =>
+                {
+                    var current = session.Shortcuts().First(item => item.Id == id);
+                    var others = session.Shortcuts().Where(item => item.TrackId == current.TrackId && item.Id != id).ToList();
+                    var low = others.Where(item => item.DisplayEndMs <= current.DisplayStartMs).Select(item => item.DisplayEndMs).DefaultIfEmpty(0).Max();
+                    var high = others.Where(item => item.DisplayStartMs >= current.DisplayEndMs).Select(item => item.DisplayStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
+                    return (current.DisplayStartMs, current.DisplayEndMs, low, high);
+                });
             }
 
             y += MaskRowHeight + RowSpacing;
@@ -448,8 +502,53 @@ internal sealed class TimelineView
         return y;
     }
 
-    private void AddLabel(string title, double y, double height, bool eye, bool hidden = false, Action? toggle = null)
+    private static string LayoutTitle(CameraTimelineLayoutType type) => type switch
     {
+        CameraTimelineLayoutType.SplitScreen => "Split screen",
+        CameraTimelineLayoutType.CutoutCamera => "Camera cutout",
+        CameraTimelineLayoutType.FullscreenCamera => "Fullscreen camera",
+        CameraTimelineLayoutType.ScreenOnly => "Only screen",
+        _ => "Camera overlay"
+    };
+
+    /// <summary>An empty row shows a plus where the pointer is, and clicking it adds a block there. Blocks are drawn over it.</summary>
+    private void AddRowTarget(double y, double height, Palette palette, Action<double> add)
+    {
+        var row = new Border { Width = TrackWidth, Height = height, Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)) };
+        var ghost = new Border
+        {
+            Width = 34,
+            Height = height,
+            CornerRadius = new CornerRadius(7),
+            Background = new SolidColorBrush(Color.FromArgb(70, palette.Top.R, palette.Top.G, palette.Top.B)),
+            BorderBrush = new SolidColorBrush(palette.Ring),
+            BorderThickness = new Thickness(1),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+            Child = new TextBlock { Text = "+", FontSize = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Colors.White) }
+        };
+        Canvas.SetLeft(row, TrackInset);
+        Canvas.SetTop(row, y);
+        Canvas.SetTop(ghost, y);
+        row.PointerMoved += (_, args) =>
+        {
+            if (drag is null && !scrubbing)
+            {
+                ghost.Visibility = Visibility.Visible;
+                Canvas.SetLeft(ghost, args.GetCurrentPoint(canvas).Position.X - 17);
+            }
+        };
+        row.PointerExited += (_, _) => ghost.Visibility = Visibility.Collapsed;
+        row.PointerPressed += (_, args) =>
+        {
+            args.Handled = true;
+            add(session.Mapper.SourceTime(TimeAt(args.GetCurrentPoint(canvas).Position.X)).SourceMs);
+        };
+        canvas.Children.Add(row);
+        canvas.Children.Add(ghost);
+    }
+
+    private void AddLabel(string title, double y, double height, bool eye, bool hidden = false, Action? toggle = null)    {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, Height = height, Padding = new Thickness(12, 0, 0, 0) };
         if (eye)
         {
@@ -513,7 +612,8 @@ internal sealed class TimelineView
         double width,
         Action select,
         Action<double, double> apply,
-        Func<(double Start, double End, double Low, double High)> bounds)
+        Func<(double Start, double End, double Low, double High)> bounds,
+        bool canMove = true)
     {
         block.PointerMoved += (_, args) =>
         {
@@ -528,10 +628,10 @@ internal sealed class TimelineView
         {
             // Selecting rebuilds every block, so it waits for release; a rebuild mid-press would cancel the drag.
             var x = args.GetCurrentPoint(block).Position.X;
-            var mode = x < EdgeHitWidth ? DragMode.Start : x > width - EdgeHitWidth ? DragMode.End : DragMode.Move;
+            var mode = x < EdgeHitWidth ? DragMode.Start : x > width - EdgeHitWidth ? DragMode.End : canMove ? DragMode.Move : DragMode.None;
             var (start, end, low, high) = bounds();
             session.BeginInteractiveEdit();
-            drag = new Drag(block, args.GetCurrentPoint(canvas).Position.X, mode, start, end, low, high, apply, select);
+            drag = new Drag(block, args.GetCurrentPoint(canvas).Position.X, session.DurationMs, mode, start, end, low, high, apply, select);
             canvas.CapturePointer(args.Pointer);
             args.Handled = true;
         };
@@ -544,6 +644,7 @@ internal sealed class TimelineView
         canvas.CapturePointer(args.Pointer);
         session.Scrub(TimeAt(args.GetCurrentPoint(canvas).Position.X));
         UpdatePlayhead();
+        PlayheadScrubbed?.Invoke();
     }
 
     private void CanvasMoved(object sender, PointerRoutedEventArgs args)
@@ -551,7 +652,13 @@ internal sealed class TimelineView
         var x = args.GetCurrentPoint(canvas).Position.X;
         if (drag is { } active)
         {
-            var delta = (x - active.PressX) / TrackWidth * session.DurationMs;
+            if (active.Mode == DragMode.None)
+            {
+                return;
+            }
+
+            // The scale at the press: trimming a clip changes the total duration under the pointer.
+            var delta = (x - active.PressX) / TrackWidth * active.PressDurationMs;
             double start = active.Start;
             double end = active.End;
             switch (active.Mode)
@@ -578,6 +685,7 @@ internal sealed class TimelineView
         {
             session.Scrub(TimeAt(x));
             UpdatePlayhead();
+            PlayheadScrubbed?.Invoke();
         }
     }
 
@@ -600,12 +708,13 @@ internal sealed class TimelineView
 
     private enum DragMode
     {
+        None,
         Move,
         Start,
         End
     }
 
-    private sealed record Drag(BlockGrid Block, double PressX, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select);
+    private sealed record Drag(BlockGrid Block, double PressX, double PressDurationMs, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select);
 
     private sealed record Palette(Color Top, Color Bottom, Color Ring)
     {
