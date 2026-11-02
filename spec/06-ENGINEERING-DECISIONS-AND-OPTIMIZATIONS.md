@@ -476,6 +476,31 @@ full frame, which depends on regenerated fixtures.
 - NV12 chroma starts two thirds into the decoder's buffer, not at `stride * height`: decoders pad rows to the macroblock
   height and the media type does not report it.
 - WIC's metadata API rejects the byte vectors of the GIF `NETSCAPE2.0` extension, so the loop block is added to the finished file.
-- Open question: under the xUnit test host, a fragmented clip reads back 100 ms late from frame 27. A standalone process
-  never showed it across fast, real-time, long and worker-thread writes. `MF_LOW_LATENCY` did not change it. The recording
-  acceptance check in `spec/08` phase 5 must confirm cursor sync on a real recording.
+- A fragmented clip reading back late was first seen here as a test host oddity. ADR-22 has the real cause.
+
+---
+
+## 22. ADR-22: Windows Reads Fragment Times From the MP4 Boxes
+
+### Context
+A recording's frames came back up to 280 ms away from the times they were written with, in blocks of tens of frames, sometimes going backwards. On a screen that stays still and then changes, the picture would lag the cursor by that much.
+
+### Root cause
+The Media Foundation fragmented MP4 sink writes about 300 ms fragments with exact sample durations but no `tfdt`. Its reader then estimates each fragment's start, and only comes right at a keyframe, whose time is in `mfra`. The file is correct; the reported times are not. It looked like a test host problem earlier because constant-rate clips are often estimated correctly.
+
+### Decision
+`Mp4FragmentIndex` parses `moov` and `moof` into a table of true times and keyframes, and `VideoFileReader` numbers frames against it instead of using `SampleTime`. A seek targets the keyframe's true time and then re-synchronizes on the nearest keyframe. Plain MP4 files keep the reported times. Recordings use H.264 baseline, so decode order is presentation order.
+
+### Status
+`FragmentedTimingTests` covers variable-rate reads and seeks on generated clips. Not checked: `AudioFileReader` still uses reported times on fragmented files, which may have the same error and must be measured against a real recording; and how the macOS app reads these files.
+
+---
+
+## 23. ADR-23: Recording on Windows: Silence, and an Unexplained Machine Reset
+
+### Decisions
+- WASAPI loopback delivers nothing while nothing plays, and the MP4 sink holds video back waiting for audio to interleave. Measured: 142 of about 240 frames written and 3.5 s to stop. `AudioTrackRecorder` now writes silence from a timer, and live writers set `MF_SINK_WRITER_DISABLE_THROTTLING`.
+- BGRA to NV12 runs on at most 4 threads. Measured 6 to 7 ms per frame including the GPU copy, on a 1536Ã—960 capture from a process without DPI awareness.
+
+### Open problem
+On one Intel MacBook Pro running Boot Camp (i9-9880H, Radeon Pro 5500M, Windows 10 19045), the machine froze and reset within about a minute in all 3 runs that recorded the microphone through `WasapiCapture`. The fans rose first, and Event 41 shows no bugcheck and no dump. In the last run, disposing the recorder took 5 s against about 40 ms without a microphone. The 4 runs without a microphone completed and the machine stayed up. Two of the 3 resets also had the camera on; the camera alone has not been run. This points at the microphone path on this audio driver, but it is not proven and no other machine has been tried. Until it is resolved, keep the microphone off by default and do not run the microphone test without accepting a possible reset.

@@ -13,6 +13,9 @@ public sealed class VideoFileReader : IDisposable
     private readonly IMFSourceReader reader;
     private readonly int stride;
     private readonly double startMs;
+    private readonly Mp4FragmentIndex? index;
+    private int nextIndex;
+    private bool resolveAfterSeek;
 
     public int Width { get; }
     public int Height { get; }
@@ -20,6 +23,7 @@ public sealed class VideoFileReader : IDisposable
     public VideoFileReader(string path)
     {
         MediaFoundationRuntime.EnsureStarted();
+        index = Mp4FragmentIndex.TryRead(path, "vide");
         using var attributes = MediaFactory.MFCreateAttributes(2);
         attributes.Set(SourceReaderAttributeKeys.EnableAdvancedVideoProcessing, false);
         attributes.Set(SinkWriterAttributeKeys.ReadwriteEnableHardwareTransforms, true);
@@ -95,14 +99,41 @@ public sealed class VideoFileReader : IDisposable
                 buffer.Unlock();
             }
 
-            return new VideoFrame(data, Width, Height, sample.SampleTime / 10_000.0 - startMs);
+            return new VideoFrame(data, Width, Height, PresentationMs(sample.SampleTime / 10_000.0));
         }
     }
 
     public void Seek(double positionMs)
     {
         reader.Flush(SourceReaderIndex.FirstVideoStream);
-        reader.SetCurrentPosition((long)((positionMs + startMs) * 10_000));
+        if (index is null)
+        {
+            reader.SetCurrentPosition((long)((positionMs + startMs) * 10_000));
+            return;
+        }
+
+        // Keyframe times are the ones Media Foundation has right, because its seek table holds them.
+        nextIndex = index.KeyframeAtOrBefore(positionMs);
+        resolveAfterSeek = true;
+        reader.SetCurrentPosition((long)((index.TimesMs[nextIndex] + startMs) * 10_000));
+    }
+
+    private double PresentationMs(double reportedMs)
+    {
+        if (index is null)
+        {
+            return reportedMs - startMs;
+        }
+
+        if (resolveAfterSeek)
+        {
+            // A seek always lands on a keyframe, though not always the one asked for.
+            resolveAfterSeek = false;
+            nextIndex = index.NearestKeyframe(reportedMs - startMs);
+        }
+
+        var last = index.TimesMs.Length - 1;
+        return index.TimesMs[Math.Min(nextIndex++, last)];
     }
 
     public void Dispose() => reader.Dispose();

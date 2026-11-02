@@ -27,6 +27,14 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-02, Phase 3 and 5: preview audio and the recording engine (verifier work on Windows)
+
+### Verifier
+- **Result:** Phase 5 FAIL (partial). Phase 3 not measured.
+- **Done:** Preview plays the audio mix through WASAPI, and the device position corrects the clock. Display, window and area capture, telemetry hooks, system audio, microphone, webcam, pause and package finishing as a library. The HUD and target picker are not written, so nothing is reachable from the app yet.
+- **Measured:** Screen only and screen with system audio, on a 1536Ã—960 capture: about 57 fps, 6 to 7 ms per frame to copy and convert, cursor every 9 ms, pause removed from all times, stop in about 45 ms. Reader times match written times in `FragmentedTimingTests` (ADR-22). Preview audio has not been heard in the app, and no A/V offset was measured.
+- **Blocker:** The 3 runs with the microphone reset the machine (ADR-23). Camera alone not run. Window and area capture, crash safety and opening a recording on macOS not run.
+
 ## 2026-11-01, Phase 1, 2 and 6: saving and the compositor (verifier work on Windows)
 
 ### Verifier

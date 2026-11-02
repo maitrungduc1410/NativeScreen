@@ -27,10 +27,8 @@ public sealed class VideoRoundTripTests : IDisposable
         while (reader.ReadNext() is { } frame)
         {
             Assert.True(frame.PresentationMs > last, $"pts {frame.PresentationMs} after {last}");
-            // Plain files only. Under the test host a fragmented file reads back 100 ms late from frame 27, which a standalone
-            // process never showed (windows/HANDOFF.md). The real check is the recording acceptance test in spec/08.
             Assert.True(
-                fragmented || Math.Abs(frame.PresentationMs - count * 1000.0 / Fps) <= 1,
+                Math.Abs(frame.PresentationMs - count * 1000.0 / Fps) <= 1,
                 $"frame {count} at {frame.PresentationMs}, expected {count * 1000.0 / Fps}");
             last = frame.PresentationMs;
             // Luma ramps with the frame index, so a wrong order or a stuck frame shows up here.

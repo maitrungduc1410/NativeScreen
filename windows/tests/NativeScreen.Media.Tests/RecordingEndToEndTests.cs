@@ -3,7 +3,7 @@ using NativeScreen.Media;
 
 namespace NativeScreen.Media.Tests;
 
-/// <summary>Real capture from this machine's screen, speakers, microphone and camera, so it only runs when asked: NS_TEST_CAPTURE=1.</summary>
+/// <summary>Real capture from this machine's screen and speakers, so it only runs when asked: NS_TEST_CAPTURE=1. The microphone ("mic") reset one machine three times (spec/06 ADR-23): add it knowingly.</summary>
 public sealed class RecordingEndToEndTests : IDisposable
 {
     private readonly string directory = Directory.CreateTempSubdirectory("ns-record-").FullName;

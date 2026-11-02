@@ -14,6 +14,7 @@ public sealed class VideoFileWriter : IDisposable
     private const uint Bt709Matrix = 1;
     private const uint NominalRange16To235 = 2;
     private const double GopSeconds = 2;
+    private const uint H264BaselineProfile = 66;
 
     private readonly IMFSinkWriter writer;
     private readonly int videoStream;
@@ -37,6 +38,8 @@ public sealed class VideoFileWriter : IDisposable
         if (fragmented)
         {
             attributes.Set(TranscodeAttributeKeys.TranscodeContainertype, TranscodeContainerTypeGuids.Fmpeg4);
+            // A live source cannot wait for the encoder. MF_SINK_WRITER_DISABLE_THROTTLING.
+            attributes.Set(new Guid("08B845D8-2B74-4AFE-9D53-BE16D2D5AE4F"), true);
         }
 
         writer = MediaFactory.MFCreateSinkWriterFromURL(path, null, attributes);
@@ -50,6 +53,12 @@ public sealed class VideoFileWriter : IDisposable
         output.Set(MediaTypeAttributeKeys.PixelAspectRatio, Pack(1, 1));
         output.Set(MediaTypeAttributeKeys.InterlaceMode, (uint)VideoInterlaceMode.Progressive);
         output.Set(MediaTypeAttributeKeys.MaxKeyframeSpacing, (uint)(fps * GopSeconds));
+        if (fragmented && !hevc)
+        {
+            // No B-frames: with reordering, a clip with gaps between frames reads back with each frame at the next one's time.
+            output.Set(MediaTypeAttributeKeys.Mpeg2Profile, H264BaselineProfile);
+        }
+
         SetBt709(output);
         videoStream = writer.AddStream(output);
 

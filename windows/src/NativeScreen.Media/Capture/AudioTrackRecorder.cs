@@ -18,6 +18,8 @@ public sealed class AudioTrackRecorder : IDisposable
     private const int SampleRate = 48000;
     private const double GapToleranceMs = 40;
     private const double AheadToleranceMs = 200;
+    private const int SilenceCheckMs = 50;
+    private const double SilenceAfterMs = 150;
 
     private readonly WasapiCapture capture;
     private readonly Action<byte[], int, double, double> write;
@@ -28,7 +30,7 @@ public sealed class AudioTrackRecorder : IDisposable
     private byte[] bytes = new byte[32768];
     private readonly byte[] silence;
     private long writtenFrames;
-    private bool wasPaused;
+    private readonly Timer silenceTimer;
 
     /// <summary>Output level of the last buffer, 0 to 1, for the recording bar's meter.</summary>
     public double Level { get; private set; }
@@ -46,6 +48,7 @@ public sealed class AudioTrackRecorder : IDisposable
             || (format is WaveFormatExtensible extensible && extensible.SubFormat == AudioMediaSubtypes.MEDIASUBTYPE_IEEE_FLOAT);
         converter = new PcmConverter(format.SampleRate, format.Channels, isFloat, format.BitsPerSample, SampleRate, channels);
         capture.DataAvailable += DataAvailable;
+        silenceTimer = new Timer(_ => FillSilence(), null, SilenceCheckMs, SilenceCheckMs);
         capture.StartRecording();
     }
 
@@ -90,6 +93,7 @@ public sealed class AudioTrackRecorder : IDisposable
     /// <summary>Stops capture and pads to the recording's end, so every track has the same length.</summary>
     public void Stop(double durationMs)
     {
+        silenceTimer.Dispose();
         capture.DataAvailable -= DataAvailable;
         capture.StopRecording();
         lock (capture)
@@ -122,16 +126,11 @@ public sealed class AudioTrackRecorder : IDisposable
         {
             if (elapsed(now - bufferMs) is not { } expectedMs)
             {
-                wasPaused = true;
                 return;
             }
 
             var writtenMs = writtenFrames * 1000.0 / SampleRate;
-            if (expectedMs - writtenMs > GapToleranceMs && !wasPaused)
-            {
-                FillUntil(expectedMs);
-            }
-            else if (expectedMs - writtenMs > GapToleranceMs)
+            if (expectedMs - writtenMs > GapToleranceMs)
             {
                 FillUntil(expectedMs);
             }
@@ -140,7 +139,6 @@ public sealed class AudioTrackRecorder : IDisposable
                 return;
             }
 
-            wasPaused = false;
             var length = converted.Length * 2;
             if (bytes.Length < length)
             {
@@ -152,8 +150,20 @@ public sealed class AudioTrackRecorder : IDisposable
         }
     }
 
-    private void FillUntil(double positionMs)
+    /// <summary>Loopback sends nothing during silence, and the MP4 sink holds video back waiting for audio to interleave with it.</summary>
+    private void FillSilence()
     {
+        lock (capture)
+        {
+            var now = Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
+            if (elapsed(now) is { } expectedMs && expectedMs - writtenFrames * 1000.0 / SampleRate > SilenceAfterMs)
+            {
+                FillUntil(expectedMs - SilenceAfterMs / 2);
+            }
+        }
+    }
+
+    private void FillUntil(double positionMs)    {
         var target = (long)(positionMs / 1000 * SampleRate);
         var frameBytes = channels * 2;
         while (writtenFrames < target)
