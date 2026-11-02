@@ -1541,17 +1541,16 @@ public final class HardwareVideoExporter {
                     }
                 }
                 // Duck/mute original microphone during any active `VoiceoverSegment` with `hideRecording == true`
-                if !doc.timeline.isVoiceoversTrackHidden {
-                    for vo in doc.timeline.voiceovers where !vo.disabled && vo.hideRecording {
-                        if let tStart = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs),
-                           let tEnd = session.timeMapper.timelineTime(forSourceMs: vo.sourceEndMs),
-                           tEnd > tStart {
-                            params.setVolume(0.0, at: CMTime(seconds: tStart / 1000.0, preferredTimescale: 600))
-                            let baseVol = Float(min(1.0, max(0.0, doc.audio.microphoneVolume * Double(masterVol))))
-                            params.setVolume(baseVol, at: CMTime(seconds: tEnd / 1000.0, preferredTimescale: 600))
-                        }
+                for vo in doc.timeline.voiceovers where !vo.disabled && vo.hideRecording && !doc.timeline.isVoiceoverTrackHidden(vo.trackIndex) {
+                    if let tStart = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs),
+                       let tEnd = session.timeMapper.timelineTime(forSourceMs: vo.sourceEndMs),
+                       tEnd > tStart {
+                        params.setVolume(0.0, at: CMTime(seconds: tStart / 1000.0, preferredTimescale: 600))
+                        let baseVol = Float(min(1.0, max(0.0, doc.audio.microphoneVolume * Double(masterVol))))
+                        params.setVolume(baseVol, at: CMTime(seconds: tEnd / 1000.0, preferredTimescale: 600))
                     }
                 }
+
                 if hasInsertedAny {
                     mixParams.append(params)
                 } else {
@@ -1561,34 +1560,33 @@ public final class HardwareVideoExporter {
         }
 
         // 3. Voiceover Segments (`doc.timeline.voiceovers`)
-        if !doc.timeline.isVoiceoversTrackHidden {
-            for vo in doc.timeline.voiceovers where !vo.disabled && vo.volume > 0.001 {
-                let voURL = session.packageURL.appendingPathComponent(vo.relativePath)
-                guard FileManager.default.fileExists(atPath: voURL.path) else { continue }
-                let voAsset = AVURLAsset(url: voURL)
-                guard let voTracks = try? await voAsset.loadTracks(withMediaType: .audio),
-                      let srcVOTrack = voTracks.first,
-                      let compVOTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-                    continue
-                }
-                let assetDur = (try? await voAsset.load(.duration)) ?? CMTime(seconds: vo.durationMs / 1000.0, preferredTimescale: 600)
-                let startTimelineMs = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs) ?? vo.sourceStartMs
-                let destStartCM = CMTime(seconds: max(0.0, startTimelineMs / 1000.0), preferredTimescale: 600)
-                let clipDurSec = min(CMTimeGetSeconds(assetDur), max(0.1, totalTimelineSec - CMTimeGetSeconds(destStartCM)))
-                guard clipDurSec > 0.05 else {
-                    composition.removeTrack(compVOTrack)
-                    continue
-                }
-                let insertRange = CMTimeRange(start: .zero, duration: CMTime(seconds: clipDurSec, preferredTimescale: 600))
-                if (try? compVOTrack.insertTimeRange(insertRange, of: srcVOTrack, at: destStartCM)) != nil {
-                    let params = AVMutableAudioMixInputParameters(track: compVOTrack)
-                    params.setVolume(Float(min(1.0, max(0.0, vo.volume * Double(masterVol)))), at: destStartCM)
-                    mixParams.append(params)
-                } else {
-                    composition.removeTrack(compVOTrack)
-                }
+        for vo in doc.timeline.voiceovers where !vo.disabled && vo.volume > 0.001 && !doc.timeline.isVoiceoverTrackHidden(vo.trackIndex) {
+            let voURL = session.packageURL.appendingPathComponent(vo.relativePath)
+            guard FileManager.default.fileExists(atPath: voURL.path) else { continue }
+            let voAsset = AVURLAsset(url: voURL)
+            guard let voTracks = try? await voAsset.loadTracks(withMediaType: .audio),
+                  let srcVOTrack = voTracks.first,
+                  let compVOTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                continue
+            }
+            let assetDur = (try? await voAsset.load(.duration)) ?? CMTime(seconds: vo.durationMs / 1000.0, preferredTimescale: 600)
+            let startTimelineMs = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs) ?? vo.sourceStartMs
+            let destStartCM = CMTime(seconds: max(0.0, startTimelineMs / 1000.0), preferredTimescale: 600)
+            let clipDurSec = min(CMTimeGetSeconds(assetDur), max(0.1, totalTimelineSec - CMTimeGetSeconds(destStartCM)))
+            guard clipDurSec > 0.05 else {
+                composition.removeTrack(compVOTrack)
+                continue
+            }
+            let insertRange = CMTimeRange(start: .zero, duration: CMTime(seconds: clipDurSec, preferredTimescale: 600))
+            if (try? compVOTrack.insertTimeRange(insertRange, of: srcVOTrack, at: destStartCM)) != nil {
+                let params = AVMutableAudioMixInputParameters(track: compVOTrack)
+                params.setVolume(Float(min(1.0, max(0.0, vo.volume * Double(masterVol)))), at: destStartCM)
+                mixParams.append(params)
+            } else {
+                composition.removeTrack(compVOTrack)
             }
         }
+
 
         // 4. Background Audio Track (`doc.audio.backgroundMusic`, looping across `totalTimelineSec`)
         if !doc.audio.backgroundMusic.muted && doc.audio.backgroundMusic.volume > 0.001,

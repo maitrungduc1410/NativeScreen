@@ -128,6 +128,10 @@ public struct MultiTrackTimelineView: View {
                         let hasTypingSuggestions = !typingSuggestions.isEmpty
                         let hasCameraLayoutsTrack = !session.document.timeline.cameraLayouts.isEmpty
                         let hasVoiceoversTrack = !session.document.timeline.voiceovers.isEmpty || session.isRecordingVoiceover
+                        let voiceoverTrackCount = max(
+                            session.document.timeline.voiceovers.voiceoverTrackCount,
+                            session.isRecordingVoiceover ? session.voiceoverRecordingTrackIndex + 1 : 0
+                        )
                         let hasShortcutsTrack = !session.document.captions.shortcutTracks.isEmpty
 
                         ScrollViewReader { verticalScrollProxy in
@@ -220,27 +224,29 @@ public struct MultiTrackTimelineView: View {
                                         }
 
                                         if hasVoiceoversTrack {
-                                            let voHidden = session.document.timeline.isVoiceoversTrackHidden
-                                            HStack(spacing: 6) {
-                                                Button {
-                                                    session.toggleVoiceoversTrackVisibility()
-                                                } label: {
-                                                    Image(systemName: voHidden ? "eye.slash" : "eye")
-                                                        .font(.system(size: 10, weight: .medium))
-                                                        .foregroundStyle(Color.ink.opacity(voHidden ? 0.28 : 0.65))
-                                                        .frame(width: 22, height: 22)
-                                                        .contentShape(Rectangle())
-                                                }
-                                                .buttonStyle(.plain)
+                                            ForEach(0..<voiceoverTrackCount, id: \.self) { voTrack in
+                                                let voHidden = session.document.timeline.isVoiceoverTrackHidden(voTrack)
+                                                HStack(spacing: 6) {
+                                                    Button {
+                                                        session.toggleVoiceoverTrackVisibility(trackIndex: voTrack)
+                                                    } label: {
+                                                        Image(systemName: voHidden ? "eye.slash" : "eye")
+                                                            .font(.system(size: 10, weight: .medium))
+                                                            .foregroundStyle(Color.ink.opacity(voHidden ? 0.28 : 0.65))
+                                                            .frame(width: 22, height: 22)
+                                                            .contentShape(Rectangle())
+                                                    }
+                                                    .buttonStyle(.plain)
 
-                                                Text("Voiceovers")
-                                                    .font(.system(size: 11, weight: .medium))
-                                                    .foregroundStyle(Color.ink.opacity(voHidden ? 0.30 : 0.65))
-                                                    .lineLimit(1)
+                                                    Text(voTrack == 0 ? "Voiceovers" : "Voiceovers \(voTrack + 1)")
+                                                        .font(.system(size: 11, weight: .medium))
+                                                        .foregroundStyle(Color.ink.opacity(voHidden ? 0.30 : 0.65))
+                                                        .lineLimit(1)
+                                                }
+                                                .padding(.leading, 10)
+                                                .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                                .id(voTrack == 0 ? "track_voiceovers" : "track_voiceovers_\(voTrack)")
                                             }
-                                            .padding(.leading, 10)
-                                            .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
-                                            .id("track_voiceovers")
                                         }
 
                                         if hasShortcutsTrack {
@@ -337,10 +343,13 @@ public struct MultiTrackTimelineView: View {
 
                                                 // Lane 3B: Voiceovers Track
                                                 if hasVoiceoversTrack {
-                                                    voiceoversLaneView(
-                                                        contentWidth: contentWidth,
-                                                        totalTimelineMs: totalTimelineMs
-                                                    )
+                                                    ForEach(0..<voiceoverTrackCount, id: \.self) { voTrack in
+                                                        voiceoversLaneView(
+                                                            trackIndex: voTrack,
+                                                            contentWidth: contentWidth,
+                                                            totalTimelineMs: totalTimelineMs
+                                                        )
+                                                    }
                                                 }
 
                                                 // Lane 4+: Multi-Track Keyboard Shortcuts Lanes (`34pt` height)
@@ -1375,15 +1384,15 @@ public struct MultiTrackTimelineView: View {
     // MARK: - 3B. Voiceovers Track Lane
 
     @ViewBuilder
-    private func voiceoversLaneView(contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
-        let isHidden = session.document.timeline.isVoiceoversTrackHidden
+    private func voiceoversLaneView(trackIndex: Int, contentWidth: CGFloat, totalTimelineMs: Double) -> some View {
+        let isHidden = session.document.timeline.isVoiceoverTrackHidden(trackIndex)
 
         ZStack(alignment: .leading) {
             Color.clear
                 .frame(width: contentWidth, height: maskRowHeight)
                 .contentShape(Rectangle())
 
-            if session.document.timeline.voiceovers.isEmpty && session.isRecordingVoiceover {
+            if session.isRecordingVoiceover && session.voiceoverRecordingTrackIndex == trackIndex {
                 let startMs = session.timeMapper.timelineTime(forSourceMs: session.voiceoverRecordingStartSourceMs) ?? 0.0
                 let curMs = max(startMs + 100.0, session.playheadTimelineMs)
                 let recX = CGFloat(startMs / totalTimelineMs) * contentWidth
@@ -1409,7 +1418,7 @@ public struct MultiTrackTimelineView: View {
                 .offset(x: recX)
             }
 
-            ForEach(session.document.timeline.voiceovers) { vo in
+            ForEach(session.document.timeline.voiceovers.filter { $0.trackIndex == trackIndex }) { vo in
                 if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: vo.sourceStartMs, sourceEndMs: vo.sourceEndMs) {
                     let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
@@ -1438,7 +1447,7 @@ public struct MultiTrackTimelineView: View {
                         startMs: tStartMs,
                         endMs: tEndMs,
                         allowDragMove: true,
-                        allowVerticalTrackDrag: false,
+                        allowVerticalTrackDrag: true,
                         clipDecoration: ClipSegmentDecoration(
                             timelineStartMs: tStartMs,
                             timelineEndMs: tEndMs,
@@ -1486,7 +1495,9 @@ public struct MultiTrackTimelineView: View {
                             let newSrcEnd = max(newSrcStart + 300.0, session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs)
                             session.moveVoiceover(id: vo.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
                         },
-                        onMoveVerticalTracks: { _ in },
+                        onMoveVerticalTracks: { trackDelta in
+                            session.moveVoiceoverToTrack(id: vo.id, targetTrackIndex: trackIndex + trackDelta)
+                        },
                         onEndInteractive: {
                             session.endInteractiveEdit()
                         }

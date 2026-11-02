@@ -27,6 +27,52 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, Click ripple and voiceover tracks (macOS side done, Windows port pending)
+
+### Writer
+- **Scope:** macOS only. Rules: `spec/06` ADR-30, ripple formula: `spec/07` Pass 4. Fixtures are regenerated; only the ripple frames of `cursor-styles` change, so they fail until the ripple is ported.
+- **To port on Windows:**
+  - Core solver: `clickWaves` on the cursor frame state (`SpringTrajectorySolver.swift`). `activeClickProgress` is unchanged.
+  - Rendering: a `ClickRipple.hlsl` pass over the whole canvas before the cursor sprite; remove the ring.
+  - Core models: `VoiceoverSegment.trackIndex`, `TimelineConfig.hiddenVoiceoverTracks` and the helpers in `Models/VoiceoverTrackLayout.swift`, run on load.
+  - Audio: playback and `AudioMixer` skip hidden tracks per segment (`isVoiceoverTrackHidden`), not with the old single flag.
+  - App: one timeline row per voiceover track with its own eye, the recording block on its track, vertical drag between tracks (`moveVoiceoverToTrack`).
+- **How to verify:** after fixtures are regenerated, `cursor-styles` frames. Open a project with overlapping voiceovers: each lands on its own track and the overlap still plays mixed.
+- **Risks / unsure:** the 3-wave limit and the wave bouncing past the screen edge have no fixture.
+
+### Verifier
+- **Result:**
+- **verify.ps1:**
+- **Measurements:**
+- **Changes made:**
+- **Spec updates:**
+- **Next:**
+
+## 2026-11-02, Cursor themes redrawn (macOS side done, Windows port pending)
+
+### Writer
+- **Scope:** macOS only. `tools/generate_cursor_assets.py` redraws every cursor and adds themes; `CursorSpriteProvider.swift` and `ProjectDocument.swift` change the default, the order, the selection of non-pointer sprites and the migration of old projects. All rules: `spec/06` ADR-29. `conformance/` is regenerated, with one compositor per case, so the ADR-20 background leak is gone.
+- **Built on macOS:** macOS app builds. Two fixture runs are pixel-identical. No Windows code was changed or built, so **Windows tests are expected to fail until the port below is done**.
+- **To port on Windows:**
+  - `Core/Rendering/CursorSpriteName.cs`: new `PreferredThemeOrder`; `NormalizeThemeId` accepts the nine ids and falls back to `classic-dark` (not `arrow`).
+  - `CursorConfig` JSON read and its default: default `classic-dark`, and the `arrow` migration from `CursorThemePreset.migrateLegacyTheme`.
+  - `OverlayRasterizer.CursorSprite`: non-pointer kinds follow the selected pointer's variant number (`resolveCGImageAndHotspot` in Swift).
+  - Inspector theme names: `Classic Dark`, `Classic Light`, `Dart Color`; the others capitalized from the id, as `displayName(forSetId:)` does.
+  - `OverlayRasterizer.AddSvgDropShadow`: the shared shadow is now black 50%, stdDeviation 3, dy 2.4 (was 35%, 2.2, 1.6). Update the values and its comment.
+  - Inspector theme and variant cards: neutral gray fill (white 0.48, hover 0.51, selected 0.54) in both app themes, so dark and light cursors both read. Previews are centered on the sprite's visible pixels (`centeredOnVisiblePixels`), not on its view box.
+  - `FrameFixtureTests`: the leak comment is out of date. Turn on full-frame enforcement for the passes that exist (`spec/06` ADR-20).
+- **How to verify:** `pwsh windows/scripts/verify.ps1`, then frame fixtures. In the app, open a project saved with `arrow` + `pointer-2` and confirm it shows `classic-light`. Save it and open it on macOS: same theme.
+- **Open VERIFY items:** Direct2D has to draw the `dart-color` gradients (`url(#g)`) and the `fill-opacity` / `stroke-opacity` in `touch`. If it does not, change the generator rather than special-casing Windows, so both platforms stay the same.
+- **Risks / unsure:** `cursor-styles` is the only case with a non-default theme (`rounded`), so the other new themes have no frame fixture. Check them by eye against the macOS inspector.
+
+### Verifier
+- **Result:**
+- **verify.ps1:**
+- **Measurements:**
+- **Changes made:**
+- **Spec updates:**
+- **Next:**
+
 ## 2026-11-02, Editor parity: segment menus, command menu, export modals, recording options
 
 ### Verifier

@@ -8,7 +8,7 @@ import AVFoundation
 /// (e.g. `pointer-1__12-6.svg` -> `id = "pointer-1"`, `kind = "pointer"`, `variantNumber = 1`, `hotspot01 = (0.12, 0.06)`).
 public struct CursorVariantDescriptor: Identifiable, Equatable, Sendable {
     public let id: String          // e.g. "pointer-1", "pointer-2"
-    public let setId: String       // e.g. "arrow", "rounded"
+    public let setId: String       // e.g. "classic-dark", "rounded"
     public let kind: String        // e.g. "pointer", "pointinghand", "ibeamstroke"
     public let variantNumber: Int  // 1, 2, 3...
     public let hotspot01: Point01
@@ -24,10 +24,12 @@ public struct CursorThemePreset: Identifiable, Equatable, Sendable {
     public let pointerVariants: [CursorVariantDescriptor]
     public let allSprites: [CursorVariantDescriptor]
 
-    public static let defaultThemeId = "arrow"
+    public static let defaultThemeId = "classic-dark"
 
     /// Display order in the Cursor inspector; unknown sets follow alphabetically.
-    public static let preferredOrder: [String] = ["arrow", "rounded", "touch"]
+    public static let preferredOrder: [String] = [
+        "classic-dark", "classic-light", "rounded", "dart", "dart-color", "outline", "ring", "pixel", "touch"
+    ]
 
     public static let allThemes: [CursorThemePreset] = loadAllBundledThemes()
 
@@ -42,6 +44,12 @@ public struct CursorThemePreset: Identifiable, Equatable, Sendable {
     public static func normalizeThemeId(_ id: String) -> String {
         if allThemes.contains(where: { $0.id == id }) { return id }
         return id.hasPrefix("touch") ? "touch" : defaultThemeId
+    }
+
+    /// Maps the retired `arrow` theme, whose two variants became separate themes, when a saved config is decoded.
+    public static func migrateLegacyTheme(themeId: String, variantId: String?) -> (themeId: String, variantId: String?) {
+        guard themeId == "arrow" else { return (themeId, variantId) }
+        return (variantId == "pointer-2" ? "classic-light" : "classic-dark", nil)
     }
 
     // MARK: - Bundle Discovery
@@ -150,9 +158,9 @@ public struct CursorThemePreset: Identifiable, Equatable, Sendable {
 
     private static func displayName(forSetId setId: String) -> String {
         switch setId {
-        case "arrow": return "Arrow"
-        case "rounded": return "Rounded"
-        case "touch": return "Touch"
+        case "classic-dark": return "Classic Dark"
+        case "classic-light": return "Classic Light"
+        case "dart-color": return "Dart Color"
         default: return setId.capitalized
         }
     }
@@ -161,8 +169,8 @@ public struct CursorThemePreset: Identifiable, Equatable, Sendable {
         [
             CursorThemePreset(
                 id: defaultThemeId,
-                name: "Arrow",
-                subtitle: "Arrow pointer",
+                name: "Classic Dark",
+                subtitle: "Classic dark pointer",
                 hotspot01: Point01(x: 0.12, y: 0.06),
                 pointerVariants: [],
                 allSprites: []
@@ -273,7 +281,10 @@ public final class CursorSpriteProvider {
                 chosenDescriptor = theme.allSprites.first(where: { $0.kind == "pointer" }) ?? theme.allSprites.first
             }
         } else {
-            chosenDescriptor = theme.allSprites.first(where: { $0.kind == mappedKind })
+            // Hands and bars follow the color of the selected pointer variant when the theme draws them per variant.
+            let pointerVariantNumber = variantId.flatMap { id in theme.pointerVariants.first(where: { $0.id == id })?.variantNumber }
+            chosenDescriptor = theme.allSprites.first(where: { $0.kind == mappedKind && $0.variantNumber == pointerVariantNumber })
+                ?? theme.allSprites.first(where: { $0.kind == mappedKind })
                 ?? ( variantId.flatMap { id in theme.pointerVariants.first(where: { $0.id == id }) } )
                 ?? theme.allSprites.first(where: { $0.kind == "pointer" })
                 ?? theme.allSprites.first
@@ -356,7 +367,30 @@ public final class CursorSpriteProvider {
         )
 
         NSGraphicsContext.restoreGraphicsState()
-        return ctx.makeImage()!
+        let image = ctx.makeImage()!
+        return centerInPreviewBox ? centeredOnVisiblePixels(image, context: ctx) : image
+    }
+
+    /// Sprites sit off-center in their view box around the hotspot; inspector cards center what is actually drawn.
+    private func centeredOnVisiblePixels(_ image: CGImage, context ctx: CGContext) -> CGImage {
+        guard let data = ctx.data?.assumingMemoryBound(to: UInt8.self) else { return image }
+        let width = ctx.width, height = ctx.height, stride = ctx.bytesPerRow
+        var minX = width, maxX = -1, minY = height, maxY = -1
+        for y in 0..<height {
+            for x in 0..<width where data[y * stride + x * 4 + 3] > 16 {
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= 0 else { return image }
+        // Bitmap rows run top-down in memory, while CGContext drawing runs bottom-up.
+        let dx = CGFloat(width - 1 - maxX - minX) / 2
+        let dy = CGFloat(maxY + minY - (height - 1)) / 2
+        ctx.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        ctx.draw(image, in: CGRect(x: dx, y: dy, width: CGFloat(width), height: CGFloat(height)))
+        return ctx.makeImage() ?? image
     }
 
     private func renderFallbackProceduralCGImage(themeId: String, pixelSize: Int) -> CGImage {

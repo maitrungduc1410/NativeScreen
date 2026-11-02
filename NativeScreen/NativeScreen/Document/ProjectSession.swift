@@ -48,6 +48,7 @@ public final class ProjectSession: Identifiable {
     public var isScanningFaces: Bool = false
     public var isRecordingVoiceover: Bool = false
     public var voiceoverRecordingStartSourceMs: Double = 0.0
+    public var voiceoverRecordingTrackIndex: Int = 0
     @ObservationIgnored private var activeVoiceoverRecorder: AVAudioRecorder?
     @ObservationIgnored private var activeVoiceoverRelativePath: String?
     public var selectedSliceId: String?
@@ -295,6 +296,7 @@ public final class ProjectSession: Identifiable {
             durationMs: metadata.durationMs
         )
         document.timeline.maskTracks.removeAll { $0.items.isEmpty }
+        document.timeline.normalizeVoiceoverTracks()
 
         let cursorURL = recordingDir.appendingPathComponent(metadata.tracks.cursorTelemetry)
         let clicksURL = recordingDir.appendingPathComponent(metadata.tracks.clicksTelemetry)
@@ -3687,9 +3689,8 @@ public final class ProjectSession: Identifiable {
     // MARK: - Voiceovers Track & Live Voiceover Recording
 
     public func activeVoiceovers(atSourceMs sourceMs: Double) -> [VoiceoverSegment] {
-        guard !document.timeline.isVoiceoversTrackHidden else { return [] }
         return document.timeline.voiceovers.filter { vo in
-            !vo.disabled && sourceMs >= vo.sourceStartMs && sourceMs <= vo.sourceEndMs
+            !vo.disabled && !document.timeline.isVoiceoverTrackHidden(vo.trackIndex) && sourceMs >= vo.sourceStartMs && sourceMs <= vo.sourceEndMs
         }
     }
 
@@ -3697,9 +3698,9 @@ public final class ProjectSession: Identifiable {
         activeVoiceovers(atSourceMs: sourceMs).contains { $0.hideRecording }
     }
 
-    public func toggleVoiceoversTrackVisibility() {
+    public func toggleVoiceoverTrackVisibility(trackIndex: Int) {
         mutate { doc in
-            doc.timeline.isVoiceoversTrackHidden.toggle()
+            doc.timeline.setVoiceoverTrack(trackIndex, hidden: !doc.timeline.isVoiceoverTrackHidden(trackIndex))
         }
     }
 
@@ -3736,6 +3737,7 @@ public final class ProjectSession: Identifiable {
         activeVoiceoverRecorder = recorder
         activeVoiceoverRelativePath = relPath
         voiceoverRecordingStartSourceMs = committedSourceTimeMs
+        voiceoverRecordingTrackIndex = document.timeline.voiceovers.firstVoiceoverTrackEmpty(after: committedSourceTimeMs)
         isRecordingVoiceover = true
         if !isPlaying {
             isPlaying = true
@@ -3766,12 +3768,13 @@ public final class ProjectSession: Identifiable {
             volume: 1.0,
             attachMode: .synchronized,
             hideRecording: false,
-            disabled: false
+            disabled: false,
+            trackIndex: voiceoverRecordingTrackIndex
         )
         mutate { doc in
-            doc.timeline.isVoiceoversTrackHidden = false
+            doc.timeline.setVoiceoverTrack(newVO.trackIndex, hidden: false)
             doc.timeline.voiceovers.append(newVO)
-            doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
+            doc.timeline.normalizeVoiceoverTracks()
         }
         Task { @MainActor [weak self] in
             await self?.loadVoiceoverWaveform(for: newVO)
@@ -3817,12 +3820,16 @@ public final class ProjectSession: Identifiable {
                 volume: 1.0,
                 attachMode: .synchronized,
                 hideRecording: false,
-                disabled: false
+                disabled: false,
+                trackIndex: self.document.timeline.voiceovers.firstFreeVoiceoverTrack(
+                    startMs: clampedStart,
+                    endMs: clampedStart + clampedDur
+                )
             )
             self.mutate { doc in
-                doc.timeline.isVoiceoversTrackHidden = false
+                doc.timeline.setVoiceoverTrack(newVO.trackIndex, hidden: false)
                 doc.timeline.voiceovers.append(newVO)
-                doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
+                doc.timeline.normalizeVoiceoverTracks()
             }
             await self.loadVoiceoverWaveform(for: newVO)
             self.selectVoiceover(newVO.id)
@@ -3837,7 +3844,10 @@ public final class ProjectSession: Identifiable {
         let span = max(250.0, durationMs)
 
         mutate { doc in
-            let sorted = doc.timeline.voiceovers.sorted { $0.sourceStartMs < $1.sourceStartMs }
+            guard let trackIndex = doc.timeline.voiceovers.first(where: { $0.id == id })?.trackIndex else { return }
+            let sorted = doc.timeline.voiceovers
+                .filter { $0.trackIndex == trackIndex }
+                .sorted { $0.sourceStartMs < $1.sourceStartMs }
             guard let sortedIdx = sorted.firstIndex(where: { $0.id == id }) else { return }
 
             let lowerBound = sortedIdx > 0
@@ -3854,6 +3864,26 @@ public final class ProjectSession: Identifiable {
                 doc.timeline.voiceovers[realIdx].durationMs = span
             }
             doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+    }
+
+    /// Moves a voiceover to another track, or to a new one past the last. The segment snaps back when the target has no room.
+    public func moveVoiceoverToTrack(id: String, targetTrackIndex: Int) {
+        let voiceovers = document.timeline.voiceovers
+        guard let segment = voiceovers.first(where: { $0.id == id }) else { return }
+        let target = Swift.max(0, Swift.min(voiceovers.voiceoverTrackCount, targetTrackIndex))
+        guard target != segment.trackIndex else { return }
+        guard voiceovers.isVoiceoverRangeFree(
+            trackIndex: target,
+            startMs: segment.sourceStartMs,
+            endMs: segment.sourceEndMs,
+            ignoringId: id
+        ) else { return }
+        mutate { doc in
+            if let idx = doc.timeline.voiceovers.firstIndex(where: { $0.id == id }) {
+                doc.timeline.voiceovers[idx].trackIndex = target
+            }
+            doc.timeline.normalizeVoiceoverTracks()
         }
     }
 
@@ -3878,6 +3908,7 @@ public final class ProjectSession: Identifiable {
     public func deleteVoiceover(id: String) {
         mutate { doc in
             doc.timeline.voiceovers.removeAll { $0.id == id }
+            doc.timeline.normalizeVoiceoverTracks()
         }
         if selectedVoiceoverId == id {
             selectedVoiceoverId = nil

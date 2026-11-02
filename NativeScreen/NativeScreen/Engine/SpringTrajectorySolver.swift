@@ -27,8 +27,18 @@ public struct SpringTrajectorySolver: Sendable {
         public var rotationRadians: Double
         public var opacity: Double
         public var cursorType: String
-        public var activeClickProgress: Double? // 0.0 -> 1.0 during click ripple
+        public var activeClickProgress: Double? // 0.0 -> 1.0 during the click circle
+        public var clickWaves: [ClickWave] = []
     }
+
+    /// A click whose ripple is still spreading, from where the cursor was when the button went down.
+    public struct ClickWave: Sendable {
+        public var ageMs: Double
+        public var position01: Point01
+    }
+
+    public static let clickWaveDurationMs = 900.0
+    public static let maxActiveClickWaves = 3
 
     public struct CameraFrameState: Sendable {
         public var center01: Point01
@@ -267,6 +277,8 @@ public struct SpringTrajectorySolver: Sendable {
 
             let baseRad = -document.cursor.baseRotationDegrees * .pi / 180.0
             let rippleDurationMs = 450.0
+            var clickWaves: [ClickWave] = []
+            var nextWaveClick = 0
 
             for step in 0..<totalSteps {
                 let tMs = Double(step) * stepMs
@@ -420,6 +432,21 @@ public struct SpringTrajectorySolver: Sendable {
                     }
                 }
 
+                for waveIndex in clickWaves.indices {
+                    clickWaves[waveIndex].ageMs += stepMs
+                }
+                clickWaves.removeAll { $0.ageMs > Self.clickWaveDurationMs }
+                while nextWaveClick < downClickTimesMs.count && downClickTimesMs[nextWaveClick] <= tMs {
+                    clickWaves.append(ClickWave(
+                        ageMs: tMs - downClickTimesMs[nextWaveClick],
+                        position01: Point01(x: curX, y: curY)
+                    ))
+                    nextWaveClick += 1
+                }
+                if clickWaves.count > Self.maxActiveClickWaves {
+                    clickWaves.removeFirst(clickWaves.count - Self.maxActiveClickWaves)
+                }
+
                 solvedCursor.append(
                     CursorFrameState(
                         position01: Point01(x: curX, y: curY),
@@ -427,7 +454,8 @@ public struct SpringTrajectorySolver: Sendable {
                         rotationRadians: rotation,
                         opacity: document.cursor.hidden ? 0.0 : currentOpacity,
                         cursorType: cursorKind,
-                        activeClickProgress: activeRipple
+                        activeClickProgress: activeRipple,
+                        clickWaves: clickWaves
                     )
                 )
             }
@@ -960,7 +988,8 @@ public struct SpringTrajectorySolver: Sendable {
             rotationRadians: c0.rotationRadians + (c1.rotationRadians - c0.rotationRadians) * frac,
             opacity: c0.opacity + (c1.opacity - c0.opacity) * frac,
             cursorType: c0.cursorType,
-            activeClickProgress: c0.activeClickProgress
+            activeClickProgress: c0.activeClickProgress,
+            clickWaves: c0.clickWaves
         )
 
         let cam0 = cameraStates[i0]

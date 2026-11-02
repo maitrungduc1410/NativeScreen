@@ -572,8 +572,12 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
         self.scale = try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.6
-        self.themeId = try container.decodeIfPresent(String.self, forKey: .themeId) ?? CursorThemePreset.defaultThemeId
-        self.variantId = try container.decodeIfPresent(String.self, forKey: .variantId)
+        let theme = CursorThemePreset.migrateLegacyTheme(
+            themeId: try container.decodeIfPresent(String.self, forKey: .themeId) ?? CursorThemePreset.defaultThemeId,
+            variantId: try container.decodeIfPresent(String.self, forKey: .variantId)
+        )
+        self.themeId = theme.themeId
+        self.variantId = theme.variantId
         self.alwaysUsePointer = try container.decodeIfPresent(Bool.self, forKey: .alwaysUsePointer) ?? false
         self.smoothMovementEnabled = try container.decodeIfPresent(Bool.self, forKey: .smoothMovementEnabled) ?? true
         self.spring = try container.decodeIfPresent(SpringConfig.self, forKey: .spring) ?? .defaultCursor
@@ -1821,6 +1825,7 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
     public var attachMode: VoiceoverAttachMode
     public var hideRecording: Bool
     public var disabled: Bool
+    public var trackIndex: Int
 
     public var sourceEndMs: Double {
         sourceStartMs + max(200.0, durationMs)
@@ -1834,7 +1839,8 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
         volume: Double = 1.0,
         attachMode: VoiceoverAttachMode = .synchronized,
         hideRecording: Bool = false,
-        disabled: Bool = false
+        disabled: Bool = false,
+        trackIndex: Int = 0
     ) {
         self.id = id
         self.sourceStartMs = sourceStartMs
@@ -1844,10 +1850,11 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
         self.attachMode = attachMode
         self.hideRecording = hideRecording
         self.disabled = disabled
+        self.trackIndex = max(0, trackIndex)
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, sourceStartMs, durationMs, relativePath, volume, attachMode, hideRecording, disabled
+        case id, sourceStartMs, durationMs, relativePath, volume, attachMode, hideRecording, disabled, trackIndex
     }
 
     public init(from decoder: Decoder) throws {
@@ -1860,6 +1867,7 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
         self.attachMode = try container.decodeIfPresent(VoiceoverAttachMode.self, forKey: .attachMode) ?? .synchronized
         self.hideRecording = try container.decodeIfPresent(Bool.self, forKey: .hideRecording) ?? false
         self.disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
+        self.trackIndex = max(0, try container.decodeIfPresent(Int.self, forKey: .trackIndex) ?? 0)
     }
 }
 
@@ -1872,6 +1880,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
     public var maskTracks: [MaskTrack]
     public var voiceovers: [VoiceoverSegment]
     public var isVoiceoversTrackHidden: Bool
+    public var hiddenVoiceoverTracks: [Int]
     public var isShortcutsTrackHidden: Bool
     public var dismissedTypingSuggestionStarts: [Int]
 
@@ -1884,6 +1893,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         maskTracks: [MaskTrack] = [],
         voiceovers: [VoiceoverSegment] = [],
         isVoiceoversTrackHidden: Bool = false,
+        hiddenVoiceoverTracks: [Int] = [],
         isShortcutsTrackHidden: Bool = false,
         dismissedTypingSuggestionStarts: [Int] = []
     ) {
@@ -1895,13 +1905,14 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         self.maskTracks = maskTracks
         self.voiceovers = voiceovers
         self.isVoiceoversTrackHidden = isVoiceoversTrackHidden
+        self.hiddenVoiceoverTracks = hiddenVoiceoverTracks
         self.isShortcutsTrackHidden = isShortcutsTrackHidden
         self.dismissedTypingSuggestionStarts = dismissedTypingSuggestionStarts
     }
 
     enum CodingKeys: String, CodingKey {
         case slices, zooms, isZoomTrackHidden, cameraLayouts, isCameraLayoutsTrackHidden
-        case maskTracks, voiceovers, isVoiceoversTrackHidden, isShortcutsTrackHidden, dismissedTypingSuggestionStarts
+        case maskTracks, voiceovers, isVoiceoversTrackHidden, hiddenVoiceoverTracks, isShortcutsTrackHidden, dismissedTypingSuggestionStarts
     }
 
     public init(from decoder: Decoder) throws {
@@ -1914,6 +1925,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         self.maskTracks = try container.decodeIfPresent([MaskTrack].self, forKey: .maskTracks) ?? []
         self.voiceovers = try container.decodeIfPresent([VoiceoverSegment].self, forKey: .voiceovers) ?? []
         self.isVoiceoversTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isVoiceoversTrackHidden) ?? false
+        self.hiddenVoiceoverTracks = try container.decodeIfPresent([Int].self, forKey: .hiddenVoiceoverTracks) ?? []
         self.isShortcutsTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isShortcutsTrackHidden) ?? false
         self.dismissedTypingSuggestionStarts = try container.decodeIfPresent([Int].self, forKey: .dismissedTypingSuggestionStarts) ?? []
     }

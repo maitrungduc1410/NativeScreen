@@ -290,6 +290,7 @@ public final class MetalFrameCompositor {
         if !hideCursorInSlice && cursorState.opacity > 0.01 {
             positionedScreen = renderCursorAndRipple(
                 over: positionedScreen,
+                canvasRect: canvasRect,
                 screenFrameRect: screenFrameRect,
                 cursorState: cursorState,
                 cursorConfig: doc.cursor,
@@ -965,6 +966,7 @@ public final class MetalFrameCompositor {
 
     private func renderCursorAndRipple(
         over image: CIImage,
+        canvasRect: CGRect,
         screenFrameRect: CGRect,
         cursorState: SpringTrajectorySolver.CursorFrameState,
         cursorConfig: CursorConfig,
@@ -975,45 +977,28 @@ public final class MetalFrameCompositor {
         let cy = screenFrameRect.minY + CGFloat(1.0 - cursorState.position01.y) * screenFrameRect.height
 
         // 1. Click Effect (`Circle` vs `Ripple`)
-        if let progress = cursorState.activeClickProgress, cursorConfig.clickEffect.visualStyle != .none {
-            let maxRippleRadius = 46.0 * canvasScale * CGFloat(cursorConfig.scale)
-            let radius = max(4.0, maxRippleRadius * CGFloat(progress))
-            let alpha = CGFloat(max(0.0, (1.0 - progress) * 0.72 * cursorState.opacity))
-            let rippleExtent = CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2)
-
-            if cursorConfig.clickEffect.visualStyle == .circle {
+        switch cursorConfig.clickEffect.visualStyle {
+        case .none:
+            break
+        case .circle:
+            if let progress = cursorState.activeClickProgress {
+                let radius = max(4.0, 46.0 * canvasScale * CGFloat(cursorConfig.scale) * CGFloat(progress))
+                let alpha = CGFloat(max(0.0, (1.0 - progress) * 0.72 * cursorState.opacity))
                 if let circle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                    "inputExtent": CIVector(cgRect: rippleExtent),
+                    "inputExtent": CIVector(cgRect: CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2)),
                     "inputRadius": radius,
                     "inputColor": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha * 0.65)
                 ])?.outputImage {
                     result = circle.composited(over: result)
                 }
-            } else {
-                // Ripple ring wave (outer disc minus inner cutout disc)
-                let ringThickness = max(2.5, 6.0 * canvasScale * CGFloat(1.0 - progress * 0.5))
-                let innerRadius = max(0.0, radius - ringThickness)
-                let innerExtent = CGRect(x: cx - innerRadius, y: cy - innerRadius, width: innerRadius * 2, height: innerRadius * 2)
-                if let outer = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                    "inputExtent": CIVector(cgRect: rippleExtent),
-                    "inputRadius": radius,
-                    "inputColor": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha)
-                ])?.outputImage {
-                    if innerRadius > 1.0,
-                       let innerMask = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                           "inputExtent": CIVector(cgRect: innerExtent),
-                           "inputRadius": innerRadius,
-                           "inputColor": CIColor.white
-                       ])?.outputImage {
-                        let ring = outer.applyingFilter("CISourceOutCompositing", parameters: [
-                            kCIInputBackgroundImageKey: innerMask
-                        ]).cropped(to: rippleExtent)
-                        result = ring.composited(over: result)
-                    } else {
-                        result = outer.composited(over: result)
-                    }
-                }
             }
+        case .ripple, .pulse, .ring:
+            result = EffectKernels.applyClickRipple(
+                to: result,
+                canvasRect: canvasRect,
+                screenRect: screenFrameRect,
+                waves: cursorState.clickWaves
+            )
         }
 
         // 2. High-DPI Vector Cursor Sprite (With Set + Variant + Always-Use-Pointer support!)

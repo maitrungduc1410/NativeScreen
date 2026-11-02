@@ -188,8 +188,8 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
   "cursor": {
     "hidden": false,
     "scale": 1.6,
-    "themeId": "arrow",
-    "variantId": "default",
+    "themeId": "classic-dark",
+    "variantId": null,
     "alwaysUsePointer": false,
     "smoothMovementEnabled": true,
     "spring": {
