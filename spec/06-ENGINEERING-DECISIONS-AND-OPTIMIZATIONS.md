@@ -561,3 +561,18 @@ Measured playing a 3072x1920 recording in the real editor window, with `NS_PREVI
 
 ### Scrubbing
 Dragging on the timeline moved the playhead without updating the clock label or the preview, because only a press raised a selection change. `TimelineView.PlayheadScrubbed` now does both.
+
+---
+
+## 27. ADR-27: Keycaps Follow the Platform a Project Was Recorded On
+
+### Context
+Keycaps drew macOS symbols and names everywhere, so a Windows recording showed Ctrl as "control" and the Windows key as "command".
+
+### Decision
+Decided by the project owner. When `recording/metadata.json` says `platform = "windows"`, and for a project with no recording on Windows, keycaps read `Ctrl`, `Alt`, `Shift`, `Win`, in the Windows order `Ctrl+Shift+P`, with no symbol line. Projects recorded on macOS keep macOS keycaps when opened on Windows, which also keeps the conformance fixtures valid. `ShortcutEngine` stays an exact port; `WindowsKeycaps` rewrites only the drawn labels and widths of its result.
+
+### Consequences
+- Telemetry and `project.json` do not change, so projects still round-trip.
+- This is an intended difference from `spec/07`: frames of Windows projects are not comparable with macOS fixtures in the keycap area.
+- The macOS app has no such branch, so it still draws macOS keycaps for a Windows project. Changing that needs a macOS code change.

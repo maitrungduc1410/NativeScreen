@@ -157,7 +157,8 @@ colors exactly. Key height `max(34, round(H * shortcutsSizeRatio))`, spacing `ro
 `max(16, round(0.05 H))`, sprite padding `max(18, ceil(0.35 kh))`. Envelope: fade-in 150 ms, fade-out 180 ms, smoothstep;
 scale `0.95 + 0.05 s`, slide `0.10 kh * (1 - s)`. Keycap: outer radius `0.125 kh`, border `max(1.2, kh * 3/256)`,
 shadow black 42% offset `0.10 kh` blur `0.22 kh`, bevel and body gradients as in the code. Highlighted (preview only):
-scale 1.02 and brightness +0.08.
+scale 1.02 and brightness +0.08. Windows projects (`platform = "windows"`) draw Windows labels instead of macOS symbols, on
+purpose (`spec/06` ADR-27).
 
 ---
 

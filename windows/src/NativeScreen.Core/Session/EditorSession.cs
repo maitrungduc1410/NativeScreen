@@ -177,6 +177,8 @@ public sealed class EditorSession
 
     public IReadOnlyList<KeyStrokeEvent> KeyEvents { get; init; } = [];
 
+    public KeycapStyle KeycapStyle { get; init; }
+
     /// <summary>Shortcut clusters of the current document, rebuilt only after an edit.</summary>
     public IReadOnlyList<ShortcutCluster> Shortcuts()
     {
@@ -184,7 +186,8 @@ public sealed class EditorSession
         if (!ReferenceEquals(shortcutsDocument, document))
         {
             shortcutsDocument = document;
-            shortcuts = ShortcutEngine.Detect(document, KeyEvents);
+            var detected = ShortcutEngine.Detect(document, KeyEvents);
+            shortcuts = KeycapStyle == KeycapStyle.Windows ? WindowsKeycaps.Apply(detected) : detected;
         }
 
         return shortcuts;

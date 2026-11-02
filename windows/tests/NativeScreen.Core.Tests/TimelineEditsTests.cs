@@ -93,6 +93,32 @@ public sealed class TimelineEditsTests
     }
 
     [Fact]
+    public void WindowsProjectsShowWindowsKeycapsAndMacProjectsKeepTheirs()
+    {
+        var document = Document();
+        document.Captions.ShortcutTracks.Add(new ShortcutTrackConfig { Id = "default-shortcuts-track" });
+        var keys = new List<KeyStrokeEvent>
+        {
+            new() { T = 1000, Kind = "shortcut", Modifiers = ["Shift", "Ctrl"], Key = "P" },
+            new() { T = 5000, Kind = "shortcut", Modifiers = ["Meta", "Alt"], Key = "Delete" }
+        };
+        Assert.Equal(KeycapStyle.Windows, WindowsKeycaps.StyleFor("windows"));
+        Assert.Equal(KeycapStyle.Mac, WindowsKeycaps.StyleFor("macos"));
+
+        var mac = new EditorSession(document, 10000) { KeyEvents = keys };
+        Assert.Equal("control", mac.Shortcuts()[0].KeyCaps.First(cap => cap.Key == "Ctrl").Label);
+
+        var windows = new EditorSession(document, 10000) { KeyEvents = keys, KeycapStyle = KeycapStyle.Windows }.Shortcuts();
+        Assert.Equal("Ctrl+Shift+P", windows[0].Label);
+        Assert.Equal(["Ctrl", "Shift", "P"], windows[0].KeyCaps.Select(cap => cap.Label));
+        Assert.All(windows[0].KeyCaps, cap => Assert.Null(cap.Symbol));
+        Assert.Equal("Win+Alt+Backspace", windows[1].Label);
+        // What is stored and compared stays the recorded identity.
+        Assert.Contains("Ctrl", windows[0].Modifiers);
+        Assert.Equal("Delete", windows[1].PrimaryKey);
+    }
+
+    [Fact]
     public void CanvasMappingInvertsUnderZoom()
     {
         var screen = new PixelRect(100, 50, 800, 450);
