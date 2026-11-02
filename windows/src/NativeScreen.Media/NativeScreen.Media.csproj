@@ -7,6 +7,8 @@
   <ItemGroup>
     <PackageReference Include="Vortice.Direct2D1" />
     <PackageReference Include="Vortice.MediaFoundation" />
+    <PackageReference Include="Vortice.Direct3D11" />
+    <PackageReference Include="NAudio.Wasapi" />
     <ProjectReference Include="..\NativeScreen.Core\NativeScreen.Core.csproj" />
   </ItemGroup>
 </Project>

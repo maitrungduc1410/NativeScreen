@@ -213,6 +213,8 @@ public sealed class EditorSession
         clock.PrimeAndStart(PlayheadTimelineMs);
     }
 
+    public void SyncToAudio(double audioTimelineMs) => clock.SyncToAudio(audioTimelineMs);
+
     public void SamplePlayhead()
     {
         if (!clock.IsRunning)

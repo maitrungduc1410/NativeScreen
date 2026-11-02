@@ -12,6 +12,7 @@ public static class AudioMasterClock
 
 public sealed class PlaybackClock
 {
+    private const double AudioSyncToleranceMs = 15;
     private readonly Func<double> nowMs;
     private double originTimelineMs;
     private double startQpcMs;
@@ -44,6 +45,15 @@ public sealed class PlaybackClock
             }
 
             return running ? originTimelineMs + (nowMs() - startQpcMs) : pausedTimelineMs;
+        }
+    }
+
+    /// <summary>The audio device is the master. Small differences are its position's granularity and would only make video jitter.</summary>
+    public void SyncToAudio(double audioTimelineMs)
+    {
+        if (running && Math.Abs(audioTimelineMs - PositionMs) > AudioSyncToleranceMs)
+        {
+            PrimeAndStart(audioTimelineMs);
         }
     }
 

@@ -78,6 +78,9 @@ public sealed partial class EditorWindow : Window
     private VideoPlaybackSource? screenPlayback;
     private VideoPlaybackSource? webcamPlayback;
     private CancellationTokenSource? exportCancel;
+    private PreviewAudioPlayer? audio;
+    private ProjectDocument? audioDocument;
+    private int playRequest;
     private bool closed;
 
     public EditorWindow(EditorSource? editorSource = null)
@@ -533,6 +536,12 @@ public sealed partial class EditorWindow : Window
         toastTimer.Stop();
         AppTheme.Changed -= ThemeChanged;
         renderer?.Dispose();
+        if (audio is { } player)
+        {
+            audio = null;
+            _ = Task.Run(player.Dispose);
+        }
+
         screenPlayback?.Dispose();
         webcamPlayback?.Dispose();
         if (swapChain is not null)
@@ -548,19 +557,62 @@ public sealed partial class EditorWindow : Window
 
     private void TogglePlay(object sender, RoutedEventArgs e) => TogglePlayback();
 
-    private void TogglePlayback()
+    private async void TogglePlayback()
     {
-        session.TogglePlayback();
+        var request = ++playRequest;
         if (session.IsPlaying)
         {
-            clockTimer.Start();
-        }
-        else
-        {
+            session.TogglePlayback();
             clockTimer.Stop();
+            StopAudio();
+            RefreshTransport();
+            return;
         }
 
+        // Priming opens and decodes files, so it runs off the UI thread and the clock starts only when sound is ready.
+        var (document, _) = session.RenderSnapshot();
+        var start = session.PlayheadTimelineMs >= session.DurationMs ? 0 : session.PlayheadTimelineMs;
+        var player = audio;
+        var stale = audioDocument;
+        audioDocument = document;
+        audio = null;
+        var ready = await Task.Run(() =>
+        {
+            var next = player;
+            if (next is null || !ReferenceEquals(stale, document))
+            {
+                next?.Dispose();
+                next = PreviewAudioPlayer.TryCreate(document, source.PackagePath, source.Project?.Metadata.Tracks ?? new RecordingTracksMetadata());
+            }
+
+            next?.Prime(start);
+            return next;
+        });
+        audio = ready;
+        if (closed)
+        {
+            audio = null;
+            ready?.Dispose();
+            return;
+        }
+
+        if (request != playRequest)
+        {
+            return;
+        }
+
+        audio?.Start();
+        session.TogglePlayback();
+        clockTimer.Start();
         RefreshTransport();
+    }
+
+    private void StopAudio()
+    {
+        if (audio is { } player)
+        {
+            _ = Task.Run(player.Pause);
+        }
     }
 
     private void RefreshTransport()
@@ -573,6 +625,11 @@ public sealed partial class EditorWindow : Window
 
     private void Sample()
     {
+        if (audio?.HeardTimelineMs is { } heard)
+        {
+            session.SyncToAudio(heard);
+        }
+
         session.SamplePlayhead();
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         timeline.UpdatePlayhead();
@@ -580,6 +637,7 @@ public sealed partial class EditorWindow : Window
         if (!session.IsPlaying)
         {
             clockTimer.Stop();
+            StopAudio();
             RefreshTransport();
         }
     }
@@ -590,8 +648,10 @@ public sealed partial class EditorWindow : Window
 
     private void SeekTo(double timelineMs)
     {
+        playRequest++;
         session.Scrub(timelineMs);
         clockTimer.Stop();
+        StopAudio();
         RefreshTransport();
         DrawPreview();
     }

@@ -72,6 +72,17 @@ public sealed class AudioMixer : IDisposable
         }
     }
 
+    /// <summary>Moves the read position; the next Render continues from this timeline time.</summary>
+    public void Seek(double timelineMs) => writtenFrames = (long)(Math.Max(0, timelineMs) / 1000 * SampleRate);
+
+    /// <summary>Fills 16-bit stereo for the next frames. Past the end of the timeline it is silence.</summary>
+    public void Render(byte[] destination, int frames)
+    {
+        MixBlock(frames);
+        Array.Copy(block, destination, frames * 4);
+        writtenFrames += frames;
+    }
+
     public void Dispose()
     {
         system?.Dispose();
@@ -90,12 +101,12 @@ public sealed class AudioMixer : IDisposable
         for (var frame = 0; frame < frames; frame++)
         {
             var timelineMs = (writtenFrames + frame) * 1000.0 / SampleRate;
-            var (sourceMs, slice) = mapper.SourceTime(timelineMs);
+            var (sourceMs, slice) = timelineMs < mapper.TotalTimelineDurationMs ? mapper.SourceTime(timelineMs) : (0, null);
             var left = 0f;
             var right = 0f;
             if (slice is not null)
             {
-                var hidden = voiceovers.Exists(item => item.Segment.HideRecording && timelineMs >= item.TimelineStartMs && timelineMs < item.TimelineStartMs + item.Segment.DurationMs);
+                var hidden = IsHiddenByVoiceover(timelineMs);
                 if (system is not null)
                 {
                     Add(system, sourceMs, (float)AudioMix.SystemGain(document.Audio, slice, master), ref left, ref right);
@@ -127,6 +138,19 @@ public sealed class AudioMixer : IDisposable
             block[frame * 4 + 2] = (byte)r;
             block[frame * 4 + 3] = (byte)(r >> 8);
         }
+    }
+
+    private bool IsHiddenByVoiceover(double timelineMs)
+    {
+        foreach (var (segment, _, start) in voiceovers)
+        {
+            if (segment.HideRecording && timelineMs >= start && timelineMs < start + segment.DurationMs)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void Add(AudioCursor cursor, double positionMs, float gain, ref float left, ref float right)

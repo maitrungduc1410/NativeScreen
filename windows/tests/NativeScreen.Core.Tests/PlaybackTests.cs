@@ -46,3 +46,18 @@ public sealed class PlaybackTests
         Assert.True(counter.LateRatio < 0.01);
     }
 }
+
+public sealed class AudioSyncTests
+{
+    [Fact]
+    public void ClockFollowsAudioOnlyBeyondTheTolerance()
+    {
+        var now = 1000.0;
+        var clock = new PlaybackClock(() => now);
+        clock.PrimeAndStart(500);
+        clock.SyncToAudio(510);
+        Assert.Equal(500, clock.PositionMs);
+        clock.SyncToAudio(530);
+        Assert.Equal(530, clock.PositionMs);
+    }
+}
