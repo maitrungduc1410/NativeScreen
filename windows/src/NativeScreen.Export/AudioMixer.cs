@@ -45,14 +45,11 @@ public sealed class AudioMixer : IDisposable
             music = AudioCursor.Open(Path.Combine(packageDirectory, musicPath));
         }
 
-        if (!document.Timeline.IsVoiceoversTrackHidden)
+        foreach (var segment in document.Timeline.Voiceovers.Where(item => !item.Disabled && item.Volume > 0.001 && !VoiceoverTrackLayout.IsTrackHidden(document.Timeline, item.TrackIndex)))
         {
-            foreach (var segment in document.Timeline.Voiceovers.Where(item => !item.Disabled && item.Volume > 0.001))
+            if (AudioCursor.Open(Path.Combine(packageDirectory, segment.RelativePath)) is { } cursor)
             {
-                if (AudioCursor.Open(Path.Combine(packageDirectory, segment.RelativePath)) is { } cursor)
-                {
-                    voiceovers.Add((segment, cursor, mapper.TimelineTime(segment.SourceStartMs) ?? segment.SourceStartMs));
-                }
+                voiceovers.Add((segment, cursor, mapper.TimelineTime(segment.SourceStartMs) ?? segment.SourceStartMs));
             }
         }
     }
@@ -97,7 +94,6 @@ public sealed class AudioMixer : IDisposable
     private void MixBlock(int frames)
     {
         var musicGain = (float)AudioMix.MusicGain(document.Audio, master);
-        var trackHidden = document.Timeline.IsVoiceoversTrackHidden;
         for (var frame = 0; frame < frames; frame++)
         {
             var timelineMs = (writtenFrames + frame) * 1000.0 / SampleRate;
@@ -122,7 +118,7 @@ public sealed class AudioMixer : IDisposable
             {
                 if (timelineMs >= start && timelineMs < start + segment.DurationMs)
                 {
-                    Add(cursor, timelineMs - start, (float)AudioMix.VoiceoverGain(segment, master, trackHidden), ref left, ref right);
+                    Add(cursor, timelineMs - start, (float)AudioMix.VoiceoverGain(segment, master, false), ref left, ref right);
                 }
             }
 

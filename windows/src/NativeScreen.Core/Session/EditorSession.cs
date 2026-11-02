@@ -79,6 +79,7 @@ public sealed partial class EditorSession
             zoom.Id = NewId();
         }
 
+        VoiceoverTrackLayout.Normalize(initial.Timeline);
         History = new UndoStack(initial);
         SourceDurationMs = durationMs;
         Mapper = new NLETimeMapper(History.Current.Timeline.Slices);

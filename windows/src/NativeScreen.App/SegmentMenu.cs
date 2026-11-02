@@ -194,7 +194,7 @@ internal sealed class SegmentMenu
         menu.Command(voiceover.Disabled ? "Enable" : "Disable", "D", () => session.ToggleVoiceoverDisabled(id));
         menu.Command("Upload voiceover audio file", null, tools.UploadVoiceover);
         menu.Separator();
-        menu.Danger("Remove voiceover", null, () => session.Mutate(document => document.Timeline.Voiceovers.RemoveAll(item => item.Id == id)));
+        menu.Danger("Remove voiceover", null, () => session.DeleteVoiceover(id));
         menu.Danger("Remove all voiceovers", null, () => session.Mutate(document => document.Timeline.Voiceovers.Clear()));
         menu.Show(anchor, at);
     }

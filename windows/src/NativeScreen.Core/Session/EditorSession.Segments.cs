@@ -389,6 +389,17 @@ public sealed partial class EditorSession
     public void SetVoiceoverVolume(string id, double volume) =>
         Mutate(document => document.Timeline.Voiceovers.First(item => item.Id == id).Volume = Math.Clamp(volume, 0, 1), "voiceover-volume:" + id, structural: false);
 
+    public void ToggleVoiceoverTrackHidden(int track) => Mutate(document =>
+        VoiceoverTrackLayout.SetTrackHidden(document.Timeline, track, !VoiceoverTrackLayout.IsTrackHidden(document.Timeline, track)));
+
+    public void MoveVoiceoverToTrack(string id, int targetTrack) => Mutate(document => VoiceoverTrackLayout.MoveToTrack(document.Timeline, id, targetTrack));
+
+    public void DeleteVoiceover(string id) => Mutate(document =>
+    {
+        document.Timeline.Voiceovers.RemoveAll(item => item.Id == id);
+        VoiceoverTrackLayout.Normalize(document.Timeline);
+    });
+
     public void ToggleVoiceoverDisabled(string id) => Mutate(document =>
     {
         var voiceover = document.Timeline.Voiceovers.First(item => item.Id == id);

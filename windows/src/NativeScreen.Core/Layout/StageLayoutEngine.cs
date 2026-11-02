@@ -144,14 +144,9 @@ public sealed class StageLayoutEngine
 
     public static bool HiddenByVoiceover(ProjectDocument document, double sourceMs)
     {
-        if (document.Timeline.IsVoiceoversTrackHidden)
-        {
-            return false;
-        }
-
         foreach (var voiceover in document.Timeline.Voiceovers)
         {
-            if (!voiceover.Disabled && voiceover.HideRecording && sourceMs >= voiceover.SourceStartMs && sourceMs <= voiceover.SourceEndMs)
+            if (!voiceover.Disabled && voiceover.HideRecording && !VoiceoverTrackLayout.IsTrackHidden(document.Timeline, voiceover.TrackIndex) && sourceMs >= voiceover.SourceStartMs && sourceMs <= voiceover.SourceEndMs)
             {
                 return true;
             }

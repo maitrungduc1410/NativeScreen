@@ -208,6 +208,7 @@ public sealed class VoiceoverSegment
     public VoiceoverAttachMode AttachMode { get; set; } = VoiceoverAttachMode.Synchronized;
     public bool HideRecording { get; set; }
     public bool Disabled { get; set; }
+    public int TrackIndex { get; set; }
 
     [JsonIgnore]
     public double SourceEndMs => SourceStartMs + Math.Max(200, DurationMs);
@@ -223,6 +224,7 @@ public sealed class TimelineConfig
     public List<MaskTrack> MaskTracks { get; set; } = [];
     public List<VoiceoverSegment> Voiceovers { get; set; } = [];
     public bool IsVoiceoversTrackHidden { get; set; }
+    public List<int> HiddenVoiceoverTracks { get; set; } = [];
     public bool IsShortcutsTrackHidden { get; set; }
     public List<int> DismissedTypingSuggestionStarts { get; set; } = [];
 

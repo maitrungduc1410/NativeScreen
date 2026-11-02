@@ -344,34 +344,46 @@ internal sealed class TimelineView
             return y;
         }
 
-        AddLabel("Voiceovers", y, MaskRowHeight, eye: true, timeline.IsVoiceoversTrackHidden, () =>
-            session.Mutate(document => document.Timeline.IsVoiceoversTrackHidden = !document.Timeline.IsVoiceoversTrackHidden));
-        foreach (var voiceover in timeline.Voiceovers)
+        var count = VoiceoverTrackLayout.TrackCount(timeline.Voiceovers);
+        for (var track = 0; track < count; track++)
         {
-            var left = X(TimelineOf(voiceover.SourceStartMs));
-            var width = X(TimelineOf(voiceover.SourceEndMs)) - left;
-            var block = Block(left, y, width, MaskRowHeight, Palette.Layout, "Voiceover", null, false, voiceover.Disabled || timeline.IsVoiceoversTrackHidden);
-            var id = voiceover.Id;
-            ToolTipService.SetToolTip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
-            block.RightTapped += (_, args) =>
+            var row = track;
+            var hidden = VoiceoverTrackLayout.IsTrackHidden(timeline, row);
+            AddLabel(row == 0 ? "Voiceovers" : $"Voiceovers {row + 1}", y, MaskRowHeight, eye: true, hidden, () => session.ToggleVoiceoverTrackHidden(row));
+            foreach (var voiceover in timeline.Voiceovers.Where(item => item.TrackIndex == row))
             {
-                args.Handled = true;
-                if (Tools is { } tools)
+                var left = X(TimelineOf(voiceover.SourceStartMs));
+                var width = X(TimelineOf(voiceover.SourceEndMs)) - left;
+                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, "Voiceover", null, false, voiceover.Disabled || hidden);
+                var id = voiceover.Id;
+                ToolTipService.SetToolTip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
+                block.RightTapped += (_, args) =>
                 {
-                    SegmentMenu.ForVoiceover(session, tools, id, canvas, args.GetPosition(canvas));
-                }
-            };
-            Draggable(block, width, () => session.SelectTab(InspectorTab.Audio), (start, end) =>
-            {
-                session.Mutate(document => document.Timeline.Voiceovers.First(other => other.Id == id).SourceStartMs = start, structural: false);
-            }, () =>
-            {
-                var current = session.Document.Timeline.Voiceovers.First(other => other.Id == id);
-                return (current.SourceStartMs, current.SourceEndMs, 0, session.SourceDurationMs);
-            });
+                    args.Handled = true;
+                    if (Tools is { } tools)
+                    {
+                        SegmentMenu.ForVoiceover(session, tools, id, canvas, args.GetPosition(canvas));
+                    }
+                };
+                Draggable(block, width, () => session.SelectTab(InspectorTab.Audio), (start, end) =>
+                {
+                    session.Mutate(document => document.Timeline.Voiceovers.First(other => other.Id == id).SourceStartMs = start, structural: false);
+                }, () =>
+                {
+                    // Dragging along a track stops at its neighbors.
+                    var current = session.Document.Timeline.Voiceovers.First(other => other.Id == id);
+                    var neighbors = session.Document.Timeline.Voiceovers.Where(other => other.Id != id && other.TrackIndex == current.TrackIndex).ToList();
+                    var low = neighbors.Where(other => other.SourceEndMs <= current.SourceStartMs).Select(other => other.SourceEndMs).DefaultIfEmpty(0).Max();
+                    var high = neighbors.Where(other => other.SourceStartMs >= current.SourceEndMs).Select(other => other.SourceStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
+                    return (current.SourceStartMs, current.SourceEndMs, low, high);
+                },
+                movedRows: rows => session.MoveVoiceoverToTrack(id, row + rows));
+            }
+
+            y += MaskRowHeight + RowSpacing;
         }
 
-        return y + MaskRowHeight + RowSpacing;
+        return y;
     }
 
     private double DrawZooms(double y)

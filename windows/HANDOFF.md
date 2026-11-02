@@ -41,12 +41,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Risks / unsure:** the 3-wave limit and the wave bouncing past the screen edge have no fixture.
 
 ### Verifier
-- **Result:**
-- **verify.ps1:**
-- **Measurements:**
-- **Changes made:**
-- **Spec updates:**
-- **Next:**
+- **Result:** PASS on Windows, except as noted under Next.
+- **verify.ps1:** Debug and Release x64, Core, Media and Rendering tests, 13 shaders.
+- **Measurements:** `cursor-styles` ripple frame 2600: screen SSIM 0.9955, within6 99.7%. Other `cursor-styles` frames 99.8 to 99.9%.
+- **Changes made:** `ClickRipple.hlsl`, `clickWaves` in the solver, `VoiceoverTrackLayout`, one timeline row per voiceover track with its own eye. The app saw a test project with overlapping segments land on two tracks, a segment dragged to the other track, and an eye click hide one track.
+- **Spec updates:** master's ADR-22 and ADR-23 are ADR-29 and ADR-30 here, because this branch already used those numbers.
+- **Next:** Not exercised: overlapping voiceovers mixed by ear, the 3-wave limit, a live ripple in the preview. Voiceover recording does not exist on Windows yet, so the recording block on its track is not ported.
 
 ## 2026-11-02, Cursor themes redrawn (macOS side done, Windows port pending)
 
@@ -66,12 +66,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Risks / unsure:** `cursor-styles` is the only case with a non-default theme (`rounded`), so the other new themes have no frame fixture. Check them by eye against the macOS inspector.
 
 ### Verifier
-- **Result:**
-- **verify.ps1:**
-- **Measurements:**
-- **Changes made:**
-- **Spec updates:**
-- **Next:**
+- **Result:** PASS on Windows.
+- **verify.ps1:** Debug and Release x64, all tests, 13 shaders.
+- **Measurements:** Frame fixtures now enforce the whole frame too. Worst enforced values: `loupe` 4200 screen within6 99.30%, `zoom-follow` 4200 frame 99.42%. The misses are anti-aliasing on the outlined hand sprite and 1 px edges of the sampled screen, seen in diff images. `LoupeWithin` went from 0.994 to 0.993 and the whole-frame gate is 0.994, below the 0.995 of `spec/08` section 2.4, so tuning them is still open.
+- **Changes made:** The port list above. Inspector cards show sprites on the neutral fill, centered on visible pixels, and a color row for themes with several pointers. `dart-color` gradients and `touch` opacities render in Direct2D.
+- **Spec updates:** none beyond the ADR renumbering.
+- **Next:** MSBuild keeps sprites from older builds in `bin`, so a stale `rounded/pointer-1__12-6.svg` can be picked over the new file. Delete `bin` once after this change.
 
 ## 2026-11-02, Editor parity: segment menus, command menu, export modals, recording options
 

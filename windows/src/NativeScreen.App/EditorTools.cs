@@ -148,9 +148,10 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         };
         session.Mutate(document =>
         {
-            document.Timeline.IsVoiceoversTrackHidden = false;
+            segment.TrackIndex = VoiceoverTrackLayout.FirstFreeTrack(document.Timeline.Voiceovers, segment.SourceStartMs, segment.SourceEndMs);
+            VoiceoverTrackLayout.SetTrackHidden(document.Timeline, segment.TrackIndex, false);
             document.Timeline.Voiceovers.Add(segment);
-            document.Timeline.Voiceovers.Sort((a, b) => a.SourceStartMs.CompareTo(b.SourceStartMs));
+            VoiceoverTrackLayout.Normalize(document.Timeline);
         });
         toast("Voiceover added");
     }
