@@ -17,6 +17,7 @@ public sealed class VideoFileWriter : IDisposable
     private const uint H264BaselineProfile = 66;
 
     private readonly IMFSinkWriter writer;
+    private readonly DecodeAccelerator? accelerator;
     private readonly int videoStream;
     private readonly int audioStream = -1;
     private readonly string path;
@@ -33,8 +34,14 @@ public sealed class VideoFileWriter : IDisposable
         this.path = path;
         frameBytes = width * height * 3 / 2;
         MediaFoundationRuntime.EnsureStarted();
-        using var attributes = MediaFactory.MFCreateAttributes(2);
+        using var attributes = MediaFactory.MFCreateAttributes(4);
         attributes.Set(SinkWriterAttributeKeys.ReadwriteEnableHardwareTransforms, true);
+        accelerator = DecodeAccelerator.TryCreate();
+        if (accelerator is not null)
+        {
+            attributes.Set(SinkWriterAttributeKeys.D3DManager, accelerator.Manager);
+        }
+
         if (fragmented)
         {
             attributes.Set(TranscodeAttributeKeys.TranscodeContainertype, TranscodeContainerTypeGuids.Fmpeg4);
@@ -127,6 +134,7 @@ public sealed class VideoFileWriter : IDisposable
     {
         finished = true;
         writer.Dispose();
+        accelerator?.Dispose();
         if (File.Exists(path))
         {
             File.Delete(path);
@@ -141,6 +149,7 @@ public sealed class VideoFileWriter : IDisposable
         }
 
         writer.Dispose();
+        accelerator?.Dispose();
     }
 
     private void Write(int stream, ReadOnlySpan<byte> data, double presentationMs, double durationMs)

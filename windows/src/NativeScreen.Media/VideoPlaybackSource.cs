@@ -17,6 +17,8 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
     private readonly object gate = new();
     private readonly AutoResetEvent wake = new(false);
     private readonly Thread thread;
+    private VideoFrame? handed;
+    private bool handedRetired;
     private double requestedMs;
     private bool seekPending = true;
     private bool endOfStream;
@@ -58,8 +60,44 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
             }
 
             wake.Set();
-            return best ?? (ring.Count > 0 ? ring[0] : null);
+            var chosen = best ?? (ring.Count > 0 ? ring[0] : null);
+            if (!ReferenceEquals(chosen, handed))
+            {
+                // The render thread is done with the last frame it was given, now that it asks again.
+                if (handedRetired && handed is not null)
+                {
+                    pool.Return(handed.Nv12);
+                }
+
+                handed = chosen;
+                handedRetired = false;
+            }
+
+            return chosen;
         }
+    }
+
+    /// <summary>Buffers are 9 MB at 3072x1920; dropping them to the GC caused pauses long enough to miss frames. Call under the gate.</summary>
+    private void Retire(VideoFrame frame)
+    {
+        if (ReferenceEquals(frame, handed))
+        {
+            handedRetired = true;
+        }
+        else
+        {
+            pool.Return(frame.Nv12);
+        }
+    }
+
+    private void RetireAll()
+    {
+        foreach (var frame in ring)
+        {
+            Retire(frame);
+        }
+
+        ring.Clear();
     }
 
     public void Dispose()
@@ -85,7 +123,8 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
                 target = requestedMs;
                 while (!seek && ring.Count > 1 && ring[1].PresentationMs <= target)
                 {
-                    // Keeps the frame at the clock and drops everything older; its buffer may still be on screen, so it goes to the GC.
+                    // Keeps the frame at the clock and drops everything older.
+                    Retire(ring[0]);
                     ring.RemoveAt(0);
                 }
 
@@ -97,7 +136,7 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
                 reader.Seek(target);
                 lock (gate)
                 {
-                    ring.Clear();
+                    RetireAll();
                     endOfStream = false;
                 }
             }
@@ -107,7 +146,7 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
                 continue;
             }
 
-            var frame = reader.ReadNext();
+            var frame = reader.ReadNext(pool);
             var seeking = seek;
             lock (gate)
             {
@@ -134,7 +173,7 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
                         }
                     }
 
-                    var next = reader.ReadNext();
+                    var next = reader.ReadNext(pool);
                     lock (gate)
                     {
                         if (next is null)
@@ -143,7 +182,7 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
                         }
                         else
                         {
-                            ring.Clear();
+                            RetireAll();
                             ring.Add(next);
                         }
                     }

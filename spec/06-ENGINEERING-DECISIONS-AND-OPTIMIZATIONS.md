@@ -463,7 +463,7 @@ full frame, which depends on regenerated fixtures.
 `ID3D11VideoProcessor` for BGRA to NV12. Both need a device shared across threads and make failures depend on the driver.
 
 ### Decision
-- Decode with hardware transforms but receive NV12 in system memory, upload to a dynamic NV12 texture on the render thread,
+- Decode with hardware transforms (they need a D3D device, see ADR-26) but receive NV12 in system memory, upload to a dynamic NV12 texture on the render thread,
   and convert with `Nv12ToRgb.hlsl`. No device is shared with the decode thread, and the render thread never waits on it.
 - Export converts each composed frame with `GpuNv12Converter` and reads NV12 back, then encodes through `IMFSinkWriter` with
   hardware transforms. GIF reads BGRA back. `Nv12Converter` stays as the reference for the matrix.
@@ -514,7 +514,7 @@ On one Intel MacBook Pro running Boot Camp (i9-9880H, Radeon Pro 5500M, Windows 
 - Compose: 1.0 ms median and 2.2 ms p95 at 1080p, 3.0 and 5.6 ms at 4K, wall clock including the GPU wait.
 - Playback of a 1080p30 clip at 60 Hz, offscreen: 0 late of 600 draws over 10 s, first frame 45 ms. No WASAPI or swap chain in that loop.
 - Preview audio: the device position was 44 ms behind wall clock after 2 s, which includes start latency.
-- Export: reading BGRA back and converting on the CPU gave 0.64x at 1080p and 0.21x at 4K. `GpuNv12Converter` gave 1.85x and 0.86x. 4K is still below the 1.5x that `spec/06` ADR-01 sets for considering hybrid encoding, and whether the sink writer picked a hardware encoder has not been checked.
+- Export: reading BGRA back and converting on the CPU gave 0.64x at 1080p and 0.21x at 4K. `GpuNv12Converter` gave 1.85x and 0.86x, and with ADR-26 about 1.7x and 1.17x. 4K is still below the 1.5x in the platform guide for considering hybrid encoding, and whether the sink writer picked a hardware encoder has not been checked.
 
 ### Packaging
 `scripts/package-msix.ps1` builds an unsigned, self-contained package of 97 MB. It has not been installed. A `.nativescreen` package is a folder on Windows, and file type associations do not apply to folders, so double-clicking a package opens it in File Explorer. The declared association only covers a file with that extension. Opening by folder picker and by command line argument works. A real fix needs a decision: a shell extension for folders, or a single-file package format, which would break the shared layout.
@@ -537,3 +537,27 @@ Given speech that starts 2 s into a track, Whisper reported the first word at 0 
 
 ### Measured
 Windows voice, base model, 8 of 16 threads: 9.7 s of speech in 1.7 to 3.6 s, words correct. `AudioFileReader` on a fragmented file matched the sample count exactly (0.0 ms), so ADR-22's problem does not reach audio. Real microphone speech has not been tried, and noisy tracks may need a different threshold.
+
+---
+
+## 26. ADR-26: Windows Playback: a Device per Reader, Swap Chain Pacing, Pooled Frames
+
+Measured playing a 3072x1920 recording in the real editor window, with `NS_PREVIEW_STATS=<file>` writing present intervals on close.
+
+| Step | CPU, of one core | Median interval | Over 1.5x median |
+| :--- | :--- | :--- | :--- |
+| Start | 215% | 33.9 ms | 1.64% over 10 s |
+| After 1 and 2 below | 85 to 97% | 16.67 ms | 0.48% over 10 s, 3.20% over 60 s |
+| After 3 below | 90% | 16.67 ms | 0.28% over 60 s, worst 165 ms |
+
+### Root causes
+1. `MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS` alone does not give a source reader a hardware decoder. Without `MF_SOURCE_READER_D3D_MANAGER` it decodes in software. Each reader now owns a device and device manager, and frames still reach the render thread in system memory, so no device is shared across threads. Writers got one too; export at 4K went from 0.88x to about 1.0x.
+2. Preview time was driven by a `DispatcherTimer`, which ticked at about 30 Hz here. The render thread now draws in a loop paced by the swap chain's latency waitable and reads the clock itself, for each frame, while playing. The timer only moves the playhead and the clock label.
+3. Each frame allocated a 9 MB array on the Large Object Heap, over 500 MB/s, and the resulting collections missed frames. It did not show in a 10 s run, which is why the acceptance check is 60 s. `VideoPlaybackSource` and `SequentialVideoSource` now reuse buffers. A frame handed to the render thread is only reused once that thread asks for another.
+
+### Still open
+- The recording bitrate came out at 47 Mbit/s against a requested 23.6, in every run. The encoder may be ignoring `MF_MT_AVG_BITRATE`; rate control through `ICodecAPI` has not been tried.
+- A/V offset is limited to the 15 ms correction tolerance against the device position; it was not measured acoustically, so output latency is not included.
+
+### Scrubbing
+Dragging on the timeline moved the playhead without updating the clock label or the preview, because only a press raised a selection change. `TimelineView.PlayheadScrubbed` now does both.

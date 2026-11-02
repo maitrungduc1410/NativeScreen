@@ -10,6 +10,7 @@ public sealed class VideoFramePool
 {
     private readonly ConcurrentBag<byte[]> free = [];
 
+    /// <summary>Buffers may hold old pixels: every byte a frame shows is written by the reader.</summary>
     public byte[] Rent(int size)
     {
         while (free.TryTake(out var buffer))
