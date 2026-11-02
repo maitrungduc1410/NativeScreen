@@ -500,7 +500,7 @@ The Media Foundation fragmented MP4 sink writes about 300 ms fragments with exac
 
 ### Decisions
 - WASAPI loopback delivers nothing while nothing plays, and the MP4 sink holds video back waiting for audio to interleave. Measured: 142 of about 240 frames written and 3.5 s to stop. `AudioTrackRecorder` now writes silence from a timer, and live writers set `MF_SINK_WRITER_DISABLE_THROTTLING`.
-- BGRA to NV12 runs on at most 4 threads. Measured 6 to 7 ms per frame including the GPU copy, on a 1536Ã—960 capture from a process without DPI awareness.
+- BGRA to NV12 runs in two pixel shaders (GpuNv12Converter) with the same matrix as Nv12Converter, because the CPU path measured 23 ms per frame at 3072Ã—1840 on 4 threads, about 40 fps. Exports keep the CPU path (ADR-21).
 
 ### Open problem
 On one Intel MacBook Pro running Boot Camp (i9-9880H, Radeon Pro 5500M, Windows 10 19045), the machine froze and reset within about a minute in all 3 runs that recorded the microphone through `WasapiCapture`. The fans rose first, and Event 41 shows no bugcheck and no dump. In the last run, disposing the recorder took 5 s against about 40 ms without a microphone. The 4 runs without a microphone completed and the machine stayed up. Two of the 3 resets also had the camera on; the camera alone has not been run. This points at the microphone path on this audio driver, but it is not proven and no other machine has been tried. Until it is resolved, keep the microphone off by default and do not run the microphone test without accepting a possible reset.

@@ -212,7 +212,10 @@ public sealed partial class EditorWindow : Window
         edit.Items.Add(Menu("Redo", session.Redo, "Ctrl+Shift+Z"));
         edit.Items.Add(Menu("Delete", session.DeleteSelected, "Delete"));
         var record = new MenuFlyoutSubItem { Text = "Record" };
-        record.Items.Add(Menu("New recording…", null));
+        record.Items.Add(Menu("New recording", () => RecordingHudWindow.Show()));
+        record.Items.Add(Menu("Record display", () => RecordingHudWindow.Show(CaptureTargetMode.Display)));
+        record.Items.Add(Menu("Record window", () => RecordingHudWindow.Show(CaptureTargetMode.Window)));
+        record.Items.Add(Menu("Record area", () => RecordingHudWindow.Show(CaptureTargetMode.Area)));
         var export = new MenuFlyoutSubItem { Text = "Export" };
         export.Items.Add(Menu("Export…", ShowExportOverlay, "Ctrl+E"));
         var view = new MenuFlyoutSubItem { Text = "View" };

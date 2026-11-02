@@ -46,7 +46,9 @@ public sealed class ScreenRecorder : IDisposable
     private readonly GraphicsCaptureItem item;
     private readonly Direct3D11CaptureFramePool framePool;
     private readonly GraphicsCaptureSession session;
-    private readonly ID3D11Texture2D staging;
+    private readonly ID3D11Texture2D frameCopy;
+    private readonly ID3D11ShaderResourceView frameView;
+    private readonly GpuNv12Converter converter;
     private readonly VideoFileWriter writer;
     private readonly TelemetryRecorder telemetry;
     private readonly AudioTrackRecorder? systemAudio;
@@ -98,7 +100,7 @@ public sealed class ScreenRecorder : IDisposable
         (sourceX, sourceY) = target.Mode == CaptureTargetMode.Area
             ? (target.Rect.X - target.Display.Bounds.X, target.Rect.Y - target.Display.Bounds.Y)
             : (0, 0);
-        staging = device.CreateTexture2D(new Texture2DDescription
+        frameCopy = device.CreateTexture2D(new Texture2DDescription
         {
             Width = (uint)width,
             Height = (uint)height,
@@ -106,9 +108,11 @@ public sealed class ScreenRecorder : IDisposable
             ArraySize = 1,
             Format = Format.B8G8R8A8_UNorm,
             SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Staging,
-            CPUAccessFlags = CpuAccessFlags.Read
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.ShaderResource
         });
+        frameView = device.CreateShaderResourceView(frameCopy);
+        converter = new GpuNv12Converter(device, context, width, height);
 
         var audioFormat = options.SystemAudio ? new AudioFormat(48000, 2, 192_000) : (AudioFormat?)null;
         writer = new VideoFileWriter(
@@ -206,7 +210,9 @@ public sealed class ScreenRecorder : IDisposable
         systemAudio?.Dispose();
         microphone?.Dispose();
         webcam?.Dispose();
-        staging.Dispose();
+        converter.Dispose();
+        frameView.Dispose();
+        frameCopy.Dispose();
         (captureDevice as IDisposable)?.Dispose();
         context.Dispose();
         device.Dispose();
@@ -309,26 +315,13 @@ public sealed class ScreenRecorder : IDisposable
         using (var texture = TextureOf(frame))
         {
             var box = new Box(sourceX, sourceY, 0, Math.Min(sourceX + width, size.Width), Math.Min(sourceY + height, size.Height), 1);
-            context.CopySubresourceRegion(staging, 0, 0, 0, 0, texture, 0, box);
+            context.CopySubresourceRegion(frameCopy, 0, 0, 0, 0, texture, 0, box);
         }
 
-        ConvertStaging();
+        converter.Convert(frameView, nv12);
         convertTotalMs += (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
         WriteCurrent(pts, host);
         framesWritten++;
-    }
-
-    private unsafe void ConvertStaging()
-    {
-        var mapped = context.Map(staging, 0, MapMode.Read);
-        try
-        {
-            Nv12Converter.FromBgraParallel((byte*)mapped.DataPointer, (int)mapped.RowPitch, nv12, width, height);
-        }
-        finally
-        {
-            context.Unmap(staging, 0);
-        }
     }
 
     private void WriteCurrent(double pts, double host)

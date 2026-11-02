@@ -19,7 +19,7 @@
                 <TextBlock Text="Native Screen" FontSize="28" FontWeight="SemiBold" Foreground="{ThemeResource Ink95}" />
                 <TextBlock Text="100% Native Windows &amp; Direct3D Engine • 0% Idle CPU" FontSize="12.5" Foreground="{ThemeResource Ink60}" TextWrapping="Wrap" Margin="0,-8,0,10" />
 
-                <Button Style="{StaticResource NsPrimaryButton}" Height="64" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" CornerRadius="12" IsEnabled="False" ToolTipService.ToolTip="Not available on Windows yet">
+                <Button Style="{StaticResource NsPrimaryButton}" Height="64" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" CornerRadius="12" Click="NewRecording">
                     <StackPanel>
                         <TextBlock Text="New Screen Recording" FontSize="14" FontWeight="SemiBold" />
                         <TextBlock Text="Display, Smart Window Picker, or Area" FontSize="11.5" FontWeight="Normal" Opacity="0.8" />

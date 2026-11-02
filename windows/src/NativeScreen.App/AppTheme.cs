@@ -79,8 +79,21 @@ public static class AppTheme
         Changed?.Invoke();
     }
 
-    public static void Register(Window window)
+    public static IReadOnlyList<Window> OpenWindows()
     {
+        var open = new List<Window>();
+        foreach (var reference in Windows)
+        {
+            if (reference.TryGetTarget(out var window))
+            {
+                open.Add(window);
+            }
+        }
+
+        return open;
+    }
+
+    public static void Register(Window window)    {
         Windows.Add(new WeakReference<Window>(window));
         window.Closed += (_, _) => Windows.RemoveAll(item => !item.TryGetTarget(out var target) || target == window);
         Apply(window);

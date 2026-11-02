@@ -94,6 +94,8 @@ public sealed partial class WelcomeWindow : Window
         await OpenPackage(ShowcaseProject.WritePackage(directory));
     }
 
+    private void NewRecording(object sender, RoutedEventArgs e) => RecordingHudWindow.Show();
+
     private void OpenEmptyEditor(object sender, RoutedEventArgs e) => new EditorWindow().Activate();
 
     private void OpenSettings(object sender, RoutedEventArgs e) => new SettingsWindow().Activate();

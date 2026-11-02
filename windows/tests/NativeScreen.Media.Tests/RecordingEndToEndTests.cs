@@ -21,7 +21,14 @@ public sealed class RecordingEndToEndTests : IDisposable
         }
 
         var display = CaptureTargets.Displays()[0];
-        var target = new CaptureTarget(CaptureTargetMode.Display, display, null, display.Bounds);
+        var targetKind = Environment.GetEnvironmentVariable("NS_TEST_CAPTURE_TARGET");
+        var window = targetKind == "window" ? CaptureTargets.WindowsFrontToBack()[0] : null;
+        var target = targetKind switch
+        {
+            "window" => new CaptureTarget(CaptureTargetMode.Window, CaptureTargets.DisplayOf(window!.Bounds), window, window.Bounds),
+            "area" => new CaptureTarget(CaptureTargetMode.Area, display, null, new PixelRect(display.Bounds.X + 100, display.Bounds.Y + 100, 801, 451)),
+            _ => new CaptureTarget(CaptureTargetMode.Display, display, null, display.Bounds)
+        };
         var package = RecordingPackage.Create(directory, DateTime.Now);
         // NS_TEST_CAPTURE_PARTS lists what runs besides the screen: system, mic, camera.
         var parts = Environment.GetEnvironmentVariable("NS_TEST_CAPTURE_PARTS") ?? "";
@@ -101,6 +108,39 @@ public sealed class RecordingEndToEndTests : IDisposable
         finally
         {
             File.WriteAllLines(Path.Combine(Path.GetTempPath(), "ns-record-report.txt"), report);
+        }
+    }
+
+    /// <summary>NS_TEST_CRASH=write dies mid-recording; NS_TEST_CRASH=read then checks what the crash left behind.</summary>
+    [Fact]
+    public void AKilledRecordingLeavesAPlayableFile()
+    {
+        var phase = Environment.GetEnvironmentVariable("NS_TEST_CRASH");
+        var folder = Path.Combine(Path.GetTempPath(), "ns-crash-package");
+        if (phase == "write")
+        {
+            var display = CaptureTargets.Displays()[0];
+            var recorder = new ScreenRecorder(new RecordingOptions(new CaptureTarget(CaptureTargetMode.Display, display, null, display.Bounds), folder, true, null, null));
+            Assert.True(recorder.WaitForFirstFrame());
+            Thread.Sleep(5000);
+            Environment.FailFast("crash test");
+        }
+        else if (phase == "read")
+        {
+            try
+            {
+                var recording = Path.Combine(folder, "recording");
+                var report = new List<string>();
+                var times = Times(Path.Combine(recording, "display.mp4"), report, "display");
+                File.WriteAllLines(Path.Combine(Path.GetTempPath(), "ns-record-report.txt"), report);
+                Assert.True(times[^1] >= 2500, $"only {times[^1]} ms survived");
+                Assert.True(AudioSeconds(Path.Combine(recording, "display.mp4")) >= 2.5);
+                Assert.NotEmpty(JsonLines.Load<CursorSampleEvent>(Path.Combine(recording, "telemetry", "cursor.jsonl")));
+            }
+            finally
+            {
+                Directory.Delete(folder, recursive: true);
+            }
         }
     }
 
