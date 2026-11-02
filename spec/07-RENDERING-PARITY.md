@@ -115,9 +115,15 @@ Then apply `canvas.cropRect01` (min 16 px).
 
 ### Pass 4: Click effect and cursor (`renderCursorAndRipple`)
 Cursor position = screen rect + `position01` (top-left normalized).
-- **Click effect** while `activeClickProgress = p` is set: radius `max(4, 46 * S * cursor.scale * p)`, alpha
-  `(1 - p) * 0.72 * cursorOpacity`. Circle: filled disc, white at `alpha * 0.65`. Ripple: ring, white at `alpha`, thickness
-  `max(2.5, 6 * S * (1 - p / 2))`.
+- **Circle click effect** while `activeClickProgress = p` is set: filled white disc, radius `max(4, 46 * S * cursor.scale * p)`,
+  alpha `(1 - p) * 0.72 * cursorOpacity * 0.65`.
+- **Ripple click effect:** draws nothing on top. It bends the positioned screen, shadow included, before the cursor is drawn,
+  over the whole canvas (`clickRipple` in `EffectKernels.swift`). Up to 3 waves at once, each from the cursor position when the
+  button went down, for 900 ms. With `t` the age in seconds, `L` the longer side of the screen rect and `d` the distance to the
+  click: front radius `L * (0.012 + 0.24 t)`, strength `exp(-3.4 t) * sin(8.8 t) * (1 - clamp((t / 0.9 - 0.7) / 0.3))`,
+  `w = exp(-3.5 b^2) * smoothstep(0, 0.03 L, d)` where `b = (d - front) / (0.042 L)`, skipped when `|b| > 3`. Waves add up.
+  Displacement is `radial * strength * w * 0.013 L`, sampled at `pixel - displacement`. Red and blue sample a further
+  `radial * |strength| * w * (1 - w) * 4 * 0.0035 L` to either side of green.
 - **Sprite:** rasterize the theme SVG once per (theme, variant, kind) at 256 px (Direct2D `ID2D1SvgDocument`). Height
   `32 * S * cursor.scale`, hotspot from the file name (percent of the 100×100 view box), rotation `rotationRadians`
   about the hotspot, alpha `opacity`. For a non-pointer kind, choose the sprite as in `spec/06` ADR-22.

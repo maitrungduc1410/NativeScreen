@@ -254,6 +254,9 @@
     "dismissedTypingSuggestionStarts" : [
 
     ],
+    "hiddenVoiceoverTracks" : [
+
+    ],
     "isCameraLayoutsTrackHidden" : false,
     "isShortcutsTrackHidden" : false,
     "isVoiceoversTrackHidden" : false,

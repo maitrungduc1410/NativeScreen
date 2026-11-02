@@ -511,3 +511,30 @@ variant ids.
 ### Fixtures
 Changing a sprite changes frames, so rerun `--generate-conformance` in the same change. The generator now creates one
 `MetalFrameCompositor` per case, which also removed the background leak in ADR-20.
+
+---
+
+## 23. ADR-23: Click Ripple Bends the Screen, Voiceovers Use Tracks
+
+### Click ripple
+The ripple used to be a hard white ring. It is now a refraction wave that draws nothing on top; the formula is in `spec/07`
+Pass 4. It needs each click's own position and age, so the solver keeps `clickWaves` (at most 3, 900 ms) for every style,
+because `clickEffect` is not part of the trajectory rebuild key. `activeClickProgress` still covers only the circle, so
+`trajectory.json` does not change.
+
+The kernel must run on the whole canvas. Running it on the screen rect alone smeared the screen's edge pixels across the
+background. It also runs before the camera zoom, so CoreImage asks it for just the visible part of the canvas: its textures
+are smaller than the canvas, and it works in canvas pixels using each texture's origin. Treating the output texture as the
+whole canvas squeezed the full screen into it, which looked like the zoom snapping to 1x on every click.
+
+### Voiceover tracks
+- `VoiceoverSegment.trackIndex` (default 0) is the track. Segments on one track never overlap; segments on different tracks
+  may, and both playback and export mix them.
+- `TimelineConfig.hiddenVoiceoverTracks` holds the hidden track indices, so each track has its own eye. A hidden track is left
+  out of playback and export, and its `hideRecording` segments stop muting the recording. Adding a voiceover shows its track.
+  The old `isVoiceoversTrackHidden` flag is read once: when set, the project loads with every track hidden and the flag cleared.
+- `normalizeVoiceoverTracks()` enforces the rules and remaps hidden indices when tracks close up. It runs on load, after adding and deleting, and after moving between tracks.
+  Old projects with overlaps load with the later segment moved to the first free track, and empty tracks are closed up.
+- An imported file goes to the first track with room. A recording goes to the first track with nothing after its start, so
+  it fits at any length. Dragging along a track stops at its neighbors; dragging to a full track snaps the segment back.
+

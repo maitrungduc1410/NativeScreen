@@ -2,7 +2,7 @@ import Foundation
 import Metal
 import CoreImage
 
-/// GPU effects that CoreImage has no filter for: the magnifier lens (loupe zoom) and camera motion blur.
+/// GPU effects that CoreImage has no filter for: the magnifier lens (loupe zoom), camera motion blur and the click ripple.
 /// The Metal source is compiled at launch with `makeLibrary(source:)`, so the build needs no Metal toolchain,
 /// and each kernel runs inside a `CIImageProcessorKernel` so it slots into the CoreImage compositor graph.
 ///
@@ -12,12 +12,14 @@ public final class EffectKernels {
 
     let lensPipeline: MTLComputePipelineState?
     let motionBlurPipeline: MTLComputePipelineState?
+    let clickRipplePipeline: MTLComputePipelineState?
     let sampler: MTLSamplerState?
 
     private init() {
         guard let device = MTLCreateSystemDefaultDevice() else {
             lensPipeline = nil
             motionBlurPipeline = nil
+            clickRipplePipeline = nil
             sampler = nil
             return
         }
@@ -36,6 +38,7 @@ public final class EffectKernels {
         }
         lensPipeline = pipeline("magnifierLens")
         motionBlurPipeline = pipeline("cameraMotionBlur")
+        clickRipplePipeline = pipeline("clickRipple")
 
         let desc = MTLSamplerDescriptor()
         desc.minFilter = .linear
@@ -73,6 +76,62 @@ public final class EffectKernels {
             presence: Float(min(1.0, presence))
         )
         return run(.lens, on: inputImage, canvasRect: canvasRect, uniforms: uniforms)
+    }
+
+    // MARK: - Click ripple
+
+    /// One uniform per wave: center x, y in pixels, front radius in pixels, signed strength.
+    fileprivate struct ClickRippleUniforms {
+        var wave0: SIMD4<Float>
+        var wave1: SIMD4<Float>
+        var wave2: SIMD4<Float>
+        var waveCount: Int32
+        var bandWidth: Float
+        var pull: Float
+        var fringe: Float
+        var coreRadius: Float
+    }
+
+    /// Bends the screen content around each click like a ring spreading through glass. Nothing is drawn on top:
+    /// a band moves outward from the click, pushes pixels along its radius with a bounce that dies away, and splits
+    /// color slightly where it bends. Lengths scale with the longer side of the screen rect.
+    public static func applyClickRipple(
+        to inputImage: CIImage,
+        canvasRect canvas: CGRect,
+        screenRect: CGRect,
+        waves: [SpringTrajectorySolver.ClickWave]
+    ) -> CIImage {
+        guard shared.clickRipplePipeline != nil, !waves.isEmpty else { return inputImage }
+        let reach = Float(max(screenRect.width, screenRect.height))
+
+        func encoded(_ index: Int) -> SIMD4<Float> {
+            guard index < waves.count else { return .zero }
+            let wave = waves[index]
+            let seconds = Float(wave.ageMs / 1000.0)
+            let life = seconds / Float(SpringTrajectorySolver.clickWaveDurationMs / 1000.0)
+            let fadeOut = 1.0 - min(1.0, max(0.0, (life - 0.7) / 0.3))
+            let bounce = exp(-3.4 * seconds) * sin(8.8 * seconds) * fadeOut
+            let x = screenRect.minX + CGFloat(wave.position01.x) * screenRect.width
+            let y = screenRect.minY + CGFloat(1.0 - wave.position01.y) * screenRect.height
+            return SIMD4(
+                Float(x - canvas.minX),
+                Float(canvas.maxY - y),
+                reach * (0.012 + 0.24 * seconds),
+                bounce
+            )
+        }
+
+        let uniforms = ClickRippleUniforms(
+            wave0: encoded(0),
+            wave1: encoded(1),
+            wave2: encoded(2),
+            waveCount: Int32(min(waves.count, 3)),
+            bandWidth: reach * 0.042,
+            pull: reach * 0.013,
+            fringe: reach * 0.0035,
+            coreRadius: reach * 0.03
+        )
+        return run(.clickRipple, on: inputImage, canvasRect: canvas, uniforms: uniforms)
     }
 
     // MARK: - Camera motion blur
@@ -126,6 +185,7 @@ public final class EffectKernels {
     fileprivate enum Kind: Int {
         case lens
         case motionBlur
+        case clickRipple
     }
 
     fileprivate struct LensUniforms {
@@ -189,8 +249,58 @@ public final class EffectKernels {
         int maxSamples;
     };
 
+    struct ClickRippleUniforms {
+        float4 waves[3];     // center x, y in pixels, front radius in pixels, signed strength
+        int waveCount;
+        float bandWidth;
+        float pull;
+        float fringe;
+        float coreRadius;
+    };
+
     inline float4 sampleAt(texture2d<float, access::sample> tex, sampler s, float2 px, float2 size) {
         return tex.sample(s, px / size);
+    }
+
+    kernel void clickRipple(
+        texture2d<float, access::sample> src [[texture(0)]],
+        texture2d<float, access::write> dst [[texture(1)]],
+        sampler smp [[sampler(0)]],
+        constant ClickRippleUniforms &u [[buffer(0)]],
+        constant float4 &regions [[buffer(1)]],
+        uint2 gid [[thread_position_in_grid]]
+    ) {
+        if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) { return; }
+
+        // Under a zoom, CoreImage renders only the visible part, so textures are not the whole canvas.
+        // Everything here is in canvas pixels; `regions` gives where each texture starts on the canvas.
+        float2 srcSize = float2(src.get_width(), src.get_height());
+        float2 px = float2(gid) + 0.5 + regions.xy;
+        float2 displacement = float2(0.0);
+        float2 split = float2(0.0);
+        for (int i = 0; i < u.waveCount; i++) {
+            float4 wave = u.waves[i];
+            float2 offset = px - wave.xy;
+            float dist = length(offset);
+            float band = (dist - wave.z) / u.bandWidth;
+            if (dist < 0.001 || abs(band) > 3.0) { continue; }
+            float2 radial = offset / dist;
+            float weight = exp(-band * band * 3.5) * smoothstep(0.0, u.coreRadius, dist);
+            displacement += radial * wave.w * weight * u.pull;
+            split += radial * abs(wave.w) * weight * (1.0 - weight) * 4.0 * u.fringe;
+        }
+
+        if (all(displacement == float2(0.0))) {
+            dst.write(sampleAt(src, smp, px - regions.zw, srcSize), gid);
+            return;
+        }
+
+        // Red and blue bend a little apart from green, only where the band is moving through.
+        float2 at = px - displacement - regions.zw;
+        float4 green = sampleAt(src, smp, at, srcSize);
+        float4 red = sampleAt(src, smp, at - split, srcSize);
+        float4 blue = sampleAt(src, smp, at + split, srcSize);
+        dst.write(float4(red.r, green.g, blue.b, green.a), gid);
     }
 
     kernel void magnifierLens(
@@ -343,6 +453,7 @@ private final class EffectKernelProcessor: CIImageProcessorKernel {
         switch kind {
         case .lens: pipeline = kernels.lensPipeline
         case .motionBlur: pipeline = kernels.motionBlurPipeline
+        case .clickRipple: pipeline = kernels.clickRipplePipeline
         }
         guard let pipeline, let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
 
@@ -351,6 +462,16 @@ private final class EffectKernelProcessor: CIImageProcessorKernel {
         encoder.setTexture(outTexture, index: 1)
         encoder.setSamplerState(sampler, index: 0)
         uniforms.withUnsafeBytes { encoder.setBytes($0.baseAddress!, length: uniforms.count, index: 0) }
+
+        // Top-left of the output and input textures in top-down canvas pixels.
+        let canvas = (arguments?[canvasKey] as? CIVector)?.cgRectValue ?? output.region
+        var regions = SIMD4<Float>(
+            Float(output.region.minX - canvas.minX),
+            Float(canvas.maxY - output.region.maxY),
+            Float(input.region.minX - canvas.minX),
+            Float(canvas.maxY - input.region.maxY)
+        )
+        encoder.setBytes(&regions, length: MemoryLayout<SIMD4<Float>>.size, index: 1)
 
         let width = pipeline.threadExecutionWidth
         let height = max(1, pipeline.maxTotalThreadsPerThreadgroup / width)
@@ -361,7 +482,7 @@ private final class EffectKernelProcessor: CIImageProcessorKernel {
         encoder.endEncoding()
     }
 
-    /// Both kernels sample anywhere on the canvas (magnified or trailing content), so they need the whole input.
+    /// The kernels sample anywhere on the canvas (magnified, trailing or bent content), so they need the whole input.
     override class func roi(forInput input: Int32, arguments: [String: Any]?, outputRect: CGRect) -> CGRect {
         (arguments?[canvasKey] as? CIVector)?.cgRectValue ?? outputRect
     }

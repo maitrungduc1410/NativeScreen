@@ -27,6 +27,27 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, Click ripple and voiceover tracks (macOS side done, Windows port pending)
+
+### Writer
+- **Scope:** macOS only. Rules: `spec/06` ADR-23, ripple formula: `spec/07` Pass 4. Fixtures are regenerated; only the ripple frames of `cursor-styles` change, so they fail until the ripple is ported.
+- **To port on Windows:**
+  - Core solver: `clickWaves` on the cursor frame state (`SpringTrajectorySolver.swift`). `activeClickProgress` is unchanged.
+  - Rendering: a `ClickRipple.hlsl` pass over the whole canvas before the cursor sprite; remove the ring.
+  - Core models: `VoiceoverSegment.trackIndex`, `TimelineConfig.hiddenVoiceoverTracks` and the helpers in `Models/VoiceoverTrackLayout.swift`, run on load.
+  - Audio: playback and `AudioMixer` skip hidden tracks per segment (`isVoiceoverTrackHidden`), not with the old single flag.
+  - App: one timeline row per voiceover track with its own eye, the recording block on its track, vertical drag between tracks (`moveVoiceoverToTrack`).
+- **How to verify:** after fixtures are regenerated, `cursor-styles` frames. Open a project with overlapping voiceovers: each lands on its own track and the overlap still plays mixed.
+- **Risks / unsure:** the 3-wave limit and the wave bouncing past the screen edge have no fixture.
+
+### Verifier
+- **Result:**
+- **verify.ps1:**
+- **Measurements:**
+- **Changes made:**
+- **Spec updates:**
+- **Next:**
+
 ## 2026-11-02, Cursor themes redrawn (macOS side done, Windows port pending)
 
 ### Writer
