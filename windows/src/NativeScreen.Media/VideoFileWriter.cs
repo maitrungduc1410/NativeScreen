@@ -103,10 +103,13 @@ public sealed class VideoFileWriter : IDisposable
 
     public void Finish()
     {
-        if (!finished)
+        lock (writer)
         {
-            finished = true;
-            writer.Finalize();
+            if (!finished)
+            {
+                finished = true;
+                writer.Finalize();
+            }
         }
     }
 
@@ -131,7 +134,32 @@ public sealed class VideoFileWriter : IDisposable
         writer.Dispose();
     }
 
-    private unsafe void Write(int stream, ReadOnlySpan<byte> data, double presentationMs, double durationMs)
+    private void Write(int stream, ReadOnlySpan<byte> data, double presentationMs, double durationMs)
+    {
+        // Screen and system audio arrive on different threads; a sample must not be written after Finish.
+        lock (writer)
+        {
+            if (!finished)
+            {
+                SinkWriterSamples.Write(writer, stream, data, presentationMs, durationMs);
+            }
+        }
+    }
+
+    private static void SetBt709(IMFMediaType type)
+    {
+        type.Set(MediaTypeAttributeKeys.VideoPrimaries, Bt709Primaries);
+        type.Set(MediaTypeAttributeKeys.TransferFunction, Bt709Transfer);
+        type.Set(MediaTypeAttributeKeys.YuvMatrix, Bt709Matrix);
+        type.Set(MediaTypeAttributeKeys.VideoNominalRange, NominalRange16To235);
+    }
+
+    private static ulong Pack(int high, int low) => ((ulong)high << 32) | (uint)low;
+}
+
+internal static class SinkWriterSamples
+{
+    public static unsafe void Write(IMFSinkWriter writer, int stream, ReadOnlySpan<byte> data, double presentationMs, double durationMs)
     {
         using var buffer = MediaFactory.MFCreateMemoryBuffer(data.Length);
         buffer.Lock(out var pointer, out _, out _);
@@ -144,16 +172,6 @@ public sealed class VideoFileWriter : IDisposable
         sample.SampleDuration = (long)(durationMs * 10_000);
         writer.WriteSample(stream, sample);
     }
-
-    private static void SetBt709(IMFMediaType type)
-    {
-        type.Set(MediaTypeAttributeKeys.VideoPrimaries, Bt709Primaries);
-        type.Set(MediaTypeAttributeKeys.TransferFunction, Bt709Transfer);
-        type.Set(MediaTypeAttributeKeys.YuvMatrix, Bt709Matrix);
-        type.Set(MediaTypeAttributeKeys.VideoNominalRange, NominalRange16To235);
-    }
-
-    private static ulong Pack(int high, int low) => ((ulong)high << 32) | (uint)low;
 }
 
 internal static class MediaFoundationRuntime
