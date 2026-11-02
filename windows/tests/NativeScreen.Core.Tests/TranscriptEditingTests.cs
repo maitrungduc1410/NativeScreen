@@ -25,6 +25,30 @@ public sealed class TranscriptEditingTests
     }
 
     [Fact]
+    public void SpeechRegionsSkipSilenceAndMergeShortGaps()
+    {
+        const int Rate = 16000;
+        var samples = new float[Rate * 10];
+        void Tone(double from, double to)
+        {
+            for (var index = (int)(from * Rate); index < (int)(to * Rate); index++)
+            {
+                samples[index] = 0.3f * MathF.Sin(index * 0.2f);
+            }
+        }
+
+        Tone(2, 3);
+        Tone(3.3, 4);
+        Tone(7, 8);
+        var regions = SpeechRegions.Find(samples, Rate);
+        Assert.Equal(2, regions.Count);
+        Assert.InRange(regions[0].Start / (double)Rate, 1.7, 2);
+        Assert.InRange((regions[0].Start + regions[0].Length) / (double)Rate, 4, 4.3);
+        Assert.InRange(regions[1].Start / (double)Rate, 6.7, 7);
+        Assert.Empty(SpeechRegions.Find(new float[Rate], Rate));
+    }
+
+    [Fact]
     public void TheWholeVideoCanNeverBeCut()
     {
         var document = Document((0, 1000));

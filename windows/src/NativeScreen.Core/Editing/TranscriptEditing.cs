@@ -400,6 +400,76 @@ public static class TranscriptSegments
     }
 }
 
+/// <summary>
+/// Where speech is in an audio track. Whisper places words wrongly after long silence, up to the whole length of the silence,
+/// so each region is transcribed on its own and its words are shifted by the region's start (spec/06 ADR-25).
+/// </summary>
+public static class SpeechRegions
+{
+    private const double WindowMs = 30;
+    private const double MergeGapMs = 700;
+    private const double PaddingMs = 200;
+    private const float RelativeThreshold = 0.05f;
+    private const float AbsoluteThreshold = 0.002f;
+
+    public static List<(int Start, int Length)> Find(float[] samples, int sampleRate)
+    {
+        var window = Math.Max(1, (int)(WindowMs / 1000 * sampleRate));
+        var count = samples.Length / window;
+        var levels = new float[count];
+        var loudest = 0f;
+        for (var index = 0; index < count; index++)
+        {
+            var sum = 0f;
+            for (var at = index * window; at < (index + 1) * window; at++)
+            {
+                sum += samples[at] * samples[at];
+            }
+
+            levels[index] = MathF.Sqrt(sum / window);
+            loudest = Math.Max(loudest, levels[index]);
+        }
+
+        var threshold = Math.Max(AbsoluteThreshold, loudest * RelativeThreshold);
+        var mergeGap = (int)(MergeGapMs / WindowMs);
+        var padding = (int)(PaddingMs / 1000 * sampleRate);
+        var regions = new List<(int Start, int Length)>();
+        var first = -1;
+        var last = -1;
+
+        void Close()
+        {
+            var start = Math.Max(0, first * window - padding);
+            var end = Math.Min(samples.Length, (last + 1) * window + padding);
+            regions.Add((start, end - start));
+        }
+
+        for (var index = 0; index < count; index++)
+        {
+            if (levels[index] < threshold)
+            {
+                continue;
+            }
+
+            if (first >= 0 && index - last > mergeGap)
+            {
+                Close();
+                first = -1;
+            }
+
+            first = first < 0 ? index : first;
+            last = index;
+        }
+
+        if (first >= 0)
+        {
+            Close();
+        }
+
+        return regions;
+    }
+}
+
 /// <summary>Peak levels per bin for the timeline, normalized to the loudest bin.</summary>
 public static class Waveform
 {

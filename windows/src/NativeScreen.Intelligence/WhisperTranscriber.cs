@@ -58,6 +58,8 @@ public sealed record WhisperModel(string Tier, string FileName, string SizeText,
 /// <summary>Speech to word timings with whisper.cpp, on the CPU and off the UI thread.</summary>
 public static class WhisperTranscriber
 {
+    private const int SpeechSampleRate = 16000;
+
     public static async Task<List<CaptionSegment>> TranscribeAsync(string audioPath, WhisperModel model, string locale, string prompt, double durationMs, IProgress<double>? progress, CancellationToken cancel)
     {
         return await Task.Run(
@@ -81,10 +83,14 @@ public static class WhisperTranscriber
 
                 using var processor = builder.Build();
                 var words = new List<(string, double, double)>();
-                await foreach (var segment in processor.ProcessAsync(samples, cancel))
+                foreach (var (start, length) in SpeechRegions.Find(samples, SpeechSampleRate))
                 {
-                    words.Add((segment.Text, segment.Start.TotalMilliseconds, segment.End.TotalMilliseconds));
-                    progress?.Report(Math.Min(1, segment.End.TotalMilliseconds / Math.Max(1, durationMs)));
+                    var offsetMs = start * 1000.0 / SpeechSampleRate;
+                    await foreach (var segment in processor.ProcessAsync(samples.AsMemory(start, length), cancel))
+                    {
+                        words.Add((segment.Text, segment.Start.TotalMilliseconds + offsetMs, segment.End.TotalMilliseconds + offsetMs));
+                        progress?.Report(Math.Min(1, (segment.End.TotalMilliseconds + offsetMs) / Math.Max(1, durationMs)));
+                    }
                 }
 
                 return TranscriptSegments.Normalize(words, durationMs);

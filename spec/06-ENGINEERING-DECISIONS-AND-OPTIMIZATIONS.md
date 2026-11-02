@@ -492,7 +492,7 @@ The Media Foundation fragmented MP4 sink writes about 300 ms fragments with exac
 `Mp4FragmentIndex` parses `moov` and `moof` into a table of true times and keyframes, and `VideoFileReader` numbers frames against it instead of using `SampleTime`. A seek targets the keyframe's true time and then re-synchronizes on the nearest keyframe. Plain MP4 files keep the reported times. Recordings use H.264 baseline, so decode order is presentation order.
 
 ### Status
-`FragmentedTimingTests` covers variable-rate reads and seeks on generated clips. Not checked: `AudioFileReader` still uses reported times on fragmented files, which may have the same error and must be measured against a real recording; and how the macOS app reads these files.
+`FragmentedTimingTests` covers variable-rate reads and seeks on generated clips. Not checked: how the macOS app reads these files.
 
 ---
 
@@ -524,3 +524,16 @@ On one Intel MacBook Pro running Boot Camp (i9-9880H, Radeon Pro 5500M, Windows 
 - Generated background music tracks. Custom audio files work.
 - Person cutout. It needs a segmentation model whose license allows redistribution (`spec/07` 7.3). None was chosen, so cutout mode draws the plain camera rectangle.
 - Voiceover recording, until the microphone problem in ADR-23 is understood. Uploading audio files works.
+
+---
+
+## 25. ADR-25: Transcribe Speech Regions, Not the Whole Track
+
+### Root cause
+Given speech that starts 2 s into a track, Whisper reported the first word at 0 ms and the rest about 1.6 s early. Edit by transcript cuts by these times, so it would cut the wrong audio. Screen recordings often have long silences.
+
+### Decision
+`SpeechRegions.Find` locates speech by energy in 30 ms windows: above 5% of the loudest window, gaps under 700 ms merged, 200 ms padding. Each region goes to Whisper separately and its words are shifted by the region's start. Silence is not sent at all, which also prevents invented text in it.
+
+### Measured
+Windows voice, base model, 8 of 16 threads: 9.7 s of speech in 1.7 to 3.6 s, words correct. `AudioFileReader` on a fragmented file matched the sample count exactly (0.0 ms), so ADR-22's problem does not reach audio. Real microphone speech has not been tried, and noisy tracks may need a different threshold.
