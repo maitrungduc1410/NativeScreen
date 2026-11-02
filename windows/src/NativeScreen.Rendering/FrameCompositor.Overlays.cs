@@ -15,6 +15,7 @@ public sealed partial class FrameCompositor
     private readonly Dictionary<string, ID3D11ShaderResourceView> lutViews = [];
     private readonly Dictionary<string, RenderLayer> keycapSprites = [];
     private ID3D11Buffer? lutConstants;
+    private ID3D11Buffer? sharpenConstants;
     private ID3D11ShaderResourceView? wallpaperView;
     private (string Path, int Width, int Height)? wallpaperInfo;
     private string? cameraShadowKey;
@@ -143,7 +144,7 @@ public sealed partial class FrameCompositor
         var lut = LookTable(config);
         if (lut is null || config.ColorGradeIntensity <= 0.005)
         {
-            return raw.View;
+            return Sharpened(raw, config, width, height);
         }
 
         var graded = Layer("camera-graded", width, height);
@@ -160,7 +161,30 @@ public sealed partial class FrameCompositor
         context.CSSetUnorderedAccessView(0, null!);
         context.CSSetShaderResource(0, null!);
         context.CSSetShaderResource(1, null!);
-        return graded.View;
+        return Sharpened(graded, config, width, height);
+    }
+
+    private ID3D11ShaderResourceView Sharpened(RenderLayer layer, CameraConfig config, int width, int height)
+    {
+        var amount = Math.Clamp(config.Sharpen01, 0, 1);
+        if (amount <= 0.01)
+        {
+            return layer.View;
+        }
+
+        var context = _graphics.Context;
+        var sharp = Layer("camera-sharp", width, height);
+        context.UnsetRenderTargets();
+        sharpenConstants ??= CreateConstants(16);
+        context.UpdateSubresource(new Vector4((float)(amount * 1.15), 0, 0, 0), sharpenConstants);
+        context.CSSetShader(_sharpen);
+        context.CSSetShaderResource(0, layer.View);
+        context.CSSetUnorderedAccessView(0, sharp.Unordered);
+        context.CSSetConstantBuffer(0, sharpenConstants);
+        context.Dispatch((uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+        context.CSSetUnorderedAccessView(0, null!);
+        context.CSSetShaderResource(0, null!);
+        return sharp.View;
     }
 
     private static float LutSize(CameraConfig config) =>

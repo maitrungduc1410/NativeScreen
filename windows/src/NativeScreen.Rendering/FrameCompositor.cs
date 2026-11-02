@@ -21,6 +21,7 @@ public sealed partial class FrameCompositor : IDisposable
         ("MagnifierLens", "cs_5_0"),
         ("CameraMotionBlur", "cs_5_0"),
         ("Lut3D", "cs_5_0"),
+        ("SharpenLuma", "cs_5_0"),
         ("FullscreenTriangle", "vs_5_0")
     ];
 
@@ -38,6 +39,7 @@ public sealed partial class FrameCompositor : IDisposable
     private readonly ID3D11ComputeShader _motionBlur;
     private readonly ID3D11ComputeShader _lens;
     private readonly ID3D11ComputeShader _lut;
+    private readonly ID3D11ComputeShader _sharpen;
     private readonly ID3D11Buffer _meshConstants;
     private readonly ID3D11Buffer _boxConstants;
 
@@ -72,6 +74,7 @@ public sealed partial class FrameCompositor : IDisposable
         _motionBlur = (ID3D11ComputeShader)shaders["CameraMotionBlur"];
         _lens = (ID3D11ComputeShader)shaders["MagnifierLens"];
         _lut = (ID3D11ComputeShader)shaders["Lut3D"];
+        _sharpen = (ID3D11ComputeShader)shaders["SharpenLuma"];
         _meshConstants = CreateConstants(Marshal.SizeOf<BackgroundConstants>());
         _boxConstants = CreateConstants(Marshal.SizeOf<BoxConstants>());
     }

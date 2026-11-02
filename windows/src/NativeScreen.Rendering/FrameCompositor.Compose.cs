@@ -30,6 +30,12 @@ public sealed class ComposeRequest
 
 public sealed partial class FrameCompositor
 {
+    private const double BackgroundCrossfadeMs = 320;
+    private RenderLayer? previousBackground;
+    private long fadeStartTicks;
+    private string? backgroundIdentity;
+    private (int Width, int Height) backgroundSize;
+
     private static readonly Vector4 SyntheticScreen = new(0.06f, 0.06f, 0.08f, 1);
     private readonly Dictionary<string, RenderLayer> layers = [];
     private ID3D11SamplerState? linearClamp;
@@ -55,7 +61,7 @@ public sealed partial class FrameCompositor
         request = WithDecodedFrames(request);
         var document = request.Document;
         var state = request.Trajectory.Evaluate(request.SourceMs);
-        var background = Background(document, request.PackageDirectory, width, height);
+        var background = Background(document, request.PackageDirectory, width, height, request.ExportQuality);
         var (screenView, screenWidth, screenHeight) = MaskedScreen(request, width, height);
         var cropWidth = Math.Max(16, screenWidth * document.Canvas.CropRect01.Width);
         var cropHeight = Math.Max(16, screenHeight * document.Canvas.CropRect01.Height);
@@ -82,7 +88,20 @@ public sealed partial class FrameCompositor
         var output = Layer("output", width, height);
         BindTarget(output);
         context.OMSetBlendState(null);
-        DrawQuad(background.View, VerticallyFlipped(width, height), default, 0, 1);
+        var fade = request.ExportQuality ? 1 : BackgroundFadeProgress();
+        if (fade < 1)
+        {
+            // Not baked, so not flipped; same as the macOS crossfade path (spec/07 Pass 1).
+            DrawQuad(previousBackground!.View, Identity(width, height), default, 0, 1);
+            context.OMSetBlendState(_sourceOver);
+            DrawQuad(background.View, Identity(width, height), default, 0, (float)(1 - Math.Pow(1 - fade, 3)));
+            IsAnimating = true;
+        }
+        else
+        {
+            DrawQuad(background.View, VerticallyFlipped(width, height), default, 0, 1);
+            IsAnimating = false;
+        }
         context.OMSetBlendState(_sourceOver);
         DrawQuad(blurred.View, Identity(width, height), default, 0, 1);
         context.UnsetRenderTargets();
@@ -174,7 +193,17 @@ public sealed partial class FrameCompositor
     }
 
     // Pass 1. Baked once per key: blur and wallpaper decoding never run per frame.
-    private RenderLayer Background(ProjectDocument document, string? packageDirectory, int width, int height)
+    /// <summary>The last frame was mid-transition, so the preview must draw again without waiting for an edit.</summary>
+    public bool IsAnimating { get; private set; }
+
+    private double BackgroundFadeProgress() =>
+        previousBackground is null || fadeStartTicks == 0
+            ? 1
+            : Math.Min(1, System.Diagnostics.Stopwatch.GetElapsedTime(fadeStartTicks).TotalMilliseconds / BackgroundCrossfadeMs);
+
+    private static string IdentityOf(string key) => key[..key.LastIndexOf('|', key.LastIndexOf('|') - 1)];
+
+    private RenderLayer Background(ProjectDocument document, string? packageDirectory, int width, int height, bool export)
     {
         var settings = document.Background;
         var layer = Layer("background", width, height);
@@ -186,8 +215,17 @@ public sealed partial class FrameCompositor
             return layer;
         }
 
-        backgroundKey = key;
         var context = _graphics.Context;
+        if (!export && backgroundSize == (width, height) && backgroundIdentity is not null && backgroundIdentity != IdentityOf(key))
+        {
+            previousBackground = Layer("background-previous", width, height);
+            context.CopyResource(previousBackground.Texture, layer.Texture);
+            fadeStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
+
+        backgroundSize = (width, height);
+        backgroundIdentity = IdentityOf(key);
+        backgroundKey = key;
         BindTarget(layer);
         context.OMSetBlendState(null);
         context.PSSetShader(_mesh);

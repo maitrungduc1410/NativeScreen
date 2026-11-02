@@ -94,6 +94,10 @@ public sealed class PreviewRenderer : IDisposable
             latency.WaitOne(100);
             compositor.Present(swapChain, current, width, height);
             swapChain.Present();
+            if (compositor.IsAnimating)
+            {
+                wake.Set();
+            }
         }
     }
 }
