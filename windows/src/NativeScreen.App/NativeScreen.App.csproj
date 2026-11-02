@@ -10,6 +10,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition="'$(NsPackage)' != 'true'">
     <WindowsPackageType>None</WindowsPackageType>
@@ -28,6 +29,8 @@
     <GenerateTestArtifacts>false</GenerateTestArtifacts>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
+    <PackageReference Include="Vortice.Direct2D1" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     <ProjectReference Include="..\NativeScreen.Core\NativeScreen.Core.csproj" />

@@ -432,6 +432,39 @@ public sealed partial class EditorWindow
 /// <summary>Opening packages from any window or the command line.</summary>
 internal static class Projects
 {
+    public static void ShowFolder(string path)
+    {
+        Directory.CreateDirectory(path);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+    }
+
+    public static async Task PromptOpen(Window owner, XamlRoot? xamlRoot)
+    {
+        // A .nativescreen package is a folder on Windows.
+        var picker = new Windows.Storage.Pickers.FolderPicker();
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(owner));
+        if (await picker.PickSingleFolderAsync() is { } folder)
+        {
+            await Open(folder.Path, xamlRoot);
+        }
+    }
+
+    public static async Task PromptImport(Window owner, XamlRoot? xamlRoot)
+    {
+        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+        foreach (var type in new[] { ".mp4", ".mov", ".m4v", ".mkv", ".wmv" })
+        {
+            picker.FileTypeFilter.Add(type);
+        }
+
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(owner));
+        if (await picker.PickSingleFileAsync() is { } file)
+        {
+            await ImportVideo(file.Path, xamlRoot);
+        }
+    }
+
     public static async Task Open(string path, XamlRoot? xamlRoot)
     {
         try

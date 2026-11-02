@@ -14,6 +14,8 @@ public sealed class AppSettings
     public bool AutosaveEnabled { get; set; } = true;
     public int CountdownSeconds { get; set; } = 3;
     public bool AutoCreateZooms { get; set; } = true;
+    public int? HudX { get; set; }
+    public int? HudY { get; set; }
 
     public string ProjectsDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Native Screen Projects");
@@ -97,6 +99,7 @@ public static class AppTheme
 
     public static void Register(Window window)    {
         Windows.Add(new WeakReference<Window>(window));
+        window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));
         window.Closed += (_, _) => Windows.RemoveAll(item => !item.TryGetTarget(out var target) || target == window);
         Apply(window);
     }

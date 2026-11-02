@@ -151,6 +151,8 @@ public sealed partial class EditorWindow : Window
             DrawPreview();
         };
         Closed += ReleasePreview;
+        Closed += (_, _) => App.EditorClosed();
+        App.EditorOpened();
     }
 
     // MARK: Title bar
