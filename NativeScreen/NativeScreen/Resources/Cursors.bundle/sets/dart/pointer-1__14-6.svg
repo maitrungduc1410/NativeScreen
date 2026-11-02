@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><filter id="s" x="-30%" y="-30%" width="160%" height="160%">
+<feGaussianBlur in="SourceAlpha" stdDeviation="3.0"/><feOffset dx="0" dy="2.4" result="blurred"/>
+<feColorMatrix in="blurred" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0" result="shadow"/>
+<feBlend in="SourceGraphic" in2="shadow" mode="normal"/></filter></defs><g filter="url(#s)"><path d="M16.08,7.29 Q14.00,6.00 14.51,8.40 L29.54,79.15 Q31.00,86.00 34.13,79.74 L41.87,64.26 Q45.00,58.00 51.49,55.37 L70.51,47.63 Q77.00,45.00 71.05,41.32 Z" fill="#ffffff" stroke="#ffffff" stroke-width="8.0" stroke-linejoin="round"/><path d="M16.08,7.29 Q14.00,6.00 14.51,8.40 L29.54,79.15 Q31.00,86.00 34.13,79.74 L41.87,64.26 Q45.00,58.00 51.49,55.37 L70.51,47.63 Q77.00,45.00 71.05,41.32 Z" fill="#111114"/></g></svg>

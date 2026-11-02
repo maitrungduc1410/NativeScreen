@@ -572,8 +572,12 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
         self.scale = try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.6
-        self.themeId = try container.decodeIfPresent(String.self, forKey: .themeId) ?? CursorThemePreset.defaultThemeId
-        self.variantId = try container.decodeIfPresent(String.self, forKey: .variantId)
+        let theme = CursorThemePreset.migrateLegacyTheme(
+            themeId: try container.decodeIfPresent(String.self, forKey: .themeId) ?? CursorThemePreset.defaultThemeId,
+            variantId: try container.decodeIfPresent(String.self, forKey: .variantId)
+        )
+        self.themeId = theme.themeId
+        self.variantId = theme.variantId
         self.alwaysUsePointer = try container.decodeIfPresent(Bool.self, forKey: .alwaysUsePointer) ?? false
         self.smoothMovementEnabled = try container.decodeIfPresent(Bool.self, forKey: .smoothMovementEnabled) ?? true
         self.spring = try container.decodeIfPresent(SpringConfig.self, forKey: .spring) ?? .defaultCursor

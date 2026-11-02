@@ -442,17 +442,15 @@ Measuring the Windows compositor against `conformance/` found two things the cod
   downward falls upward, and a top-left to bottom-right gradient runs bottom-left to top-right. The screen, cursor and
   overlays are not baked and are not flipped. Windows reproduces this (`FrameCompositor.VerticallyFlipped`) because frames
   must match macOS. If macOS is fixed, remove the flip and regenerate the fixtures in the same change.
-- **The fixtures leak backgrounds between cases.** The generator shares one `MetalFrameCompositor` across all cases, and
-  its background crossfade runs on wall-clock time for 320 ms, including during export. Frames rendered right after a
-  background change therefore contain the previous case's background: `masks` declares a solid background and its frames
-  show the mesh of the case before it. These pixels also depend on machine speed. Until the generator creates a
-  compositor per case and the fixtures are regenerated on macOS, only the screen region is enforced, and full-frame numbers
-  are reported but not enforced.
+- **The fixtures used to leak backgrounds between cases.** The generator shared one `MetalFrameCompositor` across all
+  cases, and its background crossfade runs on wall-clock time for 320 ms, including during export, so frames rendered right
+  after a background change contained the previous case's background and depended on machine speed. The generator now
+  creates a compositor per case, and two runs produce identical frames (ADR-22). Full-frame enforcement can now be turned on.
 
 ### Decision
 `Rendering.Tests` enforces the `spec/08` §2.4 tolerances (SSIM 0.985, 99.5% of pixels within 6/255) on the screen region
 of the cases whose passes exist, leaving out frames that show keycaps until that pass lands. Acceptance still needs the
-full frame, which depends on regenerated fixtures.
+full frame, which the regenerated fixtures now allow.
 
 ---
 
@@ -479,3 +477,37 @@ full frame, which depends on regenerated fixtures.
 - Open question: under the xUnit test host, a fragmented clip reads back 100 ms late from frame 27. A standalone process
   never showed it across fast, real-time, long and worker-thread writes. `MF_LOW_LATENCY` did not change it. The recording
   acceptance check in `spec/08` phase 5 must confirm cursor sync on a real recording.
+
+---
+
+## 22. ADR-22: Cursor Themes Are Self-Drawn and Identical on Every Platform
+
+### Context
+A project must look the same on macOS and Windows, whichever one it was made on. Cursors of the operating systems cannot
+meet that and stay clean: showing the macOS cursor on Windows means redistributing it, and reading each machine's own
+cursor at runtime makes the same project differ per machine. Copying the system cursor into the project was also rejected,
+because the app would still be making and carrying a copy of an operating system asset.
+
+### Decision
+- Every theme is drawn in code by `tools/generate_cursor_assets.py`. Do not bundle, trace or take coordinates from cursors
+  of an operating system or another app, and do not add a theme that reads the system cursor. A later "import my own
+  cursor" feature is fine, since the user then picks the file.
+- Theme ids, in inspector order: `classic-dark` (default), `classic-light`, `rounded`, `dart`, `dart-color`, `outline`,
+  `ring`, `pixel`, `touch`. Names are neutral; none uses an operating system's name.
+- Both platforms render the same SVG files, so sprites use only what CoreSVG and Direct2D both draw: outlines are a
+  separate layer under the fill (no `paint-order`), opacity uses `fill-opacity` / `stroke-opacity` (no `rgba()`), and every
+  file has the same shadow (black 50%, stdDeviation 3, dy 2.4) because Direct2D ignores SVG filters and adds that shadow
+  itself.
+- Hands, I-beam and cross are drawn per pointer variant where the theme has colors. For a non-pointer kind, pick the sprite
+  with the selected pointer's variant number, then the first sprite of that kind, then the selected pointer. `ring` and
+  `touch` have pointer sprites only, so they stay the same shape for every cursor kind.
+
+### Migration
+`arrow` no longer exists. When a saved `CursorConfig` is decoded (`CursorThemePreset.migrateLegacyTheme`), `arrow` with
+variant `pointer-2` becomes `classic-light`, any other `arrow` becomes `classic-dark`, and the variant is cleared.
+Other unknown ids still normalize to the default, and ids starting with `touch` to `touch`. `rounded` and `touch` keep their ids and
+variant ids.
+
+### Fixtures
+Changing a sprite changes frames, so rerun `--generate-conformance` in the same change. The generator now creates one
+`MetalFrameCompositor` per case, which also removed the background leak in ADR-20.

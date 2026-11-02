@@ -200,7 +200,7 @@
       "stiffness" : 470
     },
     "stopMovementInLastPartMs" : 0,
-    "themeId" : "arrow",
+    "themeId" : "classic-dark",
     "velocityRotationEnabled" : true,
     "velocityRotationIntensity" : 0.5
   },

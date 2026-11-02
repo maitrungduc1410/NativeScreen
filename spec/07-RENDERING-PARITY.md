@@ -120,7 +120,7 @@ Cursor position = screen rect + `position01` (top-left normalized).
   `max(2.5, 6 * S * (1 - p / 2))`.
 - **Sprite:** rasterize the theme SVG once per (theme, variant, kind) at 256 px (Direct2D `ID2D1SvgDocument`). Height
   `32 * S * cursor.scale`, hotspot from the file name (percent of the 100×100 view box), rotation `rotationRadians`
-  about the hotspot, alpha `opacity`.
+  about the hotspot, alpha `opacity`. For a non-pointer kind, choose the sprite as in `spec/06` ADR-22.
 
 ### Camera zoom (classic)
 Skipped while editing masks on the paused preview. With `Z = max(1, scale)` and focus `f` = screen rect + `center01`:

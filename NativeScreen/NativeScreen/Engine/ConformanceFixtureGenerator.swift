@@ -20,16 +20,16 @@ enum ConformanceFixtureGenerator {
         }
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
 
-        guard let compositor = MetalFrameCompositor() else {
-            throw failure("Metal is unavailable; frame fixtures and stage layout need a GPU.")
-        }
-
         try writeLooks(to: root.appendingPathComponent("looks", isDirectory: true))
 
         let screen = syntheticScreenImage()
         let webcam = syntheticWebcamImage()
         var caseIds: [String] = []
         for spec in allCases() {
+            // One compositor per case: its background crossfade runs on wall-clock time and would leak between cases.
+            guard let compositor = MetalFrameCompositor() else {
+                throw failure("Metal is unavailable; frame fixtures and stage layout need a GPU.")
+            }
             let caseDir = root.appendingPathComponent("cases/\(spec.id)", isDirectory: true)
             try writeCase(spec, to: caseDir, screen: screen, webcam: webcam, compositor: compositor)
             caseIds.append(spec.id)

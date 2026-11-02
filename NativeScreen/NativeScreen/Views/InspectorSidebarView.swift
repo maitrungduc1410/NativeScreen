@@ -1125,7 +1125,7 @@ public struct InspectorSidebarView: View {
                                                     .frame(width: 48, height: 48)
                                                     .background(
                                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                            .fill(Color.ink.opacity(isVarSelected ? 0.08 : 0.04))
+                                                            .fill(Color(white: isVarSelected ? 0.54 : 0.48))
                                                     )
                                                     .overlay(
                                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -6280,7 +6280,7 @@ private struct CursorStyleHorizontalCardView: View {
                 .frame(width: cardSize, height: cardSize)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.ink.opacity(isSelected ? 0.08 : (isHovered ? 0.065 : 0.04)))
+                        .fill(Color(white: isSelected ? 0.54 : (isHovered ? 0.51 : 0.48))) // neutral, so dark and light cursors both read
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
