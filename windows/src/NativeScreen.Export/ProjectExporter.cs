@@ -28,6 +28,35 @@ public sealed class ProjectExporter(ExportSource source)
     public Task RunAsync(string path, ExportSettings settings, IProgress<ExportProgress>? progress, CancellationToken cancel) =>
         Task.Factory.StartNew(() => Run(path, settings, progress, cancel), cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
+    /// <summary>One composed frame as PNG or JPEG, on its own compositor like a video export.</summary>
+    public Task ExportStillAsync(string path, double sourceMs, int resolutionHeight, bool jpeg) => Task.Run(() =>
+    {
+        var document = source.Document;
+        var aspect = document.Canvas.EffectiveAspectRatio(source.SourceWidth, source.SourceHeight);
+        var (width, height) = new ExportSettings { ResolutionHeight = resolutionHeight }.OutputSize(aspect);
+        using var compositor = new FrameCompositor();
+        using var screen = OpenSequential(source.Tracks.DisplayVideo);
+        using var webcam = OpenSequential(source.Tracks.WebcamVideo);
+        var layer = compositor.Compose(
+            new ComposeRequest
+            {
+                Document = document,
+                Trajectory = new SpringTrajectorySolver(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, document),
+                SourceMs = sourceMs,
+                ScreenSource = screen,
+                WebcamSource = webcam,
+                ScreenWidth = (int)source.SourceWidth,
+                ScreenHeight = (int)source.SourceHeight,
+                HasCamera = source.HasCamera,
+                ExportQuality = true,
+                PackageDirectory = source.PackageDirectory,
+                Shortcuts = source.Shortcuts
+            },
+            width,
+            height);
+        ImageTexture.Save(ImageTexture.ReadBack(compositor.Device, compositor.Context, layer.Texture, width, height), width, height, path, jpeg);
+    });
+
     private void Run(string path, ExportSettings settings, IProgress<ExportProgress>? progress, CancellationToken cancel)
     {
         var document = source.Document;

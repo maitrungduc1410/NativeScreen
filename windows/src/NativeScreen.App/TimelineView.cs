@@ -80,10 +80,17 @@ internal sealed class TimelineView
         playhead.RenderTransform = playheadOffset;
     }
 
+    private float[]? waveform;
+
     private double TrackWidth => Math.Max(260, viewportWidth - TrackInset * 2) * zoom;
 
-    public void SetZoom(double value)
+    public void SetWaveform(float[] peaks)
     {
+        waveform = peaks;
+        Rebuild();
+    }
+
+    public void SetZoom(double value)    {
         zoom = value;
         Rebuild();
     }
@@ -97,11 +104,13 @@ internal sealed class TimelineView
         labels.Children.Clear();
         DrawRuler();
         var y = RulerHeight + 8;
+        y = DrawTypingSuggestions(y);
         y = DrawClips(y);
         y = DrawZooms(y);
         y = DrawLayouts(y);
         y = DrawMasks(y);
         y = DrawShortcuts(y);
+        y = DrawVoiceovers(y);
         y += 12;
         var height = Math.Max(y, root.ActualHeight);
         canvas.Width = TrackWidth + TrackInset * 2;
@@ -184,6 +193,7 @@ internal sealed class TimelineView
                 $"{seconds / 1000:0.#}s  ·  {slice.Speed:0.##}x",
                 slice.Id == session.SelectedSliceId,
                 false);
+            AddWaveform(block, slice.SourceStartMs, slice.SourceEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
             var id = slice.Id;
             block.PointerPressed += (_, args) =>
             {
@@ -203,8 +213,110 @@ internal sealed class TimelineView
         return y + ClipRowHeight + RowSpacing;
     }
 
-    private double DrawZooms(double y)
+    /// <summary>A filled envelope along the bottom of a clip; one point per 3 px is plenty, and it is rebuilt only on edits.</summary>
+    private void AddWaveform(BlockGrid block, double sourceStart, double sourceEnd, double width)
     {
+        if (waveform is null || width < 8)
+        {
+            return;
+        }
+
+        var points = new PointCollection();
+        var msPerBin = session.SourceDurationMs / waveform.Length;
+        var count = Math.Max(2, (int)(width / 3));
+        points.Add(new Windows.Foundation.Point(0, ClipRowHeight));
+        for (var index = 0; index <= count; index++)
+        {
+            var from = sourceStart + (sourceEnd - sourceStart) * index / count;
+            var to = sourceStart + (sourceEnd - sourceStart) * (index + 1) / count;
+            var peak = 0f;
+            for (var bin = (int)(from / msPerBin); bin < Math.Min(waveform.Length, (int)(to / msPerBin) + 1); bin++)
+            {
+                peak = Math.Max(peak, waveform[Math.Max(0, bin)]);
+            }
+
+            points.Add(new Windows.Foundation.Point(width * index / count, ClipRowHeight - peak * ClipRowHeight * 0.55));
+        }
+
+        points.Add(new Windows.Foundation.Point(width, ClipRowHeight));
+        block.Children.Insert(0, new Polygon { Points = points, Fill = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)), IsHitTestVisible = false });
+    }
+
+    private double DrawTypingSuggestions(double y)
+    {
+        var suggestions = ShortcutEngine.TypingSuggestions(session.Document, session.KeyEvents);
+        if (suggestions.Count == 0)
+        {
+            return y;
+        }
+
+        foreach (var item in suggestions)
+        {
+            var left = X(TimelineOf(item.SourceStartMs));
+            var width = X(TimelineOf(item.SourceEndMs)) - left;
+            var bar = Block(left, y, width, 16, Palette.Clip, "", null, false, false);
+            var target = item;
+            bar.PointerPressed += (_, args) =>
+            {
+                var menu = new MenuFlyout();
+                foreach (var speed in new[] { 2.0, 3, 4, 6, 8 })
+                {
+                    var value = speed;
+                    var apply = new MenuFlyoutItem { Text = $"Speed up typing {value:0}x" };
+                    apply.Click += (_, _) => session.Mutate(document => TypingSuggestionEdits.Apply(document, target, value));
+                    menu.Items.Add(apply);
+                }
+
+                var all = new MenuFlyoutItem { Text = "Apply to all suggestions, 4x" };
+                all.Click += (_, _) => session.Mutate(document =>
+                {
+                    foreach (var other in suggestions)
+                    {
+                        TypingSuggestionEdits.Apply(document, other, 4);
+                    }
+                });
+                menu.Items.Add(all);
+                var remove = new MenuFlyoutItem { Text = "Remove suggestion" };
+                remove.Click += (_, _) => session.Mutate(document => TypingSuggestionEdits.Dismiss(document, target));
+                menu.Items.Add(remove);
+                menu.ShowAt(bar);
+                args.Handled = true;
+            };
+            ToolTipService.SetToolTip(bar, "Speed up typing");
+        }
+
+        AddLabel("Typing", y - 4, 22, eye: false);
+        return y + 16 + 6;
+    }
+
+    private double DrawVoiceovers(double y)
+    {
+        var timeline = session.Document.Timeline;
+        if (timeline.Voiceovers.Count == 0)
+        {
+            return y;
+        }
+
+        AddLabel("Voiceovers", y, MaskRowHeight, eye: true, timeline.IsVoiceoversTrackHidden, () =>
+            session.Mutate(document => document.Timeline.IsVoiceoversTrackHidden = !document.Timeline.IsVoiceoversTrackHidden));
+        foreach (var voiceover in timeline.Voiceovers)
+        {
+            var left = X(TimelineOf(voiceover.SourceStartMs));
+            var width = X(TimelineOf(voiceover.SourceEndMs)) - left;
+            var block = Block(left, y, width, MaskRowHeight, Palette.Layout, "Voiceover", null, false, voiceover.Disabled || timeline.IsVoiceoversTrackHidden);
+            var id = voiceover.Id;
+            block.PointerPressed += (_, args) =>
+            {
+                session.SelectTab(InspectorTab.Audio);
+                args.Handled = true;
+            };
+            ToolTipService.SetToolTip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
+        }
+
+        return y + MaskRowHeight + RowSpacing;
+    }
+
+    private double DrawZooms(double y)    {
         var timeline = session.Document.Timeline;
         AddLabel("Zoom", y, ZoomRowHeight, eye: true, timeline.IsZoomTrackHidden, () =>
             session.Mutate(document => document.Timeline.IsZoomTrackHidden = !document.Timeline.IsZoomTrackHidden));

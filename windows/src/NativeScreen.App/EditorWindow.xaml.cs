@@ -70,6 +70,7 @@ public sealed partial class EditorWindow : Window
     private Task pendingWrite = Task.CompletedTask;
     private bool hasUnsavedChanges;
     private readonly InspectorPanel inspector;
+    private readonly EditorTools tools;
     private readonly TimelineView timeline;
     private readonly ExportSettings exportSettings = new();
     private FrameCompositor? compositor;
@@ -93,7 +94,9 @@ public sealed partial class EditorWindow : Window
         Ui.SizeWindow(this, 1600, 1000, 1180, 720);
 
         session = new EditorSession(source.Document, source.DurationMs) { CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [] };
-        inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera);
+        tools = new EditorTools(this, session, source, ShowToast);
+        inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
+        tools.Changed += inspector.Rebuild;
         timeline = new TimelineView(session, TimelineHost);
 
         SetTitleBar(TitleBar);
@@ -106,6 +109,9 @@ public sealed partial class EditorWindow : Window
         };
         TitleName.SizeChanged += (_, _) => UpdateTitleBarRegions();
         FolderButton.IsEnabled = source.PackagePath is not null;
+        RemoveButton.IsEnabled = source.PackagePath is not null;
+        Root.Loaded += (_, _) => tools.XamlRoot = Root.XamlRoot;
+        _ = LoadWaveform();
 
         BuildAppMenu();
         BuildAspectMenu();
@@ -116,6 +122,7 @@ public sealed partial class EditorWindow : Window
         FillCommands();
 
         session.DocumentChanged += DocumentChanged;
+        Closed += (_, _) => tools.CancelTranscript();
         session.SelectionChanged += SelectionChanged;
         AppTheme.Changed += ThemeChanged;
         Root.PreviewKeyDown += RootKeyDown;
@@ -206,6 +213,15 @@ public sealed partial class EditorWindow : Window
     private void BuildAppMenu()
     {
         var file = new MenuFlyoutSubItem { Text = "File" };
+        file.Items.Add(Menu("Open project", () => _ = OpenProjectCommand()));
+        file.Items.Add(RecentMenu());
+        file.Items.Add(Menu("Create project from video", () => _ = ImportVideoCommand()));
+        file.Items.Add(Menu("Create interactive showcase project", () => _ = Projects.Open(ShowcaseProject.WritePackage(AppSettings.Shared.ProjectsDirectory), Root.XamlRoot)));
+        file.Items.Add(Menu("Import preset", () => _ = ImportPreset()));
+        file.Items.Add(new MenuFlyoutSeparator());
+        file.Items.Add(Menu("Save", source.PackagePath is null ? null : SaveCommand, "Ctrl+S"));
+        file.Items.Add(Menu("Save as", source.PackagePath is null ? null : SaveAsCommand));
+        file.Items.Add(new MenuFlyoutSeparator());
         file.Items.Add(Menu("Settings", OpenSettings, "Ctrl+,"));
         var edit = new MenuFlyoutSubItem { Text = "Edit" };
         edit.Items.Add(Menu("Undo", session.Undo, "Ctrl+Z"));
@@ -217,7 +233,10 @@ public sealed partial class EditorWindow : Window
         record.Items.Add(Menu("Record window", () => RecordingHudWindow.Show(CaptureTargetMode.Window)));
         record.Items.Add(Menu("Record area", () => RecordingHudWindow.Show(CaptureTargetMode.Area)));
         var export = new MenuFlyoutSubItem { Text = "Export" };
-        export.Items.Add(Menu("Export…", ShowExportOverlay, "Ctrl+E"));
+        export.Items.Add(Menu("Export", ShowExportOverlay, "Ctrl+E"));
+        export.Items.Add(Menu("Quick export to clipboard", () => _ = QuickExportToClipboard()));
+        export.Items.Add(Menu("Export current frame as image", ShowFrameExportOverlay));
+        export.Items.Add(Menu("Extract raw recording files", source.PackagePath is null ? null : () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{Path.Combine(source.PackagePath, "recording")}\"") { UseShellExecute = true })));
         var view = new MenuFlyoutSubItem { Text = "View" };
         foreach (var (tab, _) in TabIcons)
         {
@@ -746,6 +765,9 @@ public sealed partial class EditorWindow : Window
             case VirtualKey.K:
                 ToggleCommandMenu();
                 return true;
+            case VirtualKey.S:
+                SaveCommand();
+                return true;
             case VirtualKey.E:
                 ShowExportOverlay();
                 return true;
@@ -919,6 +941,38 @@ public sealed partial class EditorWindow : Window
         ExportOverlay.Visibility = Visibility.Visible;
     }
 
+    private MenuFlyoutSubItem RecentMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = "Open recent" };
+        foreach (var path in AppSettings.Shared.RecentProjects)
+        {
+            var target = path;
+            menu.Items.Add(Menu(Path.GetFileNameWithoutExtension(path), () => _ = Projects.Open(target, Root.XamlRoot)));
+        }
+
+        menu.IsEnabled = menu.Items.Count > 0;
+        return menu;
+    }
+
+    private async Task OpenProjectCommand()
+    {
+        var picker = new Windows.Storage.Pickers.FolderPicker();
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        if (await picker.PickSingleFolderAsync() is { } folder)
+        {
+            await Projects.Open(folder.Path, Root.XamlRoot);
+        }
+    }
+
+    private async Task ImportVideoCommand()
+    {
+        if (await tools.PickFile(".mp4", ".mov", ".m4v", ".mkv", ".wmv") is { } file)
+        {
+            await Projects.ImportVideo(file, Root.XamlRoot);
+        }
+    }
+
     private async Task StartExport()
     {
         var gif = exportSettings.Format == ExportFormat.Gif;
@@ -926,11 +980,14 @@ public sealed partial class EditorWindow : Window
         picker.FileTypeChoices.Add(gif ? "GIF" : "MP4", new List<string> { gif ? ".gif" : ".mp4" });
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
         var file = await picker.PickSaveFileAsync();
-        if (file is null)
+        if (file is not null)
         {
-            return;
+            await RunExport(file.Path, file.Name);
         }
+    }
 
+    private async Task RunExport(string filePath, string fileName)
+    {
         var cancel = new CancellationTokenSource();
         exportCancel = cancel;
         var started = DateTime.UtcNow;
@@ -952,22 +1009,11 @@ public sealed partial class EditorWindow : Window
             var left = share > 0 ? elapsed * (1 / share - 1) : TimeSpan.Zero;
             time.Text = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00} • {(int)left.TotalMinutes:00}:{left.Seconds:00} left";
         });
-        var (document, _) = session.RenderSnapshot();
-        var exporter = new ProjectExporter(new ExportSource(
-            document,
-            source.PackagePath,
-            source.Project?.Metadata.Tracks ?? new RecordingTracksMetadata(),
-            source.DurationMs,
-            source.SourceWidth,
-            source.SourceHeight,
-            source.HasCamera,
-            session.CursorEvents,
-            session.ClickEvents,
-            session.Shortcuts()));
+        var exporter = new ProjectExporter(CurrentExportSource());
         try
         {
-            await exporter.RunAsync(file.Path, exportSettings, progress, cancel.Token);
-            ShowToast($"Exported {file.Name}");
+            await exporter.RunAsync(filePath, exportSettings, progress, cancel.Token);
+            ShowToast($"Exported {fileName}");
         }
         catch (OperationCanceledException)
         {

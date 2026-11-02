@@ -12,8 +12,30 @@ public sealed class ImageTexture
     public required int Width { get; init; }
     public required int Height { get; init; }
 
-    public static ImageTexture Load(string path, int? maxPixelSize = null)
+    /// <summary>Writes top-down opaque BGRA as PNG or JPEG.</summary>
+    public static unsafe void Save(byte[] bgra, int width, int height, string path, bool jpeg)
     {
+        using var factory = new IWICImagingFactory();
+        using var stream = factory.CreateStream();
+        stream.Initialize(path, FileAccess.Write);
+        using var encoder = factory.CreateEncoder(jpeg ? ContainerFormat.Jpeg : ContainerFormat.Png, stream);
+        fixed (byte* pixels = bgra)
+        {
+            using var source = factory.CreateBitmapFromMemory((uint)width, (uint)height, PixelFormat.Format32bppBGRA, (uint)(width * 4), (uint)bgra.Length, pixels);
+            using var frame = encoder.CreateNewFrame(out var options);
+            using (options)
+            {
+                frame.Initialize(options!);
+                frame.SetSize((uint)width, (uint)height);
+                frame.WriteSource(source);
+                frame.Commit();
+            }
+        }
+
+        encoder.Commit();
+    }
+
+    public static ImageTexture Load(string path, int? maxPixelSize = null)    {
         using var factory = new IWICImagingFactory();
         using var decoder = factory.CreateDecoderFromFileName(path);
         using var frame = decoder.GetFrame(0);

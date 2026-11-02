@@ -30,7 +30,7 @@
                 <Button x:Name="FolderButton" Style="{StaticResource NsIconButton}" Click="ShowInExplorer" ToolTipService.ToolTip="Show project in File Explorer">
                     <FontIcon Glyph="&#xE8B7;" FontSize="16" FontFamily="{StaticResource NsIconFont}" />
                 </Button>
-                <Button Style="{StaticResource NsIconButton}" IsEnabled="False" ToolTipService.ToolTip="Remove project">
+                <Button x:Name="RemoveButton" Style="{StaticResource NsIconButton}" Click="RemoveProject" ToolTipService.ToolTip="Remove project">
                     <FontIcon Glyph="&#xE74D;" FontSize="15" FontFamily="{StaticResource NsIconFont}" />
                 </Button>
             </StackPanel>
@@ -59,7 +59,7 @@
                     </Button>
                 </StackPanel>
                 <Border Width="1" Height="18" Background="{ThemeResource Ink14}" />
-                <Button Style="{StaticResource NsPillButton}" Height="36" Padding="12,0" IsEnabled="False" ToolTipService.ToolTip="Not available on Windows yet">
+                <Button Style="{StaticResource NsPillButton}" Height="36" Padding="12,0" Click="OpenPresets">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE734;" FontSize="13" FontFamily="{StaticResource NsIconFont}" />
                         <TextBlock Text="Presets" FontSize="13" />
@@ -104,13 +104,13 @@
                             <MenuFlyout x:Name="AspectMenu" Placement="Bottom" />
                         </Button.Flyout>
                     </Button>
-                    <Button Style="{StaticResource NsPillButton}" IsEnabled="False" ToolTipService.ToolTip="Not available on Windows yet">
+                    <Button Style="{StaticResource NsPillButton}" Click="OpenCrop">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE7A8;" FontSize="13" FontFamily="{StaticResource NsIconFont}" />
                             <TextBlock Text="Crop" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource NsPillButton}" IsEnabled="False" ToolTipService.ToolTip="Not available on Windows yet">
+                    <Button Style="{StaticResource NsPillButton}" Click="ShowFrameExport">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE722;" FontSize="13" FontFamily="{StaticResource NsIconFont}" />
                             <TextBlock Text="Export frame" />
@@ -156,7 +156,7 @@
                         <TextBlock x:Name="TotalTime" Width="64" FontSize="12.5" VerticalAlignment="Center" Foreground="{ThemeResource Ink45}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <Button Style="{StaticResource NsIconButton}" IsEnabled="False" ToolTipService.ToolTip="Playback speed">
+                        <Button Style="{StaticResource NsIconButton}" Click="OpenSpeedMenu" ToolTipService.ToolTip="Speed of the clip at the playhead">
                             <TextBlock Text="1x" FontSize="12.5" />
                         </Button>
                         <Slider x:Name="TimelineZoom" Width="96" Minimum="1" Maximum="6" Value="1" StepFrequency="0.05" VerticalAlignment="Center" IsThumbToolTipEnabled="False" ValueChanged="TimelineZoomChanged" />

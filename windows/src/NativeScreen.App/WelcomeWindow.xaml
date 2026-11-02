@@ -32,6 +32,7 @@
                     </StackPanel>
                 </Button>
                 <Button Style="{StaticResource NsOptionButton}" Height="44" HorizontalAlignment="Stretch" Click="OpenProject" Content="Open .nativescreen Project…" />
+                <Button Style="{StaticResource NsOptionButton}" Height="44" HorizontalAlignment="Stretch" Click="CreateFromVideo" Content="Create Project from Video" />
                 <Button Style="{StaticResource NsOptionButton}" Height="44" HorizontalAlignment="Stretch" Click="OpenEmptyEditor" Content="New empty editor" />
                 <Button Style="{StaticResource NsOptionButton}" Height="44" HorizontalAlignment="Stretch" Click="OpenSettings" Content="Settings" />
             </StackPanel>

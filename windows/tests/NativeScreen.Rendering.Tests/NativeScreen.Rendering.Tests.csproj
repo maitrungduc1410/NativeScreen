@@ -18,5 +18,6 @@
     <ProjectReference Include="..\..\src\NativeScreen.Rendering\NativeScreen.Rendering.csproj" />
     <ProjectReference Include="..\..\src\NativeScreen.Media\NativeScreen.Media.csproj" />
     <ProjectReference Include="..\..\src\NativeScreen.Export\NativeScreen.Export.csproj" />
+    <ProjectReference Include="..\..\src\NativeScreen.Intelligence\NativeScreen.Intelligence.csproj" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NativeScreen.Core;
@@ -68,23 +67,23 @@ public sealed partial class WelcomeWindow : Window
 
     private async Task OpenPackage(string path)
     {
-        try
+        await Projects.Open(path, Root.XamlRoot);
+        FillRecents();
+    }
+
+    private async void CreateFromVideo(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker();
+        foreach (var type in new[] { ".mp4", ".mov", ".m4v", ".mkv", ".wmv" })
         {
-            var project = await Task.Run(() => new LoadedProject(path));
-            new EditorWindow(EditorSource.Package(path, project)).Activate();
-            AppSettings.Shared.NoteRecent(path);
-            FillRecents();
+            picker.FileTypeFilter.Add(type);
         }
-        catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        if (await picker.PickSingleFileAsync() is { } file)
         {
-            await new ContentDialog
-            {
-                XamlRoot = Root.XamlRoot,
-                RequestedTheme = AppTheme.Current,
-                Title = "Could not open this project",
-                Content = $"{path}\n\n{exception.Message}",
-                CloseButtonText = "OK"
-            }.ShowAsync();
+            await Projects.ImportVideo(file.Path, Root.XamlRoot);
+            FillRecents();
         }
     }
 

@@ -12,6 +12,8 @@ public sealed class AppSettings
     public string Appearance { get; set; } = "dark";
     public List<string> RecentProjects { get; set; } = [];
     public bool AutosaveEnabled { get; set; } = true;
+    public int CountdownSeconds { get; set; } = 3;
+    public bool AutoCreateZooms { get; set; } = true;
 
     public string ProjectsDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Native Screen Projects");

@@ -13,9 +13,8 @@
             <TextBlock Text="Settings" FontSize="13" VerticalAlignment="Center" Foreground="{ThemeResource Ink60}" />
         </Grid>
         <StackPanel x:Name="Tabs" Grid.Row="1" Orientation="Horizontal" Spacing="6" Padding="16,4" />
-        <StackPanel Grid.Row="2" Padding="24,20" Spacing="12">
-            <TextBlock Text="Appearance" FontSize="13" FontWeight="Medium" Foreground="{ThemeResource Ink95}" />
-            <StackPanel x:Name="Appearance" Orientation="Horizontal" Spacing="6" />
-        </StackPanel>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Body" Padding="24,20" Spacing="12" />
+        </ScrollViewer>
     </Grid>
 </Window>

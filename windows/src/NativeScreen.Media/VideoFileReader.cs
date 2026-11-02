@@ -20,6 +20,9 @@ public sealed class VideoFileReader : IDisposable
     public int Width { get; }
     public int Height { get; }
 
+    /// <summary>Time of the last frame for a fragmented file; otherwise the container's duration.</summary>
+    public double DurationMs => index is not null ? index.TimesMs[^1] : (reader.GetPresentationAttribute(SourceReaderIndex.MediaSource, PresentationDescriptionAttributeKeys.Duration) is var ticks ? Convert.ToInt64(ticks.Value) / 10_000.0 : 0);
+
     public VideoFileReader(string path)
     {
         MediaFoundationRuntime.EnsureStarted();

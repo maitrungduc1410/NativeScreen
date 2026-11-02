@@ -14,7 +14,6 @@ namespace NativeScreen.App;
 /// </summary>
 public sealed class RecordingHudWindow : Window
 {
-    private const int CountdownSeconds = 3;
     private const double BarHeight = 64;
     private const double BottomMargin = 56;
 
@@ -225,7 +224,13 @@ public sealed class RecordingHudWindow : Window
 
     private void BeginCountdown()
     {
-        countdown = CountdownSeconds;
+        countdown = AppSettings.Shared.CountdownSeconds;
+        if (countdown <= 0)
+        {
+            _ = StartRecording();
+            return;
+        }
+
         bar.Children.Clear();
         status.Text = $"Recording starts in {countdown}";
         bar.Children.Add(status);
@@ -395,7 +400,7 @@ public sealed class RecordingHudWindow : Window
         var (directory, chosen, stats) = (package, target, lastDuration);
         var project = await Task.Run(() =>
         {
-            RecordingPackage.Finish(directory, chosen.Metadata(), stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: true, DateTimeOffset.UtcNow);
+            RecordingPackage.Finish(directory, chosen.Metadata(), stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms, DateTimeOffset.UtcNow);
             return new LoadedProject(directory);
         });
         new EditorWindow(EditorSource.Package(directory, project)).Activate();
