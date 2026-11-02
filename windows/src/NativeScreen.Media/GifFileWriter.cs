@@ -11,14 +11,16 @@ public sealed class GifFileWriter : IDisposable
     private readonly IWICStream stream;
     private readonly IWICBitmapEncoder encoder;
     private readonly string path;
+    private readonly bool loop;
     private readonly int width;
     private readonly int height;
     private bool closed;
     private bool disposed;
 
-    public GifFileWriter(string path, int width, int height)
+    public GifFileWriter(string path, int width, int height, bool loop = true)
     {
         this.path = path;
+        this.loop = loop;
         this.width = width;
         this.height = height;
         stream = factory.CreateStream();
@@ -69,7 +71,10 @@ public sealed class GifFileWriter : IDisposable
             encoder.Commit();
             encoder.Dispose();
             stream.Dispose();
-            AddLoopExtension();
+            if (loop)
+            {
+                AddLoopExtension();
+            }
         }
     }
 

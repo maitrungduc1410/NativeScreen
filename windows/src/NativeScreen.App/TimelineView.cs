@@ -84,6 +84,9 @@ internal sealed class TimelineView
 
     private double TrackWidth => Math.Max(260, viewportWidth - TrackInset * 2) * zoom;
 
+    /// <summary>The editor's file actions, for menus that upload audio. Set once by the window.</summary>
+    public EditorTools? Tools { get; set; }
+
     /// <summary>The playhead was moved by hand, so the clock label and the preview must follow it.</summary>
     public event Action? PlayheadScrubbed;
 
@@ -219,6 +222,34 @@ internal sealed class TimelineView
                     return (current.SourceStartMs, current.SourceEndMs, low, high);
                 },
                 canMove: false);
+            block.RightTapped += (_, args) =>
+            {
+                args.Handled = true;
+                SegmentMenu.ForClip(session, id, canvas, args.GetPosition(canvas));
+            };
+        }
+
+        // A badge on each cut merges the two clips around it.
+        var cuts = session.Mapper.MappedSlices;
+        for (var index = 0; index + 1 < cuts.Count; index++)
+        {
+            var left = cuts[index].Slice.Id;
+            var badge = new Button
+            {
+                Style = Ui.StyleOf("NsIconButton"),
+                Width = 18,
+                Height = 18,
+                CornerRadius = new CornerRadius(9),
+                Padding = new Thickness(0),
+                Background = new SolidColorBrush(Palette.Clip.Ring),
+                Content = Ui.Icon("\uE71B", 9, new SolidColorBrush(Color.FromArgb(255, 60, 40, 5)))
+            };
+            ToolTipService.SetToolTip(badge, "Merge with next");
+            badge.Click += (_, _) => session.MergeSliceWithNext(left);
+            Canvas.SetLeft(badge, X(cuts[index].TimelineEndMs) - 9);
+            Canvas.SetTop(badge, y - 7);
+            Canvas.SetZIndex(badge, 5);
+            canvas.Children.Add(badge);
         }
 
         return y + ClipRowHeight + RowSpacing;
@@ -317,6 +348,14 @@ internal sealed class TimelineView
             var block = Block(left, y, width, MaskRowHeight, Palette.Layout, "Voiceover", null, false, voiceover.Disabled || timeline.IsVoiceoversTrackHidden);
             var id = voiceover.Id;
             ToolTipService.SetToolTip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
+            block.RightTapped += (_, args) =>
+            {
+                args.Handled = true;
+                if (Tools is { } tools)
+                {
+                    SegmentMenu.ForVoiceover(session, tools, id, canvas, args.GetPosition(canvas));
+                }
+            };
             Draggable(block, width, () => session.SelectTab(InspectorTab.Audio), (start, end) =>
             {
                 session.Mutate(document => document.Timeline.Voiceovers.First(other => other.Id == id).SourceStartMs = start, structural: false);
@@ -330,7 +369,8 @@ internal sealed class TimelineView
         return y + MaskRowHeight + RowSpacing;
     }
 
-    private double DrawZooms(double y)    {
+    private double DrawZooms(double y)
+    {
         var timeline = session.Document.Timeline;
         AddRowTarget(y, ZoomRowHeight, Palette.Zoom, time => session.AddZoomAt(ZoomPresentation.Screen, time));
         AddLabel("Zoom", y, ZoomRowHeight, eye: true, timeline.IsZoomTrackHidden, () =>
@@ -366,6 +406,11 @@ internal sealed class TimelineView
                 var high = others.Where(other => other.SourceStartMs >= current.SourceEndMs).Select(other => other.SourceStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
                 return (current.SourceStartMs, current.SourceEndMs, low, high);
             });
+            block.RightTapped += (_, args) =>
+            {
+                args.Handled = true;
+                SegmentMenu.ForZoom(session, id, canvas, args.GetPosition(canvas));
+            };
         }
 
         return y + ZoomRowHeight + RowSpacing;
@@ -403,6 +448,11 @@ internal sealed class TimelineView
                 var high = others.Where(other => other.SourceStartMs >= current.SourceEndMs).Select(other => other.SourceStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
                 return (current.SourceStartMs, current.SourceEndMs, low, high);
             });
+            block.RightTapped += (_, args) =>
+            {
+                args.Handled = true;
+                SegmentMenu.ForLayout(session, id, canvas, args.GetPosition(canvas));
+            };
         }
 
         return y + MaskRowHeight + RowSpacing;
@@ -455,7 +505,20 @@ internal sealed class TimelineView
                     var low = siblings.Where(item => item.SourceEndMs <= current.SourceStartMs).Select(item => item.SourceEndMs).DefaultIfEmpty(0).Max();
                     var high = siblings.Where(item => item.SourceStartMs >= current.SourceEndMs).Select(item => item.SourceStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
                     return (current.SourceStartMs, current.SourceEndMs, low, high);
+                },
+                movedRows: rows =>
+                {
+                    var from = session.Document.Timeline.MaskTracks.FindIndex(other => other.Items.Exists(item => item.Id == id));
+                    if (from >= 0)
+                    {
+                        session.MoveMaskToTrack(id, from + rows);
+                    }
                 });
+                block.RightTapped += (_, args) =>
+                {
+                    args.Handled = true;
+                    SegmentMenu.ForMask(session, id, canvas, args.GetPosition(canvas));
+                };
             }
 
             y += MaskRowHeight + RowSpacing;
@@ -477,7 +540,13 @@ internal sealed class TimelineView
             {
                 var left = X(TimelineOf(shortcut.DisplayStartMs));
                 var width = X(TimelineOf(shortcut.DisplayEndMs)) - left;
-                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, false);
+                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, SegmentEdits.IsShortcutHidden(session.Document, shortcut));
+                var pressed = shortcut;
+                block.RightTapped += (_, args) =>
+                {
+                    args.Handled = true;
+                    SegmentMenu.ForShortcut(session, pressed, canvas, args.GetPosition(canvas));
+                };
                 var id = shortcut.Id;
                 Draggable(block, width, () => session.SelectShortcut(id), (start, end) =>
                 {
@@ -552,7 +621,7 @@ internal sealed class TimelineView
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, Height = height, Padding = new Thickness(12, 0, 0, 0) };
         if (eye)
         {
-            var button = Ui.IconButton(Ui.Icon(hidden ? "" : "", 12, Ui.Pal(hidden ? "Ink28" : "Ink60")), hidden ? "Show track" : "Hide track", toggle, 22);
+            var button = Ui.IconButton(Ui.Icon(hidden ? "" : "", 12, Ui.Pal(hidden ? "Ink28" : "Ink60")), hidden ? "Show track" : "Hide track", toggle, 22);
             button.VerticalAlignment = VerticalAlignment.Center;
             row.Children.Add(button);
         }
@@ -613,7 +682,8 @@ internal sealed class TimelineView
         Action select,
         Action<double, double> apply,
         Func<(double Start, double End, double Low, double High)> bounds,
-        bool canMove = true)
+        bool canMove = true,
+        Action<int>? movedRows = null)
     {
         block.PointerMoved += (_, args) =>
         {
@@ -626,12 +696,18 @@ internal sealed class TimelineView
         };
         block.PointerPressed += (_, args) =>
         {
+            if (!args.GetCurrentPoint(block).Properties.IsLeftButtonPressed)
+            {
+                return;
+            }
+
             // Selecting rebuilds every block, so it waits for release; a rebuild mid-press would cancel the drag.
             var x = args.GetCurrentPoint(block).Position.X;
             var mode = x < EdgeHitWidth ? DragMode.Start : x > width - EdgeHitWidth ? DragMode.End : canMove ? DragMode.Move : DragMode.None;
             var (start, end, low, high) = bounds();
             session.BeginInteractiveEdit();
-            drag = new Drag(block, args.GetCurrentPoint(canvas).Position.X, session.DurationMs, mode, start, end, low, high, apply, select);
+            var press = args.GetCurrentPoint(canvas).Position;
+            drag = new Drag(block, press.X, press.Y, Canvas.GetTop(block), session.DurationMs, mode, start, end, low, high, apply, select, movedRows);
             canvas.CapturePointer(args.Pointer);
             args.Handled = true;
         };
@@ -639,6 +715,11 @@ internal sealed class TimelineView
 
     private void CanvasPressed(object sender, PointerRoutedEventArgs args)
     {
+        if (!args.GetCurrentPoint(canvas).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
         session.ClearSelection();
         scrubbing = true;
         canvas.CapturePointer(args.Pointer);
@@ -649,9 +730,17 @@ internal sealed class TimelineView
 
     private void CanvasMoved(object sender, PointerRoutedEventArgs args)
     {
-        var x = args.GetCurrentPoint(canvas).Position.X;
+        var point = args.GetCurrentPoint(canvas).Position;
+        var x = point.X;
         if (drag is { } active)
         {
+            if (active.MovedRows is not null && active.Mode == DragMode.Move)
+            {
+                // A mask follows the pointer up and down, between tracks; the drop decides the row.
+                Canvas.SetTop(active.Block, active.BlockY + point.Y - active.PressY);
+                Canvas.SetZIndex(active.Block, 10);
+            }
+
             if (active.Mode == DragMode.None)
             {
                 return;
@@ -691,18 +780,25 @@ internal sealed class TimelineView
 
     private void CanvasReleased(object sender, PointerRoutedEventArgs args)
     {
+        var y = args.GetCurrentPoint(canvas).Position.Y;
+        // Releasing raises PointerCaptureLost at once, which would end the drag without a drop row.
+        EndDrag(y);
         canvas.ReleasePointerCapture(args.Pointer);
-        EndDrag();
     }
 
-    private void EndDrag()
+    private void EndDrag(double? y = null)
     {
         scrubbing = false;
         if (drag is { } finished)
         {
             drag = null;
             session.EndInteractiveEdit();
+            var rows = y is { } dropY ? (int)Math.Round((dropY - finished.PressY) / (MaskRowHeight + RowSpacing)) : 0;
             finished.Select();
+            if (rows != 0 && finished.Mode == DragMode.Move)
+            {
+                finished.MovedRows?.Invoke(rows);
+            }
         }
     }
 
@@ -714,7 +810,7 @@ internal sealed class TimelineView
         End
     }
 
-    private sealed record Drag(BlockGrid Block, double PressX, double PressDurationMs, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select);
+    private sealed record Drag(BlockGrid Block, double PressX, double PressY, double BlockY, double PressDurationMs, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select, Action<int>? MovedRows);
 
     private sealed record Palette(Color Top, Color Bottom, Color Ring)
     {

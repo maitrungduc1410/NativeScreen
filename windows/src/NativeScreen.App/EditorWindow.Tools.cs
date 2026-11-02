@@ -19,7 +19,7 @@ public sealed partial class EditorWindow
 {
     private const double MinimumCrop = 0.05;
     private string stillFormat = "png";
-    private int stillHeight = 1080;
+    private int stillHeight = 1440;
 
     // MARK: Project actions
 
@@ -180,45 +180,6 @@ public sealed partial class EditorWindow
 
     // MARK: Export frame
 
-    private void ShowFrameExport(object sender, RoutedEventArgs e) => ShowFrameExportOverlay();
-
-    private void ShowFrameExportOverlay()
-    {
-        ExportBody.Children.Clear();
-        ExportBody.Children.Add(Ui.Text("Export still frame", 18, "Ink95", true));
-        ExportBody.Children.Add(ExportRow("Format", StillOptions(
-            ("PNG", stillFormat == "png", () => stillFormat = "png"),
-            ("JPEG", stillFormat == "jpg", () => stillFormat = "jpg"))));
-        ExportBody.Children.Add(ExportRow("Resolution", StillOptions(
-            ("720p", stillHeight == 720, () => stillHeight = 720),
-            ("1080p", stillHeight == 1080, () => stillHeight = 1080),
-            ("4K", stillHeight == 2160, () => stillHeight = 2160))));
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right };
-        buttons.Children.Add(Ui.Option("Cancel", false, () => ExportOverlay.Visibility = Visibility.Collapsed));
-        buttons.Children.Add(Ui.Option("Copy to clipboard", false, () => _ = ExportStill(toClipboard: true)));
-        var save = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = "Save" };
-        save.Click += (_, _) => _ = ExportStill(toClipboard: false);
-        buttons.Children.Add(save);
-        ExportBody.Children.Add(buttons);
-        ExportOverlay.Visibility = Visibility.Visible;
-    }
-
-    private StackPanel StillOptions(params (string Title, bool Selected, Action Change)[] options)
-    {
-        var stack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        foreach (var (title, selected, change) in options)
-        {
-            var apply = change;
-            stack.Children.Add(Ui.Option(title, selected, () =>
-            {
-                apply();
-                ShowFrameExportOverlay();
-            }));
-        }
-
-        return stack;
-    }
-
     private ExportSource CurrentExportSource()
     {
         var (document, _) = session.RenderSnapshot();
@@ -233,41 +194,6 @@ public sealed partial class EditorWindow
             session.CursorEvents,
             session.ClickEvents,
             session.Shortcuts());
-    }
-
-    private async Task ExportStill(bool toClipboard)
-    {
-        var jpeg = stillFormat == "jpg" && !toClipboard;
-        var extension = jpeg ? ".jpg" : ".png";
-        var path = toClipboard
-            ? Path.Combine(Directory.CreateTempSubdirectory("ns-frame-").FullName, "frame.png")
-            : await tools.PickSave($"{session.Document.Name} frame", jpeg ? "JPEG" : "PNG", extension);
-        if (path is null)
-        {
-            return;
-        }
-
-        ExportOverlay.Visibility = Visibility.Collapsed;
-        try
-        {
-            await new ProjectExporter(CurrentExportSource()).ExportStillAsync(path, session.SourceAtPlayhead, stillHeight, jpeg);
-            if (toClipboard)
-            {
-                var file = await StorageFile.GetFileFromPathAsync(path);
-                var package = new DataPackage();
-                package.SetBitmap(RandomAccessStreamReference.CreateFromFile(file));
-                Clipboard.SetContent(package);
-                ShowToast("Frame copied to clipboard");
-            }
-            else
-            {
-                ShowToast($"Exported {Path.GetFileName(path)}");
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
-        {
-            ShowToast($"Export failed: {exception.Message}");
-        }
     }
 
     // MARK: Crop
@@ -418,14 +344,7 @@ public sealed partial class EditorWindow
     {
         var directory = Directory.CreateTempSubdirectory("ns-clipboard-").FullName;
         var path = Path.Combine(directory, session.Document.Name + ".mp4");
-        await RunExport(path, Path.GetFileName(path));
-        if (File.Exists(path))
-        {
-            var package = new DataPackage();
-            package.SetStorageItems(new[] { await StorageFile.GetFileFromPathAsync(path) });
-            Clipboard.SetContent(package);
-            ShowToast("Video copied to clipboard");
-        }
+        await RunExport(path, Path.GetFileName(path), toClipboard: true);
     }
 }
 

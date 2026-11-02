@@ -25,8 +25,5 @@ public sealed class EditorSessionTests
         session.SelectTab(InspectorTab.Zoom);
         Assert.Equal("Animations", InspectorCatalog.Title(session.SelectedTab));
         Assert.Equal("Ctrl+9", InspectorCatalog.Accelerator(InspectorTab.Zoom));
-        session.OpenCommandMenu();
-        session.SetCommandQuery("und");
-        Assert.Equal("undo", EditorCommands.Search(session.CommandQuery)[0].Id);
     }
 }

@@ -75,7 +75,7 @@ public sealed class ProjectExporter(ExportSource source)
         var writer = settings.Format == ExportFormat.Gif
             ? null
             : new VideoFileWriter(path, width, height, settings.Fps, bitrate, settings.Mp4Codec == Mp4CodecOption.H265, fragmented: false, audio is null ? null : AudioMixer.OutputFormat);
-        var gif = settings.Format == ExportFormat.Gif ? new GifFileWriter(path, width, height) : null;
+        var gif = settings.Format == ExportFormat.Gif ? new GifFileWriter(path, width, height, !settings.GifDisableLoop) : null;
         var nv12 = new byte[width * height * 3 / 2];
         using var converter = writer is null ? null : new GpuNv12Converter(compositor.Device, compositor.Context, width, height);
         try

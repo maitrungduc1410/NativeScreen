@@ -184,40 +184,61 @@
         <Grid x:Name="TimelineHost" Grid.Row="4" Background="{ThemeResource SurfaceCanvas}" />
 
         <!-- Command menu -->
-        <Grid x:Name="CommandOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#66000000" Tapped="CommandOverlayTapped">
+        <Grid x:Name="CommandOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#D1080912" Tapped="CommandOverlayTapped">
             <Border
                 x:Name="CommandCard"
-                Width="560"
-                Margin="0,90,0,0"
-                Padding="10"
+                Width="616"
+                Margin="0,140,0,0"
                 VerticalAlignment="Top"
                 CornerRadius="14"
                 Background="{ThemeResource SurfaceModal}"
                 BorderBrush="{ThemeResource Ink14}"
                 BorderThickness="1"
                 Tapped="SwallowTap">
-                <StackPanel Spacing="8">
-                    <TextBox x:Name="CommandQuery" PlaceholderText="Type a command" TextChanged="QueryChanged" KeyDown="CommandQueryKeyDown" />
-                    <ListView x:Name="CommandList" MaxHeight="340" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="CommandClicked" />
+                <StackPanel>
+                    <Grid Height="60" Padding="18,0,12,0">
+                        <TextBox
+                            x:Name="CommandQuery"
+                            IsSpellCheckEnabled="False"
+                            PlaceholderText="Type to find a command"
+                            FontSize="17"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            TextChanged="QueryChanged"
+                            KeyDown="CommandQueryKeyDown">
+                            <TextBox.Resources>
+                                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                            </TextBox.Resources>
+                            </TextBox>
+                    </Grid>
+                    <Border Height="1" Background="{ThemeResource Ink10}" />
+                    <ScrollViewer x:Name="CommandScroller" MaxHeight="360">
+                        <StackPanel x:Name="CommandRows" Padding="8" />
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
         </Grid>
 
-        <!-- Export settings -->
-        <Grid x:Name="ExportOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#99000000">
+        <!-- Export settings and still frame -->
+        <Grid x:Name="ExportOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#9E000000" Tapped="ExportBackdropTapped">
             <Border
-                Width="620"
-                Padding="24"
+                x:Name="ExportCard"
+                Width="740"
+                Padding="28,26,28,26"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                CornerRadius="16"
-                Background="{ThemeResource SurfaceModal}"
-                BorderBrush="{ThemeResource Ink14}"
-                BorderThickness="1">
-                <StackPanel x:Name="ExportBody" Spacing="18" />
+                CornerRadius="14"
+                Background="#FF111114"
+                BorderBrush="{ThemeResource Ink10}"
+                BorderThickness="1"
+                Tapped="SwallowTap">
+                <StackPanel x:Name="ExportBody" Spacing="26" />
             </Border>
         </Grid>
-
         <!-- Toast -->
         <Border
             x:Name="Toast"

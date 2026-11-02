@@ -11,6 +11,7 @@ public sealed class ExportSettings
     public Mp4CodecOption Mp4Codec { get; set; } = Mp4CodecOption.H264;
     public ProResProfileOption ProResProfile { get; set; } = ProResProfileOption.Hq422;
     public bool GifHighQuality { get; set; }
+    public bool GifDisableLoop { get; set; }
 
     public void Normalize()
     {
@@ -40,7 +41,7 @@ public sealed class ExportSettings
         return (width, height);
     }
 
-    private List<int> EnabledHeights()
+    public List<int> EnabledHeights()
     {
         var all = Heights(Format);
         if (Format == ExportFormat.Mp4 && (Compression == ExportCompression.Web || Compression == ExportCompression.WebLow))

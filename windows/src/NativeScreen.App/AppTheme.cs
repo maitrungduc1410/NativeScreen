@@ -16,6 +16,7 @@ public sealed class AppSettings
     public bool AutoCreateZooms { get; set; } = true;
     public int? HudX { get; set; }
     public int? HudY { get; set; }
+    public string? StillExportFolder { get; set; }
 
     public string ProjectsDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Native Screen Projects");

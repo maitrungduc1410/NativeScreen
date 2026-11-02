@@ -51,43 +51,7 @@ public static class InspectorCatalog
     };
 }
 
-public sealed class EditorCommand
-{
-    public required string Id { get; init; }
-    public required string Title { get; init; }
-    public string Accelerator { get; init; } = "";
-}
-
-public static class EditorCommands
-{
-    public static IReadOnlyList<EditorCommand> All { get; } =
-    [
-        new() { Id = "play", Title = "Play or pause", Accelerator = "Space" },
-        new() { Id = "split", Title = "Split clip at playhead", Accelerator = "C" },
-        new() { Id = "zoom", Title = "Add classic zoom", Accelerator = "" },
-        new() { Id = "loupe", Title = "Add loupe zoom", Accelerator = "" },
-        new() { Id = "mask", Title = "Add sensitive data mask", Accelerator = "" },
-        new() { Id = "highlight", Title = "Add highlight mask", Accelerator = "" },
-        new() { Id = "delete", Title = "Delete selection", Accelerator = "Delete" },
-        new() { Id = "undo", Title = "Undo", Accelerator = "Ctrl+Z" },
-        new() { Id = "redo", Title = "Redo", Accelerator = "Ctrl+Shift+Z" },
-        new() { Id = "export", Title = "Export", Accelerator = "Ctrl+E" },
-        new() { Id = "settings", Title = "Settings", Accelerator = "Ctrl+," },
-        new() { Id = "command-menu", Title = "Command menu", Accelerator = "Ctrl+K" }
-    ];
-
-    public static IReadOnlyList<EditorCommand> Search(string? query)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return All;
-        }
-
-        return All.Where(command => command.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
-    }
-}
-
-public sealed class EditorSession
+public sealed partial class EditorSession
 {
     private const double CoalesceWindowMs = 700;
     private readonly PlaybackClock clock;
@@ -134,8 +98,6 @@ public sealed class EditorSession
     public double PlayheadTimelineMs { get; private set; }
     public bool IsPlaying => clock.IsRunning;
     public InspectorTab SelectedTab { get; private set; } = InspectorTab.Background;
-    public string CommandQuery { get; private set; } = "";
-    public bool IsCommandMenuOpen { get; private set; }
     public string? SelectedSliceId { get; private set; }
     public string? SelectedZoomId { get; private set; }
     public string? SelectedMaskId { get; private set; }
@@ -268,16 +230,6 @@ public sealed class EditorSession
         ClearSelectionState();
         SelectedTab = tab;
         SelectionChanged?.Invoke();
-    }
-
-    public void OpenCommandMenu() => IsCommandMenuOpen = true;
-
-    public void SetCommandQuery(string query) => CommandQuery = query;
-
-    public void CloseCommandMenu()
-    {
-        IsCommandMenuOpen = false;
-        CommandQuery = "";
     }
 
     public void Rename(string name) => Mutate(document => document.Name = name);

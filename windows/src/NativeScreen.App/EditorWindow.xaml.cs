@@ -98,7 +98,8 @@ public sealed partial class EditorWindow : Window
         tools = new EditorTools(this, session, source, ShowToast);
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
         tools.Changed += inspector.Rebuild;
-        timeline = new TimelineView(session, TimelineHost);
+        timeline = new TimelineView(session, TimelineHost) { Tools = tools };
+        session.ToastRequested += ShowToast;
         overlay = new PreviewOverlay(session, PreviewCanvas, () => (source.SourceWidth, source.SourceHeight, source.HasCamera));
         PreviewCanvas.SizeChanged += (_, _) => overlay.Refresh();
 
@@ -122,7 +123,6 @@ public sealed partial class EditorWindow : Window
         RefreshTabRail();
         RefreshChrome();
         inspector.Rebuild();
-        FillCommands();
 
         session.DocumentChanged += DocumentChanged;
         Closed += (_, _) => tools.CancelTranscript();
@@ -753,7 +753,8 @@ public sealed partial class EditorWindow : Window
                 e.Handled = true;
                 break;
             case VirtualKey.C:
-                SplitAtPlayhead();
+                session.SplitAtCurrentTime();
+                RefreshTransport();
                 e.Handled = true;
                 break;
             case VirtualKey.Delete:
@@ -764,13 +765,24 @@ public sealed partial class EditorWindow : Window
             case VirtualKey.Escape:
                 if (ExportOverlay.Visibility == Visibility.Visible)
                 {
-                    ExportOverlay.Visibility = Visibility.Collapsed;
+                    if (exportCancel is null && !stillBusy)
+                    {
+                        ExportOverlay.Visibility = Visibility.Collapsed;
+                    }
+
                     e.Handled = true;
                 }
                 else if (CommandOverlay.Visibility == Visibility.Visible)
                 {
                     ToggleCommandMenu();
                     e.Handled = true;
+                }
+
+                break;
+            default:
+                if (ExportOverlay.Visibility != Visibility.Visible && CommandOverlay.Visibility != Visibility.Visible)
+                {
+                    e.Handled = HandleEditorKey(e.Key);
                 }
 
                 break;
@@ -814,158 +826,17 @@ public sealed partial class EditorWindow : Window
             case VirtualKey.Y when !typing:
                 session.Redo();
                 return true;
+            case VirtualKey.O when shift && source.PackagePath is not null:
+                ShowInExplorer(this, new RoutedEventArgs());
+                return true;
             default:
-                return false;
+                return !typing && HandleSelectionControlKey(key);
         }
     }
 
     private void Undo(object sender, RoutedEventArgs e) => session.Undo();
 
     private void Redo(object sender, RoutedEventArgs e) => session.Redo();
-
-    // MARK: Command menu
-
-    private void ToggleCommands(object sender, RoutedEventArgs e) => ToggleCommandMenu();
-
-    private void ToggleCommandMenu()
-    {
-        var open = CommandOverlay.Visibility != Visibility.Visible;
-        CommandOverlay.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        if (open)
-        {
-            session.OpenCommandMenu();
-            CommandQuery.Text = "";
-            FillCommands();
-            CommandQuery.Focus(FocusState.Programmatic);
-        }
-        else
-        {
-            session.CloseCommandMenu();
-        }
-    }
-
-    private void CommandOverlayTapped(object sender, TappedRoutedEventArgs e) => ToggleCommandMenu();
-
-    private void SwallowTap(object sender, TappedRoutedEventArgs e) => e.Handled = true;
-
-    private void QueryChanged(object sender, TextChangedEventArgs e)
-    {
-        session.SetCommandQuery(CommandQuery.Text);
-        FillCommands();
-    }
-
-    private void CommandQueryKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        switch (e.Key)
-        {
-            case VirtualKey.Down:
-                CommandList.SelectedIndex = Math.Min(CommandList.Items.Count - 1, CommandList.SelectedIndex + 1);
-                e.Handled = true;
-                break;
-            case VirtualKey.Up:
-                CommandList.SelectedIndex = Math.Max(0, CommandList.SelectedIndex - 1);
-                e.Handled = true;
-                break;
-            case VirtualKey.Enter:
-                if (CommandList.SelectedItem is ListViewItem { Tag: EditorCommand command })
-                {
-                    RunCommand(command);
-                }
-
-                e.Handled = true;
-                break;
-            case VirtualKey.Escape:
-                ToggleCommandMenu();
-                e.Handled = true;
-                break;
-        }
-    }
-
-    private void FillCommands()
-    {
-        CommandList.Items.Clear();
-        foreach (var command in EditorCommands.Search(session.CommandQuery))
-        {
-            var row = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(Ui.Text(command.Title, 13, "Ink95"));
-            var shortcut = Ui.Text(command.Accelerator, 12, "Ink45");
-            Grid.SetColumn(shortcut, 1);
-            row.Children.Add(shortcut);
-            CommandList.Items.Add(new ListViewItem { Content = row, Tag = command, HorizontalContentAlignment = HorizontalAlignment.Stretch });
-        }
-
-        CommandList.SelectedIndex = CommandList.Items.Count > 0 ? 0 : -1;
-    }
-
-    private void CommandClicked(object sender, ItemClickEventArgs e)
-    {
-        if (e.ClickedItem is Grid { Parent: ListViewItem { Tag: EditorCommand command } })
-        {
-            RunCommand(command);
-        }
-    }
-
-    private void RunCommand(EditorCommand command)
-    {
-        ToggleCommandMenu();
-        switch (command.Id)
-        {
-            case "play": TogglePlayback(); break;
-            case "split": SplitAtPlayhead(); break;
-            case "zoom": session.AddZoomAtPlayhead(ZoomPresentation.Screen); break;
-            case "loupe": session.AddZoomAtPlayhead(ZoomPresentation.Loupe); break;
-            case "mask": session.AddMaskAtPlayhead(MaskType.Blur); break;
-            case "highlight": session.AddMaskAtPlayhead(MaskType.Spotlight); break;
-            case "delete": session.DeleteSelected(); break;
-            case "undo": session.Undo(); break;
-            case "redo": session.Redo(); break;
-            case "export": ShowExportOverlay(); break;
-            case "settings": OpenSettings(); break;
-        }
-    }
-
-    // MARK: Export settings
-
-    private void ShowExport(object sender, RoutedEventArgs e) => ShowExportOverlay();
-
-    private void ShowExportOverlay()
-    {
-        exportSettings.Normalize();
-        ExportBody.Children.Clear();
-        ExportBody.Children.Add(Ui.Text("Export", 18, "Ink95", true));
-        ExportBody.Children.Add(ExportRow("Format", ExportOptions(
-            ("MP4", exportSettings.Format == ExportFormat.Mp4, () => exportSettings.Format = ExportFormat.Mp4),
-            ("GIF", exportSettings.Format == ExportFormat.Gif, () => exportSettings.Format = ExportFormat.Gif))));
-        ExportBody.Children.Add(ExportRow("Frame rate", ExportOptions(ExportSettings.AllowedFps(exportSettings.Format)
-            .Select(fps => ($"{fps} FPS", exportSettings.Fps == fps, (Action)(() => exportSettings.Fps = fps))).ToArray())));
-        ExportBody.Children.Add(ExportRow("Resolution", ExportOptions(ExportSettings.Heights(exportSettings.Format)
-            .Select(height => (height == 2160 ? "4K" : $"{height}p", exportSettings.ResolutionHeight == height, (Action)(() => exportSettings.ResolutionHeight = height))).ToArray())));
-        if (exportSettings.Format == ExportFormat.Mp4)
-        {
-            ExportBody.Children.Add(ExportRow("Compression", ExportOptions(
-                ("Studio", exportSettings.Compression == ExportCompression.Studio, () => exportSettings.Compression = ExportCompression.Studio),
-                ("Social Media", exportSettings.Compression == ExportCompression.SocialMedia, () => exportSettings.Compression = ExportCompression.SocialMedia),
-                ("Web", exportSettings.Compression == ExportCompression.Web, () => exportSettings.Compression = ExportCompression.Web),
-                ("Web (Low)", exportSettings.Compression == ExportCompression.WebLow, () => exportSettings.Compression = ExportCompression.WebLow))));
-        }
-
-        var aspect = session.Document.Canvas.EffectiveAspectRatio(source.SourceWidth, source.SourceHeight);
-        var (outputWidth, outputHeight) = exportSettings.OutputSize(aspect);
-        var size = ExportEstimator.SizeString(exportSettings, aspect, session.DurationMs);
-        var time = ExportEstimator.DurationString(exportSettings, aspect, session.DurationMs);
-        ExportBody.Children.Add(Ui.Text($"{outputWidth} × {outputHeight}  ·  Estimation: export time {time}, output size {size}", 12.5, "Ink60"));
-
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancel = Ui.Option("Cancel", false, () => ExportOverlay.Visibility = Visibility.Collapsed);
-        var start = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = "Export" };
-        start.Click += (_, _) => _ = StartExport();
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(start);
-        ExportBody.Children.Add(buttons);
-        ExportOverlay.Visibility = Visibility.Visible;
-    }
 
     private MenuFlyoutSubItem RecentMenu()
     {
@@ -997,91 +868,6 @@ public sealed partial class EditorWindow : Window
         {
             await Projects.ImportVideo(file, Root.XamlRoot);
         }
-    }
-
-    private async Task StartExport()
-    {
-        var gif = exportSettings.Format == ExportFormat.Gif;
-        var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedFileName = session.Document.Name };
-        picker.FileTypeChoices.Add(gif ? "GIF" : "MP4", new List<string> { gif ? ".gif" : ".mp4" });
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
-        var file = await picker.PickSaveFileAsync();
-        if (file is not null)
-        {
-            await RunExport(file.Path, file.Name);
-        }
-    }
-
-    private async Task RunExport(string filePath, string fileName)
-    {
-        var cancel = new CancellationTokenSource();
-        exportCancel = cancel;
-        var started = DateTime.UtcNow;
-        ExportBody.Children.Clear();
-        var title = Ui.Text("Exporting video • 0%", 18, "Ink95", true);
-        var bar = new ProgressBar { Minimum = 0, Maximum = 1, Value = 0 };
-        var time = Ui.Text("Preparing export...", 12.5, "Ink60");
-        var stop = Ui.Option("Stop export", false, cancel.Cancel);
-        ExportBody.Children.Add(title);
-        ExportBody.Children.Add(bar);
-        ExportBody.Children.Add(time);
-        ExportBody.Children.Add(stop);
-        var progress = new Progress<ExportProgress>(update =>
-        {
-            var share = update.Encoded / (double)Math.Max(1, update.Total);
-            bar.Value = share;
-            title.Text = $"Exporting video • {share:P0}";
-            var elapsed = DateTime.UtcNow - started;
-            var left = share > 0 ? elapsed * (1 / share - 1) : TimeSpan.Zero;
-            time.Text = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00} • {(int)left.TotalMinutes:00}:{left.Seconds:00} left";
-        });
-        var exporter = new ProjectExporter(CurrentExportSource());
-        try
-        {
-            await exporter.RunAsync(filePath, exportSettings, progress, cancel.Token);
-            ShowToast($"Exported {fileName}");
-        }
-        catch (OperationCanceledException)
-        {
-            ShowToast("Export stopped");
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
-        {
-            ShowToast($"Export failed: {exception.Message}");
-        }
-        finally
-        {
-            exportCancel = null;
-            cancel.Dispose();
-            ExportOverlay.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private static Grid ExportRow(string title, UIElement options)
-    {
-        var row = new Grid();
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
-        row.ColumnDefinitions.Add(new ColumnDefinition());
-        row.Children.Add(Ui.Text(title, 13, "Ink88"));
-        Grid.SetColumn(options as FrameworkElement, 1);
-        row.Children.Add(options);
-        return row;
-    }
-
-    private StackPanel ExportOptions(params (string Title, bool Selected, Action Change)[] options)
-    {
-        var stack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        foreach (var (title, selected, change) in options)
-        {
-            var apply = change;
-            stack.Children.Add(Ui.Option(title, selected, () =>
-            {
-                apply();
-                ShowExportOverlay();
-            }));
-        }
-
-        return stack;
     }
 
     private void OpenSettings()
