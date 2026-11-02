@@ -19,6 +19,7 @@ public sealed partial class FrameCompositor : IDisposable
         ("MaskEffect", "ps_5_0"),
         ("LanczosScale", "ps_5_0"),
         ("MagnifierLens", "cs_5_0"),
+        ("ClickRipple", "cs_5_0"),
         ("CameraMotionBlur", "cs_5_0"),
         ("Lut3D", "cs_5_0"),
         ("SharpenLuma", "cs_5_0"),
@@ -38,6 +39,7 @@ public sealed partial class FrameCompositor : IDisposable
     private readonly ID3D11PixelShader _nv12;
     private readonly ID3D11ComputeShader _motionBlur;
     private readonly ID3D11ComputeShader _lens;
+    private readonly ID3D11ComputeShader _clickRipple;
     private readonly ID3D11ComputeShader _lut;
     private readonly ID3D11ComputeShader _sharpen;
     private readonly ID3D11Buffer _meshConstants;
@@ -73,6 +75,7 @@ public sealed partial class FrameCompositor : IDisposable
         _nv12 = (ID3D11PixelShader)shaders["Nv12ToRgb"];
         _motionBlur = (ID3D11ComputeShader)shaders["CameraMotionBlur"];
         _lens = (ID3D11ComputeShader)shaders["MagnifierLens"];
+        _clickRipple = (ID3D11ComputeShader)shaders["ClickRipple"];
         _lut = (ID3D11ComputeShader)shaders["Lut3D"];
         _sharpen = (ID3D11ComputeShader)shaders["SharpenLuma"];
         _meshConstants = CreateConstants(Marshal.SizeOf<BackgroundConstants>());
@@ -145,6 +148,7 @@ public sealed partial class FrameCompositor : IDisposable
         maskConstants?.Dispose();
         motionConstants?.Dispose();
         lensConstants?.Dispose();
+        rippleConstants?.Dispose();
         _meshConstants.Dispose();
         _boxConstants.Dispose();
         foreach (var shader in _shaders)

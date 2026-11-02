@@ -10,6 +10,7 @@ public sealed class SpringTrajectorySolver
         public double Opacity { get; set; } = 1;
         public string CursorType { get; set; } = "arrow";
         public double? ActiveClickProgress { get; set; }
+        public ClickWave[] ClickWaves { get; set; } = [];
     }
 
     public sealed class CameraFrameState
@@ -130,7 +131,13 @@ public sealed class SpringTrajectorySolver
         }
     }
 
+    public const double ClickWaveDurationMs = 900;
+    public const int MaxActiveClickWaves = 3;
+
     private readonly double stepMs = 1000.0 / 120.0;
+
+    /// <summary>A click whose ripple is still spreading, from where the cursor was when the button went down.</summary>
+    public readonly record struct ClickWave(double AgeMs, Point01 Position01);
     public IReadOnlyList<CursorFrameState> CursorStates { get; }
     public IReadOnlyList<CameraFrameState> CameraStates { get; }
 
@@ -179,7 +186,8 @@ public sealed class SpringTrajectorySolver
             RotationRadians = c0.RotationRadians + (c1.RotationRadians - c0.RotationRadians) * frac,
             Opacity = c0.Opacity + (c1.Opacity - c0.Opacity) * frac,
             CursorType = c0.CursorType,
-            ActiveClickProgress = c0.ActiveClickProgress
+            ActiveClickProgress = c0.ActiveClickProgress,
+            ClickWaves = c0.ClickWaves
         };
         var a0 = CameraStates[i0];
         var a1 = CameraStates[i1];
@@ -240,6 +248,8 @@ public sealed class SpringTrajectorySolver
             : null;
         var baseRad = -document.Cursor.BaseRotationDegrees * Math.PI / 180.0;
         const double rippleDuration = 450;
+        var clickWaves = new List<ClickWave>();
+        var nextWaveClick = 0;
 
         (double X, double Y, string Kind) Sample(double queryMs)
         {
@@ -475,6 +485,23 @@ public sealed class SpringTrajectorySolver
                 }
             }
 
+            for (var wave = 0; wave < clickWaves.Count; wave++)
+            {
+                clickWaves[wave] = clickWaves[wave] with { AgeMs = clickWaves[wave].AgeMs + stepMs };
+            }
+
+            clickWaves.RemoveAll(wave => wave.AgeMs > ClickWaveDurationMs);
+            while (nextWaveClick < downs.Count && downs[nextWaveClick] <= tMs)
+            {
+                clickWaves.Add(new ClickWave(tMs - downs[nextWaveClick], new Point01(curX, curY)));
+                nextWaveClick++;
+            }
+
+            if (clickWaves.Count > MaxActiveClickWaves)
+            {
+                clickWaves.RemoveRange(0, clickWaves.Count - MaxActiveClickWaves);
+            }
+
             solved.Add(new CursorFrameState
             {
                 Position01 = new Point01(curX, curY),
@@ -482,7 +509,8 @@ public sealed class SpringTrajectorySolver
                 RotationRadians = baseRad + dynamic,
                 Opacity = document.Cursor.Hidden ? 0 : opacity,
                 CursorType = kind,
-                ActiveClickProgress = ripple
+                ActiveClickProgress = ripple,
+                ClickWaves = clickWaves.Count == 0 ? [] : clickWaves.ToArray()
             });
         }
 

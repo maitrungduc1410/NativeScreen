@@ -63,6 +63,7 @@ public sealed partial class FrameCompositor
     private ID3D11Buffer? maskConstants;
     private ID3D11Buffer? motionConstants;
     private ID3D11Buffer? lensConstants;
+    private ID3D11Buffer? rippleConstants;
     private string? backgroundKey;
     private string? shadowKey;
     private OverlayRasterizer? overlays;
@@ -96,6 +97,7 @@ public sealed partial class FrameCompositor
         DrawInset(document, screen, radius, layer, height);
         DrawScreen(request, screenView, screenWidth, screenHeight, screen, radius, layer);
         DrawBezel(document, screen, radius, layer, width, height);
+        layer = Rippled(layer, document, state.Cursor, screen, width, height);
         BindTarget(layer);
         context.OMSetBlendState(_sourceOver);
         DrawClick(document, state.Cursor, screen, height);
@@ -179,6 +181,7 @@ public sealed partial class FrameCompositor
         maskConstants = CreateConstants(Marshal.SizeOf<MaskConstants>());
         motionConstants = CreateConstants(Marshal.SizeOf<MotionConstants>());
         lensConstants = CreateConstants(Marshal.SizeOf<LensConstants>());
+        rippleConstants = CreateConstants(Marshal.SizeOf<RippleConstants>());
     }
 
     private RenderLayer Layer(string name, int width, int height)
@@ -575,7 +578,7 @@ public sealed partial class FrameCompositor
     private void DrawClick(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, PixelRect screen, int height)
     {
         var style = document.Cursor.ClickEffect.VisualStyle;
-        if (style == ClickEffectStyle.None || cursor.Opacity <= 0.01)
+        if (style != ClickEffectStyle.Circle || cursor.Opacity <= 0.01)
         {
             return;
         }
@@ -589,14 +592,54 @@ public sealed partial class FrameCompositor
         var x = screen.X + cursor.Position01.X * screen.Width;
         var y = screen.Y + cursor.Position01.Y * screen.Height;
         var rect = new Vector4((float)(x - placement.Radius), (float)(y - placement.Radius), (float)(placement.Radius * 2), (float)(placement.Radius * 2));
-        if (style == ClickEffectStyle.Circle)
+        DrawBox(rect, (float)placement.Radius, 0, new Vector4(1, 1, 1, (float)(placement.Alpha * 0.65)));
+    }
+
+    // The ripple draws nothing on top: it bends the positioned screen, shadow included, before the cursor and the camera (spec/07 Pass 4).
+    private RenderLayer Rippled(RenderLayer layer, ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, PixelRect screen, int width, int height)
+    {
+        var style = document.Cursor.ClickEffect.VisualStyle;
+        var waves = cursor.ClickWaves;
+        if (style is ClickEffectStyle.None or ClickEffectStyle.Circle || waves.Length == 0)
         {
-            DrawBox(rect, (float)placement.Radius, 0, new Vector4(1, 1, 1, (float)(placement.Alpha * 0.65)));
+            return layer;
         }
-        else
+
+        var reach = (float)Math.Max(screen.Width, screen.Height);
+        Vector4 Wave(int index)
         {
-            DrawBox(rect, (float)placement.Radius, (float)placement.RingThickness, new Vector4(1, 1, 1, (float)placement.Alpha));
+            if (index >= waves.Length)
+            {
+                return default;
+            }
+
+            var seconds = (float)(waves[index].AgeMs / 1000);
+            var life = seconds / (float)(SpringTrajectorySolver.ClickWaveDurationMs / 1000);
+            var fadeOut = 1 - Math.Clamp((life - 0.7f) / 0.3f, 0, 1);
+            var bounce = MathF.Exp(-3.4f * seconds) * MathF.Sin(8.8f * seconds) * fadeOut;
+            return new Vector4(
+                (float)(screen.X + waves[index].Position01.X * screen.Width),
+                (float)(screen.Y + waves[index].Position01.Y * screen.Height),
+                reach * (0.012f + 0.24f * seconds),
+                bounce);
         }
+
+        var output = Layer("ripple", width, height);
+        var context = _graphics.Context;
+        context.OMSetRenderTargets((ID3D11RenderTargetView)null!);
+        context.PSSetShaderResource(0, null!);
+        context.CSSetShader(_clickRipple);
+        context.CSSetShaderResource(0, layer.View);
+        context.CSSetSampler(0, linearClamp);
+        context.CSSetUnorderedAccessView(0, output.Unordered);
+        context.UpdateSubresource(
+            new RippleConstants(Wave(0), Wave(1), Wave(2), Math.Min(waves.Length, SpringTrajectorySolver.MaxActiveClickWaves), reach * 0.042f, reach * 0.013f, reach * 0.0035f, reach * 0.03f, default),
+            rippleConstants!);
+        context.CSSetConstantBuffer(0, rippleConstants);
+        context.Dispatch((uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+        context.CSSetUnorderedAccessView(0, null!);
+        context.CSSetShaderResource(0, null!);
+        return output;
     }
 
     private RenderLayer Zoomed(RenderLayer layer, SpringTrajectorySolver.CameraFrameState camera, PixelRect screen, int width, int height)
@@ -772,6 +815,9 @@ public sealed partial class FrameCompositor
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly record struct MotionConstants(Vector4 RectNow, Vector4 RectPrevious, float Shutter, float PixelsPerSample, int MaxSamples, float Pad);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly record struct RippleConstants(Vector4 Wave0, Vector4 Wave1, Vector4 Wave2, int WaveCount, float BandWidth, float Pull, float Fringe, float CoreRadius, Vector3 Pad);
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly record struct LensConstants(Vector2 Center, float Radius, float Zoom, float RimRatio, float Fringe, float Presence, float Pad);
