@@ -110,7 +110,7 @@ public sealed class RenderingMathTests
         Assert.Equal(0.12, sprite.HotspotX);
         Assert.Equal(0.06, sprite.HotspotY);
         Assert.Equal("touch", CursorSpriteName.NormalizeThemeId("touch-legacy"));
-        Assert.Equal("arrow", CursorSpriteName.NormalizeThemeId("nope"));
+        Assert.Equal("classic-dark", CursorSpriteName.NormalizeThemeId("nope"));
     }
 
     [Fact]

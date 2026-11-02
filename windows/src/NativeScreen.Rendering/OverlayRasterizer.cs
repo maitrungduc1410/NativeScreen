@@ -67,12 +67,20 @@ public sealed class OverlayRasterizer : IDisposable
         }
 
         var kind = MapKind(type);
-        var chosen = kind == "pointer" && config.VariantId is { } variant
+        // Hands and bars follow the selected pointer variant when the theme draws them per variant (spec/06 ADR-29).
+        var pointer = config.VariantId is { } variant
             ? files.Find(item => Path.GetFileName(item.Path).StartsWith(variant + "__", StringComparison.Ordinal))
-            : files.Find(item => item.Name.Kind == kind);
+            : default;
+        var chosen = kind == "pointer" && pointer.Path is not null
+            ? pointer
+            : files.Find(item => item.Name.Kind == kind && pointer.Path is not null && item.Name.Variant == pointer.Name.Variant);
         if (chosen.Path is null)
         {
-            chosen = files.Find(item => item.Name.Kind == "pointer");
+            chosen = files.Find(item => item.Name.Kind == kind);
+        }
+        if (chosen.Path is null)
+        {
+            chosen = pointer.Path is not null ? pointer : files.Find(item => item.Name.Kind == "pointer");
         }
 
         if (chosen.Path is null)
@@ -127,13 +135,13 @@ public sealed class OverlayRasterizer : IDisposable
         factory.Dispose();
     }
 
-    // Direct2D ignores SVG filters. Every cursor file uses the same one: black at 35%, stdDeviation 2.2, dy 1.6 (view box units).
+    // Direct2D ignores SVG filters. Every cursor file uses the same one: black at 50%, stdDeviation 3, dy 2.4 (view box units).
     private void AddSvgDropShadow(RenderLayer layer, int size)
     {
         const double viewBoxScale = 2.56;
         var immediate = device.ImmediateContext;
         var pixels = ImageTexture.ReadBack(device, immediate, layer.Texture, size, size);
-        var sigma = 2.2 * viewBoxScale;
+        var sigma = 3 * viewBoxScale;
         var radius = (int)Math.Ceiling(sigma * 3);
         var weights = new float[radius + 1];
         var total = 0f;
@@ -164,7 +172,7 @@ public sealed class OverlayRasterizer : IDisposable
             }
         }
 
-        var offset = (int)Math.Round(1.6 * viewBoxScale);
+        var offset = (int)Math.Round(2.4 * viewBoxScale);
         for (var y = 0; y < size; y++)
         {
             for (var x = 0; x < size; x++)
@@ -175,7 +183,7 @@ public sealed class OverlayRasterizer : IDisposable
                     sum += scratch[Math.Clamp(y - offset + k, 0, size - 1) * size + x] * weights[Math.Abs(k)];
                 }
 
-                var shadow = sum / total * 0.35f;
+                var shadow = sum / total * 0.5f;
                 var o = (y * size + x) * 4;
                 var keep = 1 - pixels[o + 3] / 255f;
                 pixels[o + 3] = (byte)Math.Clamp(pixels[o + 3] + shadow * keep * 255f + 0.5f, 0, 255);

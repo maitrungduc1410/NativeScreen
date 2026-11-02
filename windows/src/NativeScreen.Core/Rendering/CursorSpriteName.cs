@@ -2,16 +2,19 @@ namespace NativeScreen.Core;
 
 public readonly record struct CursorSpriteName(string SetId, string Kind, int Variant, double HotspotX, double HotspotY)
 {
-    public static readonly string[] PreferredThemeOrder = ["arrow", "rounded", "touch"];
+    public const string DefaultThemeId = "classic-dark";
+
+    public static readonly string[] PreferredThemeOrder =
+        ["classic-dark", "classic-light", "rounded", "dart", "dart-color", "outline", "ring", "pixel", "touch"];
 
     public static string NormalizeThemeId(string? themeId)
     {
-        if (themeId is "arrow" or "rounded" or "touch")
+        if (themeId is not null && Array.IndexOf(PreferredThemeOrder, themeId) >= 0)
         {
             return themeId;
         }
 
-        return themeId?.StartsWith("touch", StringComparison.Ordinal) == true ? "touch" : "arrow";
+        return themeId?.StartsWith("touch", StringComparison.Ordinal) == true ? "touch" : DefaultThemeId;
     }
 
     public static CursorSpriteName Parse(string fileName, string setId)

@@ -236,10 +236,35 @@ internal sealed class InspectorPanel
     {
         Add(Toggle("Hide cursor", null, () => Doc.Cursor.Hidden, (d, v) => d.Cursor.Hidden = v));
         Add(Slider("Cursor size", () => Doc.Cursor.Scale, (d, v) => d.Cursor.Scale = v, 0.5, 3.5, 1.6));
-        Add(Labeled("Cursor style", 10, Options(
-            ("Arrow", Doc.Cursor.ThemeId == "arrow", () => Edit(d => d.Cursor.ThemeId = "arrow")),
-            ("Rounded", Doc.Cursor.ThemeId == "rounded", () => Edit(d => d.Cursor.ThemeId = "rounded")),
-            ("Touch", Doc.Cursor.ThemeId == "touch", () => Edit(d => d.Cursor.ThemeId = "touch")))));
+        var themes = new WordWrapPanel();
+        foreach (var themeId in CursorSpriteName.PreferredThemeOrder)
+        {
+            var theme = themeId;
+            var variants = CursorThemeCards.PointerVariants(theme);
+            if (variants.Count > 0)
+            {
+                themes.Children.Add(CursorThemeCards.Card(variants[0].File, CursorThemeCards.DisplayName(theme), Doc.Cursor.ThemeId == theme, () => Edit(d =>
+                {
+                    d.Cursor.ThemeId = theme;
+                    d.Cursor.VariantId = variants.Exists(item => item.Id == d.Cursor.VariantId) ? d.Cursor.VariantId : variants[0].Id;
+                })));
+            }
+        }
+
+        Add(Labeled("Cursor style", 10, themes));
+        var pointers = CursorThemeCards.PointerVariants(CursorSpriteName.NormalizeThemeId(Doc.Cursor.ThemeId));
+        if (pointers.Count > 1)
+        {
+            var row = new WordWrapPanel();
+            foreach (var (id, file) in pointers)
+            {
+                var chosen = id;
+                row.Children.Add(CursorThemeCards.Card(file, null, (Doc.Cursor.VariantId ?? pointers[0].Id) == id, () => Edit(d => d.Cursor.VariantId = chosen)));
+            }
+
+            Add(Labeled("Cursor color", 10, row));
+        }
+
         Add(Toggle("Always use pointer cursor", null, () => Doc.Cursor.AlwaysUsePointer, (d, v) => d.Cursor.AlwaysUsePointer = v));
         Add(Toggle("Hide cursor if not moving", null, () => Doc.Cursor.HideWhenIdleAfterMs is not null, (d, v) => d.Cursor.HideWhenIdleAfterMs = v ? 2000 : null));
         Add(Toggle("Loop cursor position", null, () => Doc.Cursor.LoopBackToStartMs is not null, (d, v) => d.Cursor.LoopBackToStartMs = v ? 1000 : null));

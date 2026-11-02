@@ -141,11 +141,21 @@ public sealed class ClickEffectConfig
     public double SoundVolume { get; set; } = 0.50;
 }
 
-public sealed class CursorConfig
+public sealed class CursorConfig : IJsonOnDeserialized
 {
+    /// <summary>`arrow` no longer exists: its two variants became separate themes (spec/06 ADR-29).</summary>
+    void IJsonOnDeserialized.OnDeserialized()
+    {
+        if (ThemeId == "arrow")
+        {
+            ThemeId = VariantId == "pointer-2" ? "classic-light" : CursorSpriteName.DefaultThemeId;
+            VariantId = null;
+        }
+    }
+
     public bool Hidden { get; set; }
     public double Scale { get; set; } = 1.6;
-    public string ThemeId { get; set; } = "arrow";
+    public string ThemeId { get; set; } = CursorSpriteName.DefaultThemeId;
     public string? VariantId { get; set; }
     public bool AlwaysUsePointer { get; set; }
     public bool SmoothMovementEnabled { get; set; } = true;
