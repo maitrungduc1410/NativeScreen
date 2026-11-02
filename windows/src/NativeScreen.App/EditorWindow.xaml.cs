@@ -567,7 +567,7 @@ public sealed partial class EditorWindow : Window
             HasCamera = source.HasCamera,
             PackageDirectory = source.PackagePath
         };
-        renderer.Submit(request, width, height, Preview.CompositionScaleX);
+        renderer.Submit(request, width, height, Preview.CompositionScaleX, session.LiveSourceClock());
     }
 
     private void ReleasePreview(object sender, WindowEventArgs args)
@@ -609,6 +609,7 @@ public sealed partial class EditorWindow : Window
             clockTimer.Stop();
             StopAudio();
             RefreshTransport();
+            DrawPreview();
             return;
         }
 
@@ -648,6 +649,7 @@ public sealed partial class EditorWindow : Window
         session.TogglePlayback();
         clockTimer.Start();
         overlay.Refresh();
+        DrawPreview();
         RefreshTransport();
     }
 
@@ -677,12 +679,12 @@ public sealed partial class EditorWindow : Window
         session.SamplePlayhead();
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         timeline.UpdatePlayhead();
-        DrawPreview();
         if (!session.IsPlaying)
         {
             clockTimer.Stop();
             StopAudio();
             RefreshTransport();
+            DrawPreview();
         }
     }
 

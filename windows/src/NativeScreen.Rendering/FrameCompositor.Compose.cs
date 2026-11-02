@@ -26,6 +26,25 @@ public sealed class ComposeRequest
     public int WebcamWidth { get; init; }
     public int WebcamHeight { get; init; }
     public IReadOnlyList<ShortcutCluster>? Shortcuts { get; init; }
+
+    public ComposeRequest At(double sourceMs) => new()
+    {
+        Document = Document,
+        Trajectory = Trajectory,
+        SourceMs = sourceMs,
+        Screen = Screen,
+        ScreenSource = ScreenSource,
+        WebcamSource = WebcamSource,
+        ScreenWidth = ScreenWidth,
+        ScreenHeight = ScreenHeight,
+        HasCamera = HasCamera,
+        ExportQuality = ExportQuality,
+        PackageDirectory = PackageDirectory,
+        Webcam = Webcam,
+        WebcamWidth = WebcamWidth,
+        WebcamHeight = WebcamHeight,
+        Shortcuts = Shortcuts
+    };
 }
 
 public sealed partial class FrameCompositor

@@ -221,6 +221,19 @@ public sealed class EditorSession
         clock.PrimeAndStart(PlayheadTimelineMs);
     }
 
+    /// <summary>Source time now, for the render thread. Holds its own mapper, since an edit replaces the session's.</summary>
+    public Func<double>? LiveSourceClock()
+    {
+        if (!clock.IsRunning)
+        {
+            return null;
+        }
+
+        var mapper = Mapper;
+        var duration = DurationMs;
+        return () => mapper.SourceTime(Math.Clamp(clock.PositionMs, 0, duration)).SourceMs;
+    }
+
     public void SyncToAudio(double audioTimelineMs) => clock.SyncToAudio(audioTimelineMs);
 
     public void SamplePlayhead()

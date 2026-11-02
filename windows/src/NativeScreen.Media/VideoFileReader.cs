@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using NativeScreen.Core;
+using Vortice.Direct3D;
+using Vortice.Direct3D11;
 using Vortice.MediaFoundation;
 
 namespace NativeScreen.Media;
@@ -14,6 +16,7 @@ public sealed class VideoFileReader : IDisposable
     private readonly int stride;
     private readonly double startMs;
     private readonly Mp4FragmentIndex? index;
+    private readonly DecodeAccelerator? accelerator;
     private int nextIndex;
     private bool resolveAfterSeek;
 
@@ -27,10 +30,14 @@ public sealed class VideoFileReader : IDisposable
     {
         MediaFoundationRuntime.EnsureStarted();
         index = Mp4FragmentIndex.TryRead(path, "vide");
-        using var attributes = MediaFactory.MFCreateAttributes(2);
+        using var attributes = MediaFactory.MFCreateAttributes(3);
         attributes.Set(SourceReaderAttributeKeys.EnableAdvancedVideoProcessing, false);
         attributes.Set(SinkWriterAttributeKeys.ReadwriteEnableHardwareTransforms, true);
-        reader = MediaFactory.MFCreateSourceReaderFromURL(path, attributes);
+        accelerator = DecodeAccelerator.TryCreate();
+        if (accelerator is not null)
+        {
+            attributes.Set(SourceReaderAttributeKeys.D3DManager, accelerator.Manager);
+        }        reader = MediaFactory.MFCreateSourceReaderFromURL(path, attributes);
         reader.SetStreamSelection(SourceReaderIndex.AllStreams, false);
         reader.SetStreamSelection(SourceReaderIndex.FirstVideoStream, true);
 
@@ -139,7 +146,11 @@ public sealed class VideoFileReader : IDisposable
         return index.TimesMs[Math.Min(nextIndex++, last)];
     }
 
-    public void Dispose() => reader.Dispose();
+    public void Dispose()
+    {
+        reader.Dispose();
+        accelerator?.Dispose();
+    }
 
     private static (int Width, int Height) DisplaySize(IMFMediaType type, int codedWidth, int codedHeight)
     {
@@ -173,5 +184,47 @@ public sealed class VideoFileReader : IDisposable
         {
             return fallback;
         }
+    }
+}
+
+/// <summary>
+/// Without a device the source reader only finds software decoders, whatever the hardware-transforms flag says: a 3072x1920
+/// recording cost over 2 cores to play. Each reader has its own device, so the render thread never shares one with a decoder.
+/// </summary>
+internal sealed class DecodeAccelerator : IDisposable
+{
+    private readonly ID3D11Device device;
+
+    private DecodeAccelerator(ID3D11Device device, IMFDXGIDeviceManager manager)
+    {
+        this.device = device;
+        Manager = manager;
+    }
+
+    public IMFDXGIDeviceManager Manager { get; }
+
+    public static DecodeAccelerator? TryCreate()
+    {
+        var result = D3D11.D3D11CreateDevice(null, DriverType.Hardware, DeviceCreationFlags.VideoSupport | DeviceCreationFlags.BgraSupport, [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0], out ID3D11Device? device, out _, out ID3D11DeviceContext? context);
+        context?.Dispose();
+        if (result.Failure || device is null)
+        {
+            return null;
+        }
+
+        using (var protection = device.QueryInterface<ID3D11Multithread>())
+        {
+            protection.SetMultithreadProtected(true);
+        }
+
+        var manager = MediaFactory.MFCreateDXGIDeviceManager();
+        manager.ResetDevice(device);
+        return new DecodeAccelerator(device, manager);
+    }
+
+    public void Dispose()
+    {
+        Manager.Dispose();
+        device.Dispose();
     }
 }

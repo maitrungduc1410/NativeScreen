@@ -12,11 +12,14 @@ public sealed class PreviewRenderer : IDisposable
     private readonly Thread thread;
     private readonly object gate = new();
     private ComposeRequest? request;
+    private Func<double>? liveClock;
     private int pixelWidth;
     private int pixelHeight;
     private float scale = 1;
     private bool resize;
     private volatile bool stopping;
+
+    private readonly FrameStats? stats = Environment.GetEnvironmentVariable("NS_PREVIEW_STATS") is { Length: > 0 } statsPath ? new FrameStats(statsPath) : null;
 
     public PreviewRenderer(FrameCompositor compositor, CompositionSwapChain swapChain, int pixelWidth, int pixelHeight)
     {
@@ -30,11 +33,13 @@ public sealed class PreviewRenderer : IDisposable
     }
 
     /// <summary>The newest request wins; the document inside must be a snapshot the UI thread no longer mutates.</summary>
-    public void Submit(ComposeRequest next, int width, int height, float rasterScale)
+    /// <summary>With a clock, the render thread keeps drawing at the display rate, reading the time itself for each frame.</summary>
+    public void Submit(ComposeRequest next, int width, int height, float rasterScale, Func<double>? clock = null)
     {
         lock (gate)
         {
             request = next;
+            liveClock = clock;
             if (width != pixelWidth || height != pixelHeight || rasterScale != scale)
             {
                 pixelWidth = width;
@@ -52,12 +57,52 @@ public sealed class PreviewRenderer : IDisposable
         stopping = true;
         wake.Set();
         thread.Join();
+        stats?.Write();
         wake.Dispose();
         latency.Dispose();
     }
 
-    private void Run()
+    /// <summary>NS_PREVIEW_STATS=path writes present intervals on close, to measure spec/08 phase 3 on a real window.</summary>
+    private void NoteFrame(long startTicks)
     {
+        stats?.Note(startTicks);
+    }
+
+    private sealed class FrameStats(string path)
+    {
+        private readonly List<double> intervals = [];
+        private readonly List<double> work = [];
+        private long last;
+
+        public void Note(long startTicks)
+        {
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            work.Add((now - startTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+            if (last != 0)
+            {
+                intervals.Add((now - last) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+            }
+
+            last = now;
+        }
+
+        public void Write()
+        {
+            // Only intervals inside a burst of drawing count; a pause between redraws is not a late frame.
+            var active = intervals.Where(item => item < 250).OrderBy(item => item).ToList();
+            if (active.Count == 0)
+            {
+                return;
+            }
+
+            var median = active[active.Count / 2];
+            var late = active.Count(item => item > median * 1.5);
+            work.Sort();
+            File.WriteAllText(path, FormattableString.Invariant($"frames {active.Count}, median interval {median:F2} ms, over 1.5x median {late} ({100.0 * late / active.Count:F2}%), worst {active[^1]:F1} ms, compose+present median {work[work.Count / 2]:F2} ms p95 {work[work.Count * 95 / 100]:F2} ms"));
+        }
+    }
+
+    private void Run()    {
         while (true)
         {
             wake.WaitOne();
@@ -71,9 +116,11 @@ public sealed class PreviewRenderer : IDisposable
             int height;
             float rasterScale;
             bool needsResize;
+            Func<double>? clock;
             lock (gate)
             {
                 current = request;
+                clock = liveClock;
                 width = pixelWidth;
                 height = pixelHeight;
                 rasterScale = scale;
@@ -92,9 +139,15 @@ public sealed class PreviewRenderer : IDisposable
             }
 
             latency.WaitOne(100);
+            if (clock is not null)
+            {
+                current = current.At(clock());
+            }
+
+            var composeStart = System.Diagnostics.Stopwatch.GetTimestamp();
             compositor.Present(swapChain, current, width, height);
             swapChain.Present();
-            if (compositor.IsAnimating)
+            NoteFrame(composeStart);            if (compositor.IsAnimating || clock is not null)
             {
                 wake.Set();
             }
