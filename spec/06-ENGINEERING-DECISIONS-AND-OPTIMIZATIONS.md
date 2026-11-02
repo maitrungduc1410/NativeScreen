@@ -465,8 +465,8 @@ full frame, which depends on regenerated fixtures.
 ### Decision
 - Decode with hardware transforms but receive NV12 in system memory, upload to a dynamic NV12 texture on the render thread,
   and convert with `Nv12ToRgb.hlsl`. No device is shared with the decode thread, and the render thread never waits on it.
-- Export reads each composed frame back and converts with `Nv12Converter` (fixed-point BT.709 limited range), then encodes
-  through `IMFSinkWriter` with hardware transforms.
+- Export converts each composed frame with `GpuNv12Converter` and reads NV12 back, then encodes through `IMFSinkWriter` with
+  hardware transforms. GIF reads BGRA back. `Nv12Converter` stays as the reference for the matrix.
 - Export lives in `NativeScreen.Export`, the one library allowed to depend on both `Media` and `Rendering`, so it runs in
   tests without the WinUI app.
 - This costs copies at high resolution. Move to the zero-copy path when a measurement at 4K misses the `spec/08` phase 3 or
@@ -500,7 +500,27 @@ The Media Foundation fragmented MP4 sink writes about 300 ms fragments with exac
 
 ### Decisions
 - WASAPI loopback delivers nothing while nothing plays, and the MP4 sink holds video back waiting for audio to interleave. Measured: 142 of about 240 frames written and 3.5 s to stop. `AudioTrackRecorder` now writes silence from a timer, and live writers set `MF_SINK_WRITER_DISABLE_THROTTLING`.
-- BGRA to NV12 runs in two pixel shaders (GpuNv12Converter) with the same matrix as Nv12Converter, because the CPU path measured 23 ms per frame at 3072Ã—1840 on 4 threads, about 40 fps. Exports keep the CPU path (ADR-21).
+- BGRA to NV12 runs in two pixel shaders (GpuNv12Converter) with the same matrix as Nv12Converter, because the CPU path measured 23 ms per frame at 3072×1840 on 4 threads, about 40 fps. Exports keep the CPU path (ADR-21).
 
 ### Open problem
 On one Intel MacBook Pro running Boot Camp (i9-9880H, Radeon Pro 5500M, Windows 10 19045), the machine froze and reset within about a minute in all 3 runs that recorded the microphone through `WasapiCapture`. The fans rose first, and Event 41 shows no bugcheck and no dump. In the last run, disposing the recorder took 5 s against about 40 ms without a microphone. The 4 runs without a microphone completed and the machine stayed up. Two of the 3 resets also had the camera on; the camera alone has not been run. This points at the microphone path on this audio driver, but it is not proven and no other machine has been tried. Until it is resolved, keep the microphone off by default and do not run the microphone test without accepting a possible reset.
+
+---
+
+## 24. ADR-24: Windows Measurements, Packaging and What Stays Open
+
+### Measurements (one machine: i9-9880H, Radeon Pro 5500M, Windows 10 19045)
+`NS_TEST_PERF=1` runs `PerformanceMeasurements`. These clips are synthetic, the runs are short, and compose has no decoded screen video, so they are lower bounds on real work.
+- Compose: 1.0 ms median and 2.2 ms p95 at 1080p, 3.0 and 5.6 ms at 4K, wall clock including the GPU wait.
+- Playback of a 1080p30 clip at 60 Hz, offscreen: 0 late of 600 draws over 10 s, first frame 45 ms. No WASAPI or swap chain in that loop.
+- Preview audio: the device position was 44 ms behind wall clock after 2 s, which includes start latency.
+- Export: reading BGRA back and converting on the CPU gave 0.64x at 1080p and 0.21x at 4K. `GpuNv12Converter` gave 1.85x and 0.86x. 4K is still below the 1.5x that `spec/06` ADR-01 sets for considering hybrid encoding, and whether the sink writer picked a hardware encoder has not been checked.
+
+### Packaging
+`scripts/package-msix.ps1` builds an unsigned, self-contained package of 97 MB. It has not been installed. A `.nativescreen` package is a folder on Windows, and file type associations do not apply to folders, so double-clicking a package opens it in File Explorer. The declared association only covers a file with that extension. Opening by folder picker and by command line argument works. A real fix needs a decision: a shell extension for folders, or a single-file package format, which would break the shared layout.
+
+### Not ported, on purpose
+- The macOS fallback that invents a transcript when speech recognition fails. On Windows the failure is reported instead.
+- Generated background music tracks. Custom audio files work.
+- Person cutout. It needs a segmentation model whose license allows redistribution (`spec/07` 7.3). None was chosen, so cutout mode draws the plain camera rectangle.
+- Voiceover recording, until the microphone problem in ADR-23 is understood. Uploading audio files works.

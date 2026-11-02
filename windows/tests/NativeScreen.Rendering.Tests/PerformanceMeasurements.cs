@@ -16,6 +16,25 @@ public sealed class PerformanceMeasurements : IDisposable
 
     private static void Report(string line) => File.AppendAllText(Path.Combine(Path.GetTempPath(), "ns-perf-report.txt"), line + "\n");
 
+    /// <summary>Mapping one copied texel can only finish once everything queued before it has.</summary>
+    private static void WaitForGpu(FrameCompositor compositor, RenderLayer layer)
+    {
+        using var texel = compositor.Device.CreateTexture2D(new Vortice.Direct3D11.Texture2DDescription
+        {
+            Width = 1,
+            Height = 1,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+            SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+            Usage = Vortice.Direct3D11.ResourceUsage.Staging,
+            CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Read
+        });
+        compositor.Context.CopySubresourceRegion(texel, 0, 0, 0, 0, layer.Texture, 0, new Vortice.Mathematics.Box(0, 0, 0, 1, 1, 1));
+        compositor.Context.Map(texel, 0, Vortice.Direct3D11.MapMode.Read);
+        compositor.Context.Unmap(texel, 0);
+    }
+
     private string Clip(int width, int height, int seconds)
     {
         var path = Path.Combine(directory, $"clip{width}.mp4");
@@ -68,7 +87,7 @@ public sealed class PerformanceMeasurements : IDisposable
                 width,
                 height);
             // Reading one texel waits for the GPU, so this is the whole frame and not just its submission.
-            compositor.WaitForGpu(layer);
+            WaitForGpu(compositor, layer);
             times.Add(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
 
@@ -107,7 +126,7 @@ public sealed class PerformanceMeasurements : IDisposable
                 new ComposeRequest { Document = document, Trajectory = trajectory, SourceMs = now, ScreenSource = source, ScreenWidth = 1920, ScreenHeight = 1080, Shortcuts = [] },
                 1920,
                 1080);
-            compositor.WaitForGpu(layer);
+            WaitForGpu(compositor, layer);
             if (source.FrameAt(now) is { } frame)
             {
                 counter.Present(frame.PresentationMs, now, 1000.0 / 30);

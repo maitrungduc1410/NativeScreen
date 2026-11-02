@@ -64,6 +64,9 @@ Work is split between two agents on two machines. Know which one you are.
 | Run the app (Windows) | `dotnet run --project windows/src/NativeScreen.App -c Debug -p:Platform=x64` |
 | Core tests (macOS or Windows) | `dotnet test windows/tests/NativeScreen.Core.Tests` |
 | Frame fixture tests (Windows) | `dotnet test windows/tests/NativeScreen.Rendering.Tests -c Debug -p:Platform=x64`. Scores per frame go to `%TEMP%\ns-frame-report.txt`; set `NS_DUMP_FRAMES=<folder>` to write the composed PNGs. |
+| Real capture test (Windows) | `NS_TEST_CAPTURE=1 NS_TEST_CAPTURE_PARTS=system dotnet test windows/tests/NativeScreen.Media.Tests -c Debug -p:Platform=x64 --filter DisplayRecording`. `NS_TEST_CAPTURE_TARGET` is `window` or `area`. Adding `mic` reset one machine; read `spec/06` ADR-23 first. |
+| Performance numbers (Windows) | `NS_TEST_PERF=1 dotnet test windows/tests/NativeScreen.Rendering.Tests -c Debug -p:Platform=x64 --filter PerformanceMeasurements`. Results go to `%TEMP%\ns-perf-report.txt`. |
+| Build the MSIX (Windows) | `powershell windows/scripts/package-msix.ps1` |
 | Regenerate conformance fixtures (macOS) | `"Native Screen.app/Contents/MacOS/Native Screen" --generate-conformance conformance` |
 
 If a command changes, update this table in the same commit.

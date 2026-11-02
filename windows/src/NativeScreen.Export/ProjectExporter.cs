@@ -77,6 +77,7 @@ public sealed class ProjectExporter(ExportSource source)
             : new VideoFileWriter(path, width, height, settings.Fps, bitrate, settings.Mp4Codec == Mp4CodecOption.H265, fragmented: false, audio is null ? null : AudioMixer.OutputFormat);
         var gif = settings.Format == ExportFormat.Gif ? new GifFileWriter(path, width, height) : null;
         var nv12 = new byte[width * height * 3 / 2];
+        using var converter = writer is null ? null : new GpuNv12Converter(compositor.Device, compositor.Context, width, height);
         try
         {
             for (var index = 0; index < total; index++)
@@ -100,14 +101,13 @@ public sealed class ProjectExporter(ExportSource source)
                     },
                     width,
                     height);
-                var pixels = ImageTexture.ReadBack(compositor.Device, compositor.Context, layer.Texture, width, height);
                 if (gif is not null)
                 {
-                    gif.WriteFrame(pixels, frameMs);
+                    gif.WriteFrame(ImageTexture.ReadBack(compositor.Device, compositor.Context, layer.Texture, width, height), frameMs);
                 }
                 else
                 {
-                    Nv12Converter.FromBgra(pixels, nv12, width, height);
+                    converter!.Convert(layer.View, nv12);
                     writer!.WriteFrame(nv12, timelineMs, frameMs);
                     audio?.WriteUpTo(writer, timelineMs + frameMs);
                 }

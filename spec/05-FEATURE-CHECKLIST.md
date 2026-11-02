@@ -152,8 +152,8 @@ Plan, porting map and acceptance checks: [`spec/08-WINDOWS-PORT-PLAN.md`](./08-W
 [`platforms/windows-d3d11-mediafoundation.md`](./platforms/windows-d3d11-mediafoundation.md). Tick an item only after the
 Windows verifier recorded `PASS` for it in `windows/HANDOFF.md`.
 
-- [ ] **5.0 Foundations:** macOS conformance generator (`--generate-conformance`) and committed `conformance/`; `windows/` solution, central package versions, `verify.ps1`, empty WinUI window.
-- [ ] **5.1 Core:** models + JSON round-trip with macOS projects, `NLETimeMapper`, spring solvers and auto zoom, stage layout and split screen, captions layout, shortcut clustering, export estimators, snapshot undo.
+- [x] **5.0 Foundations:** macOS conformance generator (`--generate-conformance`) and committed `conformance/`; `windows/` solution, central package versions, `verify.ps1`, empty WinUI window.
+- [x] **5.1 Core:** models + JSON round-trip with macOS projects, `NLETimeMapper`, spring solvers and auto zoom, stage layout and split screen, captions layout, shortcut clustering, export estimators, snapshot undo.
 - [ ] **5.2 Rendering:** D3D11 compositor (all passes in `spec/07`), DirectWrite captions and keycaps, SVG cursors, lens and motion blur kernels, LUT camera looks, cutout post-process.
 - [ ] **5.3 Playback:** `IMFSourceReader` decode, audio master clock, `SwapChainPanel` preview at display rate, 0% idle CPU.
 - [ ] **5.4 Export:** hardware H.264 / HEVC via `IMFSinkWriter`, audio mix, GIF, even progress, cancel.

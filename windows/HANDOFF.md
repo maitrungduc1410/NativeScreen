@@ -27,12 +27,27 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-02, Phases 3 to 8: measurements and what is left (verifier work on Windows)
+
+### Verifier
+- **Result per phase:**
+  - Phase 0 PASS: `verify.ps1` green, `conformance/` committed.
+  - Phase 1 PASS: 131 Core tests including numeric conformance; all 26 macOS fixtures round trip.
+  - Phase 2 FAIL (partial): `custom-look-warmth` and `camera-cutout` below the frame threshold; full frames blocked by the fixture defect; cutout not implemented. Compose time meets the target on a synthetic frame (ADR-24).
+  - Phase 3 FAIL (partial): 0 late frames offscreen over 10 s and first frame 45 ms, but not measured over 60 s through the swap chain, and A/V offset not measured on sound. Preview audio not listened to.
+  - Phase 4 FAIL (partial): MP4 and GIF work and memory stayed under 400 MB, but 30 minute flat memory not run, frames not compared with `frames/*.png`, and 4K exports at 0.86x.
+  - Phase 5 FAIL (partial): display, window and area through the app or test, pause, system audio, and a killed process leaving 4.7 of 5 s playable all work. Blocked: microphone resets the machine (ADR-23); camera never completed; a recording not yet opened on macOS; audio times on fragmented files not checked.
+  - Phase 6 FAIL (partial): new panels shown by screenshot on the showcase. Not done: reel mode, hover add on the timeline, moving voiceovers, custom and global shortcuts, shortcut editing parity. Crop, stills, presets and file pickers were not driven end to end, because the pickers cannot be automated here. No UI-stall measurement.
+  - Phase 7 FAIL (partial): OCR found text in real engine runs on generated clips. The face engine ran but never saw a face. Whisper code compiled and was never run, because that needs a model download. Cutout missing.
+  - Phase 8 FAIL (partial): MSIX built, never installed or signed. Folders cannot take a file association (ADR-24).
+- **Machine note:** every run with the microphone ended in a reset, so none were repeated. `NS_TEST_CAPTURE_PARTS` selects what a capture test turns on.
+
 ## 2026-11-02, Phase 3 and 5: preview audio and the recording engine (verifier work on Windows)
 
 ### Verifier
 - **Result:** Phase 5 FAIL (partial). Phase 3 not measured.
 - **Done:** Preview plays the audio mix through WASAPI, and the device position corrects the clock. Display, window and area capture, telemetry hooks, system audio, microphone, webcam, pause and package finishing as a library. The HUD and target picker are not written, so nothing is reachable from the app yet.
-- **Measured:** Screen only and screen with system audio, on a 1536Ã—960 capture: about 57 fps, 6 to 7 ms per frame to copy and convert, cursor every 9 ms, pause removed from all times, stop in about 45 ms. Reader times match written times in `FragmentedTimingTests` (ADR-22). Preview audio has not been heard in the app, and no A/V offset was measured.
+- **Measured:** Screen only and screen with system audio, on a 1536×960 capture: about 57 fps, 6 to 7 ms per frame to copy and convert, cursor every 9 ms, pause removed from all times, stop in about 45 ms. Reader times match written times in `FragmentedTimingTests` (ADR-22). Preview audio has not been heard in the app, and no A/V offset was measured.
 - **Blocker:** The 3 runs with the microphone reset the machine (ADR-23). Camera alone not run. Window and area capture, crash safety and opening a recording on macOS not run.
 
 ## 2026-11-01, Phase 1, 2 and 6: saving and the compositor (verifier work on Windows)

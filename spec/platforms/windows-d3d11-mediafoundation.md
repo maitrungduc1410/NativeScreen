@@ -105,8 +105,9 @@ Rules:
 
 ## 5. Decode and Playback
 
-> **Current state:** decode and export use system-memory frames rather than the zero-copy path below (`spec/06` ADR-21). The
-> rest of this section and §6 remain the target if measurements require them.
+> **Current state:** decode uses system-memory frames rather than the zero-copy path below (`spec/06` ADR-21). Export and
+> recording convert on the GPU with `GpuNv12Converter` and read NV12 back. The rest of this section and §6 remain the target
+> if measurements require them.
 
 - `IMFSourceReader` with `MF_SOURCE_READER_D3D_MANAGER` (`IMFDXGIDeviceManager` on the compositor's device),
   `MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS`, `MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING = false`, output `NV12`.
@@ -196,6 +197,9 @@ Rules:
 | Encoder differences (NVENC / QSV / AMF) | Never assume an `ICodecAPI` property is supported; check `IsSupported` and log the fallback. |
 | Sink writer silently falls back to software | Verify the active transform is hardware (`MFT_ENUM_HARDWARE_URL_Attribute`) and log it. |
 | Low-level hook timeouts | Callbacks over ~1 s get the hook removed; never do I/O in the callback. |
+| Reported times of fragmented MP4 | Media Foundation writes no `tfdt` and then misreports fragment starts by hundreds of ms. Read times from the boxes (`spec/06` ADR-22). |
+| WASAPI loopback during silence | It delivers nothing, and the MP4 sink then holds video back. Write silence yourself and disable sink writer throttling (`spec/06` ADR-23). |
+| Microphone capture on Boot Camp | Froze and reset one Mac three times. Not understood (`spec/06` ADR-23). |
 | Casting a projected WinUI object to a `[ComImport]` interface | Always throws `InvalidCastException` (projected objects are not COM wrappers). Call `QueryInterface` on `IWinRTObject.NativeObject.ThisPtr` (`spec/06` ADR-18). |
 | Caption buttons and window sizes | Set `AppWindowTitleBar` button colors from the app theme; `AppWindow` sizes are physical pixels, so scale DIPs by the window DPI (`spec/06` ADR-19). |
 | `SwapChainPanel` before the first opaque present | The panel shows what is behind the window, even after presenting alpha 0. Present an opaque frame right after `SetSwapChain` (`spec/06` ADR-18). |
