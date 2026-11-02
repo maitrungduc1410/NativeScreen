@@ -27,6 +27,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-02, Editor parity: segment menus, command menu, export modals, recording options
+
+### Verifier
+- **Result:** PASS for the items exercised below. This is a parity pass, not a phase acceptance, so `spec/05` is unchanged.
+- **verify.ps1:** Debug and Release x64 PASS; Core 150, Media 13, Rendering 19 tests passed; 12 shaders compiled.
+- **Exercised in the running app, on copies of projects:** real mouse right-click menus on clip, zoom and mask; Duplicate from a menu; split with C and merge with the cut badge; D, Esc, H, Ctrl+C and Ctrl+V; a mask dragged up to a new track (2 to 3 tracks, undo restored it); crop presets with a real recording; zoom position pad (center written to `project.json`); a JPEG still and a clipboard video through the new modals; a 6 s area recording, no microphone or camera, with the highlight window present while recording and gone after, then After Recording set to clipboard, which produced the file.
+- **Not exercised:** menus on shortcut, layout and voiceover segments; Alt held for split; file pickers (export to file, both-codec export, still folder choice); a GIF with loop disabled; moving the crop box by drag; the highlight's look, since it is excluded from capture and screenshots cannot show it.
+- **Changes made:** `SegmentMenu.cs`, `EditorWindow.Commands.cs`, `EditorWindow.Dialogs.cs`, `ZoomPositionPad.cs`, `Recording/RecordedAreaHighlight.cs`, `EditorSession.Segments.cs`. Two icons missing from the Windows 10 font were replaced.
+- **Spec updates:** `spec/06` ADR-28.
+- **Next:** Gaps still open against macOS, largest first: voiceover recording (needs microphone testing, ADR-23), custom color presets and LUT loading, camera preview bubble, draw a new mask on the preview, cursor variants, built-in music, transcript word bar editing, custom color and gradient pickers, camera crop, hover skim, per-shortcut styles, preset management, view toggles, settings panes including quick export, hide desktop icons, max camera resolution. Small ones: crop edge handles and thirds grid, trim badges, quick dock layouts, device finish, layout position and ratio, pinch zoom, recents menu items.
+
 ## 2026-11-02, Phases 3 to 8: measurements and what is left (verifier work on Windows)
 
 ### Verifier

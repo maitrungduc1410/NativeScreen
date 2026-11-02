@@ -415,6 +415,18 @@ public sealed partial class EditorWindow
         Mp4Codec = codec
     };
 
+    /// <summary>The After Recording action: the editor is open, then the export runs with the current settings.</summary>
+    public void ExportAfterOpening(string action)
+    {
+        if (action is not ("clipboard" or "file"))
+        {
+            return;
+        }
+
+        exportToClipboard = action == "clipboard";
+        Root.Loaded += (_, _) => _ = StartExport();
+    }
+
     // MARK: Still frame
 
     private void ShowFrameExport(object sender, RoutedEventArgs e) => ShowFrameExportOverlay();

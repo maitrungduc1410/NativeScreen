@@ -487,6 +487,27 @@ public sealed class RecordingHudWindow : Window
                 settings.Save();
             };
             menu.Items.Add(zooms);
+            var highlight = new ToggleMenuFlyoutItem { Text = "Highlight recorded area", IsChecked = settings.HighlightRecordedArea };
+            highlight.Click += (_, _) =>
+            {
+                settings.HighlightRecordedArea = highlight.IsChecked;
+                settings.Save();
+            };
+            menu.Items.Add(highlight);
+            var after = new MenuFlyoutSubItem { Text = "After recording" };
+            foreach (var (title, action) in new[] { ("Create project", "project"), ("Export to clipboard", "clipboard"), ("Export to file", "file") })
+            {
+                var value = action;
+                var item = new ToggleMenuFlyoutItem { Text = title, IsChecked = settings.AfterRecording == value };
+                item.Click += (_, _) =>
+                {
+                    settings.AfterRecording = value;
+                    settings.Save();
+                };
+                after.Items.Add(item);
+            }
+
+            menu.Items.Add(after);
             menu.ShowAt(button);
         };
         return button;
@@ -585,6 +606,11 @@ public sealed class RecordingHudWindow : Window
             pausedTotal = TimeSpan.Zero;
             pausedAt = null;
             isPaused = false;
+            if (AppSettings.Shared.HighlightRecordedArea)
+            {
+                recordedArea = new RecordedAreaHighlight(chosen.Rect, chosen.Display.Scale);
+            }
+
             ShowRecording();
         }
         catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or COMException or IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -648,9 +674,13 @@ public sealed class RecordingHudWindow : Window
         ShowRecording();
     }
 
+    private RecordedAreaHighlight? recordedArea;
+
     private async Task StopRecorder()
     {
         tick.Stop();
+        recordedArea?.Dispose();
+        recordedArea = null;
         var running = recorder;
         recorder = null;
         if (running is not null)
@@ -681,7 +711,7 @@ public sealed class RecordingHudWindow : Window
         await Task.Run(() => RecordingPackage.Finish(directory, chosen.Metadata(), stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms, DateTimeOffset.UtcNow));
         busy = false;
         ShowIdle();
-        await Projects.Open(directory, root.XamlRoot);
+        await Projects.Open(directory, root.XamlRoot, AppSettings.Shared.AfterRecording);
     }
 
     private async Task Restart()

@@ -96,9 +96,14 @@ internal sealed class TimelineView
         Rebuild();
     }
 
-    public void SetZoom(double value)    {
+    /// <summary>Changes the scale with the playhead staying where it is in the viewport.</summary>
+    public void SetZoom(double value)
+    {
+        var onScreen = X(session.PlayheadTimelineMs) - scroller.HorizontalOffset;
         zoom = value;
         Rebuild();
+        canvas.UpdateLayout();
+        scroller.ChangeView(Math.Max(0, X(session.PlayheadTimelineMs) - onScreen), null, null, true);
     }
 
     /// <summary>Called on every clock tick while playing, so it only moves a transform.</summary>

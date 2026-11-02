@@ -576,3 +576,18 @@ Decided by the project owner. When `recording/metadata.json` says `platform = "w
 - Telemetry and `project.json` do not change, so projects still round-trip.
 - This is an intended difference from `spec/07`: frames of Windows projects are not comparable with macOS fixtures in the keycap area.
 - The macOS app has no such branch, so it still draws macOS keycaps for a Windows project. Changing that needs a macOS code change.
+
+## 28. ADR-28: Pointer Rules for Timeline Drags and Menus (Windows)
+
+### Context
+Three WinUI behaviors broke timeline editing. A right press bubbled to the canvas, which scrubbed and captured the pointer, and the capture cancelled `RightTapped`, so segment menus never opened. `ReleasePointerCapture` raises `PointerCaptureLost` synchronously, so a handler that released first ended the drag before the drop row was read. `Flyout` has no slider or card rows, and `MenuFlyout` cannot hold them.
+
+### Decision
+- Only a left press starts a scrub or a drag.
+- `CanvasReleased` ends the drag with its drop position first, then releases the capture.
+- Segment menus are a `Flyout` with rows built to look like a menu.
+- A mask keeps its row until the drop. It follows the pointer visually, and the drop computes `round(deltaY / rowStep)`.
+
+### Consequences
+- Moving the only mask of a track to a new row looks like nothing happened: the emptied track is removed, so the layout is the same. A test of mask dragging needs a track with two masks.
+- Icon glyphs must exist in Segoe MDL2 Assets as well as Segoe Fluent Icons, because Windows 10 has only the first. `ED1A` and `F19F` do not.

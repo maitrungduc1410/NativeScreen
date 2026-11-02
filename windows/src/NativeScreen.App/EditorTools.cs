@@ -178,6 +178,21 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         ? Path.Combine(package, "recording", project.Metadata.Tracks.DisplayVideo)
         : null;
 
+    /// <summary>One frame of the recording as BGRA, off the UI thread, for thumbnails.</summary>
+    public async Task<(byte[] Bgra, int Width, int Height)?> ReadFrame(double sourceMs)
+    {
+        if (VideoPath is not { } path || !File.Exists(path))
+        {
+            return null;
+        }
+
+        return await Task.Run<(byte[] Bgra, int Width, int Height)?>(() =>
+        {
+            using var reader = new VideoFileReader(path);
+            return MediaAssets.FrameAt(reader, sourceMs) is { } frame ? (MediaAssets.ToBgra(frame), frame.Width, frame.Height) : null;
+        });
+    }
+
     public void SetHideSensitive(bool enabled)
     {
         session.Mutate(document =>

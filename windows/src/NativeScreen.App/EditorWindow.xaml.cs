@@ -129,6 +129,7 @@ public sealed partial class EditorWindow : Window
         session.SelectionChanged += SelectionChanged;
         AppTheme.Changed += ThemeChanged;
         Root.PreviewKeyDown += RootKeyDown;
+        Root.PreviewKeyUp += RootKeyUp;
         PreviewHost.SizeChanged += (_, _) => FitPreview();
         Preview.CompositionScaleChanged += (_, _) => DrawPreview();
         Preview.Loaded += AttachPreview;
@@ -240,6 +241,10 @@ public sealed partial class EditorWindow : Window
         edit.Items.Add(Menu("Undo", session.Undo, "Ctrl+Z"));
         edit.Items.Add(Menu("Redo", session.Redo, "Ctrl+Shift+Z"));
         edit.Items.Add(Menu("Delete", session.DeleteSelected, "Delete"));
+        edit.Items.Add(new MenuFlyoutSeparator());
+        edit.Items.Add(Menu("Cut", () => HandleSelectionControlKey(VirtualKey.X), "Ctrl+X"));
+        edit.Items.Add(Menu("Copy", () => HandleSelectionControlKey(VirtualKey.C), "Ctrl+C"));
+        edit.Items.Add(Menu("Paste", session.PasteFromClipboard, "Ctrl+V"));
         var record = new MenuFlyoutSubItem { Text = "Record" };
         record.Items.Add(Menu("New recording", () => RecordingHudWindow.Show()));
         record.Items.Add(Menu("Record display", () => RecordingHudWindow.Show(CaptureTargetMode.Display)));
@@ -730,9 +735,27 @@ public sealed partial class EditorWindow : Window
 
     // MARK: Keyboard
 
+    private bool altHeldForSplit;
+
+    private void RootKeyUp(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu && altHeldForSplit)
+        {
+            altHeldForSplit = false;
+            session.IsSplitModeActive = false;
+            RefreshChrome();
+        }
+    }
+
     private void RootKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
+        // Holding Alt alone is the temporary split tool.
+        if (e.Key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu && !session.IsSplitModeActive)
+        {
+            altHeldForSplit = true;
+            session.IsSplitModeActive = true;
+            RefreshChrome();
+        }        var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
         var shift = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
         var typing = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox;
         if (control)
@@ -777,7 +800,18 @@ public sealed partial class EditorWindow : Window
                     ToggleCommandMenu();
                     e.Handled = true;
                 }
+                else
+                {
+                    session.IsSplitModeActive = false;
+                    session.ClearSelection();
+                    RefreshChrome();
+                    e.Handled = true;
+                }
 
+                break;
+            case VirtualKey.H:
+                session.Mutate(document => document.Camera.Enabled = !document.Camera.Enabled);
+                e.Handled = true;
                 break;
             default:
                 if (ExportOverlay.Visibility != Visibility.Visible && CommandOverlay.Visibility != Visibility.Visible)

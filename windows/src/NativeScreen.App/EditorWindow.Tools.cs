@@ -304,6 +304,27 @@ public sealed partial class EditorWindow
         DragWith(handles[3], (x, y) => (right, bottom) = (Math.Max(x, left + MinimumCrop), Math.Max(y, top + MinimumCrop)));
         Layout();
 
+        // Dragging inside the frame moves the crop without changing its size.
+        frame.IsHitTestVisible = true;
+        frame.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
+        var grabX = 0.0;
+        var grabY = 0.0;
+        frame.PointerPressed += (_, args) =>
+        {
+            var point = args.GetCurrentPoint(canvas).Position;
+            grabX = point.X / viewWidth - left;
+            grabY = point.Y / viewHeight - top;
+        };
+        DragWith(frame, (x, y) =>
+        {
+            var w = right - left;
+            var h = bottom - top;
+            left = Math.Clamp(x - grabX, 0, 1 - w);
+            top = Math.Clamp(y - grabY, 0, 1 - h);
+            right = left + w;
+            bottom = top + h;
+        });
+
         var overlay = new Grid { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(230, 10, 10, 14)) };
         Grid.SetRowSpan(overlay, 8);
         Grid.SetColumnSpan(overlay, 8);
@@ -315,6 +336,25 @@ public sealed partial class EditorWindow
             (left, top, right, bottom) = (0, 0, 1, 1);
             Layout();
         }));
+        foreach (var (title, ratio) in new[] { ("16:9", 16.0 / 9), ("9:16", 9.0 / 16), ("1:1", 1.0), ("4:3", 4.0 / 3) })
+        {
+            var chosen = ratio;
+            buttons.Children.Add(Ui.Option(title, false, () =>
+            {
+                var aspect = width / (double)Math.Max(1, height);
+                var newWidth = 1.0;
+                var newHeight = aspect / chosen;
+                if (newHeight > 1)
+                {
+                    newHeight = 1;
+                    newWidth = chosen / aspect;
+                }
+
+                (left, top, right, bottom) = ((1 - newWidth) / 2, (1 - newHeight) / 2, (1 + newWidth) / 2, (1 + newHeight) / 2);
+                Layout();
+            }));
+        }
+
         var apply = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = "Apply" };
         apply.Click += (_, _) =>
         {
@@ -384,12 +424,14 @@ internal static class Projects
         }
     }
 
-    public static async Task Open(string path, XamlRoot? xamlRoot)
+    public static async Task Open(string path, XamlRoot? xamlRoot, string afterOpening = "project")
     {
         try
         {
             var project = await Task.Run(() => new LoadedProject(path));
-            new EditorWindow(EditorSource.Package(path, project)).Activate();
+            var editor = new EditorWindow(EditorSource.Package(path, project));
+            editor.Activate();
+            editor.ExportAfterOpening(afterOpening);
             AppSettings.Shared.NoteRecent(path);
         }
         catch (Exception exception) when (exception is IOException or System.Text.Json.JsonException or UnauthorizedAccessException or NotSupportedException or ArgumentException)

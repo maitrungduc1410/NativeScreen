@@ -355,6 +355,10 @@ internal sealed class InspectorPanel
         Add(Text("Captions", medium: true));
         Add(Toggle("Disable captions", null, () => !Doc.Captions.Enabled, (d, v) => d.Captions.Enabled = !v));
         Add(Slider("Caption size", () => Doc.Captions.FontSizeRatio, (d, v) => d.Captions.FontSizeRatio = v, 0.02, 0.10, 0.045));
+        var centered = Math.Abs(captions.Position01.Y - 0.5) < 0.15;
+        Add(Labeled("Caption position", 10, Options(
+            ("Bottom", !centered, () => Edit(d => d.Captions.Position01 = new Point01(0.5, 0.88))),
+            ("Center", centered, () => Edit(d => d.Captions.Position01 = new Point01(0.5, 0.5))))));
         Add(Labeled("Font style", 10, Options(
             ("Sans-serif", captions.FontStyle == CaptionFontStyle.SansSerif, () => Edit(d => d.Captions.FontStyle = CaptionFontStyle.SansSerif)),
             ("Serif", captions.FontStyle == CaptionFontStyle.Serif, () => Edit(d => d.Captions.FontStyle = CaptionFontStyle.Serif)),
@@ -683,6 +687,10 @@ internal sealed class InspectorPanel
         Add(Labeled("Zoom position", 10, Options(
             ("Auto", zoom.Mode == ZoomMode.FollowCursor, () => Edit(d => Find(d).Mode = ZoomMode.FollowCursor)),
             ("Manual", zoom.Mode == ZoomMode.Manual, () => Edit(d => Find(d).Mode = ZoomMode.Manual)))));
+        if (zoom.Mode == ZoomMode.Manual || session.CursorEvents.Count == 0)
+        {
+            Add(new ZoomPositionPad(session, tools, zoom.Id).Element);
+        }
         Add(Slider("Zoom level", () => session.SelectedZoom?.Scale ?? 1.8, (d, v) => Find(d).Scale = v, 1, 3.5, 1.8));
         Add(Note("How close to zoom on the cursor during this zoom phase"));
         if (zoom.Presentation == ZoomPresentation.Loupe)
