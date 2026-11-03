@@ -86,7 +86,7 @@ All numbers below come from `composeFrame`. `S = canvasScale = outputHeight / 90
 - **Crossfade:** when the background identity changes, fade the new one over the old for **320 ms**, ease-out cubic
   `1 - (1 - t)^3`, blur applied to the blend. Preview only; exports render the settled background.
 - Cache the result in a texture keyed by (background identity, canvas size, `round(blurRadius * 2)`).
-- **Flip:** the macOS bake mirrors the settled background vertically, and exports show it too. Draw it flipped (`spec/06` ADR-20). The crossfade path is not baked and is not flipped.
+- **Orientation:** every path keeps the background upright: the bake, the crossfade and export (`spec/06` ADR-24).
 
 ### Pass 2: Masks on the source screen (`applyMultiTrackMasks`)
 Applied in source-video pixels, before scaling and zoom. For each active mask, rect = keyframe-interpolated `rect01`,
@@ -109,8 +109,7 @@ Then apply `canvas.cropRect01` (min 16 px).
 - **Drop shadow:** rounded rect of the screen rect, radius as above, black at alpha `intensity`, offset
   `Directional: (cos a * dist * 0.55, sin a * dist * 0.55)` in top-down coordinates (angle `a` in degrees, `dist = distance * S`),
   `Classic: (0, +0.20 * dist)` downward; Gaussian `sigma = max(1, blur * S * 0.45)`. Bake into a texture (key: screen
-  rect, canvas, radius, shadow config). Never blur at 4K per frame. The macOS bake mirrors this layer vertically, so the
-  shadow lands on the opposite side from these offsets; draw it flipped (`spec/06` ADR-20).
+  rect, canvas, radius, shadow config). Never blur at 4K per frame.
 - **Device mockup:** port `renderDeviceMockupBezel` with Direct2D (same rects, radii, colors, gradients, even-odd fill).
 
 ### Pass 4: Click effect and cursor (`renderCursorAndRipple`)
