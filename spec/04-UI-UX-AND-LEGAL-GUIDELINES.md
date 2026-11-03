@@ -87,9 +87,10 @@ To keep **NativeScreen** distributable under its open-source license (MIT) on Gi
 1. **System Wallpapers (Zero Bundle Size, 100% Legal):**
    - **On macOS:** Read available system wallpapers directly at runtime from `/System/Library/Desktop Pictures/` (and `/System/Library/Desktop Pictures/.thumbnails/`) as well as the user's current desktop wallpaper (`NSWorkspace.shared.desktopImageURL(for:)`).
    - **On Windows:** Read directly from `C:\Windows\Web\Wallpaper\`.
-   - **Project Portability:** When a user selects a system wallpaper (or drops a custom image) into a project, NativeScreen copies/transcodes that selected image into `MyDemo.nativescreen/assets/background.jpg` so the project renders identically if moved to another machine.
-2. **Procedural GPU Mesh Gradients & Abstract Shaders (Built-in, 0 KB):**
-   - Include 20+ curated **Mesh Gradient & Procedural Wave Presets** (*Spring, Sunset, Radiant, Midnight, Iridescent, Glassmorphism, Energy*) rendered natively by Metal / SwiftUI `MeshGradient` at full 4K/8K resolution. Color hex palettes are not copyrightable, and procedural shaders produce crisp, resolution-independent backgrounds with zero file size.
+   - **Project Portability:** When a user selects a system wallpaper (or drops a custom image) into a project, NativeScreen copies/transcodes that selected image into `MyDemo.nativescreen/assets/background-<id>.jpg` so the project renders identically if moved to another machine.
+2. **Self-Drawn Wallpapers and Mesh Gradients (Built-in):**
+   - 108 wallpapers (*Spring, Sunset, Radiant, Energy, Iridescent, Midnight, Glassmorphism*) drawn from scratch by `tools/generate_wallpapers.py` and shipped in `Wallpapers.bundle`, about 20 MB. Never add images taken from other apps or wallpaper packs (`spec/06` ADR-32).
+   - 8 Mesh Gradient presets rendered by the compositor at any resolution with zero file size. Color hex palettes are not copyrightable.
 3. **Native System Cursors:**
    - Capture the active system cursor image directly from macOS (`NSCursor` / CoreGraphics cursor APIs) during recording, or render clean vector cursor SVGs/PDFs designed specifically for NativeScreen.
 4. **Synthesized / Royalty-Free Click Sounds:**

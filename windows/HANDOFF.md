@@ -27,6 +27,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, Built-in wallpapers and upright baked layers (macOS side done, Windows port pending)
+
+### Writer
+- **Scope:** macOS only. Rules: `spec/06` ADR-32, `spec/07` Pass 1. All frame fixtures are regenerated, and most fail on Windows until the flip below is removed.
+- **To port on Windows:**
+  - Rendering, do this first: remove `VerticallyFlipped` and draw with `Identity` at its 3 call sites: `FrameCompositor.Compose.cs` (background, shadow) and `FrameCompositor.Overlays.cs` (bezel). Check the bezel rasterizer's own orientation, the notch must end up at the top.
+  - Assets: ship `NativeScreen/NativeScreen/Resources/Wallpapers.bundle/**/*.jpg` as content, like the cursors in `NativeScreen.Rendering.csproj`.
+  - App: category pills `★`, the system wallpapers, `Mesh`, then `Spring, Sunset, Radiant, Energy, Iridescent, Midnight, Glassmorphism`. Grid previews come from `thumbs/`, sorted by file name. A pill only browses. `Pick random wallpaper` draws from the current pill. Opening a project selects the pill holding its wallpaper or mesh.
+  - Core: picking a bundled wallpaper copies it byte for byte to `assets/background-<id>.jpg`, with `systemWallpaperName` set to the id.
+- **How to verify:** `verify.ps1` frame fixtures pass again. Pick `spring-01`: the image is upright during and after the crossfade, and the copied file hashes the same as the bundled one. In `device-mockup` the notch is at the top; in `basic` the shadow falls downward.
+
 ## 2026-11-03, Editor parity: music, trim badges, keycap clicks, crop handles
 
 ### Verifier

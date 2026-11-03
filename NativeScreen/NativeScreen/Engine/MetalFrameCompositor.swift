@@ -718,11 +718,8 @@ public final class MetalFrameCompositor {
         guard let baked = CIImage(mtlTexture: tex, options: [.colorSpace: colorSpace]) else {
             return nil
         }
-        // `CIImage(mtlTexture:)` has flipped Y coordinates by default in Metal; flip back to CoreImage bottom-left coordinates
-        let unflipped = baked
-            .transformed(by: CGAffineTransform(scaleX: 1.0, y: -1.0).translatedBy(x: 0.0, y: -CGFloat(h)))
-            .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
-        return unflipped
+        // `render(_:to:)` and `CIImage(mtlTexture:)` use the same row order, so the round trip keeps the image upright.
+        return baked.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
     }
 
     private func buildRawBackgroundImage(bg: BackgroundConfig, session: ProjectSession, canvasRect: CGRect) -> CIImage {

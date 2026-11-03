@@ -1351,8 +1351,11 @@ public final class ProjectSession: Identifiable {
 
         let sourceURL = item.fullImageURL
         let itemName = item.name
+        let isBundled = item.isBundled
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: sourceURL, maxPixelSize: 2560) {
+            if isBundled {
+                try? FileManager.default.copyItem(at: sourceURL, to: destURL)
+            } else if let cgImage = SystemWallpaperCatalog.downsampleCGImage(at: sourceURL, maxPixelSize: 2560) {
                 let bitmap = NSBitmapImageRep(cgImage: cgImage)
                 if let jpgData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.88]) {
                     try? jpgData.write(to: destURL, options: .atomic)
