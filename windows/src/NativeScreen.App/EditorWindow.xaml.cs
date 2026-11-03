@@ -100,6 +100,7 @@ public sealed partial class EditorWindow : Window
         tools.Changed += inspector.Rebuild;
         timeline = new TimelineView(session, TimelineHost) { Tools = tools };
         session.ToastRequested += ShowToast;
+        timeline.Skimmed += DrawPreview;
         overlay = new PreviewOverlay(session, PreviewCanvas, () => (source.SourceWidth, source.SourceHeight, source.HasCamera));
         PreviewCanvas.SizeChanged += (_, _) => overlay.Refresh();
 
@@ -309,14 +310,24 @@ public sealed partial class EditorWindow : Window
         }
     }
 
+    private void BeginMaskDraw(MaskType type)
+    {
+        if (session.IsPlaying)
+        {
+            TogglePlayback();
+        }
+
+        session.BeginInteractiveMaskSelection(type);
+    }
+
     private void BuildQuickDock()
     {
         QuickDock.Children.Add(DockGroup(
             Ui.IconButton(Ui.Icon("", 16), "Classic zoom", () => session.AddZoomAtPlayhead(ZoomPresentation.Screen)),
             Ui.IconButton(Ui.Icon("", 16), "Loupe zoom", () => session.AddZoomAtPlayhead(ZoomPresentation.Loupe))));
         QuickDock.Children.Add(DockGroup(
-            Ui.IconButton(Ui.Icon("", 16), "Sensitive data mask", () => session.AddMaskAtPlayhead(MaskType.Blur)),
-            Ui.IconButton(Ui.Icon("", 16), "Highlight mask", () => session.AddMaskAtPlayhead(MaskType.Spotlight))));
+            Ui.IconButton(Ui.Icon("", 16), "Sensitive data mask", () => BeginMaskDraw(MaskType.Blur)),
+            Ui.IconButton(Ui.Icon("", 16), "Highlight mask", () => BeginMaskDraw(MaskType.Spotlight))));
         QuickDock.Children.Add(DockGroup(
             Ui.IconButton(Ui.Icon("", 16), "Add shortcut", () => session.AddCustomShortcut(null, session.SourceAtPlayhead)),
             Ui.IconButton(Ui.Icon("", 16), "Upload a voiceover", tools.UploadVoiceover)));
@@ -565,7 +576,7 @@ public sealed partial class EditorWindow : Window
         {
             Document = document,
             Trajectory = trajectory,
-            SourceMs = session.SourceAtPlayhead,
+            SourceMs = session.DisplaySourceMs,
             ScreenSource = screenPlayback,
             WebcamSource = webcamPlayback,
             Shortcuts = session.Shortcuts(),
@@ -798,6 +809,11 @@ public sealed partial class EditorWindow : Window
                 else if (CommandOverlay.Visibility == Visibility.Visible)
                 {
                     ToggleCommandMenu();
+                    e.Handled = true;
+                }
+                else if (session.PendingAddMaskType is not null)
+                {
+                    session.CancelInteractiveMaskSelection();
                     e.Handled = true;
                 }
                 else

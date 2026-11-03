@@ -94,6 +94,8 @@ internal sealed class InspectorPanel
 
     // MARK: Tabs
 
+    private double gradientHueShift = 0.5;
+
     private void General()
     {
         var background = Doc.Background;
@@ -147,6 +149,15 @@ internal sealed class InspectorPanel
                     })));
             }
 
+            Add(Action("Pick random wallpaper", () =>
+            {
+                var picked = MeshPreset.BuiltIn[Random.Shared.Next(MeshPreset.BuiltIn.Count)];
+                Edit(d =>
+                {
+                    d.Background.Type = BackgroundType.Mesh;
+                    d.Background.MeshPresetId = picked.Id;
+                });
+            }));
             Add(Labeled("Wallpaper", 10, strip, swatches));
             if (tools.HasPackage)
             {
@@ -182,6 +193,32 @@ internal sealed class InspectorPanel
                     d.Background.Gradient.Stops = [new GradientStopConfig(from, 0), new GradientStopConfig(to, 1)])));
             }
 
+            var first = background.Gradient.Stops.Count > 0 ? background.Gradient.Stops[0].Color : "#000000";
+            var last = background.Gradient.Stops.Count > 1 ? background.Gradient.Stops[^1].Color : first;
+            void SetStops(ProjectDocument d, string from, string to) => d.Background.Gradient.Stops = [new GradientStopConfig(from, 0), new GradientStopConfig(to, 1)];
+            var fields = new Grid { ColumnSpacing = 8 };
+            fields.ColumnDefinitions.Add(new ColumnDefinition());
+            fields.ColumnDefinitions.Add(new ColumnDefinition());
+            var startField = ColorField.Create("Gradient start", first, hex => session.Mutate(d => SetStops(d, hex, d.Background.Gradient.Stops[^1].Color), "gradient-color", structural: false), hex => Edit(d => SetStops(d, hex, d.Background.Gradient.Stops[^1].Color)));
+            var endField = ColorField.Create("Gradient end", last, hex => session.Mutate(d => SetStops(d, d.Background.Gradient.Stops[0].Color, hex), "gradient-color", structural: false), hex => Edit(d => SetStops(d, d.Background.Gradient.Stops[0].Color, hex)));
+            Grid.SetColumn(endField, 1);
+            fields.Children.Add(startField);
+            fields.Children.Add(endField);
+            Add(Labeled("Gradient colors", 10, fields));
+            Add(Action("Pick random gradient", () =>
+            {
+                var (randomStart, randomEnd) = CuratedGradientPairs[Random.Shared.Next(CuratedGradientPairs.Length)];
+                Edit(d => SetStops(d, randomStart, randomEnd));
+            }));
+            var hue = new Slider { Minimum = 0, Maximum = 1, StepFrequency = 0.005, Value = gradientHueShift, IsThumbToolTipEnabled = false };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(hue, "Hue");
+            hue.ValueChanged += (_, args) =>
+            {
+                var delta = args.NewValue - gradientHueShift;
+                gradientHueShift = args.NewValue;
+                session.Mutate(d => SetStops(d, ColorField.ShiftHue(d.Background.Gradient.Stops[0].Color, delta), ColorField.ShiftHue(d.Background.Gradient.Stops[^1].Color, delta)), "gradient-hue", structural: false);
+            };
+            Add(Labeled("Hue", 8, hue));
             Add(Labeled("Background Gradient", 10, swatches));
         }
         else if (background.Type == BackgroundType.Solid)
@@ -193,6 +230,12 @@ internal sealed class InspectorPanel
                 swatches.Children.Add(Swatch(new SolidColorBrush(Ui.Hex(value)), value, background.SolidColor == value, () => Edit(d => d.Background.SolidColor = value)));
             }
 
+            Add(Labeled("Color", 10, ColorField.Create("Background color", background.SolidColor, hex => session.Mutate(d => d.Background.SolidColor = hex, "solid-color", structural: false), hex => Edit(d => d.Background.SolidColor = hex))));
+            Add(Action("Pick random color", () =>
+            {
+                var picked = CuratedSolidColors[Random.Shared.Next(CuratedSolidColors.Length)];
+                Edit(d => d.Background.SolidColor = picked);
+            }));
             Add(Labeled("Background Color", 10, swatches));
         }
 

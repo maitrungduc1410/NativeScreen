@@ -9,6 +9,82 @@ public sealed partial class EditorSession
 
     public event Action<string>? ToastRequested;
 
+    /// <summary>A mask is about to be drawn on the preview, by dragging out its area.</summary>
+    public MaskType? PendingAddMaskType { get; private set; }
+
+    /// <summary>The time the timeline is hovered at while paused; the preview shows it, the playhead stays.</summary>
+    public double? HoverSkimTimelineMs { get; private set; }
+
+    public double DisplaySourceMs => HoverSkimTimelineMs is { } skim ? Mapper.SourceTime(skim).SourceMs : SourceAtPlayhead;
+
+    /// <summary>Returns whether the time changed.</summary>
+    public bool SetHoverSkim(double? timelineMs)
+    {
+        var next = timelineMs is { } time ? Math.Clamp(time, 0, DurationMs) : (double?)null;
+        if (next == HoverSkimTimelineMs)
+        {
+            return false;
+        }
+
+        HoverSkimTimelineMs = next;
+        return true;
+    }
+
+    /// <summary>Asking again for the same type leaves the mode.</summary>
+    public void BeginInteractiveMaskSelection(MaskType type)
+    {
+        HoverSkimTimelineMs = null;
+        IsSplitModeActive = false;
+        PendingAddMaskType = PendingAddMaskType == type ? null : type;
+        if (PendingAddMaskType is not null)
+        {
+            ClearSelection();
+        }
+
+        SelectionChanged?.Invoke();
+    }
+
+    public void CancelInteractiveMaskSelection()
+    {
+        PendingAddMaskType = null;
+        SelectionChanged?.Invoke();
+    }
+
+    public void CompleteInteractiveMaskSelection(Rect01 rect)
+    {
+        var type = PendingAddMaskType ?? MaskType.Blur;
+        PendingAddMaskType = null;
+        var at = SourceAtPlayhead;
+        var end = Math.Min(SourceDurationMs, at + 4500);
+        var start = Math.Max(0, Math.Min(at, end - 1200));
+        var item = new MaskItem
+        {
+            Id = NewId(),
+            SourceStartMs = start,
+            SourceEndMs = end,
+            Type = type,
+            Style = type == MaskType.Spotlight ? MaskStyle.Dim : MaskStyle.Gaussian,
+            Intensity = type == MaskType.Spotlight ? 50 : 36,
+            CornerRadius = 12,
+            Keyframes = [new MaskKeyframe { SourceMs = start, Rect01 = rect.Clamped() }]
+        };
+        Mutate(document =>
+        {
+            var tracks = document.Timeline.MaskTracks;
+            var free = tracks.Find(track => !track.Items.Exists(other => !(end <= other.SourceStartMs + 30 || start >= other.SourceEndMs - 30)));
+            if (free is null)
+            {
+                free = new MaskTrack { Id = NewId(), Name = tracks.Count == 0 ? "Masks" : $"Masks {tracks.Count + 1}" };
+                tracks.Add(free);
+            }
+
+            free.IsHidden = false;
+            free.Items.Add(item);
+            free.Items.Sort((a, b) => a.SourceStartMs.CompareTo(b.SourceStartMs));
+        });
+        SelectMask(item.Id);
+    }
+
     public ClipSlice? ActiveSlice => Mapper.SourceTime(PlayheadTimelineMs).Slice;
 
     private MaskItem? FindMask(ProjectDocument document, string id) =>

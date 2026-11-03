@@ -96,6 +96,7 @@ internal static class Ui
     {
         var button = new Button { Style = StyleOf("NsIconButton"), Content = content, Width = size, Height = size };
         ToolTipService.SetToolTip(button, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
         if (click is null)
         {
             button.IsEnabled = false;

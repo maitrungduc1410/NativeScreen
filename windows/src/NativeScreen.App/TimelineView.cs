@@ -43,6 +43,7 @@ internal sealed class TimelineView
     private readonly Canvas labels = new();
     private readonly Canvas playhead = new() { IsHitTestVisible = false };
     private readonly TranslateTransform playheadOffset = new();
+    private readonly Rectangle skimLine = new() { Width = 1, Fill = new SolidColorBrush(Color.FromArgb(150, 255, 255, 255)), IsHitTestVisible = false, Visibility = Visibility.Collapsed };
     private readonly Rectangle stem = new() { Width = 1.5, Fill = new SolidColorBrush(Color.FromArgb(230, 112, 77, 255)) };
     private double zoom = 1;
     private double viewportWidth = 800;
@@ -69,6 +70,7 @@ internal sealed class TimelineView
         canvas.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
         canvas.PointerPressed += CanvasPressed;
         canvas.PointerMoved += CanvasMoved;
+        canvas.PointerExited += (_, _) => EndSkim();
         canvas.PointerReleased += CanvasReleased;
         canvas.PointerCaptureLost += (_, _) => EndDrag();
 
@@ -86,6 +88,9 @@ internal sealed class TimelineView
 
     /// <summary>The editor's file actions, for menus that upload audio. Set once by the window.</summary>
     public EditorTools? Tools { get; set; }
+
+    /// <summary>The hovered time changed while paused, so the preview should redraw.</summary>
+    public event Action? Skimmed;
 
     /// <summary>The playhead was moved by hand, so the clock label and the preview must follow it.</summary>
     public event Action? PlayheadScrubbed;
@@ -131,6 +136,7 @@ internal sealed class TimelineView
         var rule = new Border { Width = 1, Height = height, Background = Ui.Pal("Ink07") };
         Canvas.SetLeft(rule, LabelColumnWidth - 1);
         labels.Children.Add(rule);
+        canvas.Children.Add(skimLine);
         canvas.Children.Add(playhead);
         UpdatePlayhead();
     }
@@ -737,12 +743,40 @@ internal sealed class TimelineView
             return;
         }
 
+        EndSkim();
         session.ClearSelection();
         scrubbing = true;
         canvas.CapturePointer(args.Pointer);
         session.Scrub(TimeAt(args.GetCurrentPoint(canvas).Position.X));
         UpdatePlayhead();
         PlayheadScrubbed?.Invoke();
+    }
+
+    private void EndSkim()
+    {
+        skimLine.Visibility = Visibility.Collapsed;
+        if (session.SetHoverSkim(null))
+        {
+            Skimmed?.Invoke();
+        }
+    }
+
+    private void Skim(double x)
+    {
+        if (session.IsPlaying || session.PendingAddMaskType is not null || session.IsSplitModeActive)
+        {
+            EndSkim();
+            return;
+        }
+
+        var time = TimeAt(x);
+        Canvas.SetLeft(skimLine, X(time));
+        skimLine.Height = canvas.Height;
+        skimLine.Visibility = Visibility.Visible;
+        if (session.SetHoverSkim(time))
+        {
+            Skimmed?.Invoke();
+        }
     }
 
     private void CanvasMoved(object sender, PointerRoutedEventArgs args)
@@ -792,6 +826,10 @@ internal sealed class TimelineView
             session.Scrub(TimeAt(x));
             UpdatePlayhead();
             PlayheadScrubbed?.Invoke();
+        }
+        else
+        {
+            Skim(x);
         }
     }
 

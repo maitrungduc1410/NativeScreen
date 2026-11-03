@@ -58,7 +58,13 @@ internal sealed class PreviewOverlay
             DrawSafeZones(width, height);
         }
 
-        if (session.IsPlaying || !session.Document.Timeline.MaskTracks.Exists(track => !track.IsHidden))
+        if (session.PendingAddMaskType is { } pending && !session.IsPlaying)
+        {
+            DrawNewMaskLayer(pending, width, height);
+            return;
+        }
+
+        if (session.IsPlaying || session.HoverSkimTimelineMs is not null || !session.Document.Timeline.MaskTracks.Exists(track => !track.IsHidden))
         {
             return;
         }
@@ -72,6 +78,106 @@ internal sealed class PreviewOverlay
                 DrawMask(mask, map, at);
             }
         }
+    }
+
+    /// <summary>Drag over the recording to choose the area; a plain click places a default mask around the click.</summary>
+    private void DrawNewMaskLayer(MaskType type, double width, double height)
+    {
+        var (x, y, videoWidth, videoHeight) = Transform(width, height).ToCanvas(new Rect01(0, 0, 1, 1));
+        var layer = new CrosshairCanvas { Width = videoWidth, Height = videoHeight, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 255, 255, 255)) };
+        Canvas.SetLeft(layer, x);
+        Canvas.SetTop(layer, y);
+        var selection = new Microsoft.UI.Xaml.Shapes.Rectangle
+        {
+            Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(40, 124, 92, 252)),
+            Stroke = Accent,
+            StrokeThickness = 1.5,
+            StrokeDashArray = [5, 3],
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false
+        };
+        layer.Children.Add(selection);
+        var hint = new Border
+        {
+            Padding = new Thickness(14, 7, 14, 7),
+            CornerRadius = new CornerRadius(16),
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(184, 0, 0, 0)),
+            IsHitTestVisible = false,
+            Child = new TextBlock
+            {
+                Text = $"Drag to select the area for the new {(type == MaskType.Blur ? "sensitive data" : "highlight")} mask",
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(Colors.White)
+            }
+        };
+        hint.Loaded += (_, _) =>
+        {
+            Canvas.SetLeft(hint, (videoWidth - hint.ActualWidth) / 2);
+            Canvas.SetTop(hint, videoHeight - hint.ActualHeight - 16);
+        };
+        layer.Children.Add(hint);
+
+        Windows.Foundation.Point? press = null;
+        layer.PointerPressed += (_, args) =>
+        {
+            press = args.GetCurrentPoint(layer).Position;
+            layer.CapturePointer(args.Pointer);
+            hint.Visibility = Visibility.Collapsed;
+            args.Handled = true;
+        };
+        layer.PointerMoved += (_, args) =>
+        {
+            if (press is not { } from)
+            {
+                return;
+            }
+
+            var to = args.GetCurrentPoint(layer).Position;
+            var (left, right) = (Math.Clamp(Math.Min(from.X, to.X), 0, videoWidth), Math.Clamp(Math.Max(from.X, to.X), 0, videoWidth));
+            var (top, bottom) = (Math.Clamp(Math.Min(from.Y, to.Y), 0, videoHeight), Math.Clamp(Math.Max(from.Y, to.Y), 0, videoHeight));
+            Canvas.SetLeft(selection, left);
+            Canvas.SetTop(selection, top);
+            selection.Width = Math.Max(2, right - left);
+            selection.Height = Math.Max(2, bottom - top);
+            selection.Visibility = Visibility.Visible;
+        };
+        layer.PointerReleased += (_, args) =>
+        {
+            if (press is not { } from)
+            {
+                return;
+            }
+
+            press = null;
+            var to = args.GetCurrentPoint(layer).Position;
+            layer.ReleasePointerCaptures();
+            var crop = session.Document.Canvas.CropRect01;
+            var (x0, x1) = (Math.Clamp(from.X, 0, videoWidth), Math.Clamp(to.X, 0, videoWidth));
+            var (y0, y1) = (Math.Clamp(from.Y, 0, videoHeight), Math.Clamp(to.Y, 0, videoHeight));
+            var (dragWidth, dragHeight) = (Math.Abs(x1 - x0), Math.Abs(y1 - y0));
+            Rect01 rect;
+            if (dragWidth >= 6 && dragHeight >= 6)
+            {
+                rect = new Rect01(
+                    crop.X + Math.Min(x0, x1) / Math.Max(1, videoWidth) * crop.Width,
+                    crop.Y + Math.Min(y0, y1) / Math.Max(1, videoHeight) * crop.Height,
+                    dragWidth / Math.Max(1, videoWidth) * crop.Width,
+                    dragHeight / Math.Max(1, videoHeight) * crop.Height);
+            }
+            else
+            {
+                var (sourceX, sourceY) = (crop.X + x1 / Math.Max(1, videoWidth) * crop.Width, crop.Y + y1 / Math.Max(1, videoHeight) * crop.Height);
+                var (defaultWidth, defaultHeight) = (Math.Min(0.28, crop.Width), Math.Min(0.14, crop.Height));
+                rect = new Rect01(
+                    Math.Max(crop.X, Math.Min(crop.X + crop.Width - defaultWidth, sourceX - defaultWidth / 2)),
+                    Math.Max(crop.Y, Math.Min(crop.Y + crop.Height - defaultHeight, sourceY - defaultHeight / 2)),
+                    defaultWidth,
+                    defaultHeight);
+            }
+
+            session.CompleteInteractiveMaskSelection(rect);
+        };
+        canvas.Children.Add(layer);
     }
 
     private CanvasCoordinateTransform Transform(double width, double height)
@@ -212,6 +318,11 @@ internal sealed class PreviewOverlay
         session.EndInteractiveEdit();
         session.SelectMask(drag.MaskId);
         Refresh();
+    }
+
+    private sealed partial class CrosshairCanvas : Canvas
+    {
+        public CrosshairCanvas() => ProtectedCursor = Microsoft.UI.Input.InputSystemCursor.Create(Microsoft.UI.Input.InputSystemCursorShape.Cross);
     }
 
     private sealed record Interaction(string MaskId, FrameworkElement Element, Rect01 Start, CanvasCoordinateTransform Map, double AtMs, double PressX, double PressY, double MoveX, double MoveY, double SizeX, double SizeY, bool Changed);
