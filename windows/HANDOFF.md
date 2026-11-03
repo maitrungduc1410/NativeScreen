@@ -27,7 +27,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
-## 2026-11-03, Built-in wallpapers and upright baked layers (macOS side done, Windows port pending)
+## 2026-11-03, Built-in wallpapers and upright baked layers
 
 ### Writer
 - **Scope:** macOS only. Rules: `spec/06` ADR-32, `spec/07` Pass 1. All frame fixtures are regenerated, and most fail on Windows until the flip below is removed.
@@ -37,6 +37,16 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
   - App: category pills `★`, the system wallpapers, `Mesh`, then `Spring, Sunset, Radiant, Energy, Iridescent, Midnight, Glassmorphism`. Grid previews come from `thumbs/`, sorted by file name. A pill only browses. `Pick random wallpaper` draws from the current pill. Opening a project selects the pill holding its wallpaper or mesh.
   - Core: picking a bundled wallpaper copies it byte for byte to `assets/background-<id>.jpg`, with `systemWallpaperName` set to the id.
 - **How to verify:** `verify.ps1` frame fixtures pass again. Pick `spring-01`: the image is upright during and after the crossfade, and the copied file hashes the same as the bundled one. In `device-mockup` the notch is at the top; in `basic` the shadow falls downward.
+
+### Verifier
+- **Result:** PASS on Windows.
+- **verify.ps1:** Debug and Release x64, 209 tests (Core 175, Media 13, Rendering 21), 13 shaders.
+- **Measurements:** all enforced fixture cases pass with the flip removed: `basic`, `mesh` and `wallpaper-blur` at SSIM 0.995 or better, `device-mockup-iphone` at 0.9956 or better. Not enforced and below the tolerance: `device-mockup` 98.9% within 6/255, `camera-cutout` and `camera-layout-transitions` about 94%.
+- **Exercised in the running app, on a copy of a project:** picked `spring-03`; the settled image matches its thumbnail's orientation, `project.json` has type `wallpaper`, the id and `assets/background-spring-03.jpg`, and the SHA-256 equals the bundled file's. `Pick random wallpaper` stayed in Spring over 4 picks. The `Wallpaper` mode pill returned from Color to the last wallpaper. The `Mesh` pill left the background alone. `★` lists meshes, then bundled wallpapers.
+- **Not exercised:** the crossfade frame itself; the notch by eye on a MacBook mockup, only the `device-mockup` fixture numbers above; a project picked on macOS and opened here; how long `★` takes to rebuild with its 100+ swatches.
+- **Changes made:** `BundledWallpaperCatalog`, `SelectWallpaper`, the inspector pills and grid, a shared thumbnail cache, names on swatches for UI Automation; `VerticallyFlipped` removed.
+- **Spec updates:** the wallpaper ADR clashed with the Windows ADR-24 and is now ADR-32.
+- **Next:** nothing left from this entry.
 
 ## 2026-11-03, Editor parity: music, trim badges, keycap clicks, crop handles
 

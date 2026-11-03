@@ -30,11 +30,14 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
 
     public ProjectPresetStore Presets { get; } = new(PresetsDirectory);
 
-    public static IReadOnlyList<string> SystemWallpapers()
+    public static IReadOnlyList<WallpaperItem> SystemWallpapers()
     {
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Web", "Wallpaper");
         return Directory.Exists(root)
-            ? Directory.EnumerateFiles(root, "*.jpg", SearchOption.AllDirectories).Take(ThumbnailLimit).ToList()
+            ? Directory.EnumerateFiles(root, "*.jpg", SearchOption.AllDirectories)
+                .Take(ThumbnailLimit)
+                .Select(file => new WallpaperItem(Path.GetFileNameWithoutExtension(file), file, file, false))
+                .ToList()
             : [];
     }
 
@@ -92,16 +95,18 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
     }
 
-    public void SelectSystemWallpaper(string file)
+    /// <summary>Copied byte for byte, so a project stores the same file whichever platform picked a bundled wallpaper.</summary>
+    public void SelectWallpaper(WallpaperItem item)
     {
-        var name = Path.GetFileNameWithoutExtension(file);
-        var relative = CopyToAssets(file, $"background-{name}{Path.GetExtension(file).ToLowerInvariant()}");
+        var name = $"background-{item.Id}{Path.GetExtension(item.FullImagePath).ToLowerInvariant()}";
+        var alreadyCopied = source.PackagePath is { } package && File.Exists(Path.Combine(package, "assets", name));
+        var relative = alreadyCopied ? "assets/" + name : CopyToAssets(item.FullImagePath, name);
         if (relative is not null)
         {
             session.Mutate(document =>
             {
                 document.Background.Type = BackgroundType.Wallpaper;
-                document.Background.SystemWallpaperName = name;
+                document.Background.SystemWallpaperName = item.Id;
                 document.Background.WallpaperRelativePath = relative;
             });
         }

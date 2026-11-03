@@ -34,7 +34,12 @@ internal sealed class InspectorPanel
     private readonly bool hasCamera;
     private readonly EditorTools tools;
     private readonly HashSet<string> expanded = [];
-    private string meshCategory = "All";
+    private const string WindowsWallpapers = "Windows";
+
+    private static readonly Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> WallpaperThumbnails = [];
+
+    private string? wallpaperCategory;
+    private IReadOnlyList<WallpaperItem>? systemWallpapers;
 
     public InspectorPanel(EditorSession session, ScrollViewer scroller, StackPanel body, bool hasCamera, EditorTools tools)
     {
@@ -101,7 +106,13 @@ internal sealed class InspectorPanel
         var background = Doc.Background;
         var isWallpaper = background.Type is BackgroundType.Mesh or BackgroundType.Wallpaper;
         Add(Labeled("Background", 10, Options(
-            ("Wallpaper", isWallpaper, () => Edit(d => d.Background.Type = BackgroundType.Mesh)),
+            ("Wallpaper", isWallpaper, () => Edit(d =>
+            {
+                // Return to the last picked wallpaper. A custom image shares the path field, so it doesn't count.
+                var hasWallpaper = d.Background.SystemWallpaperName is not null
+                    && d.Background.WallpaperRelativePath?.StartsWith("assets/background", StringComparison.Ordinal) == true;
+                d.Background.Type = hasWallpaper ? BackgroundType.Wallpaper : BackgroundType.Mesh;
+            })),
             ("Gradient", background.Type == BackgroundType.Gradient, () => Edit(d => d.Background.Type = BackgroundType.Gradient)),
             ("Color", background.Type == BackgroundType.Solid, () => Edit(d => d.Background.Type = BackgroundType.Solid)),
             ("Image", background.Type == BackgroundType.Image, tools.PickBackgroundImage))));
@@ -128,15 +139,14 @@ internal sealed class InspectorPanel
 
         if (isWallpaper)
         {
-            var categories = new List<string> { "All" };
-            categories.AddRange(MeshPreset.BuiltIn.Select(preset => preset.Category).Distinct());
+            wallpaperCategory ??= background.Type == BackgroundType.Mesh ? "Mesh" : BundledWallpaperCatalog.CategoryOf(background.SystemWallpaperName) ?? WindowsWallpapers;
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, Padding = new Thickness(0, 2, 0, 2) };
-            foreach (var category in categories)
+            foreach (var category in new[] { "All", WindowsWallpapers, "Mesh" }.Concat(BundledWallpaperCatalog.Categories))
             {
                 var name = category;
-                row.Children.Add(Ui.Option(name, name == meshCategory, () =>
+                row.Children.Add(Ui.Option(name == "All" ? "★" : name, name == wallpaperCategory, () =>
                 {
-                    meshCategory = name;
+                    wallpaperCategory = name;
                     Rebuild();
                 }));
             }
@@ -149,14 +159,19 @@ internal sealed class InspectorPanel
                 VerticalScrollMode = ScrollMode.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
             };
-            var swatches = SwatchGrid();
-            foreach (var preset in MeshPreset.BuiltIn)
-            {
-                if (meshCategory != "All" && preset.Category != meshCategory)
-                {
-                    continue;
-                }
 
+            // The items of the current pill. The random button draws from the same lists.
+            systemWallpapers ??= EditorTools.SystemWallpapers();
+            IReadOnlyList<MeshPreset> meshes = wallpaperCategory is "All" or "Mesh" ? MeshPreset.BuiltIn : [];
+            IReadOnlyList<WallpaperItem> wallpapers = wallpaperCategory switch
+            {
+                "All" => [.. BundledWallpaperCatalog.AllItems, .. systemWallpapers],
+                WindowsWallpapers => systemWallpapers,
+                _ => BundledWallpaperCatalog.Items(wallpaperCategory)
+            };
+            var swatches = SwatchGrid();
+            foreach (var preset in meshes)
+            {
                 var id = preset.Id;
                 swatches.Children.Add(Swatch(
                     Ui.Gradient(Ui.Hex(preset.ColorsHex[0]), Ui.Hex(preset.ColorsHex[2]), vertical: false),
@@ -169,36 +184,31 @@ internal sealed class InspectorPanel
                     })));
             }
 
+            foreach (var item in wallpapers)
+            {
+                var target = item;
+                var selected = background.Type == BackgroundType.Wallpaper && background.SystemWallpaperName == item.Id;
+                swatches.Children.Add(Swatch(WallpaperThumbnail(item), item.Id, selected, () => tools.SelectWallpaper(target)));
+            }
+
             Add(Action("Pick random wallpaper", () =>
             {
-                var picked = MeshPreset.BuiltIn[Random.Shared.Next(MeshPreset.BuiltIn.Count)];
-                Edit(d =>
+                var pick = Random.Shared.Next(Math.Max(meshes.Count + wallpapers.Count, 1));
+                if (pick < meshes.Count)
                 {
-                    d.Background.Type = BackgroundType.Mesh;
-                    d.Background.MeshPresetId = picked.Id;
-                });
+                    var picked = meshes[pick];
+                    Edit(d =>
+                    {
+                        d.Background.Type = BackgroundType.Mesh;
+                        d.Background.MeshPresetId = picked.Id;
+                    });
+                }
+                else if (pick - meshes.Count < wallpapers.Count)
+                {
+                    tools.SelectWallpaper(wallpapers[pick - meshes.Count]);
+                }
             }));
             Add(Labeled("Wallpaper", 10, strip, swatches));
-            if (tools.HasPackage)
-            {
-                var system = SwatchGrid();
-                foreach (var file in EditorTools.SystemWallpapers())
-                {
-                    var target = file;
-                    var thumbnail = new Microsoft.UI.Xaml.Media.ImageBrush
-                    {
-                        ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(file)) { DecodePixelWidth = 76 },
-                        Stretch = Stretch.UniformToFill
-                    };
-                    var selected = background.Type == BackgroundType.Wallpaper && background.SystemWallpaperName == Path.GetFileNameWithoutExtension(file);
-                    system.Children.Add(Swatch(thumbnail, Path.GetFileNameWithoutExtension(file), selected, () => tools.SelectSystemWallpaper(target)));
-                }
-
-                if (system.Children.Count > 0)
-                {
-                    Add(Labeled("Windows wallpapers", 10, system));
-                }
-            }
         }
         else if (background.Type == BackgroundType.Gradient)
         {
@@ -1205,6 +1215,18 @@ internal sealed class InspectorPanel
     private static VariableSizedWrapGrid SwatchGrid() =>
         new() { Orientation = Orientation.Horizontal, ItemWidth = 44, ItemHeight = 44 };
 
+    // The inspector rebuilds on every edit, and the image is decoded once for all of those rebuilds.
+    private static Microsoft.UI.Xaml.Media.ImageBrush WallpaperThumbnail(WallpaperItem item)
+    {
+        if (!WallpaperThumbnails.TryGetValue(item.ThumbnailPath, out var image))
+        {
+            image = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(item.ThumbnailPath)) { DecodePixelWidth = 76 };
+            WallpaperThumbnails[item.ThumbnailPath] = image;
+        }
+
+        return new Microsoft.UI.Xaml.Media.ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
+    }
+
     private static Button Swatch(Brush fill, string tooltip, bool selected, Action click)
     {
         var button = new Button
@@ -1218,6 +1240,7 @@ internal sealed class InspectorPanel
             BorderThickness = new Thickness(selected ? 2 : 1)
         };
         ToolTipService.SetToolTip(button, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
         button.Click += (_, _) => click();
         return button;
     }
