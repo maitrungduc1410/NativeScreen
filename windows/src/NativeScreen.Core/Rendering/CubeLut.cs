@@ -18,6 +18,21 @@ public sealed class CubeLut
         Rgb = rgb;
     }
 
+    public const int MaximumSize = 128;
+
+    /// <summary>Null when the text is not a complete 3D table, for files a person picked.</summary>
+    public static CubeLut? TryParse(string text)
+    {
+        try
+        {
+            return text.Contains("LUT_1D_SIZE", StringComparison.Ordinal) ? null : Parse(text);
+        }
+        catch (Exception exception) when (exception is FormatException or InvalidDataException or IndexOutOfRangeException or OverflowException)
+        {
+            return null;
+        }
+    }
+
     public static CubeLut Parse(string text)
     {
         var size = 0;
@@ -45,6 +60,11 @@ public sealed class CubeLut
             values.Add(float.Parse(parts[0], CultureInfo.InvariantCulture));
             values.Add(float.Parse(parts[1], CultureInfo.InvariantCulture));
             values.Add(float.Parse(parts[2], CultureInfo.InvariantCulture));
+        }
+
+        if (size > MaximumSize)
+        {
+            throw new InvalidDataException($"LUT size {size} is above {MaximumSize}.");
         }
 
         return new CubeLut(size, values.ToArray());

@@ -141,7 +141,7 @@ public sealed partial class FrameCompositor
             0,
             1);
 
-        var lut = LookTable(config);
+        var lut = LookTable(config, request.PackageDirectory);
         if (lut is null || config.ColorGradeIntensity <= 0.005)
         {
             return Sharpened(raw, config, width, height);
@@ -150,7 +150,7 @@ public sealed partial class FrameCompositor
         var graded = Layer("camera-graded", width, height);
         context.UnsetRenderTargets();
         lutConstants ??= CreateConstants(16);
-        context.UpdateSubresource(new Vector4((float)Math.Clamp(config.ColorGradeIntensity, 0, 1), LutSize(config), 0, 0), lutConstants);
+        context.UpdateSubresource(new Vector4((float)Math.Clamp(config.ColorGradeIntensity, 0, 1), lutSizes[lut], 0, 0), lutConstants);
         context.CSSetShader(_lut);
         context.CSSetShaderResource(0, raw.View);
         context.CSSetShaderResource(1, lut);
@@ -187,15 +187,57 @@ public sealed partial class FrameCompositor
         return sharp.View;
     }
 
-    private static float LutSize(CameraConfig config) =>
-        config.SelectedCustomColorPresetId is not null ? CustomLutSize : 33;
-
     private const int CustomLutSize = 33;
 
-    /// <summary>Built-in looks come from the LUTs exported on macOS. A custom preset bakes the same math into one.</summary>
-    private ID3D11ShaderResourceView? LookTable(CameraConfig config)
+    private readonly Dictionary<ID3D11ShaderResourceView, int> lutSizes = [];
+    private readonly HashSet<string> brokenLuts = [];
+
+    /// <summary>A LUT file in the package, or null when it is missing or broken, so the built-in look shows instead.</summary>
+    private ID3D11ShaderResourceView? FileLookTable(CameraConfig config, string? packageDirectory)
+    {
+        if (config.CustomLutRelativePath is not { Length: > 0 } relative || packageDirectory is null)
+        {
+            return null;
+        }
+
+        var path = Path.Combine(packageDirectory, relative);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        var key = $"file|{path}|{File.GetLastWriteTimeUtc(path).Ticks}";
+        if (lutViews.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        if (brokenLuts.Contains(key))
+        {
+            return null;
+        }
+
+        if (CubeLut.TryParse(File.ReadAllText(path)) is not { } table)
+        {
+            brokenLuts.Add(key);
+            return null;
+        }
+
+        var view = CreateLutView(table);
+        lutViews[key] = view;
+        lutSizes[view] = table.Size;
+        return view;
+    }
+
+    /// <summary>Built-in looks come from the LUTs exported on macOS. A custom preset bakes the same math into one. A LUT file comes between them (spec/06 ADR-31).</summary>
+    private ID3D11ShaderResourceView? LookTable(CameraConfig config, string? packageDirectory)
     {
         var custom = config.CustomColorPresets.Find(preset => preset.Id == config.SelectedCustomColorPresetId);
+        if (custom is null && FileLookTable(config, packageDirectory) is { } fromFile)
+        {
+            return fromFile;
+        }
+
         if (custom is null && config.ColorGradePreset == CameraColorGradePreset.Original)
         {
             return null;
@@ -241,6 +283,7 @@ public sealed partial class FrameCompositor
 
         view = CreateLutView(table);
         lutViews[key] = view;
+        lutSizes[view] = table.Size;
         return view;
     }
 

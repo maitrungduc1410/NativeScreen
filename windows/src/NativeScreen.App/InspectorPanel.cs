@@ -437,10 +437,11 @@ internal sealed class InspectorPanel
         foreach (var preset in Enum.GetValues<CameraColorGradePreset>())
         {
             var look = preset;
-            var option = Ui.Option(look.ToString(), looks == look && Doc.Camera.SelectedCustomColorPresetId is null, () => Edit(d =>
+            var option = Ui.Option(look.ToString(), looks == look && Doc.Camera.SelectedCustomColorPresetId is null && Doc.Camera.CustomLutRelativePath is null, () => Edit(d =>
             {
                 d.Camera.ColorGradePreset = look;
                 d.Camera.SelectedCustomColorPresetId = null;
+                d.Camera.CustomLutRelativePath = null;
             }));
             option.HorizontalAlignment = HorizontalAlignment.Stretch;
             option.Margin = new Thickness(0, 0, 6, 8);
@@ -451,21 +452,41 @@ internal sealed class InspectorPanel
         foreach (var custom in Doc.Camera.CustomColorPresets)
         {
             var id = custom.Id;
-            var option = Ui.Option(custom.Name, Doc.Camera.SelectedCustomColorPresetId == id, () => Edit(d => d.Camera.SelectedCustomColorPresetId = d.Camera.SelectedCustomColorPresetId == id ? null : id));
+            var option = Ui.Option(custom.Name, Doc.Camera.SelectedCustomColorPresetId == id, () => Edit(d =>
+            {
+                d.Camera.SelectedCustomColorPresetId = d.Camera.SelectedCustomColorPresetId == id ? null : id;
+                d.Camera.CustomLutRelativePath = null;
+            }));
             option.HorizontalAlignment = HorizontalAlignment.Stretch;
             option.Margin = new Thickness(0, 0, 6, 8);
             option.Padding = new Thickness(0);
             wrap.Children.Add(option);
         }
 
-        var addLook = Ui.Option("+", false, () => _ = tools.CreateColorPreset());
+        var addLook = Ui.Option("+", false, () => { });
+        addLook.Click += (_, _) =>
+        {
+            var menu = new MenuFlyout();
+            var create = new MenuFlyoutItem { Text = "Create your color preset..." };
+            create.Click += (_, _) => _ = tools.CreateColorPreset();
+            var load = new MenuFlyoutItem { Text = "Load your LUT file..." };
+            load.Click += (_, _) => tools.LoadLutFile();
+            menu.Items.Add(create);
+            menu.Items.Add(load);
+            menu.ShowAt(addLook);
+        };
         addLook.HorizontalAlignment = HorizontalAlignment.Stretch;
         addLook.Margin = new Thickness(0, 0, 6, 8);
         addLook.Padding = new Thickness(0);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(addLook, "Create your color preset");
-        ToolTipService.SetToolTip(addLook, "Create your color preset...");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(addLook, "Add a color look");
         wrap.Children.Add(addLook);
         Add(Labeled("Color grading", 10, wrap));
+        if (Doc.Camera.CustomLutRelativePath is { } lut)
+        {
+            Add(Note(Path.GetFileName(lut)));
+            Add(Action("Remove LUT", () => Edit(d => d.Camera.CustomLutRelativePath = null)));
+        }
+
         var hasCrop = !Rect01Full(Doc.Camera.CropRect01);
         Add(Labeled("Crop", 10, Options(
             (hasCrop ? "Edit crop" : "Crop camera", false, () => CameraCropRequested?.Invoke()),

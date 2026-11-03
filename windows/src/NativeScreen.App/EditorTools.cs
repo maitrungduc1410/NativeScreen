@@ -185,6 +185,30 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
 
     public void PreviewClickSound() => previewSounds.Play(session.Document.Cursor.ClickEffect.SoundSet, session.Document.Cursor.ClickEffect.SoundVolume);
 
+    public async void LoadLutFile()
+    {
+        if (await PickFile(".cube") is not { } file)
+        {
+            return;
+        }
+
+        if (CubeLut.TryParse(await File.ReadAllTextAsync(file)) is null)
+        {
+            toast("This file is not a 3D LUT");
+            return;
+        }
+
+        // In the package, so the project stays portable.
+        if (CopyToAssets(file, "lut-" + Path.GetFileName(file)) is { } relative)
+        {
+            session.Mutate(document =>
+            {
+                document.Camera.CustomLutRelativePath = relative;
+                document.Camera.SelectedCustomColorPresetId = null;
+            });
+        }
+    }
+
     /// <summary>Name and four sliders; the new preset goes on the project and is selected.</summary>
     public async Task CreateColorPreset()
     {
@@ -221,6 +245,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
             {
                 document.Camera.CustomColorPresets.Add(preset);
                 document.Camera.SelectedCustomColorPresetId = preset.Id;
+                document.Camera.CustomLutRelativePath = null;
             });
         }
     }
