@@ -26,7 +26,9 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     public bool IsScanningFaces { get; private set; }
     public XamlRoot? XamlRoot { get; set; }
 
-    public ProjectPresetStore Presets { get; } = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "Presets"));
+    public static string PresetsDirectory { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "Presets");
+
+    public ProjectPresetStore Presets { get; } = new(PresetsDirectory);
 
     public static IReadOnlyList<string> SystemWallpapers()
     {

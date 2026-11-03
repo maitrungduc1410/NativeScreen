@@ -709,9 +709,23 @@ public sealed class RecordingHudWindow : Window
         package = null;
         target = null;
         await Task.Run(() => RecordingPackage.Finish(directory, chosen.Metadata(), stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms, DateTimeOffset.UtcNow));
+        await Task.Run(() => ApplyDefaultPreset(directory));
         busy = false;
         ShowIdle();
         await Projects.Open(directory, root.XamlRoot, AppSettings.Shared.AfterRecording);
+    }
+
+    /// <summary>A new project starts in the style of the default preset, when one is set.</summary>
+    private static void ApplyDefaultPreset(string directory)
+    {
+        var store = new ProjectPresetStore(EditorTools.PresetsDirectory);
+        if (AppSettings.Shared.DefaultPresetId is { } id && store.Load().Find(item => item.Id == id) is { } preset)
+        {
+            var path = Path.Combine(directory, "project.json");
+            var document = ProjectJson.Deserialize<ProjectDocument>(File.ReadAllText(path));
+            preset.Apply(document);
+            File.WriteAllText(path, ProjectJson.Serialize(document));
+        }
     }
 
     private async Task Restart()

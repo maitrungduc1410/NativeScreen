@@ -98,6 +98,7 @@ public sealed partial class EditorWindow : Window
         tools = new EditorTools(this, session, source, ShowToast);
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
         tools.Changed += inspector.Rebuild;
+        inspector.SeekRequested = SeekTo;
         timeline = new TimelineView(session, TimelineHost) { Tools = tools };
         session.ToastRequested += ShowToast;
         timeline.Skimmed += DrawPreview;

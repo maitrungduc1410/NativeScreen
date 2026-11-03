@@ -365,7 +365,7 @@ internal sealed class InspectorPanel
         }
         else
         {
-            Add(Labeled("Camera Position", 10, PositionGrid()));
+            Add(Labeled("Camera Position", 10, PositionGrid(Doc.Camera.Position01, target => Edit(d => d.Camera.Position01 = target))));
             Add(Labeled("Camera aspect ratio", 10, OptionsWrap(
                 ("16:9", camera.AspectRatioPreset == CameraAspectRatioPreset.Widescreen16x9, () => Edit(d => d.Camera.AspectRatioPreset = CameraAspectRatioPreset.Widescreen16x9)),
                 ("4:3", camera.AspectRatioPreset == CameraAspectRatioPreset.Classic4x3, () => Edit(d => d.Camera.AspectRatioPreset = CameraAspectRatioPreset.Classic4x3)),
@@ -450,6 +450,148 @@ internal sealed class InspectorPanel
         Add(Action("Export transcript", tools.ExportSrt));
     }
 
+    /// <summary>Asks the window to move the playhead and redraw.</summary>
+    public Action<double>? SeekRequested { get; set; }
+
+    private string? selectedWordId;
+
+    private Button WordChip(CaptionSegment segment, bool present)
+    {
+        var filler = TranscriptEditing.IsFillerWord(segment.Text) && present;
+        var text = new TextBlock
+        {
+            Text = segment.Text,
+            FontSize = 12.5,
+            Foreground = !present ? Ui.Rgb(1, 0.23, 0.19, 0.65) : Ui.Pal(segment.IsHidden ? "Ink45" : "Ink95"),
+            TextDecorations = (!present || segment.IsHidden ? Windows.UI.Text.TextDecorations.Strikethrough : Windows.UI.Text.TextDecorations.None)
+                | (filler ? Windows.UI.Text.TextDecorations.Underline : Windows.UI.Text.TextDecorations.None)
+        };
+        var chip = new Button
+        {
+            Style = Ui.StyleOf("NsIconButton"),
+            Content = text,
+            Width = double.NaN,
+            Height = 26,
+            Padding = new Thickness(5, 0, 5, 0),
+            CornerRadius = new CornerRadius(5)
+        };
+        AutomationName(chip, segment.Text);
+        if (segment.Id == selectedWordId)
+        {
+            chip.Background = Ui.Rgb(0.38, 0.26, 0.96, 0.48);
+        }
+
+        var (id, start, end) = (segment.Id, segment.SourceStartMs, segment.SourceEndMs);
+        chip.Click += (_, _) =>
+        {
+            selectedWordId = selectedWordId == id ? null : id;
+            if (session.Mapper.TimelineTime(start + (end - start) * 0.1) is { } timeline)
+            {
+                SeekRequested?.Invoke(timeline);
+            }
+
+            Rebuild();
+        };
+        return chip;
+    }
+
+    private Button PauseChip(double from, double to, bool open)
+    {
+        var pause = new Button
+        {
+            Style = Ui.StyleOf("NsIconButton"),
+            Content = new TextBlock
+            {
+                Text = $"··· {(to - from) / 1000:0.0}s",
+                FontSize = 11.5,
+                Foreground = Ui.Pal(open ? "Ink60" : "Ink28"),
+                TextDecorations = open ? Windows.UI.Text.TextDecorations.None : Windows.UI.Text.TextDecorations.Strikethrough
+            },
+            Width = double.NaN,
+            Height = 26,
+            Padding = new Thickness(7, 0, 7, 0),
+            CornerRadius = new CornerRadius(13),
+            Background = Ui.Pal("Ink07")
+        };
+        ToolTipService.SetToolTip(pause, open ? "Pause — click to tighten to a natural breath" : "Tightened pause — click to restore");
+        pause.Click += (_, _) => session.Mutate(document =>
+        {
+            if (open)
+            {
+                TranscriptEditing.CutSourceRange(document, from + 100, to - 100);
+            }
+            else
+            {
+                TranscriptEditing.RestoreSourceRange(document, from, to, session.SourceDurationMs);
+            }
+        });
+        return pause;
+    }
+
+    private StackPanel WordBar(CaptionSegment segment)
+    {
+        var (id, start, end) = (segment.Id, Math.Max(0, segment.SourceStartMs - 25), Math.Min(session.SourceDurationMs, segment.SourceEndMs + 25));
+        var present = TranscriptEditing.IsRangePresent(Doc, segment.SourceStartMs, segment.SourceEndMs);
+        var bar = new StackPanel { Spacing = 8, Padding = new Thickness(10), CornerRadius = new CornerRadius(10), Background = Ui.Pal("Ink04") };
+        var word = new TextBox { Text = segment.Text, PlaceholderText = "Word" };
+        AutomationName(word, "Word");
+        void SaveWord()
+        {
+            var trimmed = word.Text.Trim();
+            if (trimmed.Length > 0 && trimmed != segment.Text)
+            {
+                Edit(d =>
+                {
+                    if (d.Captions.Segments.Find(item => item.Id == id) is { } target)
+                    {
+                        target.Text = trimmed;
+                    }
+                });
+            }
+        }
+
+        word.LostFocus += (_, _) => SaveWord();
+        word.KeyDown += (_, args) =>
+        {
+            if (args.Key == Windows.System.VirtualKey.Enter)
+            {
+                SaveWord();
+                args.Handled = true;
+            }
+        };
+        bar.Children.Add(word);
+        var actions = new WordWrapPanel();
+        if (present)
+        {
+            var cut = Ui.Option("Cut video", false, () => Edit(d => TranscriptEditing.CutSourceRange(d, start, end)));
+            cut.Background = Ui.Rgb(1, 0.23, 0.19, 0.22);
+            actions.Children.Add(cut);
+        }
+
+        actions.Children.Add(Ui.Option(segment.IsHidden ? "Unhide" : "Cut transcript", false, () => Edit(d =>
+        {
+            if (d.Captions.Segments.Find(item => item.Id == id) is { } target)
+            {
+                target.IsHidden = !target.IsHidden;
+            }
+        })));
+        if (!present || segment.IsHidden)
+        {
+            actions.Children.Add(Ui.Option("Restore", false, () => Edit(d =>
+            {
+                if (d.Captions.Segments.Find(item => item.Id == id) is { } target)
+                {
+                    target.IsHidden = false;
+                }
+
+                TranscriptEditing.RestoreSourceRange(d, start, end, session.SourceDurationMs);
+            })));
+        }
+
+        bar.Children.Add(actions);
+        return bar;
+    }
+
     private void TranscriptControls()
     {
         var captions = Doc.Captions;
@@ -512,38 +654,41 @@ internal sealed class InspectorPanel
         var pauses = TranscriptEditing.TightenablePauses(Doc).Count;
         Add(Action($"Remove {fillers} filler words", fillers == 0 ? null : () => session.Mutate(document => TranscriptEditing.RemoveFillers(document, session.SourceDurationMs))));
         Add(Action($"Tighten {pauses} pauses", pauses == 0 ? null : () => session.Mutate(TranscriptEditing.TightenPauses)));
-        Add(Note("Click a word to cut it from the video. Click a cut word to restore it."));
         var words = new WordWrapPanel();
-        foreach (var segment in Doc.Captions.Segments.OrderBy(item => item.SourceStartMs))
+        var ordered = Doc.Captions.Segments.OrderBy(item => item.SourceStartMs).ToList();
+        var showDeleted = Doc.Captions.ShowDeletedTextInTranscript;
+        var showHidden = Doc.Captions.ShowHiddenWordsInTranscript;
+        for (var index = 0; index < ordered.Count; index++)
         {
-            var (id, start, end) = (segment.Id, segment.SourceStartMs, segment.SourceEndMs);
-            var present = TranscriptEditing.IsRangePresent(Doc, start, end);
-            var word = Ui.Option(segment.Text, false, () => session.Mutate(document =>
+            var segment = ordered[index];
+            var present = TranscriptEditing.IsRangePresent(Doc, segment.SourceStartMs, segment.SourceEndMs);
+            if ((present || showDeleted) && (!segment.IsHidden || showHidden))
             {
-                if (present)
-                {
-                    TranscriptEditing.CutSourceRange(document, start, end);
-                }
-                else
-                {
-                    var match = document.Captions.Segments.Find(item => item.Id == id);
-                    if (match is not null)
-                    {
-                        match.IsHidden = false;
-                    }
+                words.Children.Add(WordChip(segment, present));
+            }
 
-                    TranscriptEditing.RestoreSourceRange(document, start, end, session.SourceDurationMs);
+            // Pauses of 0.8 s or more show between words; a click tightens one to a natural breath.
+            if (index + 1 < ordered.Count && ordered[index + 1].SourceStartMs - segment.SourceEndMs >= 800)
+            {
+                var (from, to) = (segment.SourceEndMs, ordered[index + 1].SourceStartMs);
+                var open = TranscriptEditing.IsRangePresent(Doc, from + 100, to - 100);
+                if (open || showDeleted)
+                {
+                    words.Children.Add(PauseChip(from, to, open));
                 }
-            }));
-            word.Padding = new Thickness(6, 2, 6, 2);
-            word.MinHeight = 24;
-            word.Height = 26;
-            word.FontSize = 12;
-            word.Opacity = present ? 1 : 0.4;
-            words.Children.Add(word);
+            }
         }
 
         Add(words);
+        if (selectedWordId is { } wordId && Doc.Captions.Segments.Find(item => item.Id == wordId) is { } picked)
+        {
+            Add(WordBar(picked));
+        }
+
+        Add(Note("Click any word to edit or cut — Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only."));
+        AddDivider();
+        Add(Toggle("Show deleted text", "Keep cut words visible as strikethrough so they can be restored.", () => Doc.Captions.ShowDeletedTextInTranscript, (d, v) => d.Captions.ShowDeletedTextInTranscript = v));
+        Add(Toggle("Show hidden words", "Keep words hidden from captions visible here so they can be restored.", () => Doc.Captions.ShowHiddenWordsInTranscript, (d, v) => d.Captions.ShowHiddenWordsInTranscript = v));
     }
 
     private void Audio()
@@ -598,18 +743,47 @@ internal sealed class InspectorPanel
         Add(Slider("Shortcut labels size", () => Doc.Captions.ShortcutsSizeRatio, (d, v) => d.Captions.ShortcutsSizeRatio = v, 0.075, 0.25, 0.11));
         Add(Toggle("Show single key shortcuts", null, () => Doc.Captions.ShowSingleKeyShortcuts, (d, v) => d.Captions.ShowSingleKeyShortcuts = v));
         AddDivider();
-        var style = Doc.Captions.DefaultShortcutStyle;
+        ShortcutStyleSection(d => d.Captions.DefaultShortcutStyle);
+    }
+
+    /// <summary>Position, offsets and keycap colors of a style, edited through <paramref name="target"/> on the document.</summary>
+    private void ShortcutStyleSection(Func<ProjectDocument, ShortcutStyleConfig> target)
+    {
+        var style = target(Doc);
         Add(Labeled("Position", 10, Options(
-            ("Bottom", style.DockPosition == ShortcutDockPosition.Bottom, () => Edit(d => d.Captions.DefaultShortcutStyle.DockPosition = ShortcutDockPosition.Bottom)),
-            ("Top", style.DockPosition == ShortcutDockPosition.Top, () => Edit(d => d.Captions.DefaultShortcutStyle.DockPosition = ShortcutDockPosition.Top)),
-            ("Left", style.DockPosition == ShortcutDockPosition.Left, () => Edit(d => d.Captions.DefaultShortcutStyle.DockPosition = ShortcutDockPosition.Left)),
-            ("Right", style.DockPosition == ShortcutDockPosition.Right, () => Edit(d => d.Captions.DefaultShortcutStyle.DockPosition = ShortcutDockPosition.Right)))));
-        Add(Slider("Horizontal offset", () => Doc.Captions.DefaultShortcutStyle.OffsetX, (d, v) => d.Captions.DefaultShortcutStyle.OffsetX = v, -0.45, 0.45, 0));
-        Add(Slider("Vertical offset", () => Doc.Captions.DefaultShortcutStyle.OffsetY, (d, v) => d.Captions.DefaultShortcutStyle.OffsetY = v, -0.45, 0.45, 0));
+            ("Bottom", style.DockPosition == ShortcutDockPosition.Bottom, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Bottom)),
+            ("Top", style.DockPosition == ShortcutDockPosition.Top, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Top)),
+            ("Left", style.DockPosition == ShortcutDockPosition.Left, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Left)),
+            ("Right", style.DockPosition == ShortcutDockPosition.Right, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Right)))));
+        Add(Slider("Horizontal offset", () => target(Doc).OffsetX, (d, v) => target(d).OffsetX = v, -0.45, 0.45, 0));
+        Add(Slider("Vertical offset", () => target(Doc).OffsetY, (d, v) => target(d).OffsetY = v, -0.45, 0.45, 0));
         Add(Labeled("Keycap color", 10, Options(
-            ("Default", style.ColorMode == ShortcutColorMode.DefaultDark, () => Edit(d => d.Captions.DefaultShortcutStyle.ColorMode = ShortcutColorMode.DefaultDark)),
-            ("Solid", style.ColorMode == ShortcutColorMode.Solid, () => Edit(d => d.Captions.DefaultShortcutStyle.ColorMode = ShortcutColorMode.Solid)),
-            ("Gradient", style.ColorMode == ShortcutColorMode.Gradient, () => Edit(d => d.Captions.DefaultShortcutStyle.ColorMode = ShortcutColorMode.Gradient)))));
+            ("Default", style.ColorMode == ShortcutColorMode.DefaultDark, () => Edit(d => target(d).ColorMode = ShortcutColorMode.DefaultDark)),
+            ("Solid", style.ColorMode == ShortcutColorMode.Solid, () => Edit(d => target(d).ColorMode = ShortcutColorMode.Solid)),
+            ("Gradient", style.ColorMode == ShortcutColorMode.Gradient, () => Edit(d => target(d).ColorMode = ShortcutColorMode.Gradient)))));
+        UIElement Field(string name, string hex, Action<ShortcutStyleConfig, string> set) => ColorField.Create(
+            name,
+            hex,
+            value => session.Mutate(d => set(target(d), value), "shortcut-color", structural: false),
+            value => Edit(d => set(target(d), value)));
+        if (style.ColorMode == ShortcutColorMode.Solid)
+        {
+            Add(Labeled("Key background", 8, Field("Key background", style.SolidColorHex, (item, value) => item.SolidColorHex = value)));
+            Add(Action("Pick random color", () =>
+            {
+                var picked = CuratedSolidColors[Random.Shared.Next(CuratedSolidColors.Length)];
+                Edit(d => target(d).SolidColorHex = picked);
+            }));
+        }
+        else if (style.ColorMode == ShortcutColorMode.Gradient)
+        {
+            Add(Labeled("Key gradient", 8, Field("Key gradient start", style.GradientStartHex, (item, value) => item.GradientStartHex = value), Field("Key gradient end", style.GradientEndHex, (item, value) => item.GradientEndHex = value)));
+        }
+
+        if (style.ColorMode != ShortcutColorMode.DefaultDark)
+        {
+            Add(Labeled("Text color", 8, Field("Text color", style.TextColorHex, (item, value) => item.TextColorHex = value)));
+        }
     }
 
     private void Animations()
@@ -682,6 +856,24 @@ internal sealed class InspectorPanel
             ("Camera cutout", layout.LayoutType == CameraTimelineLayoutType.CutoutCamera, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.CutoutCamera)),
             ("Fullscreen camera", layout.LayoutType == CameraTimelineLayoutType.FullscreenCamera, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.FullscreenCamera)),
             ("Only screen", layout.LayoutType == CameraTimelineLayoutType.ScreenOnly, () => Edit(d => Find(d).LayoutType = CameraTimelineLayoutType.ScreenOnly)))));
+        if (layout.LayoutType == CameraTimelineLayoutType.CameraOverlay)
+        {
+            Add(Labeled("Camera Position", 10, PositionGrid(layout.OverlayPosition01 ?? Doc.Camera.Position01, target => Edit(d => Find(d).OverlayPosition01 = target))));
+        }
+        else if (layout.LayoutType == CameraTimelineLayoutType.CutoutCamera)
+        {
+            Add(Slider("Camera Position", () => session.SelectedLayout?.CutoutPositionX01 ?? Doc.Camera.CutoutPositionX01, (d, v) => Find(d).CutoutPositionX01 = v, 0, 1, 0.5));
+        }
+        else if (layout.LayoutType == CameraTimelineLayoutType.SplitScreen)
+        {
+            var ratio = Doc.Camera.SplitScreenRatio01;
+            Add(Labeled("Split ratio", 10, Options(
+                ("1/2", Math.Abs(ratio - 0.5) < 0.01, () => Edit(d => d.Camera.SplitScreenRatio01 = 0.5)),
+                ("1/3", Math.Abs(ratio - 1.0 / 3) < 0.01, () => Edit(d => d.Camera.SplitScreenRatio01 = 1.0 / 3)),
+                ("2/3", Math.Abs(ratio - 2.0 / 3) < 0.01, () => Edit(d => d.Camera.SplitScreenRatio01 = 2.0 / 3)))));
+            Add(Toggle("Flip", "If enabled, the layout will be flipped.", () => Doc.Camera.SplitFlip, (d, v) => d.Camera.SplitFlip = v));
+        }
+
         Add(Toggle("Disable layout", null, () => session.SelectedLayout?.Disabled ?? false, (d, v) => Find(d).Disabled = v));
         Add(Action("Remove layout", session.DeleteSelected));
     }
@@ -729,18 +921,22 @@ internal sealed class InspectorPanel
         }
 
         Add(Labeled("Modifiers", 10, OptionsWrap(row.ToArray())));
-        var style = Doc.Captions.ShortcutStyleOverrides.GetValueOrDefault(cluster.Id) ?? Doc.Captions.DefaultShortcutStyle;
-        void SetDock(ShortcutDockPosition dock) => Edit(d =>
+        var hidden = SegmentEdits.IsShortcutHidden(Doc, cluster);
+        Add(ToolToggle("Show this shortcut", "When disabled, this shortcut segment is dimmed on the timeline and hidden in the video.", !hidden, _ => session.ToggleShortcutHidden(cluster)));
+        AddDivider();
+        var custom = Doc.Captions.ShortcutStyleOverrides.ContainsKey(cluster.Id);
+        Add(ToolToggle("Custom style for this shortcut", "Override the track's default position, offset, and keycap color for this segment.", custom, enabled => Edit(d =>
         {
-            var copy = ProjectJson.Clone(style);
-            copy.DockPosition = dock;
-            d.Captions.ShortcutStyleOverrides[cluster.Id] = copy;
-        });
-        Add(Labeled("Position", 10, Options(
-            ("Bottom", style.DockPosition == ShortcutDockPosition.Bottom, () => SetDock(ShortcutDockPosition.Bottom)),
-            ("Top", style.DockPosition == ShortcutDockPosition.Top, () => SetDock(ShortcutDockPosition.Top)),
-            ("Left", style.DockPosition == ShortcutDockPosition.Left, () => SetDock(ShortcutDockPosition.Left)),
-            ("Right", style.DockPosition == ShortcutDockPosition.Right, () => SetDock(ShortcutDockPosition.Right)))));
+            if (enabled)
+            {
+                d.Captions.ShortcutStyleOverrides[cluster.Id] = ProjectJson.Clone(d.Captions.DefaultShortcutStyle);
+            }
+            else
+            {
+                d.Captions.ShortcutStyleOverrides.Remove(cluster.Id);
+            }
+        })));
+        ShortcutStyleSection(d => d.Captions.ShortcutStyleOverrides.GetValueOrDefault(cluster.Id) ?? d.Captions.DefaultShortcutStyle);
         Add(Action("Remove shortcut", session.DeleteSelected));
     }
 
@@ -1073,10 +1269,9 @@ internal sealed class InspectorPanel
         return stack;
     }
 
-    private UIElement PositionGrid()
+    private static UIElement PositionGrid(Point01 current, Action<Point01> choose)
     {
         var grid = new Grid { Width = 180, Height = 104, HorizontalAlignment = HorizontalAlignment.Left, CornerRadius = new CornerRadius(10), Background = Ui.Pal("Ink04") };
-        var current = Doc.Camera.Position01;
         foreach (var x in new[] { 0.0, 0.5, 1.0 })
         {
             foreach (var y in new[] { 0.0, 0.5, 1.0 })
@@ -1099,7 +1294,7 @@ internal sealed class InspectorPanel
                     VerticalAlignment = y == 0 ? VerticalAlignment.Top : y == 1 ? VerticalAlignment.Bottom : VerticalAlignment.Center,
                     Margin = new Thickness(8)
                 };
-                dot.Click += (_, _) => Edit(d => d.Camera.Position01 = target);
+                dot.Click += (_, _) => choose(target);
                 grid.Children.Add(dot);
             }
         }

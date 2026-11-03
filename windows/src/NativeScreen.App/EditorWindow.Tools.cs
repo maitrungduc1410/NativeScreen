@@ -116,18 +116,133 @@ public sealed partial class EditorWindow
 
     private void OpenPresets(object sender, RoutedEventArgs e)
     {
-        var menu = new MenuFlyout();
+        var rows = new StackPanel { Width = 340, Spacing = 2 };
+        var flyout = new Flyout { Content = rows, ShouldConstrainToRootBounds = false };
         foreach (var preset in tools.Presets.Load())
         {
-            var target = preset;
-            menu.Items.Add(Menu(target.Name, () => session.Mutate(target.Apply)));
+            rows.Children.Add(PresetRow(preset, flyout));
         }
 
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Menu("Save current style as preset", () => _ = SavePreset()));
-        menu.Items.Add(Menu("Import preset", () => _ = ImportPreset()));
-        menu.Items.Add(Menu("Show presets folder", () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{tools.Presets.Directory}\"") { UseShellExecute = true })));
-        menu.ShowAt((FrameworkElement)sender);
+        if (rows.Children.Count > 0)
+        {
+            rows.Children.Add(new Border { Height = 1, Margin = new Thickness(4), Background = Ui.Pal("Ink10") });
+        }
+
+        void Command(string title, Action run)
+        {
+            var button = Ui.Option(title, false, () =>
+            {
+                flyout.Hide();
+                run();
+            });
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+            rows.Children.Add(button);
+        }
+
+        Command("Save current style as preset", () => _ = SavePreset());
+        Command("Import preset", () => _ = ImportPreset());
+        Command("Show presets folder", () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{tools.Presets.Directory}\"") { UseShellExecute = true })?.Dispose());
+        flyout.ShowAt((FrameworkElement)sender);
+    }
+
+    private Grid PresetRow(ProjectPreset preset, Flyout flyout)
+    {
+        var settings = AppSettings.Shared;
+        var row = new Grid { ColumnSpacing = 4 };
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        title.Children.Add(Ui.Text(preset.Name, 13, "Ink95"));
+        void Badge(string text) => title.Children.Add(new Border
+        {
+            Padding = new Thickness(6, 1, 6, 2),
+            CornerRadius = new CornerRadius(5),
+            Background = Ui.Pal("Ink07"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock { Text = text, FontSize = 11, Foreground = Ui.Pal("Ink60") }
+        });
+        var matches = preset.Matches(session.Document);
+        if (matches)
+        {
+            Badge("Matches project");
+        }
+
+        if (settings.DefaultPresetId == preset.Id)
+        {
+            Badge("Default");
+        }
+
+        var apply = new Button { Style = Ui.StyleOf("NsIconButton"), Content = title, Width = double.NaN, Height = 34, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 0, 8, 0) };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(apply, preset.Name);
+        ToolTipService.SetToolTip(apply, "Click to apply");
+        apply.Click += (_, _) =>
+        {
+            flyout.Hide();
+            session.Mutate(preset.Apply);
+        };
+        row.Children.Add(apply);
+        var gear = new Button { Style = Ui.StyleOf("NsIconButton"), Content = Ui.Icon("", 13), Width = 34, Height = 34 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(gear, preset.Name + " options");
+        gear.Click += (_, _) =>
+        {
+            var menu = new MenuFlyout();
+            menu.Items.Add(Menu("Rename...", () =>
+            {
+                flyout.Hide();
+                _ = RenamePreset(preset);
+            }));
+            var useDefault = new ToggleMenuFlyoutItem { Text = "Use as default for new projects", IsChecked = settings.DefaultPresetId == preset.Id };
+            useDefault.Click += (_, _) =>
+            {
+                settings.DefaultPresetId = settings.DefaultPresetId == preset.Id ? null : preset.Id;
+                settings.Save();
+                flyout.Hide();
+            };
+            menu.Items.Add(useDefault);
+            if (!matches)
+            {
+                menu.Items.Add(Menu("Update to match currently edited project", () =>
+                {
+                    var updated = ProjectPreset.From(preset.Name, session.Document);
+                    updated.Id = preset.Id;
+                    tools.Presets.Delete(preset);
+                    tools.Presets.Save(updated);
+                    flyout.Hide();
+                    ShowToast("Preset updated");
+                }));
+            }
+
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(Menu("Show in File Explorer", () => System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{tools.Presets.PathOf(preset)}\"")?.Dispose()));
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(Menu("Remove...", () =>
+            {
+                tools.Presets.Delete(preset);
+                if (settings.DefaultPresetId == preset.Id)
+                {
+                    settings.DefaultPresetId = null;
+                    settings.Save();
+                }
+
+                flyout.Hide();
+            }));
+            menu.ShowAt(gear);
+        };
+        Grid.SetColumn(gear, 1);
+        row.Children.Add(gear);
+        return row;
+    }
+
+    private async Task RenamePreset(ProjectPreset preset)
+    {
+        var name = new TextBox { Text = preset.Name };
+        var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = AppTheme.Current, Title = "Rename preset", Content = name, PrimaryButtonText = "Rename", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && name.Text.Trim().Length > 0)
+        {
+            tools.Presets.Delete(preset);
+            preset.Name = name.Text.Trim();
+            tools.Presets.Save(preset);
+        }
     }
 
     private async Task SavePreset()

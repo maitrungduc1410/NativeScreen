@@ -27,6 +27,27 @@ public sealed class ProjectPreset
         Audio = ProjectJson.Clone(document.Audio)
     };
 
+    /// <summary>Whether the document already has this style. Crop and camera on/off belong to the recording.</summary>
+    public bool Matches(ProjectDocument document)
+    {
+        var canvas = ProjectJson.Clone(document.Canvas);
+        canvas.CropRect01 = Canvas.CropRect01;
+        return Same(Canvas, canvas)
+            && Background.Type == document.Background.Type
+            && Background.SolidColor == document.Background.SolidColor
+            && Same(Background.Gradient, document.Background.Gradient)
+            && Background.MeshPresetId == document.Background.MeshPresetId
+            && Math.Abs(Background.BlurRadius - document.Background.BlurRadius) < 0.01
+            && Same(FrameStyle, document.FrameStyle)
+            && Same(Cursor, document.Cursor)
+            && Camera.LayoutMode == document.Camera.LayoutMode
+            && Camera.ColorGradePreset == document.Camera.ColorGradePreset
+            && Math.Abs(Camera.SizeRatio - document.Camera.SizeRatio) < 0.01
+            && Same(Motion, document.Motion);
+    }
+
+    private static bool Same<T>(T left, T right) => ProjectJson.Serialize(left) == ProjectJson.Serialize(right);
+
     /// <summary>What belongs to the recording stays: canvas crop, whether the camera shows, and its crop.</summary>
     public void Apply(ProjectDocument document)
     {
@@ -163,7 +184,7 @@ public sealed class ProjectPresetStore(string directory)
         }
     }
 
-    private string PathOf(ProjectPreset preset)
+    public string PathOf(ProjectPreset preset)
     {
         var safe = new string(preset.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '-' : character).ToArray());
         var suffix = preset.Id.Length >= 8 ? preset.Id[..8] : preset.Id;

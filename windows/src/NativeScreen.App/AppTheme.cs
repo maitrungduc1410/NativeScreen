@@ -17,6 +17,7 @@ public sealed class AppSettings
     public int? HudX { get; set; }
     public int? HudY { get; set; }
     public string? StillExportFolder { get; set; }
+    public string? DefaultPresetId { get; set; }
     public string AfterRecording { get; set; } = "project";
     public bool HighlightRecordedArea { get; set; } = true;
 
