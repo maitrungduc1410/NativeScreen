@@ -690,7 +690,6 @@ public sealed partial class FrameCompositor
 
     // MARK: Device mockup
 
-    // Baked on macOS through the same texture round trip as the shadow, so it is drawn flipped too.
     private void DrawBezel(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int width, int height)
     {
         var mockup = document.FrameStyle.DeviceMockup;
@@ -710,7 +709,7 @@ public sealed partial class FrameCompositor
 
         RebindPipeline(target);
         _graphics.Context.OMSetBlendState(_sourceOver);
-        DrawQuad(layer.View, VerticallyFlipped(width, height), default, 0, 1);
+        DrawQuad(layer.View, Identity(width, height), default, 0, 1);
     }
 
     private void RasterizeBezel(RenderLayer layer, DeviceMockupConfig mockup, PixelRect screen, float radius, int height)

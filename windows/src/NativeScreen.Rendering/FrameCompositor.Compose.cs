@@ -112,7 +112,6 @@ public sealed partial class FrameCompositor
         var fade = request.ExportQuality ? 1 : BackgroundFadeProgress();
         if (fade < 1)
         {
-            // Not baked, so not flipped; same as the macOS crossfade path (spec/07 Pass 1).
             DrawQuad(previousBackground!.View, Identity(width, height), default, 0, 1);
             context.OMSetBlendState(_sourceOver);
             DrawQuad(background.View, Identity(width, height), default, 0, (float)(1 - Math.Pow(1 - fade, 3)));
@@ -120,7 +119,7 @@ public sealed partial class FrameCompositor
         }
         else
         {
-            DrawQuad(background.View, VerticallyFlipped(width, height), default, 0, 1);
+            DrawQuad(background.View, Identity(width, height), default, 0, 1);
             IsAnimating = false;
         }
         context.OMSetBlendState(_sourceOver);
@@ -458,7 +457,7 @@ public sealed partial class FrameCompositor
 
         BindTarget(target);
         context.OMSetBlendState(_sourceOver);
-        DrawQuad(baked.View, VerticallyFlipped(width, height), default, 0, 1);
+        DrawQuad(baked.View, Identity(width, height), default, 0, 1);
     }
 
     private void DrawCursor(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, double sourceMs, PixelRect screen, RenderLayer target, int height)
@@ -774,11 +773,6 @@ public sealed partial class FrameCompositor
 
     private static QuadMap Identity(int width, int height) =>
         new(new Vector4(1f / width, 0, 0, 0), new Vector4(0, 1f / height, 0, 0));
-
-    // The macOS compositor bakes its background and shadow through a texture round trip that flips them vertically.
-    // The screen and everything above it are not flipped. Frames must match macOS, so this is reproduced (spec/06 ADR-20).
-    private static QuadMap VerticallyFlipped(int width, int height) =>
-        new(new Vector4(1f / width, 0, 0, 0), new Vector4(0, -1f / height, 1, 0));
 
     private static Vector4 ToVector(PixelRect rect) => new((float)rect.X, (float)rect.Y, (float)rect.Width, (float)rect.Height);
 
