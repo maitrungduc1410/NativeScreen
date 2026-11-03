@@ -18,7 +18,6 @@ public sealed class RecordingHudWindow : Window
     private const double BarHeight = 64;
     private const double ButtonHeight = 44;
     private const double BottomMargin = 56;
-    private const double CornerRadiusDip = 18;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoSize = 0x0001;
 
@@ -62,11 +61,9 @@ public sealed class RecordingHudWindow : Window
     {
         Title = "Native Screen Recording";
         root.RequestedTheme = ElementTheme.Dark;
-        // The window itself is opaque, so its shape comes from a window region. This also removes the white frame of a borderless window.
         root.Background = Ui.Rgb(0.09, 0.09, 0.11);
         root.Children.Add(new Border
         {
-            CornerRadius = new CornerRadius(CornerRadiusDip),
             BorderThickness = new Thickness(1),
             BorderBrush = Ui.Rgb(1, 1, 1, 0.22),
             IsHitTestVisible = false
@@ -92,6 +89,7 @@ public sealed class RecordingHudWindow : Window
             presenter.IsMinimizable = false;
         }
 
+        RemoveWindowFrame();
         AppWindow.IsShownInSwitchers = false;
         tick.Tick += (_, _) => elapsed.Text = FormatElapsed(Elapsed());
         countdownTimer.Tick += (_, _) => CountdownTick();
@@ -154,7 +152,7 @@ public sealed class RecordingHudWindow : Window
 
     // MARK: Placement and dragging
 
-    /// <summary>Sizes the window to the bar, keeps its spot, and reshapes it. The bar's width changes with its state, like on macOS.</summary>
+    /// <summary>Sizes the window to the bar and keeps its spot. The bar's width changes with its state, like on macOS.</summary>
     private void FitToContent()
     {
         bar.Measure(new Windows.Foundation.Size(double.PositiveInfinity, BarHeight));
@@ -163,9 +161,14 @@ public sealed class RecordingHudWindow : Window
         var height = (int)(BarHeight * scale);
         var (x, y) = PlaceFor(width, height, scale);
         AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(x, y, width, height));
-        var corner = (int)(CornerRadiusDip * 2 * scale);
-        // One pixel in from the frame on every side: that outermost line is what showed as a white border.
-        SetWindowRgn(Handle, CreateRoundRectRgn(1, 1, width, height, corner, corner), true);
+    }
+
+    /// <summary>A window without a title bar still gets a white frame around its content, 3 pixels at 200%. Only the style removes it.</summary>
+    private void RemoveWindowFrame()
+    {
+        var style = GetWindowLongPtr(Handle, StyleIndex) & ~(CaptionStyle | ThickFrameStyle) | PopupStyle;
+        SetWindowLongPtr(Handle, StyleIndex, style);
+        SetWindowPos(Handle, 0, 0, 0, 0, 0, FrameChangedFlags);
     }
 
     private (int X, int Y) PlaceFor(int width, int height, double scale)
@@ -805,12 +808,19 @@ public sealed class RecordingHudWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out Point32 point);
 
+    private const int StyleIndex = -16;
+    private const long CaptionStyle = 0x00C00000;
+    private const long ThickFrameStyle = 0x00040000;
+    private const long PopupStyle = 0x80000000;
+    private const uint FrameChangedFlags = 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern long GetWindowLongPtr(nint window, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern long SetWindowLongPtr(nint window, int index, long value);
+
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
 
-    [DllImport("user32.dll")]
-    private static extern int SetWindowRgn(nint window, nint region, bool redraw);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateRoundRectRgn(int left, int top, int right, int bottom, int cornerWidth, int cornerHeight);
 }
