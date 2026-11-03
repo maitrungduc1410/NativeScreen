@@ -142,6 +142,38 @@ public sealed partial class EditorSession
 
     public KeycapStyle KeycapStyle { get; init; }
 
+    public bool HasRecordedCamera { get; init; }
+
+    public bool HasMicrophoneTrack { get; init; }
+
+    public bool HasRecordedMicrophone => HasMicrophoneTrack || Document.Captions.Segments.Count > 0;
+
+    /// <summary>Whether a sidebar tab can be opened, and the reason shown on it when it cannot.</summary>
+    public (bool CanApply, string? DisabledTooltip) TabAvailability(InspectorTab tab)
+    {
+        switch (tab)
+        {
+            case InspectorTab.Cursor:
+                return CursorEvents.Count > 0 ? (true, null) : (false, "There is no mouse cursor recorded");
+            case InspectorTab.CameraLayout:
+                return HasRecordedCamera ? (true, null) : (false, "No camera recorded");
+            case InspectorTab.CameraStyle:
+                if (!HasRecordedCamera)
+                {
+                    return (false, "No camera recorded");
+                }
+
+                return Document.Camera.Enabled ? (true, null) : (false, "Camera is hidden (see Camera Layout)");
+            case InspectorTab.Captions or InspectorTab.Transcript:
+                return HasRecordedMicrophone ? (true, null) : (false, "No microphone recorded");
+            case InspectorTab.Shortcuts:
+                var hasShortcuts = KeyEvents.Count > 0 || Document.Captions.CustomShortcuts.Count > 0 || Document.Captions.ShortcutTracks.Count > 0;
+                return hasShortcuts ? (true, null) : (false, "No keyboard shortcuts during recording");
+            default:
+                return (true, null);
+        }
+    }
+
     /// <summary>Shortcut clusters of the current document, rebuilt only after an edit.</summary>
     public IReadOnlyList<ShortcutCluster> Shortcuts()
     {

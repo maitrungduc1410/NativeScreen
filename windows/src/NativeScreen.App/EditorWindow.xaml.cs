@@ -31,6 +31,8 @@ public sealed record EditorSource(ProjectDocument? Document, double DurationMs, 
 
 public sealed partial class EditorWindow : Window
 {
+    private readonly Dictionary<InspectorTab, MenuFlyoutItem> viewMenuItems = [];
+    private int railAvailability;
     private const double PreviewSideMargin = 72;
     private const double PreviewEndMargin = 8;
 
@@ -95,7 +97,7 @@ public sealed partial class EditorWindow : Window
         AppTheme.Register(this);
         Ui.SizeWindow(this, 1600, 1000, 1180, 720);
 
-        session = new EditorSession(source.Document, source.DurationMs) { CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
+        session = new EditorSession(source.Document, source.DurationMs) { HasRecordedCamera = source.HasCamera, HasMicrophoneTrack = source.Project?.Metadata.Tracks.MicrophoneAudio is not null, CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
         tools = new EditorTools(this, session, source, ShowToast);
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
         tools.Changed += inspector.Rebuild;
@@ -268,7 +270,10 @@ public sealed partial class EditorWindow : Window
         foreach (var (tab, _) in TabIcons)
         {
             var target = tab;
-            view.Items.Add(Menu(InspectorCatalog.Title(tab), () => session.SelectTab(target), InspectorCatalog.Accelerator(tab)));
+            var item = Menu(InspectorCatalog.Title(tab), () => session.SelectTab(target), InspectorCatalog.Accelerator(tab));
+            item.IsEnabled = session.TabAvailability(tab).CanApply;
+            viewMenuItems[tab] = item;
+            view.Items.Add(item);
         }
 
         view.Items.Add(new MenuFlyoutSeparator());
@@ -365,15 +370,28 @@ public sealed partial class EditorWindow : Window
     private void RefreshTabRail()
     {
         TabRail.Children.Clear();
+        railAvailability = 0;
         foreach (var (tab, glyph) in TabIcons)
         {
             var target = tab;
-            var selected = session.SelectedTab == tab;
+            var (canApply, disabledTooltip) = session.TabAvailability(tab);
+            var selected = session.SelectedTab == tab && canApply;
             var accelerator = InspectorCatalog.Accelerator(tab);
-            var tooltip = accelerator is null ? InspectorCatalog.Title(tab) : $"{InspectorCatalog.Title(tab)} ({accelerator})";
+            var tooltip = !canApply
+                ? disabledTooltip ?? InspectorCatalog.Title(tab)
+                : accelerator is null ? InspectorCatalog.Title(tab) : $"{InspectorCatalog.Title(tab)} ({accelerator})";
             var tint = selected ? Ui.Rgb(0.65, 0.58, 0.99) : Ui.Pal("Ink88");
             UIElement icon = glyph.Length == 0 ? Ui.Shape(CursorArrowPath, 16, tint) : Ui.Icon(glyph, 16, tint);
-            var button = Ui.IconButton(icon, tooltip, () => session.SelectTab(target), 38);
+            // Stays enabled, because a disabled button shows no tooltip and the tooltip says why the tab is off.
+            icon.Opacity = canApply ? 1 : 0.28;
+            var button = Ui.IconButton(icon, tooltip, () =>
+            {
+                if (session.TabAvailability(target).CanApply)
+                {
+                    session.SelectTab(target);
+                }
+            }, 38);
+            button.IsTabStop = canApply;
             if (selected)
             {
                 button.Background = Ui.Pal("Ink07");
@@ -381,8 +399,16 @@ public sealed partial class EditorWindow : Window
 
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, InspectorCatalog.Title(tab));
             TabRail.Children.Add(button);
+            railAvailability = railAvailability * 2 + (canApply ? 1 : 0);
+            if (viewMenuItems.TryGetValue(tab, out var item))
+            {
+                item.IsEnabled = canApply;
+            }
         }
     }
+
+    private int CurrentTabAvailability() =>
+        TabIcons.Aggregate(0, (bits, entry) => bits * 2 + (session.TabAvailability(entry.Item1).CanApply ? 1 : 0));
 
     private void RefreshChrome()
     {
@@ -474,6 +500,11 @@ public sealed partial class EditorWindow : Window
     private void DocumentChanged(bool structural)
     {
         ScheduleSave();
+        if (CurrentTabAvailability() != railAvailability)
+        {
+            RefreshTabRail();
+        }
+
         RefreshChrome();
         FitPreview();
         if (structural)
@@ -865,7 +896,12 @@ public sealed partial class EditorWindow : Window
         if (key is >= VirtualKey.Number0 and <= VirtualKey.Number9)
         {
             var digit = (int)key - (int)VirtualKey.Number0;
-            session.SelectTab(digit == 0 ? InspectorTab.DeviceFrame : InspectorCatalog.Tabs[digit - 1]);
+            var tab = digit == 0 ? InspectorTab.DeviceFrame : InspectorCatalog.Tabs[digit - 1];
+            if (session.TabAvailability(tab).CanApply)
+            {
+                session.SelectTab(tab);
+            }
+
             return true;
         }
 
