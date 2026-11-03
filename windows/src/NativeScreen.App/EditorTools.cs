@@ -181,6 +181,50 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         ? Path.Combine(package, "recording", project.Metadata.Tracks.DisplayVideo)
         : null;
 
+    private readonly ClickSounds previewSounds = new();
+
+    public void PreviewClickSound() => previewSounds.Play(session.Document.Cursor.ClickEffect.SoundSet, session.Document.Cursor.ClickEffect.SoundVolume);
+
+    /// <summary>Name and four sliders; the new preset goes on the project and is selected.</summary>
+    public async Task CreateColorPreset()
+    {
+        var name = new TextBox { Text = "My preset" };
+        var panel = new StackPanel { Spacing = 10, Width = 340 };
+        panel.Children.Add(new TextBlock { Text = "Preset name" });
+        panel.Children.Add(name);
+        Slider Row(string title, double minimum, double maximum, double value)
+        {
+            var slider = new Slider { Minimum = minimum, Maximum = maximum, StepFrequency = 0.01, Value = value };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, title);
+            panel.Children.Add(new TextBlock { Text = title });
+            panel.Children.Add(slider);
+            return slider;
+        }
+
+        var warmth = Row("Warmth", -1, 1, 0);
+        var pop = Row("Background pop", 0, 1, 0.2);
+        var contrast = Row("Contrast", -1, 1, 0.25);
+        var intensity = Row("Color intensity", -1, 1, 0.2);
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = AppTheme.Current, Title = "Color preset studio", Content = panel, PrimaryButtonText = "Create preset", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            var preset = new CustomCameraColorPreset
+            {
+                Id = EditorSession.NewId(),
+                Name = name.Text.Trim().Length == 0 ? "My preset" : name.Text.Trim(),
+                Warmth = warmth.Value,
+                BackgroundPop = pop.Value,
+                Contrast = contrast.Value,
+                ColorIntensity = intensity.Value
+            };
+            session.Mutate(document =>
+            {
+                document.Camera.CustomColorPresets.Add(preset);
+                document.Camera.SelectedCustomColorPresetId = preset.Id;
+            });
+        }
+    }
+
     /// <summary>One frame of the recording as BGRA, off the UI thread, for thumbnails.</summary>
     public async Task<(byte[] Bgra, int Width, int Height)?> ReadFrame(double sourceMs)
     {

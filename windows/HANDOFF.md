@@ -27,6 +27,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, Editor parity: mask drawing, skim, colors, transcript bar, shortcut styles, presets, click sounds
+
+### Verifier
+- **Result:** PASS for the items exercised below. A parity pass, so `spec/05` is unchanged.
+- **verify.ps1:** Debug and Release x64, Core, Media and Rendering tests, 13 shaders.
+- **Exercised in the running app, on copies of projects:** dragging out a new mask (new track, rect and radius in `project.json`), Esc cancelling that mode, hover skim with the playhead staying put, the color picker opening and a random gradient, word selection and Cut transcript, preset list and badges, layout segment editor, a shortcut's custom style written to `shortcutStyleOverrides`, color preset studio creating and selecting a preset, device finish.
+- **Not exercised:** retyping a word; click sounds by ear; camera crop, which needs a project with a webcam track; default preset on a new recording; preset rename, update and remove; pause chips; hue slider.
+- **Changes made:** `ColorField.cs`, `ClickSounds.cs`, additions to `PreviewOverlay.cs`, `InspectorPanel.cs`, `EditorWindow.Tools.cs`, `TimelineView.cs`, `EditorSession.Segments.cs`, `ProjectPreset.cs`. Click sound wavs are now copied to the output.
+- **Spec updates:** none.
+- **Next:** `Load your LUT file` is not ported: on macOS it stores `customLUTRelativePath` and switches to Cinema, and no renderer reads that path, so it would be an empty control. Decide on macOS first. Still open for editing: built-in music, trim badges with durations, quick dock layout buttons, pinch zoom, crop edge handles and thirds grid.
+
 ## 2026-11-03, Click ripple and voiceover tracks (macOS side done, Windows port pending)
 
 ### Writer

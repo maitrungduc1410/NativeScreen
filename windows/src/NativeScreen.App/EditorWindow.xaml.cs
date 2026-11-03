@@ -74,6 +74,7 @@ public sealed partial class EditorWindow : Window
     private readonly TimelineView timeline;
     private readonly PreviewOverlay overlay;
     private readonly ExportSettings exportSettings = new();
+    private readonly ClickSounds clickSounds = new();
     private FrameCompositor? compositor;
     private CompositionSwapChain? swapChain;
     private PreviewRenderer? renderer;
@@ -99,6 +100,7 @@ public sealed partial class EditorWindow : Window
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
         tools.Changed += inspector.Rebuild;
         inspector.SeekRequested = SeekTo;
+        inspector.CameraCropRequested = OpenCameraCrop;
         timeline = new TimelineView(session, TimelineHost) { Tools = tools };
         session.ToastRequested += ShowToast;
         timeline.Skimmed += DrawPreview;
@@ -127,7 +129,11 @@ public sealed partial class EditorWindow : Window
         inspector.Rebuild();
 
         session.DocumentChanged += DocumentChanged;
-        Closed += (_, _) => tools.CancelTranscript();
+        Closed += (_, _) =>
+        {
+            tools.CancelTranscript();
+            clickSounds.Dispose();
+        };
         session.SelectionChanged += SelectionChanged;
         AppTheme.Changed += ThemeChanged;
         Root.PreviewKeyDown += RootKeyDown;
@@ -696,10 +702,12 @@ public sealed partial class EditorWindow : Window
         }
 
         session.SamplePlayhead();
+        clickSounds.Advance(session);
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         timeline.UpdatePlayhead();
         if (!session.IsPlaying)
         {
+            clickSounds.Rewind();
             clockTimer.Stop();
             StopAudio();
             RefreshTransport();

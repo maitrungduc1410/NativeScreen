@@ -310,7 +310,21 @@ internal sealed class InspectorPanel
 
         Add(Toggle("Always use pointer cursor", null, () => Doc.Cursor.AlwaysUsePointer, (d, v) => d.Cursor.AlwaysUsePointer = v));
         Add(Toggle("Hide cursor if not moving", null, () => Doc.Cursor.HideWhenIdleAfterMs is not null, (d, v) => d.Cursor.HideWhenIdleAfterMs = v ? 2000 : null));
-        Add(Toggle("Loop cursor position", null, () => Doc.Cursor.LoopBackToStartMs is not null, (d, v) => d.Cursor.LoopBackToStartMs = v ? 1000 : null));
+        if (Doc.Cursor.HideWhenIdleAfterMs is not null)
+        {
+            Add(Slider("Hide not moving cursor after", () => (Doc.Cursor.HideWhenIdleAfterMs ?? 2000) / 1000, (d, v) => d.Cursor.HideWhenIdleAfterMs = v * 1000, 0.5, 5, 2));
+        }
+
+        Add(Toggle("Loop cursor position", "Near the end of the video, cursor will move back to its initial position", () => Doc.Cursor.LoopBackToStartMs is not null, (d, v) => d.Cursor.LoopBackToStartMs = v ? 1000 : null));
+        if (Doc.Cursor.LoopBackToStartMs is not null)
+        {
+            Add(Slider("Loop cursor position duration", () => (Doc.Cursor.LoopBackToStartMs ?? 1000) / 1000, (d, v) => d.Cursor.LoopBackToStartMs = v * 1000, 1, 4, 1));
+        }
+        else
+        {
+            Add(Slider("Stop cursor movement at the end of the video", () => Doc.Cursor.StopMovementInLastPartMs, (d, v) => d.Cursor.StopMovementInLastPartMs = v, 0, 5000, 0));
+        }
+
         AddDivider();
         var effect = Doc.Cursor.ClickEffect.VisualStyle;
         Add(Labeled("Click effect", 10, Options(
@@ -324,6 +338,7 @@ internal sealed class InspectorPanel
             ("Crisp", sound == "crisp", () => Edit(d => d.Cursor.ClickEffect.SoundSet = "crisp")))));
         if (sound is not null)
         {
+            Add(Action("Play click sound preview", () => tools.PreviewClickSound()));
             Add(Slider("Click sound volume", () => Doc.Cursor.ClickEffect.SoundVolume, (d, v) => d.Cursor.ClickEffect.SoundVolume = v, 0, 1, 0.5));
         }
 
@@ -334,11 +349,21 @@ internal sealed class InspectorPanel
                 ("Tilt", Doc.Cursor.RotationMode == CursorRotationMode.Tilt, () => Edit(d => d.Cursor.RotationMode = CursorRotationMode.Tilt)),
                 ("Follow", Doc.Cursor.RotationMode == CursorRotationMode.Follow, () => Edit(d => d.Cursor.RotationMode = CursorRotationMode.Follow))),
             Slider("Tilt amount", () => Doc.Cursor.VelocityRotationIntensity, (d, v) => d.Cursor.VelocityRotationIntensity = v, 0, 1, 0.5))));
+        if (Doc.Cursor.RemoveShakeThresholdPx > 0.01)
+        {
+            Add(Slider("Remove cursor shakes threshold", () => Doc.Cursor.RemoveShakeThresholdPx, (d, v) => d.Cursor.RemoveShakeThresholdPx = v, 1, 20, 4));
+        }
+
         Add(Collapsible("Advanced", () => Stack(16,
             Toggle("Remove cursor shakes", null, () => Doc.Cursor.RemoveShakeThresholdPx > 0, (d, v) => d.Cursor.RemoveShakeThresholdPx = v ? 4 : 0),
             Toggle("Optimize cursor changes", null, () => Doc.Cursor.OptimizeCursorChanges, (d, v) => d.Cursor.OptimizeCursorChanges = v),
             Toggle("Keep cursor in sync with hovers", null, () => Doc.Cursor.KeepInSyncWithHovers, (d, v) => d.Cursor.KeepInSyncWithHovers = v))));
     }
+
+    /// <summary>Asks the window to open the crop editor on the webcam track.</summary>
+    public Action? CameraCropRequested { get; set; }
+
+    private static bool Rect01Full(Rect01 rect) => rect.X <= 0 && rect.Y <= 0 && rect.Width >= 1 && rect.Height >= 1;
 
     private void CameraLayout()
     {
@@ -385,7 +410,18 @@ internal sealed class InspectorPanel
             ("Fullscreen", false, () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.FullscreenCamera)),
             ("Only screen", false, () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.ScreenOnly)))));
         Add(Slider("Camera rounded corners", () => Doc.Camera.BorderRadiusRatio, (d, v) => d.Camera.BorderRadiusRatio = v, 0, 0.5, 0.22));
-        Add(Toggle("Hide during silence", null, () => Doc.Camera.HideDuringSilenceMs is not null, (d, v) => d.Camera.HideDuringSilenceMs = v ? 2000 : null));
+        Add(Toggle("Hide during silence", null, () => Doc.Camera.HideDuringSilenceMs is not null, (d, v) => d.Camera.HideDuringSilenceMs = v ? 5000 : null));
+        if (Doc.Camera.HideDuringSilenceMs is { } silence)
+        {
+            Add(Slider($"Minimum silence duration ({silence / 1000:0.0}s)", () => Doc.Camera.HideDuringSilenceMs ?? 5000, (d, v) => d.Camera.HideDuringSilenceMs = v, 2000, 15000, 5000));
+        }
+
+        if (camera.LayoutMode == CameraLayoutMode.Cutout)
+        {
+            Add(Slider("Edge softness", () => Doc.Camera.CutoutEdgeSoftness, (d, v) => d.Camera.CutoutEdgeSoftness = v, 0, 1, 0.2));
+            Add(Slider("Edge inset", () => Doc.Camera.CutoutEdgeInset, (d, v) => d.Camera.CutoutEdgeInset = v, 0, 1, 0));
+            Add(Toggle("Avoid empty area", "Will try to avoid showing too much empty space around the recording", () => Doc.Camera.CutoutAvoidEmptyArea, (d, v) => d.Camera.CutoutAvoidEmptyArea = v));
+        }
     }
 
     private void CameraStyle()
@@ -401,14 +437,39 @@ internal sealed class InspectorPanel
         foreach (var preset in Enum.GetValues<CameraColorGradePreset>())
         {
             var look = preset;
-            var option = Ui.Option(look.ToString(), looks == look, () => Edit(d => d.Camera.ColorGradePreset = look));
+            var option = Ui.Option(look.ToString(), looks == look && Doc.Camera.SelectedCustomColorPresetId is null, () => Edit(d =>
+            {
+                d.Camera.ColorGradePreset = look;
+                d.Camera.SelectedCustomColorPresetId = null;
+            }));
             option.HorizontalAlignment = HorizontalAlignment.Stretch;
             option.Margin = new Thickness(0, 0, 6, 8);
             option.Padding = new Thickness(0);
             wrap.Children.Add(option);
         }
 
+        foreach (var custom in Doc.Camera.CustomColorPresets)
+        {
+            var id = custom.Id;
+            var option = Ui.Option(custom.Name, Doc.Camera.SelectedCustomColorPresetId == id, () => Edit(d => d.Camera.SelectedCustomColorPresetId = d.Camera.SelectedCustomColorPresetId == id ? null : id));
+            option.HorizontalAlignment = HorizontalAlignment.Stretch;
+            option.Margin = new Thickness(0, 0, 6, 8);
+            option.Padding = new Thickness(0);
+            wrap.Children.Add(option);
+        }
+
+        var addLook = Ui.Option("+", false, () => _ = tools.CreateColorPreset());
+        addLook.HorizontalAlignment = HorizontalAlignment.Stretch;
+        addLook.Margin = new Thickness(0, 0, 6, 8);
+        addLook.Padding = new Thickness(0);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(addLook, "Create your color preset");
+        ToolTipService.SetToolTip(addLook, "Create your color preset...");
+        wrap.Children.Add(addLook);
         Add(Labeled("Color grading", 10, wrap));
+        var hasCrop = !Rect01Full(Doc.Camera.CropRect01);
+        Add(Labeled("Crop", 10, Options(
+            (hasCrop ? "Edit crop" : "Crop camera", false, () => CameraCropRequested?.Invoke()),
+            ("Reset", false, hasCrop ? () => Edit(d => d.Camera.CropRect01 = Rect01.Full) : null))));
         Add(Slider("Color grading intensity", () => Doc.Camera.ColorGradeIntensity, (d, v) => d.Camera.ColorGradeIntensity = v, 0, 1, 1));
         Add(Slider("Sharpen", () => Doc.Camera.Sharpen01, (d, v) => d.Camera.Sharpen01 = v, 0, 1, 0));
         AddDivider();
@@ -812,6 +873,13 @@ internal sealed class InspectorPanel
             return;
         }
 
+        var finishes = mockup.DeviceId switch
+        {
+            "macbook-air-15" => new[] { ("midnight", "Midnight"), ("starlight", "Starlight"), ("silver", "Silver") },
+            "iphone-16-pro" => new[] { ("black-titanium", "Black Titanium"), ("white-titanium", "White Titanium"), ("natural-titanium", "Natural Titanium"), ("desert-titanium", "Desert Titanium") },
+            _ => new[] { ("space-black", "Space Black"), ("silver", "Silver") }
+        };
+        Add(Labeled("Finish", 10, OptionsWrap(finishes.Select<(string, string), (string, bool, Action?)>(finish => (finish.Item2, mockup.ColorVariantId == finish.Item1, (Action?)(() => Edit(d => d.FrameStyle.DeviceMockup.ColorVariantId = finish.Item1)))).ToArray())));
         Add(Labeled("Device frames", 10, OptionsWrap(
             ("MacBook Pro 16\"", mockup.DeviceId == "macbook-pro-16", () => Edit(d => d.FrameStyle.DeviceMockup.DeviceId = "macbook-pro-16")),
             ("MacBook Air 15\"", mockup.DeviceId == "macbook-air-15", () => Edit(d => d.FrameStyle.DeviceMockup.DeviceId = "macbook-air-15")),

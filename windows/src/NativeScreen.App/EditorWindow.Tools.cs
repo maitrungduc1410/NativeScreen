@@ -336,10 +336,36 @@ public sealed partial class EditorWindow
             return;
         }
 
-        ShowCropOverlay(still.Item1, still.Width, still.Height);
+        ShowCropOverlay(still.Item1, still.Width, still.Height, session.Document.Canvas.CropRect01, crop => session.Mutate(document => document.Canvas.CropRect01 = crop));
     }
 
-    private void ShowCropOverlay(byte[] bgra, int width, int height)
+    private async void OpenCameraCrop()
+    {
+        var path = source.PackagePath is { } package && source.Project?.Metadata.Tracks.WebcamVideo is { } webcam
+            ? Path.Combine(package, "recording", webcam)
+            : null;
+        if (path is null || !File.Exists(path))
+        {
+            ShowToast("This project has no camera recording to crop");
+            return;
+        }
+
+        var at = session.SourceAtPlayhead;
+        var still = await Task.Run(() =>
+        {
+            using var reader = new VideoFileReader(path);
+            return MediaAssets.FrameAt(reader, at) is { } frame ? (MediaAssets.ToBgra(frame), frame.Width, frame.Height) : default;
+        });
+        if (still.Item1 is null)
+        {
+            ShowToast("Could not read a frame to crop");
+            return;
+        }
+
+        ShowCropOverlay(still.Item1, still.Width, still.Height, session.Document.Camera.CropRect01, crop => session.Mutate(document => document.Camera.CropRect01 = crop));
+    }
+
+    private void ShowCropOverlay(byte[] bgra, int width, int height, Rect01 start, Action<Rect01> applyCrop)
     {
         var bitmap = new WriteableBitmap(width, height);
         using (var stream = bitmap.PixelBuffer.AsStream())
@@ -352,7 +378,6 @@ public sealed partial class EditorWindow
         var fit = Math.Min(available.Width / width, available.Height / height);
         var viewWidth = width * fit;
         var viewHeight = height * fit;
-        var start = session.Document.Canvas.CropRect01;
         var (left, top, right, bottom) = (start.X, start.Y, start.X + start.Width, start.Y + start.Height);
 
         var canvas = new Canvas { Width = viewWidth, Height = viewHeight };
@@ -474,7 +499,7 @@ public sealed partial class EditorWindow
         apply.Click += (_, _) =>
         {
             var crop = new Rect01(left, top, right - left, bottom - top);
-            session.Mutate(document => document.Canvas.CropRect01 = crop);
+            applyCrop(crop);
             Close();
         };
         buttons.Children.Add(apply);
