@@ -396,6 +396,8 @@ public sealed partial class EditorWindow
             canvas.Children.Add(handle);
         }
 
+        Action? layoutExtras = null;
+
         void Layout()
         {
             var (x, y, w, h) = (left * viewWidth, top * viewHeight, (right - left) * viewWidth, (bottom - top) * viewHeight);
@@ -412,6 +414,7 @@ public sealed partial class EditorWindow
             Canvas.SetTop(handles[2], y + h - 9);
             Canvas.SetLeft(handles[3], x + w - 9);
             Canvas.SetTop(handles[3], y + h - 9);
+            layoutExtras?.Invoke();
         }
 
         void DragWith(UIElement element, Action<double, double> apply)
@@ -444,6 +447,28 @@ public sealed partial class EditorWindow
         DragWith(handles[3], (x, y) => (right, bottom) = (Math.Max(x, left + MinimumCrop), Math.Max(y, top + MinimumCrop)));
         Layout();
 
+        // Thirds grid, edge handles and the size readout.
+        var thirds = Enumerable.Range(0, 4).Select(_ => new Border { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(90, 255, 255, 255)), IsHitTestVisible = false }).ToArray();
+        var edges = Enumerable.Range(0, 4).Select(index => new Border { Background = new SolidColorBrush(Colors.White), CornerRadius = new CornerRadius(3), Width = index < 2 ? 34 : 6, Height = index < 2 ? 6 : 34 }).ToArray();
+        var readout = new TextBlock { FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new SolidColorBrush(Colors.White) };
+        layoutExtras = () =>
+        {
+            var (x, y, w, h) = (left * viewWidth, top * viewHeight, (right - left) * viewWidth, (bottom - top) * viewHeight);
+            Place(thirds[0], x + w / 3, y, 1, h);
+            Place(thirds[1], x + w * 2 / 3, y, 1, h);
+            Place(thirds[2], x, y + h / 3, w, 1);
+            Place(thirds[3], x, y + h * 2 / 3, w, 1);
+            Canvas.SetLeft(edges[0], x + w / 2 - 17);
+            Canvas.SetTop(edges[0], y - 3);
+            Canvas.SetLeft(edges[1], x + w / 2 - 17);
+            Canvas.SetTop(edges[1], y + h - 3);
+            Canvas.SetLeft(edges[2], x - 3);
+            Canvas.SetTop(edges[2], y + h / 2 - 17);
+            Canvas.SetLeft(edges[3], x + w - 3);
+            Canvas.SetTop(edges[3], y + h / 2 - 17);
+            readout.Text = $"Size {Math.Round((right - left) * width)} × {Math.Round((bottom - top) * height)}    Position {Math.Round(left * width)} {Math.Round(top * height)}";
+        };
+
         // Dragging inside the frame moves the crop without changing its size.
         frame.IsHitTestVisible = true;
         frame.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
@@ -464,6 +489,22 @@ public sealed partial class EditorWindow
             right = left + w;
             bottom = top + h;
         });
+
+        foreach (var line in thirds)
+        {
+            canvas.Children.Add(line);
+        }
+
+        foreach (var edge in edges)
+        {
+            canvas.Children.Add(edge);
+        }
+
+        DragWith(edges[0], (_, y) => top = Math.Min(y, bottom - MinimumCrop));
+        DragWith(edges[1], (_, y) => bottom = Math.Max(y, top + MinimumCrop));
+        DragWith(edges[2], (x, _) => left = Math.Min(x, right - MinimumCrop));
+        DragWith(edges[3], (x, _) => right = Math.Max(x, left + MinimumCrop));
+        Layout();
 
         var overlay = new Grid { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(230, 10, 10, 14)) };
         Grid.SetRowSpan(overlay, 8);
@@ -504,6 +545,7 @@ public sealed partial class EditorWindow
         };
         buttons.Children.Add(apply);
         var stack = new StackPanel { Spacing = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        stack.Children.Add(readout);
         stack.Children.Add(canvas);
         stack.Children.Add(buttons);
         overlay.Children.Add(stack);

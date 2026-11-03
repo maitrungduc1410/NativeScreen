@@ -48,7 +48,7 @@ public sealed class PreviewAudioPlayer : IDisposable
             return null;
         }
 
-        var mixer = new AudioMixer(document, packageDirectory, tracks, new NLETimeMapper(document.Timeline.Slices));
+        var mixer = new AudioMixer(document, packageDirectory, tracks, new NLETimeMapper(document.Timeline.Slices), livePreview: true);
         if (!mixer.HasAudio)
         {
             mixer.Dispose();

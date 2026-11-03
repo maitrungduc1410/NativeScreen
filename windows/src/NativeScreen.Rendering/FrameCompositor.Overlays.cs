@@ -429,9 +429,28 @@ public sealed partial class FrameCompositor
 
     // MARK: Keycaps
 
+    /// <summary>Where the last frame drew each shortcut, normalized, for clicks on the preview. Swapped whole, so another thread may read it.</summary>
+    public IReadOnlyDictionary<string, Vector4> ShortcutHitRects01 { get; private set; } = new Dictionary<string, Vector4>();
+
     private void DrawKeycaps(RenderLayer frame, ComposeRequest request, int width, int height)
     {
         var captions = request.Document.Captions;
+        Dictionary<string, Vector4>? hits = null;
+        try
+        {
+            DrawKeycaps(frame, request, width, height, captions, ref hits);
+        }
+        finally
+        {
+            if (hits is not null || ShortcutHitRects01.Count > 0)
+            {
+                ShortcutHitRects01 = hits ?? new Dictionary<string, Vector4>();
+            }
+        }
+    }
+
+    private void DrawKeycaps(RenderLayer frame, ComposeRequest request, int width, int height, CaptionsConfig captions, ref Dictionary<string, Vector4>? hits)
+    {
         if (!captions.ShowKeystrokes || request.Shortcuts is not { Count: > 0 } clusters)
         {
             return;
@@ -488,6 +507,11 @@ public sealed partial class FrameCompositor
             var centerX = x + contentWidth / 2 + (float)style.OffsetX * width;
             var centerY = y + contentHeight / 2 + (float)style.OffsetY * height;
             var scale = (float)envelope.Scale;
+            (hits ??= [])[match.Id] = new Vector4(
+                (centerX - contentWidth * scale / 2) / width,
+                (centerY - contentHeight * scale / 2) / height,
+                contentWidth * scale / width,
+                contentHeight * scale / height);
             var drawnWidth = sprite.Width * scale;
             var drawnHeight = sprite.Height * scale;
             RebindPipeline(frame);

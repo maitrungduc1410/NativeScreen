@@ -106,6 +106,26 @@ internal sealed class InspectorPanel
             ("Color", background.Type == BackgroundType.Solid, () => Edit(d => d.Background.Type = BackgroundType.Solid)),
             ("Image", background.Type == BackgroundType.Image, tools.PickBackgroundImage))));
 
+        if (background.Type == BackgroundType.Image)
+        {
+            var drop = new Border { Height = 96, CornerRadius = new CornerRadius(10), Background = Ui.Pal("Ink04"), BorderBrush = Ui.Pal("Ink14"), BorderThickness = new Thickness(1), AllowDrop = true, Padding = new Thickness(12) };
+            drop.Child = new TextBlock { Text = "Click to select, drop image, or press Ctrl+V while hovering.", FontSize = 12.5, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = Ui.Pal("Ink60") };
+            drop.Tapped += (_, _) => tools.PickBackgroundImage();
+            drop.PointerEntered += (_, _) => tools.IsHoveringBackgroundDrop = true;
+            drop.PointerExited += (_, _) => tools.IsHoveringBackgroundDrop = false;
+            drop.Unloaded += (_, _) => tools.IsHoveringBackgroundDrop = false;
+            drop.DragOver += (_, args) => args.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+            drop.Drop += async (_, args) =>
+            {
+                if (args.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems)
+                    && (await args.DataView.GetStorageItemsAsync()).OfType<Windows.Storage.StorageFile>().FirstOrDefault() is { } file)
+                {
+                    tools.SetBackgroundImage(file.Path);
+                }
+            };
+            Add(Labeled("Background Image", 10, drop));
+        }
+
         if (isWallpaper)
         {
             var categories = new List<string> { "All" };
@@ -773,6 +793,8 @@ internal sealed class InspectorPanel
         Add(Toggle("Show hidden words", "Keep words hidden from captions visible here so they can be restored.", () => Doc.Captions.ShowHiddenWordsInTranscript, (d, v) => d.Captions.ShowHiddenWordsInTranscript = v));
     }
 
+    private string audioGenre = "Lo-Fi";
+
     private void Audio()
     {
         Add(Text("Microphone", 12.5, "Ink45", true));
@@ -791,6 +813,19 @@ internal sealed class InspectorPanel
         Add(Slider("System audio volume", () => Doc.Audio.SystemAudioVolume, (d, v) => d.Audio.SystemAudioVolume = v, 0, 1, 1));
         AddDivider();
         Add(Text("Background audio", 12.5, "Ink45", true));
+        Add(OptionsWrap(BuiltInBackgroundMusic.Genres.Select<string, (string, bool, Action?)>(genre => (genre, audioGenre == genre, () =>
+        {
+            audioGenre = genre;
+            Rebuild();
+        })).ToArray()));
+        var musicPath = Doc.Audio.BackgroundMusic.RelativePath;
+        Add(OptionsWrap(BuiltInBackgroundMusic.Tracks(audioGenre).Select<string, (string, bool, Action?)>(track => (tools.LoadingTrack == track ? track + "..." : track, musicPath == track, () => tools.SelectBuiltInTrack(track))).ToArray()));
+        if (musicPath is not null && tools.LoadingTrack is null)
+        {
+            var title = Path.GetFileNameWithoutExtension(musicPath).Replace("bg-", "");
+            Add(Action($"{(tools.IsPreviewingMusic ? "Stop" : "Play")} {title}", tools.ToggleMusicPreview));
+        }
+
         if (Doc.Audio.BackgroundMusic.RelativePath is null)
         {
             Add(Action("Add background audio", tools.AddBackgroundAudio));
@@ -811,6 +846,10 @@ internal sealed class InspectorPanel
             VoiceoverSegment Find(ProjectDocument d) => d.Timeline.Voiceovers.First(item => item.Id == id);
             Add(Collapsible($"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}", () => Stack(14,
                 Slider("Volume", () => Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.Volume ?? 1, (d, v) => Find(d).Volume = v, 0, 1, 1),
+                Action(Doc.Timeline.Voiceovers.Count > 1 ? "Apply to other voiceovers" : "", Doc.Timeline.Voiceovers.Count > 1 ? () => session.ApplyVoiceoverVolumeToOthers(id) : null),
+                Labeled("Attach to recording", 10, Options(
+                    ("Independent", Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.AttachMode == VoiceoverAttachMode.Independent, () => Edit(d => Find(d).AttachMode = VoiceoverAttachMode.Independent)),
+                    ("Synchronized", Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.AttachMode == VoiceoverAttachMode.Synchronized, () => Edit(d => Find(d).AttachMode = VoiceoverAttachMode.Synchronized)))),
                 Toggle("Hide & mute original recording", null, () => Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.HideRecording ?? false, (d, v) => Find(d).HideRecording = v),
                 Toggle("Disable voiceover", null, () => Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.Disabled ?? false, (d, v) => Find(d).Disabled = v),
                 Action("Remove voiceover", () => Edit(d => d.Timeline.Voiceovers.RemoveAll(item => item.Id == id))))));

@@ -9,6 +9,7 @@ namespace NativeScreen.Export;
 /// </summary>
 public sealed class AudioMixer : IDisposable
 {
+    private readonly bool livePreview;
     public const int SampleRate = 48000;
     private const int BlockFrames = 1024;
 
@@ -24,8 +25,9 @@ public sealed class AudioMixer : IDisposable
     private readonly byte[] block = new byte[BlockFrames * 4];
     private long writtenFrames;
 
-    public AudioMixer(ProjectDocument document, string packageDirectory, RecordingTracksMetadata tracks, NLETimeMapper mapper)
+    public AudioMixer(ProjectDocument document, string packageDirectory, RecordingTracksMetadata tracks, NLETimeMapper mapper, bool livePreview = false)
     {
+        this.livePreview = livePreview;
         this.document = document;
         this.mapper = mapper;
         master = Math.Clamp(document.Audio.MasterVolume, 0, 2);
@@ -42,7 +44,7 @@ public sealed class AudioMixer : IDisposable
 
         if (document.Audio.BackgroundMusic is { Muted: false, Volume: > 0.001, RelativePath: { } musicPath })
         {
-            music = AudioCursor.Open(Path.Combine(packageDirectory, musicPath));
+            music = BuiltInBackgroundMusic.ResolvePath(packageDirectory, musicPath) is { } musicFile ? AudioCursor.Open(musicFile) : null;
         }
 
         foreach (var segment in document.Timeline.Voiceovers.Where(item => !item.Disabled && item.Volume > 0.001 && !VoiceoverTrackLayout.IsTrackHidden(document.Timeline, item.TrackIndex)))
@@ -116,7 +118,15 @@ public sealed class AudioMixer : IDisposable
 
             foreach (var (segment, cursor, start) in voiceovers)
             {
-                if (timelineMs >= start && timelineMs < start + segment.DurationMs)
+                if (livePreview && segment.AttachMode == VoiceoverAttachMode.Synchronized)
+                {
+                    // In preview a synchronized voiceover follows the recording through speed changes and cuts.
+                    if (slice is not null && sourceMs >= segment.SourceStartMs && sourceMs < segment.SourceEndMs)
+                    {
+                        Add(cursor, sourceMs - segment.SourceStartMs, (float)AudioMix.VoiceoverGain(segment, master, false), ref left, ref right);
+                    }
+                }
+                else if (timelineMs >= start && timelineMs < start + segment.DurationMs)
                 {
                     Add(cursor, timelineMs - start, (float)AudioMix.VoiceoverGain(segment, master, false), ref left, ref right);
                 }

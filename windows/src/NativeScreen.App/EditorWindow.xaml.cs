@@ -104,6 +104,7 @@ public sealed partial class EditorWindow : Window
         timeline = new TimelineView(session, TimelineHost) { Tools = tools };
         session.ToastRequested += ShowToast;
         timeline.Skimmed += DrawPreview;
+        timeline.ZoomNudged += ZoomTimeline;
         overlay = new PreviewOverlay(session, PreviewCanvas, () => (source.SourceWidth, source.SourceHeight, source.HasCamera));
         PreviewCanvas.SizeChanged += (_, _) => overlay.Refresh();
 
@@ -332,6 +333,16 @@ public sealed partial class EditorWindow : Window
         QuickDock.Children.Add(DockGroup(
             Ui.IconButton(Ui.Icon("", 16), "Classic zoom", () => session.AddZoomAtPlayhead(ZoomPresentation.Screen)),
             Ui.IconButton(Ui.Icon("", 16), "Loupe zoom", () => session.AddZoomAtPlayhead(ZoomPresentation.Loupe))));
+        if (source.HasCamera)
+        {
+            QuickDock.Children.Add(DockGroup(
+                Ui.IconButton(Ui.Icon("", 16), "Camera overlay layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.CameraOverlay)),
+                Ui.IconButton(Ui.Icon("", 16), "Split screen layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.SplitScreen)),
+                Ui.IconButton(Ui.Icon("", 16), "Camera cutout layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.CutoutCamera)),
+                Ui.IconButton(Ui.Icon("", 16), "Fullscreen camera layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.FullscreenCamera)),
+                Ui.IconButton(Ui.Icon("", 16), "Only screen layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.ScreenOnly))));
+        }
+
         QuickDock.Children.Add(DockGroup(
             Ui.IconButton(Ui.Icon("", 16), "Sensitive data mask", () => BeginMaskDraw(MaskType.Blur)),
             Ui.IconButton(Ui.Icon("", 16), "Highlight mask", () => BeginMaskDraw(MaskType.Spotlight))));
@@ -509,6 +520,7 @@ public sealed partial class EditorWindow : Window
         swapChain = compositor.CreateSwapChain(width, height);
         SwapChainPanelInterop.SetSwapChain(Preview, swapChain.SwapChain.NativePointer);
         renderer = new PreviewRenderer(compositor, swapChain, width, height);
+        overlay.ShortcutHits = () => compositor.ShortcutHitRects01;
         screenPlayback = OpenPlayback(source.Project?.Metadata.Tracks.DisplayVideo);
         webcamPlayback = OpenPlayback(source.Project?.Metadata.Tracks.WebcamVideo);
         FitPreview();

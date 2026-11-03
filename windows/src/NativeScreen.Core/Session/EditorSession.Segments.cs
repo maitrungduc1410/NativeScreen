@@ -92,6 +92,63 @@ public sealed partial class EditorSession
 
     public void MergeSliceWithNext(string id) => Mutate(document => SegmentEdits.MergeSliceWithNext(document, id));
 
+    public void RemoveSliceStartTrim(string id) => Mutate(document =>
+    {
+        var slices = document.Timeline.Slices;
+        var index = slices.FindIndex(item => item.Id == id);
+        if (index >= 0)
+        {
+            slices[index].SourceStartMs = Math.Min(slices[index].SourceStartMs, index > 0 ? slices[index - 1].SourceEndMs : 0);
+        }
+    });
+
+    public void RemoveSliceEndTrim(string id) => Mutate(document =>
+    {
+        var slices = document.Timeline.Slices;
+        var index = slices.FindIndex(item => item.Id == id);
+        if (index >= 0)
+        {
+            slices[index].SourceEndMs = Math.Max(slices[index].SourceEndMs, index + 1 < slices.Count ? slices[index + 1].SourceStartMs : SourceDurationMs);
+        }
+    });
+
+    public void ToggleShortcutTrackHidden(string trackId) => Mutate(document =>
+    {
+        var tracks = document.Captions.ShortcutTracks;
+        var index = tracks.FindIndex(track => track.Id == trackId);
+        if (index >= 0)
+        {
+            tracks[index].IsHidden = !tracks[index].IsHidden;
+            if (index == 0)
+            {
+                document.Timeline.IsShortcutsTrackHidden = tracks[0].IsHidden;
+            }
+        }
+    });
+
+    public void AddCameraLayoutAt(CameraTimelineLayoutType type, double sourceMs)
+    {
+        string? id = null;
+        Mutate(document => id = TimelineEdits.AddCameraLayout(document, sourceMs, SourceDurationMs, type));
+        if (id is not null)
+        {
+            SelectLayout(id);
+        }
+    }
+
+    public void ApplyVoiceoverVolumeToOthers(string id)
+    {
+        Mutate(document =>
+        {
+            var volume = document.Timeline.Voiceovers.First(item => item.Id == id).Volume;
+            foreach (var other in document.Timeline.Voiceovers)
+            {
+                other.Volume = volume;
+            }
+        });
+        ToastRequested?.Invoke("Volume applied to all voiceovers");
+    }
+
     public void ResetSliceTrim(string id) => Mutate(document => SegmentEdits.ResetSliceTrim(document, id, SourceDurationMs));
 
     public void ResetAllSlices() => Mutate(document => SegmentEdits.ResetAllSlices(document, SourceDurationMs));

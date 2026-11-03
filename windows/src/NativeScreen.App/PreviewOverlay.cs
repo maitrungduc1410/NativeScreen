@@ -32,12 +32,35 @@ internal sealed class PreviewOverlay
         this.session = session;
         this.canvas = canvas;
         this.source = source;
+        // A click that lands on a drawn keycap opens that shortcut's editor; masks sit above and take their own clicks.
+        canvas.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
+        canvas.PointerPressed += (_, args) =>
+        {
+            if (active is not null || session.IsPlaying || ShortcutHits?.Invoke() is not { Count: > 0 } hits)
+            {
+                return;
+            }
+
+            var point = args.GetCurrentPoint(canvas).Position;
+            var (x, y) = (point.X / Math.Max(1, canvas.ActualWidth), point.Y / Math.Max(1, canvas.ActualHeight));
+            foreach (var (id, rect) in hits)
+            {
+                if (x >= rect.X && x <= rect.X + rect.Z && y >= rect.Y && y <= rect.Y + rect.W)
+                {
+                    session.SelectShortcut(id);
+                    args.Handled = true;
+                    return;
+                }
+            }
+        };
         canvas.PointerMoved += Moved;
         canvas.PointerReleased += Released;
         canvas.PointerCaptureLost += (_, _) => Finish();
     }
 
     public bool ShowSafeZones { get; set; }
+
+    public Func<IReadOnlyDictionary<string, System.Numerics.Vector4>>? ShortcutHits { get; set; }
 
     public void Refresh()
     {

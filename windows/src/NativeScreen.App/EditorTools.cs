@@ -182,6 +182,104 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         : null;
 
     private readonly ClickSounds previewSounds = new();
+    private Windows.Media.Playback.MediaPlayer? musicPreview;
+
+    public string? LoadingTrack { get; private set; }
+
+    public bool IsPreviewingMusic => musicPreview is not null;
+
+    public bool IsHoveringBackgroundDrop { get; set; }
+
+    /// <summary>Picking the selected track again clears it. A new one is made if needed, then previews.</summary>
+    public async void SelectBuiltInTrack(string track)
+    {
+        StopMusicPreview();
+        if (session.Document.Audio.BackgroundMusic.RelativePath == track)
+        {
+            session.Mutate(document => document.Audio.BackgroundMusic.RelativePath = null);
+            return;
+        }
+
+        session.Mutate(document =>
+        {
+            document.Audio.BackgroundMusic.RelativePath = track;
+            document.Audio.BackgroundMusic.Muted = false;
+        });
+        LoadingTrack = track;
+        Changed?.Invoke();
+        await Task.Run(() => BuiltInBackgroundMusic.EnsureTrack(track));
+        LoadingTrack = null;
+        if (session.Document.Audio.BackgroundMusic.RelativePath == track && !session.IsPlaying)
+        {
+            ToggleMusicPreview();
+        }
+
+        Changed?.Invoke();
+    }
+
+    public void ToggleMusicPreview()
+    {
+        if (musicPreview is not null)
+        {
+            StopMusicPreview();
+        }
+        else if (BuiltInBackgroundMusic.ResolvePath(source.PackagePath, session.Document.Audio.BackgroundMusic.RelativePath) is { } file)
+        {
+            musicPreview = new Windows.Media.Playback.MediaPlayer
+            {
+                Source = Windows.Media.Core.MediaSource.CreateFromUri(new Uri(file)),
+                IsLoopingEnabled = true,
+                Volume = Math.Clamp(session.Document.Audio.BackgroundMusic.Volume * 2.5, 0.05, 1)
+            };
+            musicPreview.Play();
+        }
+
+        Changed?.Invoke();
+    }
+
+    public void StopMusicPreview()
+    {
+        musicPreview?.Dispose();
+        musicPreview = null;
+    }
+
+    /// <summary>Copies an image into the project and makes it the background.</summary>
+    public void SetBackgroundImage(string file)
+    {
+        if (CopyToAssets(file, $"custom-bg-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}{Path.GetExtension(file)}") is { } relative)
+        {
+            session.Mutate(document =>
+            {
+                document.Background.Type = BackgroundType.Image;
+                document.Background.WallpaperRelativePath = relative;
+            });
+        }
+    }
+
+    public async Task PasteBackgroundImage()
+    {
+        var content = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+        if (!content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Bitmap))
+        {
+            toast("The clipboard has no image");
+            return;
+        }
+
+        var reference = await content.GetBitmapAsync();
+        using var input = await reference.OpenReadAsync();
+        var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(input);
+        using var bitmap = await decoder.GetSoftwareBitmapAsync();
+        var temporary = Path.Combine(Directory.CreateTempSubdirectory("ns-paste-").FullName, "pasted.png");
+        using (var output = File.Create(temporary))
+        {
+            var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId, System.IO.WindowsRuntimeStreamExtensions.AsRandomAccessStream(output));
+            encoder.SetSoftwareBitmap(Windows.Graphics.Imaging.SoftwareBitmap.Convert(bitmap, Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8, Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied));
+            await encoder.FlushAsync();
+        }
+
+        SetBackgroundImage(temporary);
+    }
+
 
     public void PreviewClickSound() => previewSounds.Play(session.Document.Cursor.ClickEffect.SoundSet, session.Document.Cursor.ClickEffect.SoundVolume);
 

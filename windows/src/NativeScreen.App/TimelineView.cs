@@ -69,6 +69,14 @@ internal sealed class TimelineView
         };
         canvas.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
         canvas.PointerPressed += CanvasPressed;
+        canvas.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, args) =>
+        {
+            if (args.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))
+            {
+                ZoomNudged?.Invoke(Math.Pow(1.25, args.GetCurrentPoint(canvas).Properties.MouseWheelDelta / 120.0));
+                args.Handled = true;
+            }
+        }), handledEventsToo: true);
         canvas.PointerMoved += CanvasMoved;
         canvas.PointerExited += (_, _) => EndSkim();
         canvas.PointerReleased += CanvasReleased;
@@ -88,6 +96,9 @@ internal sealed class TimelineView
 
     /// <summary>The editor's file actions, for menus that upload audio. Set once by the window.</summary>
     public EditorTools? Tools { get; set; }
+
+    /// <summary>A touchpad pinch reaches the window as Ctrl and the wheel; the value multiplies the timeline zoom.</summary>
+    public event Action<double>? ZoomNudged;
 
     /// <summary>The hovered time changed while paused, so the preview should redraw.</summary>
     public event Action? Skimmed;
@@ -240,30 +251,78 @@ internal sealed class TimelineView
             };
         }
 
-        // A badge on each cut merges the two clips around it.
+        DrawTrimBadges();
+        return y + ClipRowHeight + RowSpacing;
+    }
+
+    /// <summary>Gold teardrops on the ruler for what was trimmed or cut; a click restores it.</summary>
+    private void DrawTrimBadges()
+    {
         var cuts = session.Mapper.MappedSlices;
-        for (var index = 0; index + 1 < cuts.Count; index++)
+        if (cuts.Count == 0)
         {
-            var left = cuts[index].Slice.Id;
-            var badge = new Button
-            {
-                Style = Ui.StyleOf("NsIconButton"),
-                Width = 18,
-                Height = 18,
-                CornerRadius = new CornerRadius(9),
-                Padding = new Thickness(0),
-                Background = new SolidColorBrush(Palette.Clip.Ring),
-                Content = Ui.Icon("\uE71B", 9, new SolidColorBrush(Color.FromArgb(255, 60, 40, 5)))
-            };
-            ToolTipService.SetToolTip(badge, "Merge with next");
-            badge.Click += (_, _) => session.MergeSliceWithNext(left);
-            Canvas.SetLeft(badge, X(cuts[index].TimelineEndMs) - 9);
-            Canvas.SetTop(badge, y - 7);
-            Canvas.SetZIndex(badge, 5);
-            canvas.Children.Add(badge);
+            return;
         }
 
-        return y + ClipRowHeight + RowSpacing;
+        const double threshold = 20;
+        var first = cuts[0].Slice;
+        if (first.SourceStartMs > threshold)
+        {
+            var id = first.Id;
+            TrimBadge(cuts[0].TimelineStartMs, TrimLabel(first.SourceStartMs), "Undo trim", () => session.RemoveSliceStartTrim(id));
+        }
+
+        for (var index = 0; index + 1 < cuts.Count; index++)
+        {
+            var id = cuts[index].Slice.Id;
+            var gap = Math.Max(0, cuts[index + 1].Slice.SourceStartMs - cuts[index].Slice.SourceEndMs);
+            TrimBadge(cuts[index].TimelineEndMs, gap > threshold ? TrimLabel(gap) : null, gap > threshold ? "Undo trim" : "Join clips", () => session.MergeSliceWithNext(id));
+        }
+
+        var last = cuts[^1].Slice;
+        var tail = session.SourceDurationMs - last.SourceEndMs;
+        if (tail > threshold)
+        {
+            var id = last.Id;
+            TrimBadge(cuts[^1].TimelineEndMs, TrimLabel(tail), "Undo trim", () => session.RemoveSliceEndTrim(id));
+        }
+    }
+
+    private static string TrimLabel(double ms)
+    {
+        var seconds = Math.Max(0, ms / 1000);
+        if (seconds < 1)
+        {
+            return $"{seconds:0.0}s";
+        }
+
+        if (seconds < 60)
+        {
+            return $"{seconds:0}s";
+        }
+
+        var minutes = (int)(seconds / 60);
+        return minutes < 60 ? $"{minutes}m" : $"{minutes / 60}h";
+    }
+
+    private void TrimBadge(double timelineMs, string? label, string tooltip, Action click)
+    {
+        var content = new Grid { Width = 30, Height = 28 };
+        content.Children.Add(Ui.Shape("M0,0 A7,7 0 0 1 14,0 C14,6 9,11 7,16 C5,11 0,6 0,0 Z", 26, new SolidColorBrush(Palette.Clip.Ring)));
+        var ink = new SolidColorBrush(Color.FromArgb(255, 60, 40, 5));
+        UIElement mark = label is null
+            ? Ui.Icon("", 9, ink)
+            : new TextBlock { Text = label, FontSize = 8, FontWeight = FontWeights.Bold, Foreground = ink, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        ((FrameworkElement)mark).Margin = new Thickness(0, 0, 0, 7);
+        content.Children.Add(mark);
+        var badge = new Button { Style = Ui.StyleOf("NsIconButton"), Content = content, Width = 30, Height = 28, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        ToolTipService.SetToolTip(badge, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(badge, tooltip);
+        badge.Click += (_, _) => click();
+        Canvas.SetLeft(badge, X(timelineMs) - 15);
+        Canvas.SetTop(badge, RulerHeight - 28);
+        Canvas.SetZIndex(badge, 5);
+        canvas.Children.Add(badge);
     }
 
     /// <summary>A filled envelope along the bottom of a clip; one point per 3 px is plenty, and it is rebuilt only on edits.</summary>
@@ -447,6 +506,7 @@ internal sealed class TimelineView
             return y;
         }
 
+        AddRowTarget(y, MaskRowHeight, Palette.Layout, time => session.AddCameraLayoutAt(CameraTimelineLayoutType.CameraOverlay, time));
         AddLabel("Layouts", y, MaskRowHeight, eye: true, timeline.IsCameraLayoutsTrackHidden, () =>
             session.Mutate(document => document.Timeline.IsCameraLayoutsTrackHidden = !document.Timeline.IsCameraLayoutsTrackHidden));
         foreach (var layout in timeline.CameraLayouts)
@@ -557,13 +617,14 @@ internal sealed class TimelineView
         {
             var trackId = track.Id;
             AddRowTarget(y, MaskRowHeight, Palette.Layout, time => session.AddCustomShortcut(trackId, time));
-            AddLabel(track.Name, y, MaskRowHeight, eye: false);
+            var trackHidden = track.IsHidden || !captions.ShowKeystrokes;
+            AddLabel(track.Name, y, MaskRowHeight, eye: true, trackHidden, () => session.ToggleShortcutTrackHidden(trackId));
             var clusters = session.Shortcuts().Where(item => item.TrackId == track.Id).OrderBy(item => item.DisplayStartMs).ToList();
             foreach (var shortcut in clusters)
             {
                 var left = X(TimelineOf(shortcut.DisplayStartMs));
                 var width = X(TimelineOf(shortcut.DisplayEndMs)) - left;
-                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, SegmentEdits.IsShortcutHidden(session.Document, shortcut));
+                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, trackHidden || SegmentEdits.IsShortcutHidden(session.Document, shortcut));
                 var pressed = shortcut;
                 block.RightTapped += (_, args) =>
                 {

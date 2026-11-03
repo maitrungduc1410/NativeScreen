@@ -428,7 +428,15 @@ public sealed partial class EditorWindow
 
                 return true;
             case VirtualKey.V:
-                session.PasteFromClipboard();
+                if (tools.IsHoveringBackgroundDrop)
+                {
+                    _ = tools.PasteBackgroundImage();
+                }
+                else
+                {
+                    session.PasteFromClipboard();
+                }
+
                 return true;
             default:
                 return false;

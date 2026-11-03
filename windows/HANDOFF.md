@@ -27,6 +27,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, Editor parity: music, trim badges, keycap clicks, crop handles
+
+### Verifier
+- **Result:** PASS for the items exercised below.
+- **verify.ps1:** Debug and Release x64, Core, Media and Rendering tests, 13 shaders.
+- **Exercised in the running app, on copies of projects:** selecting a built-in track (2.8 MB wav written to the cache, name in `project.json`), the preview stop button; a cut badge on the ruler; Ctrl and the wheel zooming with the playhead still; the crop grid, edge handles drawn and size readout; camera layout dock buttons drawn; a click on a drawn keycap opening its editor.
+- **Not exercised:** music by ear, including whether it matches macOS; trim badges for a leading or trailing trim; dragging crop edge handles; a real touchpad pinch; dropping and pasting a background image; Independent and Synchronized by ear; shortcut track eye; hover add on the layout row.
+- **Changes made:** `BuiltInBackgroundMusic` ports the macOS synthesis with the same formulas. Background audio paths now resolve through the package, its assets, then built-in tracks, so projects using a built-in track from macOS play here.
+- **Spec updates:** none.
+- **Next:** Attach mode changes preview only, as on macOS: both exports place a voiceover at its timeline start. Not ported: the Reel mode mock UI, because it imitates other apps' interfaces; that needs an owner decision. Mic and voiceover waveforms are still missing.
+
 ## 2026-11-03, LUT files on both platforms (written on Windows, macOS not built)
 
 ### Writer
