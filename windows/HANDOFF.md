@@ -27,6 +27,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, Mask frame no longer covers the cursor
+
+### Verifier
+- **Result:** PASS on Windows.
+- **verify.ps1:** PASS.
+- **Measurements:** none.
+- **Exercised in the running app, on a copy of a project:** a paused playhead inside a mask draws no frame; hovering shows the 4 corner handles and leaving hides them; clicking selects and keeps them; dragging moved `rect01` by the expected amount.
+- **Changes made:** `PreviewOverlay.DrawMask` drew a XAML outline around every active mask, above the composited cursor. It now draws only the handles, while selected or hovered, as `InteractiveMaskCanvasOverlayView` does on macOS.
+- **Not exercised:** a cursor overlapping a mask on screen, since the test project has none at that time; resizing with a corner handle.
+- **Next:** macOS shows a selected mask at 1x (`suppressZoomForMaskEditing`); Windows keeps the zoom.
+
 ## 2026-11-03, Built-in wallpapers and upright baked layers
 
 ### Writer

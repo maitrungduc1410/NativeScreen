@@ -26,6 +26,7 @@ internal sealed class PreviewOverlay
     private readonly Canvas canvas;
     private readonly Func<(double SourceWidth, double SourceHeight, bool HasCamera)> source;
     private Interaction? active;
+    private string? hoveredMaskId;
 
     public PreviewOverlay(EditorSession session, Canvas canvas, Func<(double, double, bool)> source)
     {
@@ -231,42 +232,64 @@ internal sealed class PreviewOverlay
         canvas.Children.Add(zone);
     }
 
+    // The drawn frame is the mask's only appearance. This layer sits above the cursor, so it adds nothing but corner handles,
+    // and those only while the mask is selected or under the pointer.
     private void DrawMask(MaskItem mask, CanvasCoordinateTransform map, double at)
     {
         var rect = mask.InterpolatedRect(at);
         var (x, y, width, height) = map.ToCanvas(rect);
-        var selected = mask.Id == session.SelectedMaskId;
+        var id = mask.Id;
         var body = new Border
         {
             Width = Math.Max(1, width),
             Height = Math.Max(1, height),
-            BorderBrush = selected ? Accent : new SolidColorBrush(Windows.UI.Color.FromArgb(150, 255, 255, 255)),
-            BorderThickness = new Thickness(selected ? 2 : 1),
-            Background = new SolidColorBrush(Colors.Transparent),
-            CornerRadius = new CornerRadius(4)
+            Background = new SolidColorBrush(Colors.Transparent)
         };
         Canvas.SetLeft(body, x);
         Canvas.SetTop(body, y);
         canvas.Children.Add(body);
         Begin(body, mask, map, rect, at, moveX: 1, moveY: 1, sizeX: 0, sizeY: 0);
-        if (!selected)
+        Border[] handles =
+        [
+            Handle(mask, map, rect, at, x, y, 1, 1, -1, -1),
+            Handle(mask, map, rect, at, x + width, y, 0, 1, 1, -1),
+            Handle(mask, map, rect, at, x, y + height, 1, 0, -1, 1),
+            Handle(mask, map, rect, at, x + width, y + height, 0, 0, 1, 1)
+        ];
+        void ShowHandles()
         {
-            return;
+            var visible = id == session.SelectedMaskId || id == hoveredMaskId;
+            foreach (var handle in handles)
+            {
+                handle.Opacity = visible ? 1 : 0;
+            }
         }
 
-        Handle(mask, map, rect, at, x, y, 1, 1, -1, -1);
-        Handle(mask, map, rect, at, x + width, y, 0, 1, 1, -1);
-        Handle(mask, map, rect, at, x, y + height, 1, 0, -1, 1);
-        Handle(mask, map, rect, at, x + width, y + height, 0, 0, 1, 1);
+        foreach (var element in handles.Append(body))
+        {
+            element.PointerEntered += (_, _) =>
+            {
+                hoveredMaskId = id;
+                ShowHandles();
+            };
+            element.PointerExited += (_, _) =>
+            {
+                hoveredMaskId = hoveredMaskId == id ? null : hoveredMaskId;
+                ShowHandles();
+            };
+        }
+
+        ShowHandles();
     }
 
-    private void Handle(MaskItem mask, CanvasCoordinateTransform map, Rect01 rect, double at, double x, double y, double moveX, double moveY, double sizeX, double sizeY)
+    private Border Handle(MaskItem mask, CanvasCoordinateTransform map, Rect01 rect, double at, double x, double y, double moveX, double moveY, double sizeX, double sizeY)
     {
         var handle = new Border { Width = HandleSize, Height = HandleSize, CornerRadius = new CornerRadius(HandleSize / 2), Background = new SolidColorBrush(Colors.White), BorderBrush = Accent, BorderThickness = new Thickness(2) };
         Canvas.SetLeft(handle, x - HandleSize / 2);
         Canvas.SetTop(handle, y - HandleSize / 2);
         canvas.Children.Add(handle);
         Begin(handle, mask, map, rect, at, moveX, moveY, sizeX, sizeY);
+        return handle;
     }
 
     private void Begin(FrameworkElement element, MaskItem mask, CanvasCoordinateTransform map, Rect01 rect, double at, double moveX, double moveY, double sizeX, double sizeY)
