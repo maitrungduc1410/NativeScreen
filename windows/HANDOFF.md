@@ -27,6 +27,18 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, Recording bar rectangle, sideways rows, disabled inspector tabs
+
+### Verifier
+- **Result:** PASS on Windows.
+- **verify.ps1:** PASS, 217 tests (Core 183, Media 13, Rendering 21).
+- **Measurements:** bar edge pixels before: white frame of 3 px outside the border; after: only the `#49494E` border on all 4 sides. Scroll percent sampled every 25 ms after picking a cursor card: 8.8, 30.3, 36.5, 40.4, 42.8, 43.6, 44.8, 45.3, 45.4.
+- **Exercised in the running app, on copies of a project:** cursor style and color rows; wallpaper pills; mouse wheel over a row; each disabled tooltip on a copy with no camera, microphone, cursor or keys; a press and Ctrl+3 on a disabled tab change nothing; Hide camera disables Camera Style at once.
+- **Changes made:** `RecordingHudWindow`, `InspectorPanel.Strip` and `Options`, `CursorThemeCards` at the macOS sizes without captions, `EditorSession.TabAvailability`, the rail, the View menu and Ctrl+digit.
+- **Not exercised:** the View menu's disabled items; rows other than cursor and wallpaper by scroll measurement; the bar while recording or at another scale.
+- **Spec updates:** ADR-33.
+- **Next:** A plain wheel over an overflowing row scrolls the row, not the panel.
+
 ## 2026-11-03, Mask frame no longer covers the cursor
 
 ### Verifier

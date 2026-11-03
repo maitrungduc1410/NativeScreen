@@ -35,9 +35,11 @@ internal sealed class InspectorPanel
     private readonly EditorTools tools;
     private readonly HashSet<string> expanded = [];
     private const string WindowsWallpapers = "Windows";
+    private const double StripBleed = 20;
 
     private static readonly Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> WallpaperThumbnails = [];
 
+    private readonly Dictionary<string, StripState> strips = [];
     private string? wallpaperCategory;
     private IReadOnlyList<WallpaperItem>? systemWallpapers;
 
@@ -140,25 +142,21 @@ internal sealed class InspectorPanel
         if (isWallpaper)
         {
             wallpaperCategory ??= background.Type == BackgroundType.Mesh ? "Mesh" : BundledWallpaperCatalog.CategoryOf(background.SystemWallpaperName) ?? WindowsWallpapers;
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, Padding = new Thickness(0, 2, 0, 2) };
+            var row = StripRow(7);
+            FrameworkElement? selectedPill = null;
             foreach (var category in new[] { "All", WindowsWallpapers, "Mesh" }.Concat(BundledWallpaperCatalog.Categories))
             {
                 var name = category;
-                row.Children.Add(Ui.Option(name == "All" ? "★" : name, name == wallpaperCategory, () =>
+                var pill = Ui.Option(name == "All" ? "★" : name, name == wallpaperCategory, () =>
                 {
                     wallpaperCategory = name;
                     Rebuild();
-                }));
+                });
+                selectedPill = name == wallpaperCategory ? pill : selectedPill;
+                row.Children.Add(pill);
             }
 
-            var strip = new ScrollViewer
-            {
-                Content = row,
-                HorizontalScrollMode = ScrollMode.Enabled,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-                VerticalScrollMode = ScrollMode.Disabled,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
-            };
+            var strip = Strip("wallpaper-category", row, wallpaperCategory, selectedPill);
 
             // The items of the current pill. The random button draws from the same lists.
             systemWallpapers ??= EditorTools.SystemWallpapers();
@@ -309,33 +307,43 @@ internal sealed class InspectorPanel
     {
         Add(Toggle("Hide cursor", null, () => Doc.Cursor.Hidden, (d, v) => d.Cursor.Hidden = v));
         Add(Slider("Cursor size", () => Doc.Cursor.Scale, (d, v) => d.Cursor.Scale = v, 0.5, 3.5, 1.6));
-        var themes = new WordWrapPanel();
+        var themeRow = StripRow(8);
+        var selectedThemeId = CursorSpriteName.NormalizeThemeId(Doc.Cursor.ThemeId);
+        FrameworkElement? selectedTheme = null;
         foreach (var themeId in CursorSpriteName.PreferredThemeOrder)
         {
             var theme = themeId;
             var variants = CursorThemeCards.PointerVariants(theme);
             if (variants.Count > 0)
             {
-                themes.Children.Add(CursorThemeCards.Card(variants[0].File, CursorThemeCards.DisplayName(theme), Doc.Cursor.ThemeId == theme, () => Edit(d =>
+                var isSelected = selectedThemeId == theme;
+                var shown = isSelected ? variants.Find(item => item.Id == Doc.Cursor.VariantId).File ?? variants[0].File : variants[0].File;
+                var card = CursorThemeCards.Card(shown, CursorThemeCards.DisplayName(theme), isSelected, () => Edit(d =>
                 {
                     d.Cursor.ThemeId = theme;
                     d.Cursor.VariantId = variants.Exists(item => item.Id == d.Cursor.VariantId) ? d.Cursor.VariantId : variants[0].Id;
-                })));
+                }));
+                selectedTheme = isSelected ? card : selectedTheme;
+                themeRow.Children.Add(card);
             }
         }
 
-        Add(Labeled("Cursor style", 10, themes));
-        var pointers = CursorThemeCards.PointerVariants(CursorSpriteName.NormalizeThemeId(Doc.Cursor.ThemeId));
+        Add(Labeled("Cursor style", 10, Strip("cursor-style", themeRow, selectedThemeId, selectedTheme)));
+        var pointers = CursorThemeCards.PointerVariants(selectedThemeId);
         if (pointers.Count > 1)
         {
-            var row = new WordWrapPanel();
+            var row = StripRow(8);
+            var selectedVariant = Doc.Cursor.VariantId ?? pointers[0].Id;
+            FrameworkElement? selectedCard = null;
             foreach (var (id, file) in pointers)
             {
                 var chosen = id;
-                row.Children.Add(CursorThemeCards.Card(file, null, (Doc.Cursor.VariantId ?? pointers[0].Id) == id, () => Edit(d => d.Cursor.VariantId = chosen)));
+                var card = CursorThemeCards.Card(file, id, selectedVariant == id, () => Edit(d => d.Cursor.VariantId = chosen), 48, 26);
+                selectedCard = selectedVariant == id ? card : selectedCard;
+                row.Children.Add(card);
             }
 
-            Add(Labeled("Cursor color", 10, row));
+            Add(Labeled("Cursor color", 10, Strip("cursor-color-" + selectedThemeId, row, selectedVariant, selectedCard)));
         }
 
         Add(Toggle("Always use pointer cursor", null, () => Doc.Cursor.AlwaysUsePointer, (d, v) => d.Cursor.AlwaysUsePointer = v));
@@ -811,7 +819,7 @@ internal sealed class InspectorPanel
         Add(Toggle("Mute microphone", null, () => Doc.Audio.MuteMicrophone, (d, v) => d.Audio.MuteMicrophone = v));
         Add(Slider("Microphone volume", () => Doc.Audio.MicrophoneVolume, (d, v) => d.Audio.MicrophoneVolume = v, 0, 1, 1));
         var preset = Doc.Audio.MicrophoneAudioPreset;
-        Add(Labeled("Microphone audio mode", 10, OptionsWrap(
+        Add(Labeled("Microphone audio mode", 10, Options(
             ("Off", preset == MicrophoneAudioPreset.Off, () => Edit(d => d.Audio.MicrophoneAudioPreset = MicrophoneAudioPreset.Off)),
             ("Standard", preset == MicrophoneAudioPreset.Standard, () => Edit(d => d.Audio.MicrophoneAudioPreset = MicrophoneAudioPreset.Standard)),
             ("Loud", preset == MicrophoneAudioPreset.Loud, () => Edit(d => d.Audio.MicrophoneAudioPreset = MicrophoneAudioPreset.Loud)),
@@ -823,13 +831,13 @@ internal sealed class InspectorPanel
         Add(Slider("System audio volume", () => Doc.Audio.SystemAudioVolume, (d, v) => d.Audio.SystemAudioVolume = v, 0, 1, 1));
         AddDivider();
         Add(Text("Background audio", 12.5, "Ink45", true));
-        Add(OptionsWrap(BuiltInBackgroundMusic.Genres.Select<string, (string, bool, Action?)>(genre => (genre, audioGenre == genre, () =>
+        Add(Options(BuiltInBackgroundMusic.Genres.Select<string, (string, bool, Action?)>(genre => (genre, audioGenre == genre, () =>
         {
             audioGenre = genre;
             Rebuild();
         })).ToArray()));
         var musicPath = Doc.Audio.BackgroundMusic.RelativePath;
-        Add(OptionsWrap(BuiltInBackgroundMusic.Tracks(audioGenre).Select<string, (string, bool, Action?)>(track => (tools.LoadingTrack == track ? track + "..." : track, musicPath == track, () => tools.SelectBuiltInTrack(track))).ToArray()));
+        Add(Options(BuiltInBackgroundMusic.Tracks(audioGenre).Select<string, (string, bool, Action?)>(track => (tools.LoadingTrack == track ? track + "..." : track, musicPath == track, () => tools.SelectBuiltInTrack(track))).ToArray()));
         if (musicPath is not null && tools.LoadingTrack is null)
         {
             var title = Path.GetFileNameWithoutExtension(musicPath).Replace("bg-", "");
@@ -949,7 +957,7 @@ internal sealed class InspectorPanel
             "iphone-16-pro" => new[] { ("black-titanium", "Black Titanium"), ("white-titanium", "White Titanium"), ("natural-titanium", "Natural Titanium"), ("desert-titanium", "Desert Titanium") },
             _ => new[] { ("space-black", "Space Black"), ("silver", "Silver") }
         };
-        Add(Labeled("Finish", 10, OptionsWrap(finishes.Select<(string, string), (string, bool, Action?)>(finish => (finish.Item2, mockup.ColorVariantId == finish.Item1, (Action?)(() => Edit(d => d.FrameStyle.DeviceMockup.ColorVariantId = finish.Item1)))).ToArray())));
+        Add(Labeled("Finish", 10, Options(finishes.Select<(string, string), (string, bool, Action?)>(finish => (finish.Item2, mockup.ColorVariantId == finish.Item1, (Action?)(() => Edit(d => d.FrameStyle.DeviceMockup.ColorVariantId = finish.Item1)))).ToArray())));
         Add(Labeled("Device frames", 10, OptionsWrap(
             ("MacBook Pro 16\"", mockup.DeviceId == "macbook-pro-16", () => Edit(d => d.FrameStyle.DeviceMockup.DeviceId = "macbook-pro-16")),
             ("MacBook Air 15\"", mockup.DeviceId == "macbook-air-15", () => Edit(d => d.FrameStyle.DeviceMockup.DeviceId = "macbook-air-15")),
@@ -1186,15 +1194,109 @@ internal sealed class InspectorPanel
         return stack;
     }
 
-    private static StackPanel Options(params (string Title, bool Selected, Action? Click)[] options)
+    private ScrollViewer Options(params (string Title, bool Selected, Action? Click)[] options)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        foreach (var (title, selected, click) in options)
+        var row = StripRow(6);
+        FrameworkElement? selected = null;
+        string? selectedTitle = null;
+        foreach (var (title, isSelected, click) in options)
         {
-            row.Children.Add(Ui.Option(title, selected, click));
+            var option = Ui.Option(title, isSelected, click);
+            row.Children.Add(option);
+            if (isSelected)
+            {
+                selected = option;
+                selectedTitle = title;
+            }
         }
 
-        return row;
+        return Strip(string.Join('|', options.Select(option => option.Title)), row, selectedTitle, selected);
+    }
+
+    private static StackPanel StripRow(double spacing) =>
+        new() { Orientation = Orientation.Horizontal, Spacing = spacing, Padding = new Thickness(0, 2, StripBleed, 2) };
+
+    /// <summary>
+    /// A row that scrolls sideways and runs to the panel's edge. The panel is rebuilt on every edit, so where the row was and what
+    /// it had selected live here by key: that is what lets a newly selected item glide to the center, instead of the row
+    /// jumping back to its start. A row opening for the first time centers without animating, and any other rebuild leaves it alone.
+    /// </summary>
+    private ScrollViewer Strip(string key, StackPanel row, string? selectedId, FrameworkElement? selected)
+    {
+        var strip = new ScrollViewer
+        {
+            Content = row,
+            Margin = new Thickness(0, 0, -StripBleed, 0),
+            HorizontalScrollMode = ScrollMode.Enabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            VerticalScrollMode = ScrollMode.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
+        };
+        var isNew = !strips.TryGetValue(key, out var state);
+        state ??= new StripState();
+        strips[key] = state;
+        state.Owner = strip;
+        foreach (var button in row.Children.OfType<Microsoft.UI.Xaml.Controls.Primitives.ButtonBase>())
+        {
+            button.Click += (_, _) => CenterInStrip(strip, row, button, state, animated: true);
+        }
+
+        var restored = false;
+        strip.ViewChanged += (_, args) =>
+        {
+            if (!restored || state.Owner != strip)
+            {
+                return;
+            }
+
+            state.Offset = strip.HorizontalOffset;
+            if (!args.IsIntermediate)
+            {
+                state.Target = null;
+            }
+        };
+        strip.Loaded += (_, _) =>
+        {
+            strip.UpdateLayout();
+            strip.ChangeView(state.Offset, null, null, disableAnimation: true);
+            restored = true;
+            var changed = !isNew && state.SelectedId != selectedId;
+            state.SelectedId = selectedId;
+            var target = state.Target;
+            strip.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (selected is not null && (isNew || changed))
+                {
+                    CenterInStrip(strip, row, selected, state, animated: changed);
+                }
+                else if (target is { } unfinished)
+                {
+                    strip.ChangeView(unfinished, null, null, disableAnimation: false);
+                }
+            });
+        };
+        return strip;
+    }
+
+    private static void CenterInStrip(ScrollViewer strip, StackPanel row, FrameworkElement item, StripState state, bool animated)
+    {
+        if (!item.IsLoaded || !strip.IsLoaded)
+        {
+            return;
+        }
+
+        var left = item.TransformToVisual(row).TransformPoint(default).X;
+        var target = Math.Clamp(left + item.ActualWidth / 2 - strip.ViewportWidth / 2, 0, strip.ScrollableWidth);
+        state.Target = animated ? target : null;
+        strip.ChangeView(target, null, null, disableAnimation: !animated);
+    }
+
+    private sealed class StripState
+    {
+        public double Offset { get; set; }
+        public double? Target { get; set; }
+        public string? SelectedId { get; set; }
+        public ScrollViewer? Owner { get; set; }
     }
 
     private static VariableSizedWrapGrid OptionsWrap(params (string Title, bool Selected, Action? Click)[] options)

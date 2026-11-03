@@ -13,8 +13,6 @@ namespace NativeScreen.App;
 /// </summary>
 internal static class CursorThemeCards
 {
-    private const double CardSize = 62;
-    private const double SpriteSize = 44;
     private static readonly string Root = Path.Combine(AppContext.BaseDirectory, "Assets", "Cursors", "sets");
     private static readonly Dictionary<string, (double X, double Y)> Offsets = [];
 
@@ -42,27 +40,21 @@ internal static class CursorThemeCards
             .ToList();
     }
 
-    public static Button Card(string file, string? title, bool selected, Action click)
+    public static Button Card(string file, string name, bool selected, Action click, double size = 50, double spriteSize = 31)
     {
-        var image = new Image { Width = SpriteSize, Height = SpriteSize, Source = new SvgImageSource(new Uri(file)) { RasterizePixelWidth = 88, RasterizePixelHeight = 88 } };
+        var image = new Image { Width = spriteSize, Height = spriteSize, Source = new SvgImageSource(new Uri(file)) { RasterizePixelWidth = 88, RasterizePixelHeight = 88 } };
         image.Loaded += (_, _) => _ = Center(image, file);
-        var stack = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Center };
-        var fill = new Border { Width = CardSize, Height = CardSize, CornerRadius = new CornerRadius(9), Background = Ui.Rgb(0.48, 0.48, 0.48), Child = image };
+        var fill = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(10), Background = Ui.Rgb(0.48, 0.48, 0.48), Child = image };
         if (selected)
         {
             fill.Background = Ui.Rgb(0.54, 0.54, 0.54);
             fill.BorderBrush = Ui.Rgb(0.44, 0.34, 0.98);
-            fill.BorderThickness = new Thickness(2);
+            fill.BorderThickness = new Thickness(1.5);
         }
 
-        stack.Children.Add(fill);
-        if (title is not null)
-        {
-            stack.Children.Add(new TextBlock { Text = title, FontSize = 11, MaxWidth = CardSize + 8, TextTrimming = TextTrimming.CharacterEllipsis, HorizontalAlignment = HorizontalAlignment.Center, Foreground = Ui.Pal("Ink60") });
-        }
-
-        var button = new Button { Style = Ui.StyleOf("NsIconButton"), Content = stack, Width = double.NaN, Height = double.NaN, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title ?? Path.GetFileNameWithoutExtension(file));
+        var button = new Button { Style = Ui.StyleOf("NsIconButton"), Content = fill, Width = double.NaN, Height = double.NaN, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        ToolTipService.SetToolTip(button, name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, name);
         button.Click += (_, _) => click();
         return button;
     }

@@ -691,3 +691,15 @@ wallpaper appeared upright and then jumped upside down when the fade ended. `ren
 use the same row order, so the bake now only restores the extent's origin. Rounded masks are symmetric and did not change.
 All frame fixtures were regenerated. Existing projects keep their settings and now render the intended direction.
 
+---
+
+## 33. ADR-33: Windows Recording Bar Frame and Sideways Rows in a Rebuilt Inspector
+
+### Recording bar
+On Windows the bar is a plain rectangle; rounded corners stay a macOS look. A WinUI window without a title bar still paints a white frame around its content, measured at 3 pixels at 200% scale. A window region only hides part of it and, being aliased, leaves broken black and white edges. The frame goes away only by removing `WS_CAPTION` and `WS_THICKFRAME` and adding `WS_POPUP`, followed by `SWP_FRAMECHANGED`. The bar is excluded from capture, so a screenshot of it needs that exclusion turned off for the test.
+
+### Sideways rows
+The inspector rebuilds its controls on every edit, so a new `ScrollViewer` would start at offset 0 and a selected item could never glide into view. `InspectorPanel.Strip` keeps offset, pending target and selected id by row key. A rebuild restores the offset without animation. When the selected id changed it then animates to center the item, and a row opening for the first time centers without animating. Every other rebuild leaves the row where the user scrolled it. On a row that overflows, a plain mouse wheel scrolls sideways.
+
+### Inspector tabs
+A disabled tab keeps its button enabled and ignores clicks, because a disabled WinUI button shows no tooltip and the tooltip gives the reason. The rail rebuilds only when availability changes, so a slider drag does not recreate it.
