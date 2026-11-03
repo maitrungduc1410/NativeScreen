@@ -649,3 +649,21 @@ whole canvas squeezed the full screen into it, which looked like the zoom snappi
   Old projects with overlaps load with the later segment moved to the first free track, and empty tracks are closed up.
 - An imported file goes to the first track with room. A recording goes to the first track with nothing after its start, so
   it fits at any length. Dragging along a track stops at its neighbors; dragging to a full track snaps the segment back.
+
+---
+
+## 31. ADR-31: Camera LUT Files Live in the Package and Grade sRGB Values
+
+### Context
+`Load your LUT file` stored only the file's name and switched to the Cinema look. No renderer read `customLUTRelativePath`, so the chosen LUT had no effect, and the file stayed outside the project.
+
+### Decision
+- The `.cube` file is checked, then copied to `assets/lut-<file name>`. `customLUTRelativePath` is that package-relative path. `recording/` is untouched.
+- Order of precedence: selected custom preset, then LUT file, then built-in look. Picking a built-in look or a custom preset clears the LUT path, and loading a LUT clears the custom preset. `colorGradePreset` is left alone.
+- A missing or unreadable file falls back to the built-in look, which covers projects saved by the old code with a bare file name and presets applied to another project.
+- The table applies to sRGB-encoded values on both platforms: `CIColorCubeWithColorSpace` with sRGB on macOS, the `Lut3D` pass on Windows. `Color grading intensity` fades it as it does a look. Sizes from 2 to 128 are accepted; 1D LUTs are refused.
+
+### Consequences
+- Export and preview both pick it up, since both go through the compositor. Look thumbnails in the inspector do not show it.
+- There is no fixture for a LUT file yet, so nothing compares the two platforms' output.
+

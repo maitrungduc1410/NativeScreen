@@ -2760,10 +2760,11 @@ public struct InspectorSidebarView: View {
                     spacing: 6
                 ) {
                     ForEach(CameraColorGradePreset.allCases) { preset in
-                        let isSelected = (cam.selectedCustomColorPresetID == nil && cam.colorGradePreset == preset)
+                        let isSelected = (cam.selectedCustomColorPresetID == nil && cam.customLUTRelativePath == nil && cam.colorGradePreset == preset)
                         Button {
                             session.mutate {
                                 $0.camera.selectedCustomColorPresetID = nil
+                                $0.camera.customLUTRelativePath = nil
                                 $0.camera.colorGradePreset = preset
                             }
                         } label: {
@@ -2796,6 +2797,7 @@ public struct InspectorSidebarView: View {
                         Button {
                             session.mutate {
                                 $0.camera.selectedCustomColorPresetID = custom.id
+                                $0.camera.customLUTRelativePath = nil
                             }
                         } label: {
                             Image(
@@ -2831,11 +2833,7 @@ public struct InspectorSidebarView: View {
                             panel.title = "Choose a 3D LUT (.cube) file"
                             panel.allowsMultipleSelection = false
                             if panel.runModal() == .OK, let url = panel.url {
-                                session.mutate {
-                                    $0.camera.customLUTRelativePath = url.lastPathComponent
-                                    $0.camera.selectedCustomColorPresetID = nil
-                                    $0.camera.colorGradePreset = .cinema
-                                }
+                                loadLUTFile(from: url)
                             }
                         }
                     } label: {
@@ -2854,7 +2852,22 @@ public struct InspectorSidebarView: View {
                     .buttonStyle(.plain)
                 }
 
-                if cam.colorGradePreset != .original || cam.selectedCustomColorPresetID != nil {
+                if let lutPath = cam.customLUTRelativePath {
+                    HStack(spacing: 8) {
+                        Text((lutPath as NSString).lastPathComponent)
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.ink.opacity(0.70))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Button("Remove LUT") {
+                            session.mutate { $0.camera.customLUTRelativePath = nil }
+                        }
+                        .font(.system(size: 12.5, weight: .regular))
+                    }
+                }
+
+                if cam.colorGradePreset != .original || cam.selectedCustomColorPresetID != nil || cam.customLUTRelativePath != nil {
                     coalescedSlider(
                         title: "Color grading intensity",
                         value: Binding(
@@ -4006,6 +4019,34 @@ public struct InspectorSidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Copies a `.cube` file into the package so the project stays portable, then grades the camera with it.
+    private func loadLUTFile(from url: URL) {
+        guard let text = try? String(contentsOf: url, encoding: .utf8), CubeLUTFile.parse(text) != nil else {
+            let alert = NSAlert()
+            alert.messageText = "This file is not a 3D LUT"
+            alert.informativeText = url.lastPathComponent
+            alert.runModal()
+            return
+        }
+        let assets = session.packageURL.appendingPathComponent("assets", isDirectory: true)
+        let name = "lut-\(url.lastPathComponent)"
+        let target = assets.appendingPathComponent(name)
+        do {
+            try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: target.path) {
+                try FileManager.default.removeItem(at: target)
+            }
+            try FileManager.default.copyItem(at: url, to: target)
+        } catch {
+            NSAlert(error: error).runModal()
+            return
+        }
+        session.mutate {
+            $0.camera.customLUTRelativePath = "assets/\(name)"
+            $0.camera.selectedCustomColorPresetID = nil
+        }
     }
 
     private struct CameraPerimeterPositionGridPicker: View {

@@ -413,6 +413,7 @@ public final class MetalFrameCompositor {
         if includeShortcutOverlay {
             if session.hasRecordedCamera && stage.camera.opacity > 0.004 {
                 composite = renderWebcamOverlay(
+                    packageURL: session.packageURL,
                     over: composite,
                     webcamFrame: webcamVideoFrame,
                     placement: stage.camera,
@@ -1841,6 +1842,7 @@ public final class MetalFrameCompositor {
     }
 
     private func renderWebcamOverlay(
+        packageURL: URL,
         over background: CIImage,
         webcamFrame: CIImage?,
         placement: StageLayout.CameraPlacement,
@@ -1854,7 +1856,7 @@ public final class MetalFrameCompositor {
             camCfg.customColorPresets.first(where: { $0.id == id })
         }
         guard let rawCI = webcamFrame.map({
-            self.prepareRecordedWebcamFrame($0, camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: placement.isCutout, isRealtimePreview: isRealtimePreview)
+            self.prepareRecordedWebcamFrame($0, packageURL: packageURL, camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: placement.isCutout, isRealtimePreview: isRealtimePreview)
         }) ?? Self.placeholderWebcamImage(camCfg: camCfg, customPreset: activeCustomPreset, isCutoutMode: placement.isCutout) else {
             return background
         }
@@ -1938,6 +1940,7 @@ public final class MetalFrameCompositor {
 
     private func prepareRecordedWebcamFrame(
         _ frame: CIImage,
+        packageURL: URL,
         camCfg: CameraConfig,
         customPreset: CustomCameraColorPreset?,
         isCutoutMode: Bool,
@@ -1983,6 +1986,7 @@ public final class MetalFrameCompositor {
             to: img,
             preset: customPreset == nil ? camCfg.colorGradePreset : .original,
             customPreset: customPreset,
+            customLUT: camCfg.customLUTRelativePath.flatMap { CubeLUTCache.table(at: packageURL.appendingPathComponent($0)) },
             intensity: camCfg.colorGradeIntensity,
             sharpen01: camCfg.sharpen01
         )

@@ -798,6 +798,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
                                 session.mutate { doc in
                                     doc.camera.customColorPresets.append(created)
                                     doc.camera.selectedCustomColorPresetID = created.id
+                                    doc.camera.customLUTRelativePath = nil
                                     doc.camera.colorGradeIntensity = 1.0
                                 }
                                 onCloseWindow()

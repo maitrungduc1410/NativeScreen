@@ -508,6 +508,7 @@ public enum LocalOnDeviceMediaIntelligence {
         to image: CIImage,
         preset: CameraColorGradePreset,
         customPreset: CustomCameraColorPreset? = nil,
+        customLUT: CubeLUTFile? = nil,
         intensity: Double,
         sharpen01: Double
     ) -> CIImage {
@@ -517,6 +518,16 @@ public enum LocalOnDeviceMediaIntelligence {
         let clampedIntensity = max(0.0, min(1.0, intensity))
         if let custom = customPreset, clampedIntensity > 0.005 {
             let graded = applyCustomColorPreset(to: current, preset: custom).cropped(to: baseExtent)
+            if clampedIntensity >= 0.995 {
+                current = graded
+            } else {
+                let faded = graded.applyingFilter("CIColorMatrix", parameters: [
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(clampedIntensity))
+                ])
+                current = faded.composited(over: current).cropped(to: baseExtent)
+            }
+        } else if let lut = customLUT, clampedIntensity > 0.005 {
+            let graded = lut.apply(to: current).cropped(to: baseExtent)
             if clampedIntensity >= 0.995 {
                 current = graded
             } else {

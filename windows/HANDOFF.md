@@ -27,6 +27,23 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-03, LUT files on both platforms (written on Windows, macOS not built)
+
+### Writer
+- **Scope:** `spec/06` ADR-31. macOS: new `Engine/CubeLUTFile.swift`, `applyCameraGradeAndSharpen(customLUT:)`, `packageURL` passed down the compositor, `loadLUTFile` and `Remove LUT` in the inspector. Windows: `CubeLut.TryParse`, `FileLookTable`, per-table LUT size, the `+` menu.
+- **Built on macOS:** No. **The Swift changes were written on Windows and have never been compiled.** This breaks the `NativeScreen/AGENTS.md` rule to build after a Swift change, so build before anything else.
+- **How to verify on macOS:** build; load a 33-point `.cube` on a project with a camera; confirm the camera changes in preview and export, the file is at `assets/lut-*.cube`, the intensity slider fades it, and a cutout camera keeps its transparency. Then open the same project on Windows and compare.
+- **Open VERIFY items:** `CubeLUTFile.apply`: `CIColorCubeWithColorSpace` with a 33 size, and alpha on a cutout camera. `CubeLUTCache` uses `nonisolated(unsafe)`; adjust if the project's concurrency settings refuse it.
+- **Risks / unsure:** No LUT fixture exists, so matching output between platforms is by design, not measured.
+
+### Verifier
+- **Result:** PASS on Windows only.
+- **verify.ps1:** Debug and Release x64, all tests, 13 shaders. It does not build Swift.
+- **Measurements:** none. On a test copy with the screen recording as a webcam track and an inverting 2-point LUT, the camera bubble drew inverted and no built-in look was selected. Camera crop with the 1:1 preset wrote `cropRect01` on the same copy.
+- **Changes made:** the above; `CubeLutTests`.
+- **Spec updates:** ADR-31.
+- **Next:** Not exercised: the file picker path of `Load your LUT file`, a LUT in an export, Remove LUT.
+
 ## 2026-11-03, Editor parity: mask drawing, skim, colors, transcript bar, shortcut styles, presets, click sounds
 
 ### Verifier
@@ -36,7 +53,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Not exercised:** retyping a word; click sounds by ear; camera crop, which needs a project with a webcam track; default preset on a new recording; preset rename, update and remove; pause chips; hue slider.
 - **Changes made:** `ColorField.cs`, `ClickSounds.cs`, additions to `PreviewOverlay.cs`, `InspectorPanel.cs`, `EditorWindow.Tools.cs`, `TimelineView.cs`, `EditorSession.Segments.cs`, `ProjectPreset.cs`. Click sound wavs are now copied to the output.
 - **Spec updates:** none.
-- **Next:** `Load your LUT file` is not ported: on macOS it stores `customLUTRelativePath` and switches to Cinema, and no renderer reads that path, so it would be an empty control. Decide on macOS first. Still open for editing: built-in music, trim badges with durations, quick dock layout buttons, pinch zoom, crop edge handles and thirds grid.
+- **Next:** Still open for editing: built-in music, trim badges with durations, quick dock layout buttons, pinch zoom, crop edge handles and thirds grid.
 
 ## 2026-11-03, Click ripple and voiceover tracks (macOS side done, Windows port pending)
 
