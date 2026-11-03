@@ -41,6 +41,7 @@
 - [x] Playback controller (`AVAssetReader` / `AVPlayerItemVideoOutput` synchronized with telemetry clock at 60/120fps).
 - [x] **Background Pass:**
   - [x] Load macOS system wallpapers directly from `/System/Library/Desktop Pictures/` (and copy chosen image to `.nativescreen/assets/`).
+  - [x] 108 self-drawn built-in wallpapers in 7 categories, with `Pick random wallpaper` per category (`spec/06` ADR-24).
   - [x] Built-in procedural Mesh Gradients, Linear Gradients (with interactive 2D HSB Color Picker, Eyedropper, Hue rotation slider, and 30 curated gradient presets), Solid Colors, and custom image drop/paste (`⌘V`).
   - [x] Background blur slider, padding slider, and subtle anti-banding noise.
 - [x] **Screen Frame Pass:**

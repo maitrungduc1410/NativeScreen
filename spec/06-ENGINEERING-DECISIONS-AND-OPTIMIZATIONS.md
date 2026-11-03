@@ -437,11 +437,9 @@ OS theme rather than the app theme, so their glyphs disappeared on the dark titl
 Measuring the Windows compositor against `conformance/` found two things the code and `spec/07` did not state.
 
 ### Findings
-- **Baked layers are flipped vertically.** `materializeToGPUTexture` renders into a Metal texture and flips the result back
-  with an extra transform, so the background and the screen shadow come out mirrored. A shadow configured to fall
-  downward falls upward, and a top-left to bottom-right gradient runs bottom-left to top-right. The screen, cursor and
-  overlays are not baked and are not flipped. Windows reproduces this (`FrameCompositor.VerticallyFlipped`) because frames
-  must match macOS. If macOS is fixed, remove the flip and regenerate the fixtures in the same change.
+- **Baked layers were flipped vertically (fixed, ADR-24).** `materializeToGPUTexture` rendered into a Metal texture and
+  flipped the result with an extra transform, mirroring the background, screen shadow and device bezel. Windows reproduced
+  this until the macOS fix.
 - **The fixtures used to leak backgrounds between cases.** The generator shared one `MetalFrameCompositor` across all
   cases, and its background crossfade runs on wall-clock time for 320 ms, including during export, so frames rendered right
   after a background change contained the previous case's background and depended on machine speed. The generator now
@@ -537,4 +535,30 @@ whole canvas squeezed the full screen into it, which looked like the zoom snappi
   Old projects with overlaps load with the later segment moved to the first free track, and empty tracks are closed up.
 - An imported file goes to the first track with room. A recording goes to the first track with nothing after its start, so
   it fits at any length. Dragging along a track stops at its neighbors; dragging to a full track snaps the segment back.
+
+---
+
+## 24. ADR-24: Self-Drawn Wallpapers, Baked Layers Stay Upright
+
+### Built-in wallpapers
+The built-in set is 108 JPGs in `Resources/Wallpapers.bundle/<Category>/`, with 192x120 previews in `thumbs/`. They are drawn by
+`tools/generate_wallpapers.py` from seeded math and self-chosen colors, so the set carries no third-party rights. Never add
+images from other apps or wallpaper packs to this bundle.
+
+- **Files, not shaders.** The look depends on layered shading, grain and glass highlights. Shipping the same bytes gives
+  identical wallpapers on every platform with no new compositor code. Cost: about 20 MB of app size.
+- **2560x1600**, the compositor's decode limit. Grain breaks up 8-bit banding in the long gradients.
+- **Colors mix in OKLCH along the short hue arc.** Mixing in OKLab turns complementary colors grey. Dark layers reject arcs
+  through the yellow-green band, where those hues turn olive and brown.
+- **Picking one copies the file byte for byte** to `assets/background-<id>.jpg` and sets `systemWallpaperName` to the id (for
+  example `spring-01`). No re-encode, so a project stores the same file whichever platform picked the wallpaper.
+- **Category pills only browse.** They no longer change `background.type`; picking an item does. The `Wallpaper` mode pill returns
+  to the last picked wallpaper, or to the mesh when there is none. Mesh presets stay for existing projects, under `Mesh` and `★`.
+
+### Baked layers stay upright
+`materializeToGPUTexture` flipped every baked layer vertically, so the background was upside down in preview and export, shadows
+fell the wrong way and the device notch sat at the bottom. The 320 ms background crossfade is not baked, so a newly picked
+wallpaper appeared upright and then jumped upside down when the fade ended. `render(_:to:)` and `CIImage(mtlTexture:)` already
+use the same row order, so the bake now only restores the extent's origin. Rounded masks are symmetric and did not change.
+All frame fixtures were regenerated. Existing projects keep their settings and now render the intended direction.
 

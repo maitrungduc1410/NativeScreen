@@ -141,9 +141,15 @@ public struct InspectorSidebarView: View {
             if systemWallpapers.isEmpty {
                 let items = SystemWallpaperCatalog.discoverSystemWallpapers()
                 systemWallpapers = items
-                SystemWallpaperCatalog.preloadThumbnailsInBackground(for: items) {
+                SystemWallpaperCatalog.preloadThumbnailsInBackground(for: items + BundledWallpaperCatalog.allItems) {
                     wallpaperThumbnailRevision &+= 1
                 }
+            }
+            let background = session.document.background
+            if background.type == .mesh {
+                wallpaperCategory = "Mesh"
+            } else if let category = BundledWallpaperCatalog.category(ofWallpaperNamed: background.systemWallpaperName) {
+                wallpaperCategory = category
             }
         }
     }
@@ -191,7 +197,12 @@ public struct InspectorSidebarView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 7) {
                             inspectorPillOptionButton(title: "Wallpaper", isSelected: isWallpaperMode) {
-                                session.mutate { $0.background.type = (wallpaperCategory == "macOS" ? .wallpaper : .mesh) }
+                                session.mutate {
+                                    // Return to the last picked wallpaper. A custom image shares the path field, so it doesn't count.
+                                    let hasWallpaper = $0.background.systemWallpaperName != nil
+                                        && $0.background.wallpaperRelativePath?.hasPrefix("assets/background") == true
+                                    $0.background.type = hasWallpaper ? .wallpaper : .mesh
+                                }
                                 withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
                                     modeProxy.scrollTo("Wallpaper", anchor: .center)
                                 }
@@ -244,13 +255,10 @@ public struct InspectorSidebarView: View {
                     ScrollViewReader { catProxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 7) {
-                                ForEach(["All", "macOS", "Mesh", "Spring", "Sunset", "Radiant"], id: \.self) { cat in
+                                ForEach(["All", "macOS", "Mesh"] + BundledWallpaperCatalog.categories, id: \.self) { cat in
                                     let displayTitle = (cat == "All") ? "★" : cat
                                     inspectorPillOptionButton(title: displayTitle, isSelected: wallpaperCategory == cat) {
                                         wallpaperCategory = cat
-                                        session.mutate {
-                                            $0.background.type = (cat == "macOS") ? .wallpaper : .mesh
-                                        }
                                         withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
                                             catProxy.scrollTo(cat, anchor: .center)
                                         }
@@ -264,14 +272,26 @@ public struct InspectorSidebarView: View {
                         .padding(.trailing, -18)
                     }
 
+                    // Items shown for the current category, the random button draws from the same list.
+                    let filteredMeshPresets: [MeshPreset] = (wallpaperCategory == "All" || wallpaperCategory == "Mesh") ? MeshPreset.builtIn : []
+                    let filteredWallpapers: [SystemWallpaperItem] = {
+                        switch wallpaperCategory {
+                        case "All": return BundledWallpaperCatalog.allItems + systemWallpapers
+                        case "macOS": return systemWallpapers
+                        default: return BundledWallpaperCatalog.items(in: wallpaperCategory)
+                        }
+                    }()
+
                     Button {
-                        if wallpaperCategory == "macOS", let randomSys = systemWallpapers.randomElement() {
-                            session.selectSystemWallpaper(randomSys)
-                        } else if let randomPreset = MeshPreset.builtIn.randomElement() {
+                        let pick = Int.random(in: 0..<max(filteredMeshPresets.count + filteredWallpapers.count, 1))
+                        if pick < filteredMeshPresets.count {
+                            let presetId = filteredMeshPresets[pick].id
                             session.mutate {
                                 $0.background.type = .mesh
-                                $0.background.meshPresetId = randomPreset.id
+                                $0.background.meshPresetId = presetId
                             }
+                        } else if pick - filteredMeshPresets.count < filteredWallpapers.count {
+                            session.selectSystemWallpaper(filteredWallpapers[pick - filteredMeshPresets.count])
                         }
                     } label: {
                         HStack(spacing: 7) {
@@ -296,14 +316,6 @@ public struct InspectorSidebarView: View {
                     .buttonStyle(.plain)
 
                     // 8-Column Square Thumbnail Grid
-                    let filteredMeshPresets: [MeshPreset] = {
-                        if wallpaperCategory == "macOS" { return [] }
-                        if wallpaperCategory == "All" || wallpaperCategory == "Mesh" { return MeshPreset.builtIn }
-                        let sub = MeshPreset.builtIn.filter { $0.category.caseInsensitiveCompare(wallpaperCategory) == .orderedSame }
-                        return sub.isEmpty ? MeshPreset.builtIn : sub
-                    }()
-                    let showSystemItems = (wallpaperCategory == "All" || wallpaperCategory == "macOS" || wallpaperCategory == "Spring" || wallpaperCategory == "Sunset")
-
                     let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 8)
                     LazyVGrid(columns: columns, spacing: 6) {
                         ForEach(filteredMeshPresets) { preset in
@@ -332,33 +344,31 @@ public struct InspectorSidebarView: View {
                             .buttonStyle(.plain)
                         }
 
-                        if showSystemItems {
-                            let _ = wallpaperThumbnailRevision
-                            ForEach(systemWallpapers) { item in
-                                let isSelected = (session.document.background.type == .wallpaper && session.document.background.systemWallpaperName == item.name)
-                                Button {
-                                    session.selectSystemWallpaper(item)
-                                } label: {
-                                    Color.clear
-                                        .aspectRatio(1.0, contentMode: .fit)
-                                        .overlay {
-                                            if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
-                                                Image(nsImage: nsImg)
-                                                    .resizable()
-                                                    .scaledToFill()
-                                            } else {
-                                                Color.secondary.opacity(0.2)
-                                            }
+                        let _ = wallpaperThumbnailRevision
+                        ForEach(filteredWallpapers) { item in
+                            let isSelected = (session.document.background.type == .wallpaper && session.document.background.systemWallpaperName == item.name)
+                            Button {
+                                session.selectSystemWallpaper(item)
+                            } label: {
+                                Color.clear
+                                    .aspectRatio(1.0, contentMode: .fit)
+                                    .overlay {
+                                        if let nsImg = SystemWallpaperCatalog.cachedThumbnailImage(for: item) {
+                                            Image(nsImage: nsImg)
+                                                .resizable()
+                                                .scaledToFill()
+                                        } else {
+                                            Color.secondary.opacity(0.2)
                                         }
-                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .strokeBorder(isSelected ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
-                                        )
-                                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
+                                    }
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .strokeBorder(isSelected ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
+                                    )
+                                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }

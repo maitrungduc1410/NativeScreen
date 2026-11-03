@@ -32,6 +32,7 @@ Where the Swift code and a spec disagree, the Swift code wins.
 | `Engine/LocalOnDeviceMediaIntelligence.swift` | `Intelligence/*` + camera looks in `Rendering` | Whisper, filler words, SRT, OCR masks, face masks, camera looks, cutout. |
 | `Recording/*` | `Media/Capture/*`, `App/Recording/*` | Platform guide §7. HUD and window picker are WinUI windows. |
 | `Views/*` | `App/Views/*` | Same layout and behavior; use the Swift views as the reference for every control, spacing and string. |
+| `tools/generate_wallpapers.py` output (`Resources/Wallpapers.bundle`) | `App/Assets/Wallpapers/` | Use the generated files as-is (same names), copied byte for byte into the project (`spec/06` ADR-24). |
 | `tools/generate_cursor_assets.py` output (`Resources/Cursors.bundle`) | `App/Assets/Cursors/` | Use the generated files as-is (same names). Themes, sprite selection and old-project migration: `spec/06` ADR-22. |
 
 ---
