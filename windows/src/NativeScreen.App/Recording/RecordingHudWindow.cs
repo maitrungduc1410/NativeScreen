@@ -18,6 +18,7 @@ public sealed class RecordingHudWindow : Window
     private const double BarHeight = 64;
     private const double ButtonHeight = 44;
     private const double BottomMargin = 56;
+    private const int MaximumAudioAppRows = 12;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoSize = 0x0001;
 
@@ -33,6 +34,7 @@ public sealed class RecordingHudWindow : Window
     private readonly Grid root = new();
     private readonly DispatcherTimer tick = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer countdownTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
+    private readonly DispatcherTimer meterTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly TextBlock elapsed = new() { FontSize = 15, VerticalAlignment = VerticalAlignment.Center, MinWidth = 38 };
     private readonly ProgressRing countdownRing = new() { IsIndeterminate = false, Width = 22, Height = 22, Maximum = 1, Minimum = 0, Foreground = Coral };
     private readonly TextBlock countdownNumber = new() { FontSize = 11.5, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = Coral, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -56,6 +58,21 @@ public sealed class RecordingHudWindow : Window
     private Windows.Graphics.PointInt32 dragWindow;
     private (double DurationMs, bool HasWebcam, bool HasMicrophone, bool HasSystemAudio) lastDuration;
     private bool isShown;
+    private bool systemAudioAllApps = true;
+    private readonly HashSet<string> systemAudioApps = new(StringComparer.OrdinalIgnoreCase);
+    private bool showCameraPreview = true;
+    private int cameraMaxHeight = 1080;
+    private bool capturing;
+    private Flyout? openMenu;
+    private LevelBar? barMeter;
+    private LevelBar? menuMeter;
+    private string? menuMeterDevice;
+    private string? monitoredMicrophone;
+    private string? previewedCamera;
+    private MicrophoneLevelMonitor? monitor;
+    private CameraPreviewSource? cameraPreview;
+    private CameraPreviewWindow? previewWindow;
+    private Task deviceWork = Task.CompletedTask;
 
     private RecordingHudWindow()
     {
@@ -89,11 +106,11 @@ public sealed class RecordingHudWindow : Window
             presenter.IsMinimizable = false;
         }
 
-        RemoveWindowFrame();
+        RemoveWindowFrame(Handle);
         AppWindow.IsShownInSwitchers = false;
         tick.Tick += (_, _) => elapsed.Text = FormatElapsed(Elapsed());
         countdownTimer.Tick += (_, _) => CountdownTick();
-        CaptureTargets.SetExcludedFromCapture(Handle, true);
+        meterTimer.Tick += (_, _) => MeterTick();
         ShowIdle();
     }
 
@@ -127,6 +144,8 @@ public sealed class RecordingHudWindow : Window
     {
         shared?.overlay?.Dispose();
         shared?.recorder?.Dispose();
+        shared?.monitor?.Dispose();
+        shared?.cameraPreview?.Dispose();
     }
 
     private void Reveal()
@@ -135,6 +154,7 @@ public sealed class RecordingHudWindow : Window
         Activate();
         AppWindow.Show();
         FitToContent();
+        UpdateDevices();
     }
 
     private void Conceal()
@@ -142,6 +162,7 @@ public sealed class RecordingHudWindow : Window
         isShown = false;
         CancelPicking();
         AppWindow.Hide();
+        UpdateDevices();
     }
 
     private static string FormatElapsed(TimeSpan time)
@@ -164,11 +185,11 @@ public sealed class RecordingHudWindow : Window
     }
 
     /// <summary>A window without a title bar still gets a white frame around its content, 3 pixels at 200%. Only the style removes it.</summary>
-    private void RemoveWindowFrame()
+    internal static void RemoveWindowFrame(nint window)
     {
-        var style = GetWindowLongPtr(Handle, StyleIndex) & ~(CaptionStyle | ThickFrameStyle) | PopupStyle;
-        SetWindowLongPtr(Handle, StyleIndex, style);
-        SetWindowPos(Handle, 0, 0, 0, 0, 0, FrameChangedFlags);
+        var style = GetWindowLongPtr(window, StyleIndex) & ~(CaptionStyle | ThickFrameStyle) | PopupStyle;
+        SetWindowLongPtr(window, StyleIndex, style);
+        SetWindowPos(window, 0, 0, 0, 0, 0, FrameChangedFlags);
     }
 
     private (int X, int Y) PlaceFor(int width, int height, double scale)
@@ -292,8 +313,8 @@ public sealed class RecordingHudWindow : Window
         bar.Children.Add(modes);
         bar.Children.Add(Separator());
         var devices = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        devices.Children.Add(DeviceButton("", "", camera, "No camera", 72, 96, WebcamRecorder.Cameras, device => camera = device));
-        devices.Children.Add(DeviceButton("", "", microphone, "No microphone", 96, 112, AudioTrackRecorder.Microphones, device => microphone = device));
+        devices.Children.Add(CameraButton());
+        devices.Children.Add(MicrophoneButton());
         devices.Children.Add(SystemAudioButton());
         bar.Children.Add(devices);
         bar.Children.Add(Separator());
@@ -376,59 +397,494 @@ public sealed class RecordingHudWindow : Window
         }
     }
 
-    private Button DeviceButton(string glyph, string offGlyph, CaptureDeviceInfo? selected, string offTitle, double onWidth, double offWidth, Func<IReadOnlyList<CaptureDeviceInfo>> list, Action<CaptureDeviceInfo?> choose)
+    /// <summary>Opens a device menu. The bar is rebuilt only when it closes, because a rebuild would take the menu's anchor away.</summary>
+    private void OpenMenu(Button anchor, StackPanel content, Action? closed = null)
     {
-        var active = selected is not null;
-        var button = Item(IconAndText(active ? glyph : offGlyph, selected?.Name ?? offTitle, active ? onWidth : offWidth, active), null, () => { });
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, offTitle);
+        anchor.Background = SelectedFill;
+        content.RequestedTheme = ElementTheme.Dark;
+        content.Padding = new Thickness(4, 6, 4, 6);
+        content.Spacing = 2;
+        var presenter = new Style(typeof(FlyoutPresenter));
+        presenter.Setters.Add(new Setter(Control.BackgroundProperty, Ui.Rgb(0.13, 0.13, 0.15)));
+        presenter.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
+        presenter.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, 460.0));
+        var flyout = new Flyout { Content = content, Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top, ShouldConstrainToRootBounds = false, FlyoutPresenterStyle = presenter };
+        openMenu = flyout;
+        flyout.Closed += (_, _) =>
+        {
+            openMenu = null;
+            closed?.Invoke();
+            ShowIdle();
+            UpdateDevices();
+        };
+        flyout.ShowAt(anchor);
+    }
+
+    /// <summary>A row with a check mark column, like the menus on macOS.</summary>
+    private Button MenuRow(bool selected, double height, UIElement content, Action click)
+    {
+        var row = new Grid { ColumnSpacing = 8, Padding = new Thickness(8, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        if (selected)
+        {
+            row.Children.Add(Ui.Icon("\uE73E", 11, Ui.Rgb(1, 1, 1, 0.96)));
+        }
+
+        Grid.SetColumn((FrameworkElement)content, 1);
+        row.Children.Add(content);
+        var button = new Button
+        {
+            Style = Ui.StyleOf("NsIconButton"),
+            Content = row,
+            Width = double.NaN,
+            Height = height,
+            Padding = new Thickness(0),
+            CornerRadius = new CornerRadius(7),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = Ui.Rgb(1, 1, 1, 0)
+        };
         button.Click += (_, _) =>
         {
-            var menu = new MenuFlyout { ShouldConstrainToRootBounds = false };
-            var none = new ToggleMenuFlyoutItem { Text = offTitle, IsChecked = selected is null };
-            none.Click += (_, _) =>
+            click();
+            openMenu?.Hide();
+        };
+        return button;
+    }
+
+    private static Grid DeviceTitle(CaptureDeviceInfo device)
+    {
+        var title = new Grid { ColumnSpacing = 14 };
+        title.ColumnDefinitions.Add(new ColumnDefinition());
+        title.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        title.Children.Add(Label(device.Name, 13.5, 0.96));
+        if (device.IsDefault)
+        {
+            var badge = new Border { Background = Ui.Rgb(1, 1, 1, 0.16), CornerRadius = new CornerRadius(9), Padding = new Thickness(8, 2, 8, 3), Child = Label("Default", 11, 0.88, true) };
+            Grid.SetColumn(badge, 1);
+            title.Children.Add(badge);
+        }
+
+        return title;
+    }
+
+    private static (Grid Row, ToggleSwitch Toggle) SwitchRow(string title, bool isOn, Action<bool> changed, UIElement? icon = null)
+    {
+        var toggle = new ToggleSwitch { IsOn = isOn, OnContent = "", OffContent = "", MinWidth = 0, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, -12, 0) };
+        toggle.Toggled += (_, _) => changed(toggle.IsOn);
+        var row = new Grid { ColumnSpacing = 10, MinHeight = 32, Padding = new Thickness(14, 0, 8, 0) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 150 });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        if (icon is not null)
+        {
+            row.Children.Add(icon);
+        }
+
+        var label = Label(title, 13.5, 0.96);
+        Grid.SetColumn(label, 1);
+        row.Children.Add(label);
+        Grid.SetColumn(toggle, 2);
+        row.Children.Add(toggle);
+        return (row, toggle);
+    }
+
+    private static async Task<IReadOnlyList<CaptureDeviceInfo>> ListDevices(Func<IReadOnlyList<CaptureDeviceInfo>> list)
+    {
+        try
+        {
+            return await Task.Run(list);
+        }
+        catch (Exception exception) when (exception is COMException or SharpGen.Runtime.SharpGenException)
+        {
+            return [];
+        }
+    }
+
+    private Button CameraButton()
+    {
+        var active = camera is not null;
+        var button = Item(IconAndText(active ? "\uE714" : "\uF781", camera?.Name ?? "No camera", active ? 72 : 96, active), null, () => { });
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "Camera");
+        button.Click += async (_, _) =>
+        {
+            var cameras = await ListDevices(WebcamRecorder.Cameras);
+            if (camera is { } chosen && !cameras.Any(item => item.Id == chosen.Id))
             {
-                choose(null);
-                ShowIdle();
-            };
-            menu.Items.Add(none);
-            foreach (var device in list())
-            {
-                var captured = device;
-                var item = new ToggleMenuFlyoutItem { Text = device.Name, IsChecked = device.Id == selected?.Id };
-                item.Click += (_, _) =>
-                {
-                    choose(captured);
-                    ShowIdle();
-                };
-                menu.Items.Add(item);
+                camera = null;
             }
 
-            menu.ShowAt(button);
+            var menu = new StackPanel();
+            foreach (var device in cameras)
+            {
+                var captured = device;
+                menu.Children.Add(MenuRow(device.Id == camera?.Id, 30, DeviceTitle(device), () => camera = captured));
+            }
+
+            menu.Children.Add(MenuRow(camera is null, 30, Label("Don't record camera", 13.5, 0.96), () => camera = null));
+            menu.Children.Add(new Border { Height = 1, Background = Ui.Rgb(1, 1, 1, 0.12), Margin = new Thickness(10, 5, 10, 5) });
+            menu.Children.Add(SwitchRow("Show camera preview", showCameraPreview, value =>
+            {
+                showCameraPreview = value;
+                UpdateDevices();
+            }).Row);
+            menu.Children.Add(ResolutionRow());
+            OpenMenu(button, menu);
+        };
+        return button;
+    }
+
+    private StackPanel ResolutionRow()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Height = 36, Padding = new Thickness(14, 0, 8, 0) };
+        var label = Label("Max resolution", 13.5, 0.96);
+        label.MinWidth = 120;
+        row.Children.Add(label);
+        var pills = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, VerticalAlignment = VerticalAlignment.Center, Background = Ui.Rgb(1, 1, 1, 0.11), CornerRadius = new CornerRadius(7.5), Padding = new Thickness(2) };
+        var buttons = new List<(Button Button, int Height)>();
+        void Refresh()
+        {
+            foreach (var (pill, height) in buttons)
+            {
+                pill.Background = height == cameraMaxHeight ? Ui.Rgb(0.04, 0.52, 1) : Ui.Rgb(1, 1, 1, 0);
+            }
+        }
+
+        foreach (var (title, height) in new[] { ("720p", 720), ("1080p", 1080), ("4K", 2160) })
+        {
+            var value = height;
+            var pill = new Button { Style = Ui.StyleOf("NsIconButton"), Content = Label(title, 12.5, 1), Width = 52, Height = 24, Padding = new Thickness(0), CornerRadius = new CornerRadius(6) };
+            pill.Click += (_, _) =>
+            {
+                cameraMaxHeight = value;
+                Refresh();
+            };
+            buttons.Add((pill, height));
+            pills.Children.Add(pill);
+        }
+
+        Refresh();
+        row.Children.Add(pills);
+        return row;
+    }
+
+    private Button MicrophoneButton()
+    {
+        var active = microphone is not null;
+        var content = new Grid { Height = ButtonHeight };
+        content.Children.Add(IconAndText(active ? "\uE720" : "\uEC54", microphone?.Name ?? "No microphone", active ? 96 : 112, active));
+        barMeter = null;
+        if (active)
+        {
+            barMeter = new LevelBar(3, Ui.Rgb(1, 1, 1, 0.14), Ui.Rgb(1, 1, 1, 0.30), Ui.Rgb(1, 1, 1, 0.68)) { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(8, 0, 8, 3) };
+            content.Children.Add(barMeter);
+        }
+
+        var button = Item(content, null, () => { });
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "Microphone");
+        button.Click += async (_, _) =>
+        {
+            var microphones = await ListDevices(AudioTrackRecorder.Microphones);
+            if (microphone is { } chosen && !microphones.Any(item => item.Id == chosen.Id))
+            {
+                microphone = null;
+            }
+
+            // The meter reads one device at a time: the chosen one, or the default while none is chosen.
+            menuMeterDevice = microphone?.Id ?? microphones.FirstOrDefault(item => item.IsDefault)?.Id ?? microphones.FirstOrDefault()?.Id;
+            menuMeter = null;
+            var menu = new StackPanel { Spacing = 4 };
+            foreach (var device in microphones)
+            {
+                var captured = device;
+                var lines = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+                lines.Children.Add(DeviceTitle(device));
+                var blue = Ui.Rgb(0.04, 0.52, 1);
+                var meter = new LevelBar(3.5, Ui.Rgb(1, 1, 1, 0.15), Ui.Rgb(0.04, 0.52, 1, 0.42), blue);
+                lines.Children.Add(meter);
+                if (device.Id == menuMeterDevice)
+                {
+                    menuMeter = meter;
+                }
+
+                menu.Children.Add(MenuRow(device.Id == microphone?.Id, 44, lines, () => microphone = captured));
+            }
+
+            menu.Children.Add(MenuRow(microphone is null, 30, Label("Don't record microphone", 13.5, 0.96), () => microphone = null));
+            OpenMenu(button, menu, () =>
+            {
+                menuMeter = null;
+                menuMeterDevice = null;
+            });
+            UpdateDevices();
         };
         return button;
     }
 
     private Button SystemAudioButton()
     {
-        var button = Item(IconAndText("", systemAudio ? "System audio" : "No system audio", 120, systemAudio), null, () => { });
-        button.Click += (_, _) =>
+        var button = Item(IconAndText("\uE767", SystemAudioTitle, 120, IsSystemAudioActive), null, () => { });
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "System audio");
+        button.Click += async (_, _) =>
         {
-            var menu = new MenuFlyout { ShouldConstrainToRootBounds = false };
-            foreach (var (title, value) in new[] { ("System audio", true), ("No system audio", false) })
-            {
-                var chosen = value;
-                var item = new ToggleMenuFlyoutItem { Text = title, IsChecked = systemAudio == value };
-                item.Click += (_, _) =>
-                {
-                    systemAudio = chosen;
-                    ShowIdle();
-                };
-                menu.Items.Add(item);
-            }
-
-            menu.ShowAt(button);
+            var apps = AudioApps.IsPerAppSupported ? await Task.Run(AudioApps.List) : [];
+            OpenMenu(button, SystemAudioMenu(apps));
         };
         return button;
+    }
+
+    private bool IsSystemAudioActive => systemAudio && (systemAudioAllApps || systemAudioApps.Count > 0);
+
+    private string SystemAudioTitle => !IsSystemAudioActive
+        ? "No system audio"
+        : systemAudioAllApps
+            ? "System audio"
+            : systemAudioApps.Count == 1 ? "Sound from 1 app" : $"Sound from {systemAudioApps.Count} apps";
+
+    /// <summary>Windows without process loopback gets the first switch only, since an app could not be recorded on its own there.</summary>
+    private StackPanel SystemAudioMenu(IReadOnlyList<AudioAppInfo> apps)
+    {
+        var menu = new StackPanel { MinWidth = 284 };
+        var appSwitches = new List<(ToggleSwitch Toggle, string Id)>();
+        ToggleSwitch? recordSwitch = null;
+        ToggleSwitch? allSwitch = null;
+        var refreshing = false;
+        void Refresh()
+        {
+            refreshing = true;
+            recordSwitch!.IsOn = systemAudio;
+            if (allSwitch is not null)
+            {
+                allSwitch.IsOn = systemAudio && systemAudioAllApps;
+            }
+
+            foreach (var (toggle, id) in appSwitches)
+            {
+                toggle.IsOn = systemAudio && !systemAudioAllApps && systemAudioApps.Contains(id);
+            }
+
+            refreshing = false;
+        }
+
+        void Change(Action apply)
+        {
+            if (!refreshing)
+            {
+                apply();
+                Refresh();
+            }
+        }
+
+        var record = SwitchRow("Record system audio", systemAudio, value => Change(() =>
+        {
+            systemAudio = value;
+            if (value && !systemAudioAllApps && systemAudioApps.Count == 0)
+            {
+                systemAudioAllApps = true;
+            }
+        }));
+        recordSwitch = record.Toggle;
+        menu.Children.Add(record.Row);
+        if (!AudioApps.IsPerAppSupported)
+        {
+            return menu;
+        }
+
+        var all = SwitchRow("From all apps", systemAudio && systemAudioAllApps, value => Change(() =>
+        {
+            systemAudioAllApps = value;
+            if (value)
+            {
+                systemAudio = true;
+                systemAudioApps.Clear();
+            }
+        }));
+        allSwitch = all.Toggle;
+        menu.Children.Add(all.Row);
+        menu.Children.Add(new Border { Height = 1, Background = Ui.Rgb(1, 1, 1, 0.12), Margin = new Thickness(14, 5, 14, 5) });
+        var header = Label("Apps", 12, 0.5, true);
+        header.Margin = new Thickness(14, 0, 0, 4);
+        menu.Children.Add(header);
+        foreach (var app in apps.Take(MaximumAudioAppRows))
+        {
+            var id = app.Id;
+            var icon = new Image { Width = 19, Height = 19, VerticalAlignment = VerticalAlignment.Center };
+            var row = SwitchRow(app.Name, systemAudio && !systemAudioAllApps && systemAudioApps.Contains(id), value => Change(() =>
+            {
+                if (value)
+                {
+                    systemAudio = true;
+                    systemAudioAllApps = false;
+                    systemAudioApps.Add(id);
+                }
+                else
+                {
+                    systemAudioApps.Remove(id);
+                }
+            }), icon);
+            _ = LoadAppIcon(icon, app.ExecutablePath);
+            appSwitches.Add((row.Toggle, id));
+            menu.Children.Add(row.Row);
+        }
+
+        return menu;
+    }
+
+    private static async Task LoadAppIcon(Image image, string? path)
+    {
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
+            using var thumbnail = await file.GetThumbnailAsync(Windows.Storage.FileProperties.ThumbnailMode.SingleItem, 38);
+            var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+            await bitmap.SetSourceAsync(thumbnail);
+            image.Source = bitmap;
+        }
+        catch (Exception exception) when (exception is COMException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // The row stands without an icon.
+        }
+    }
+
+    // MARK: Device monitoring
+
+    /// <summary>
+    /// Opens and closes the meter and the camera preview to match what is on screen. Only one piece of device work runs at a
+    /// time and always off the UI thread, and nothing stays open once a recording needs the devices (spec/06 ADR-23).
+    /// </summary>
+    private void UpdateDevices()
+    {
+        var idle = isShown && !capturing;
+        var wantedMicrophone = idle ? menuMeterDevice ?? microphone?.Id : null;
+        if (wantedMicrophone != monitoredMicrophone)
+        {
+            monitoredMicrophone = wantedMicrophone;
+            var old = monitor;
+            monitor = null;
+            deviceWork = deviceWork.ContinueWith(_ =>
+            {
+                old?.Dispose();
+                if (wantedMicrophone is null)
+                {
+                    return;
+                }
+
+                var opened = MicrophoneLevelMonitor.TryStart(wantedMicrophone);
+                if (opened is not null && !DispatcherQueue.TryEnqueue(() => AdoptMonitor(opened, wantedMicrophone)))
+                {
+                    opened.Dispose();
+                }
+            }, TaskScheduler.Default);
+        }
+
+        var showPreview = isShown && camera is not null && showCameraPreview;
+        if (showPreview && previewWindow is null)
+        {
+            previewWindow = new CameraPreviewWindow();
+            previewWindow.AppWindow.Show(false);
+        }
+        else if (!showPreview && previewWindow is not null)
+        {
+            previewWindow.Close();
+            previewWindow = null;
+        }
+
+        var wantedCamera = idle && showPreview ? camera?.Id : null;
+        if (wantedCamera != previewedCamera)
+        {
+            previewedCamera = wantedCamera;
+            var old = cameraPreview;
+            cameraPreview = null;
+            var window = previewWindow;
+            deviceWork = deviceWork.ContinueWith(_ =>
+            {
+                old?.Dispose();
+                if (wantedCamera is null || window is null)
+                {
+                    return;
+                }
+
+                var opened = CameraPreviewSource.TryStart(wantedCamera, window.ShowFrame);
+                if (opened is not null && !DispatcherQueue.TryEnqueue(() => AdoptPreview(opened, wantedCamera)))
+                {
+                    opened.Dispose();
+                }
+            }, TaskScheduler.Default);
+        }
+
+        if (wantedMicrophone is null)
+        {
+            meterTimer.Stop();
+            barMeter?.Set(0, 0);
+        }
+        else
+        {
+            meterTimer.Start();
+        }
+    }
+
+    private void AdoptMonitor(MicrophoneLevelMonitor opened, string device)
+    {
+        if (monitoredMicrophone == device && monitor is null)
+        {
+            monitor = opened;
+        }
+        else
+        {
+            deviceWork = deviceWork.ContinueWith(_ => opened.Dispose(), TaskScheduler.Default);
+        }
+    }
+
+    private void AdoptPreview(CameraPreviewSource opened, string device)
+    {
+        if (previewedCamera == device && cameraPreview is null)
+        {
+            cameraPreview = opened;
+        }
+        else
+        {
+            deviceWork = deviceWork.ContinueWith(_ => opened.Dispose(), TaskScheduler.Default);
+        }
+    }
+
+    private void MeterTick()
+    {
+        var (level, peak) = monitor is { } active ? (active.Level, active.PeakHold) : (0, 0);
+        barMeter?.Set(level, peak);
+        menuMeter?.Set(level, peak);
+    }
+
+    /// <summary>A capsule track with a dim peak bar and a bright level bar. Widths are set from the meter, never bound.</summary>
+    private sealed partial class LevelBar : Grid
+    {
+        private readonly Border trailing = new() { HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+        private readonly Border bright = new() { HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+
+        public LevelBar(double thickness, Brush track, Brush peak, Brush level)
+        {
+            Height = thickness;
+            var radius = new CornerRadius(thickness / 2);
+            Children.Add(new Border { Background = track, CornerRadius = radius });
+            trailing.Background = peak;
+            trailing.CornerRadius = radius;
+            bright.Background = level;
+            bright.CornerRadius = radius;
+            Children.Add(trailing);
+            Children.Add(bright);
+        }
+
+        public void Set(double level, double peak)
+        {
+            var total = Math.Max(10, ActualWidth);
+            trailing.Width = peak * total > 0.5 ? Math.Max(Height, Math.Min(1, peak) * total) : 0;
+            bright.Width = level * total > 0.5 ? Math.Max(Height, Math.Min(1, level) * total) : 0;
+        }
     }
 
     private Button ProjectsButton()
@@ -587,8 +1043,12 @@ public sealed class RecordingHudWindow : Window
         AppExclusion(true);
         try
         {
+            // The recorder opens the same devices, so the meter and the preview let go of them first.
+            capturing = true;
+            UpdateDevices();
+            await deviceWork;
             var directory = RecordingPackage.Create(AppSettings.Shared.ProjectsDirectory, DateTime.Now);
-            var options = new RecordingOptions(chosen, directory, systemAudio, microphone?.Id, camera?.Id);
+            var options = new RecordingOptions(chosen, directory, IsSystemAudioActive, microphone?.Id, camera?.Id, cameraMaxHeight, systemAudioAllApps ? null : systemAudioApps.ToList());
             var (created, started) = await Task.Run(() =>
             {
                 var next = new ScreenRecorder(options);
@@ -599,6 +1059,11 @@ public sealed class RecordingHudWindow : Window
             package = directory;
             recorder = created;
             busy = false;
+            if (previewWindow is { } preview)
+            {
+                created.CameraFrame += preview.ShowFrame;
+            }
+
             if (!started)
             {
                 await AbortRecording();
@@ -620,8 +1085,10 @@ public sealed class RecordingHudWindow : Window
         {
             busy = false;
             pending = null;
+            capturing = false;
             AppExclusion(false);
             ShowIdle();
+            UpdateDevices();
             await new ContentDialog { XamlRoot = root.XamlRoot, RequestedTheme = ElementTheme.Dark, Title = "Could not start recording", Content = exception.Message, CloseButtonText = "OK" }.ShowAsync();
         }
     }
@@ -651,6 +1118,13 @@ public sealed class RecordingHudWindow : Window
         actions.Children.Add(Item(Ui.Icon("", 16.5, Ui.Rgb(1, 1, 1, 0.9)), "Restart recording", () => _ = Restart(), 38, 38));
         actions.Children.Add(Item(Ui.Icon("", 16, Ui.Rgb(1, 1, 1, 0.9)), "Cancel & delete recording", () => _ = ConfirmDelete(), 38, 38));
         bar.Children.Add(actions);
+        if (recorder?.IsMissingAppAudio == true)
+        {
+            var warning = Label("Some app sound is missing", 12.5, 1);
+            warning.Foreground = Orange;
+            bar.Children.Add(warning);
+        }
+
         FitToContent();
         tick.Start();
     }
@@ -696,6 +1170,9 @@ public sealed class RecordingHudWindow : Window
                 return result;
             });
         }
+
+        capturing = false;
+        UpdateDevices();
     }
 
     private async Task StopAndOpen()
@@ -786,9 +1263,13 @@ public sealed class RecordingHudWindow : Window
         }
     }
 
-    /// <summary>The app's own windows never appear in its recordings.</summary>
-    private static void AppExclusion(bool excluded)
+    /// <summary>
+    /// The app's own windows never appear in its recordings. The bar is excluded only while recording, so a screenshot of it
+    /// works the rest of the time.
+    /// </summary>
+    private void AppExclusion(bool excluded)
     {
+        CaptureTargets.SetExcludedFromCapture(Handle, excluded);
         foreach (var window in AppTheme.OpenWindows())
         {
             CaptureTargets.SetExcludedFromCapture(WinRT.Interop.WindowNative.GetWindowHandle(window), excluded);

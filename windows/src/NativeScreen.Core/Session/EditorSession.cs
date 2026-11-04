@@ -367,11 +367,11 @@ public sealed partial class EditorSession
         }
     }
 
-    public void AddCustomShortcut(string? trackId, double sourceMs)
+    public void AddCustomShortcut(string? trackId, double sourceMs, double? endMs = null)
     {
         string? id = null;
         var clusters = Shortcuts();
-        Mutate(document => id = TimelineEdits.AddCustomShortcut(document, clusters, trackId, sourceMs, SourceDurationMs));
+        Mutate(document => id = TimelineEdits.AddCustomShortcut(document, clusters, trackId, sourceMs, SourceDurationMs, endMs));
         if (id is not null)
         {
             SelectShortcut(id);
@@ -384,6 +384,85 @@ public sealed partial class EditorSession
     }
 
     public void AddZoomAtPlayhead(ZoomPresentation presentation) => AddZoomAt(presentation, SourceAtPlayhead);
+
+    /// <summary>What the timeline's ghost block adds: follows the cursor, starting from where it is mid-range, when one was recorded.</summary>
+    public void AddZoomInRange(double startMs, double endMs)
+    {
+        if (endMs - startMs < 350)
+        {
+            return;
+        }
+
+        var hasCursor = CursorEvents.Count > 0;
+        var center = hasCursor ? RenderSnapshot().Trajectory.Evaluate((startMs + endMs) * 0.5).Cursor.Position01 : Point01.Center;
+        var created = new ZoomBlock
+        {
+            Id = NewId(),
+            SourceStartMs = startMs,
+            SourceEndMs = endMs,
+            Scale = 1.8,
+            Mode = hasCursor ? ZoomMode.FollowCursor : ZoomMode.Manual,
+            Presentation = ZoomPresentation.Screen,
+            ManualCenter01 = new Point01(center.X, center.Y),
+            Loupe = new LoupeConfig { Radius01 = 0.35, BevelRatio = 0.25, ChromaticAberration = 0.65 }
+        };
+        Mutate(document =>
+        {
+            document.Timeline.IsZoomTrackHidden = false;
+            document.Timeline.Zooms.Add(created);
+            document.Timeline.Zooms.Sort((a, b) => a.SourceStartMs.CompareTo(b.SourceStartMs));
+        });
+        SelectZoom(created.Id);
+    }
+
+    /// <summary>A new mask on a track takes after the last one there, then the last one anywhere.</summary>
+    public void AddMaskInRange(string trackId, double startMs, double endMs)
+    {
+        if (endMs - startMs < 300)
+        {
+            return;
+        }
+
+        var tracks = Document.Timeline.MaskTracks;
+        var reference = tracks.Find(track => track.Id == trackId)?.Items.LastOrDefault() ?? tracks.FirstOrDefault()?.Items.LastOrDefault();
+        var type = reference?.Type ?? MaskType.Blur;
+        var created = new MaskItem
+        {
+            Id = NewId(),
+            SourceStartMs = startMs,
+            SourceEndMs = endMs,
+            Type = type,
+            Style = reference?.Style ?? MaskStyle.Gaussian,
+            Intensity = reference?.Intensity ?? (type == MaskType.Spotlight ? 50 : 36),
+            CornerRadius = reference?.CornerRadius ?? 12,
+            Keyframes = [new MaskKeyframe { SourceMs = startMs, Rect01 = new Rect01(0.36, 0.43, 0.28, 0.14) }]
+        };
+        Mutate(document =>
+        {
+            if (document.Timeline.MaskTracks.Find(track => track.Id == trackId) is { } target)
+            {
+                target.IsHidden = false;
+                target.Items.Add(created);
+                target.Items.Sort((a, b) => a.SourceStartMs.CompareTo(b.SourceStartMs));
+            }
+        });
+        SelectMask(created.Id);
+    }
+
+    public void AddCameraLayoutInRange(CameraTimelineLayoutType type, double startMs, double endMs)
+    {
+        if (endMs - startMs < 350)
+        {
+            return;
+        }
+
+        string? id = null;
+        Mutate(document => id = TimelineEdits.AddCameraLayoutInRange(document, startMs, endMs, type));
+        if (id is not null)
+        {
+            SelectLayout(id);
+        }
+    }
 
     public void AddZoomAt(ZoomPresentation presentation, double source)
     {

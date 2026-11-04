@@ -62,6 +62,93 @@ public sealed class VideoRoundTripTests : IDisposable
         Assert.True(early, "seeking back did not reach the target");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SeekingKeepsTheShownFrameAndSettles(bool fragmented)
+    {
+        var path = WriteClip(fragmented, 240);
+        using var source = new VideoPlaybackSource(path);
+        var seeks = 0;
+        source.FrameDecoded += () => Interlocked.Increment(ref seeks);
+        Assert.True(WaitFor(() => source.FrameAt(0) is not null));
+
+        // Like a pointer moving over the ruler: every request lands while the last seek is still running.
+        for (var i = 0; i < 200; i++)
+        {
+            var target = i * 7919.0 % 7900;
+            Assert.NotNull(source.FrameAt(target));
+            Thread.Sleep(2);
+        }
+
+        // Between frames, as a time on a 30 fps clip almost always is. The frame just before it must be the answer.
+        const double between = 4010;
+        Assert.True(WaitFor(() => source.FrameAt(between) is { } frame && Math.Abs(frame.PresentationMs - 4000) <= 1000.0 / Fps));
+        Thread.Sleep(100);
+        var settled = Volatile.Read(ref seeks);
+        for (var i = 0; i < 50; i++)
+        {
+            var frame = source.FrameAt(between);
+            Assert.NotNull(frame);
+            Assert.True(frame.PresentationMs <= between + 0.5, $"showed {frame.PresentationMs}");
+            Thread.Sleep(5);
+        }
+
+        Assert.Equal(settled, Volatile.Read(ref seeks));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PlayingFromASeekDoesNotChaseTheClock(bool fragmented)
+    {
+        var path = WriteClip(fragmented, 240);
+        using var source = new VideoPlaybackSource(path);
+        Assert.True(WaitFor(() => source.FrameAt(3000) is { } frame && frame.PresentationMs >= 2900));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var newest = 0.0;
+        while (clock.ElapsedMilliseconds < 2000)
+        {
+            var time = 3000 + clock.ElapsedMilliseconds;
+            var frame = source.FrameAt(time);
+            Assert.NotNull(frame);
+            newest = frame.PresentationMs;
+            Thread.Sleep(8);
+        }
+
+        Assert.True(newest >= 4800, $"clock at 5000, newest frame {newest}");
+    }
+
+    [Fact]
+    public void AppAudioTrackIsContinuousEvenWithNothingToCapture()
+    {
+        // Only output-side capture of this test's own silent process, or none on Windows without process loopback.
+        var written = 0.0;
+        var last = 0.0;
+        var contiguous = true;
+        var origin = System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        var track = new AppAudioTrackRecorder([Environment.ProcessId], (_, length, at, duration) =>
+        {
+            contiguous &= Math.Abs(at - last) < 0.01;
+            Assert.Equal(duration * 192, length, 1);
+            last = at + duration;
+            written += duration;
+        }, host => host - origin);
+        Thread.Sleep(500);
+        track.Stop(1000);
+        track.Dispose();
+        Assert.True(contiguous);
+        Assert.Equal(1000, written, 1);
+    }
+
+    [Fact]
+    public void AudioAppsAreListedWithoutThisProcess()
+    {
+        var apps = AudioApps.List();
+        Assert.DoesNotContain(apps, app => app.Id == System.Diagnostics.Process.GetCurrentProcess().ProcessName);
+        Assert.Contains(Environment.ProcessId, AudioApps.RootProcessIds([System.Diagnostics.Process.GetCurrentProcess().ProcessName]));
+    }
+
     [Fact]
     public void CancelRemovesThePartialFile()
     {

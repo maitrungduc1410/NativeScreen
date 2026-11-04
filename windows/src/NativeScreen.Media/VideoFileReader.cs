@@ -12,6 +12,8 @@ namespace NativeScreen.Media;
 /// </summary>
 public sealed class VideoFileReader : IDisposable
 {
+    private const double UnknownKeyframeIntervalMs = 5000;
+
     private readonly IMFSourceReader reader;
     private readonly int stride;
     private readonly double startMs;
@@ -19,6 +21,7 @@ public sealed class VideoFileReader : IDisposable
     private readonly DecodeAccelerator? accelerator;
     private int nextIndex;
     private bool resolveAfterSeek;
+    private double lastSeekMs;
 
     public int Width { get; }
     public int Height { get; }
@@ -115,6 +118,7 @@ public sealed class VideoFileReader : IDisposable
 
     public void Seek(double positionMs)
     {
+        lastSeekMs = positionMs;
         reader.Flush(SourceReaderIndex.FirstVideoStream);
         if (index is null)
         {
@@ -126,6 +130,22 @@ public sealed class VideoFileReader : IDisposable
         nextIndex = index.KeyframeAtOrBefore(positionMs);
         resolveAfterSeek = true;
         reader.SetCurrentPosition((long)((index.TimesMs[nextIndex] + startMs) * 10_000));
+    }
+
+    /// <summary>
+    /// Whether a seek to a later time would start past a position. It also has to be past the last seek's own target: a
+    /// seek can land well before the keyframe it asked for, and asking again would land there again, for ever.
+    /// </summary>
+    public bool CanSkipAhead(double positionMs, double targetMs)
+    {
+        var reached = Math.Max(positionMs, lastSeekMs);
+        if (index is null)
+        {
+            // Without an index the keyframes are unknown, so only a gap longer than any keyframe interval counts.
+            return targetMs - reached > UnknownKeyframeIntervalMs;
+        }
+
+        return index.TimesMs[index.KeyframeAtOrBefore(targetMs)] > reached;
     }
 
     private double PresentationMs(double reportedMs)

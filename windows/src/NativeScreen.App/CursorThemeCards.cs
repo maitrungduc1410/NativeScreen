@@ -15,6 +15,8 @@ internal static class CursorThemeCards
 {
     private static readonly string Root = Path.Combine(AppContext.BaseDirectory, "Assets", "Cursors", "sets");
     private static readonly Dictionary<string, (double X, double Y)> Offsets = [];
+    private const int CenterAttempts = 6;
+    private const int CenterRetryMs = 60;
 
     public static string DisplayName(string themeId) => themeId switch
     {
@@ -40,11 +42,15 @@ internal static class CursorThemeCards
             .ToList();
     }
 
-    public static Button Card(string file, string name, bool selected, Action click, double size = 50, double spriteSize = 31)
+    /// <param name="hoverFiles">Other variants a card cycles through while hovered, to show the style has more than one.</param>
+    public static Button Card(string file, string name, bool selected, Action click, double size = 50, double spriteSize = 31, IReadOnlyList<string>? hoverFiles = null)
     {
-        var image = new Image { Width = spriteSize, Height = spriteSize, Source = new SvgImageSource(new Uri(file)) { RasterizePixelWidth = 88, RasterizePixelHeight = 88 } };
+        var image = Sprite(file, spriteSize);
         image.Loaded += (_, _) => _ = Center(image, file);
-        var fill = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(10), Background = Ui.Rgb(0.48, 0.48, 0.48), Child = image };
+        image.ImageOpened += (_, _) => _ = Center(image, file);
+        var sprites = new Grid();
+        sprites.Children.Add(image);
+        var fill = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(10), Background = Ui.Rgb(0.48, 0.48, 0.48), Child = sprites };
         if (selected)
         {
             fill.Background = Ui.Rgb(0.54, 0.54, 0.54);
@@ -56,46 +62,134 @@ internal static class CursorThemeCards
         ToolTipService.SetToolTip(button, name);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, name);
         button.Click += (_, _) => click();
-        return button;
-    }
-
-    private static async Task Center(Image image, string file)
-    {
-        if (!Offsets.TryGetValue(file, out var offset))
+        if (!selected)
         {
-            var bitmap = new RenderTargetBitmap();
-            try
+            button.PointerEntered += (_, _) => fill.Background = Ui.Rgb(0.51, 0.51, 0.51);
+            button.PointerExited += (_, _) => fill.Background = Ui.Rgb(0.48, 0.48, 0.48);
+            if (hoverFiles is { Count: > 0 })
             {
-                await bitmap.RenderAsync(image);
-                var pixels = (await bitmap.GetPixelsAsync()).ToArray();
-                var (width, height) = (bitmap.PixelWidth, bitmap.PixelHeight);
-                var (minX, maxX, minY, maxY) = (width, -1, height, -1);
-                for (var y = 0; y < height; y++)
-                {
-                    for (var x = 0; x < width; x++)
-                    {
-                        if (pixels[(y * width + x) * 4 + 3] > 16)
-                        {
-                            (minX, maxX, minY, maxY) = (Math.Min(minX, x), Math.Max(maxX, x), Math.Min(minY, y), Math.Max(maxY, y));
-                        }
-                    }
-                }
-
-                if (maxX < 0 || width == 0 || height == 0)
-                {
-                    // Not drawn yet: leave it uncentered and let the next build of the panel measure it.
-                    return;
-                }
-
-                offset = ((width - 1 - maxX - minX) / 2.0 / width, (height - 1 - maxY - minY) / 2.0 / height);
-                Offsets[file] = offset;
-            }
-            catch (System.Runtime.InteropServices.COMException)
-            {
-                return;
+                CycleOnHover(button, sprites, image, hoverFiles, spriteSize);
             }
         }
 
-        image.RenderTransform = new TranslateTransform { X = offset.X * image.ActualWidth, Y = offset.Y * image.ActualHeight };
+        return button;
+    }
+
+    private static Image Sprite(string file, double size) => new()
+    {
+        Width = size,
+        Height = size,
+        Source = new SvgImageSource(new Uri(file)) { RasterizePixelWidth = 88, RasterizePixelHeight = 88 }
+    };
+
+    /// <summary>The other sprites are made on the first hover, so a panel full of cards loads nothing it may never show.</summary>
+    private static void CycleOnHover(Button button, Grid sprites, Image first, IReadOnlyList<string> files, double spriteSize)
+    {
+        var fade = TimeSpan.FromMilliseconds(180);
+        var timer = new DispatcherTimer();
+        var current = 0;
+        void Show(int next)
+        {
+            sprites.Children[current].Opacity = 0;
+            sprites.Children[next].Opacity = 1;
+            current = next;
+        }
+
+        timer.Tick += (_, _) =>
+        {
+            timer.Interval = TimeSpan.FromMilliseconds(950);
+            Show((current + 1) % sprites.Children.Count);
+        };
+        button.PointerEntered += (_, _) =>
+        {
+            if (sprites.Children.Count == 1)
+            {
+                first.OpacityTransition = new ScalarTransition { Duration = fade };
+                foreach (var file in files)
+                {
+                    var sprite = Sprite(file, spriteSize);
+                    sprite.Opacity = 0;
+                    sprite.OpacityTransition = new ScalarTransition { Duration = fade };
+                    // Variants of a theme share one shape, and a sprite at zero opacity cannot be measured.
+                    if (first.RenderTransform is TranslateTransform centered)
+                    {
+                        sprite.RenderTransform = new TranslateTransform { X = centered.X, Y = centered.Y };
+                    }
+
+                    sprites.Children.Add(sprite);
+                }
+            }
+
+            timer.Interval = TimeSpan.FromMilliseconds(120);
+            timer.Start();
+        };
+        void Stop()
+        {
+            timer.Stop();
+            if (current != 0)
+            {
+                Show(0);
+            }
+        }
+
+        button.PointerExited += (_, _) => Stop();
+        button.Unloaded += (_, _) => timer.Stop();
+    }
+
+    /// <summary>An SVG decodes after the image loads, so a measurement can find nothing drawn yet and has to look again.</summary>
+    private static async Task Center(Image image, string file)
+    {
+        for (var attempt = 0; attempt < CenterAttempts && !Offsets.ContainsKey(file); attempt++)
+        {
+            if (attempt > 0)
+            {
+                await Task.Delay(CenterRetryMs);
+            }
+
+            if (image.XamlRoot is null)
+            {
+                return;
+            }
+
+            await Measure(image, file);
+        }
+
+        if (Offsets.TryGetValue(file, out var offset))
+        {
+            image.RenderTransform = new TranslateTransform { X = offset.X * image.ActualWidth, Y = offset.Y * image.ActualHeight };
+        }
+    }
+
+    private static async Task Measure(Image image, string file)
+    {
+        var bitmap = new RenderTargetBitmap();
+        try
+        {
+            // Measured without the last correction, which would otherwise be counted in.
+            image.RenderTransform = null;
+            await bitmap.RenderAsync(image);
+            var pixels = (await bitmap.GetPixelsAsync()).ToArray();
+            var (width, height) = (bitmap.PixelWidth, bitmap.PixelHeight);
+            var (minX, maxX, minY, maxY) = (width, -1, height, -1);
+            for (var y = 0; y < height; y++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    if (pixels[(y * width + x) * 4 + 3] > 16)
+                    {
+                        (minX, maxX, minY, maxY) = (Math.Min(minX, x), Math.Max(maxX, x), Math.Min(minY, y), Math.Max(maxY, y));
+                    }
+                }
+            }
+
+            if (maxX >= 0 && width > 0 && height > 0)
+            {
+                Offsets[file] = ((width - 1 - maxX - minX) / 2.0 / width, (height - 1 - maxY - minY) / 2.0 / height);
+            }
+        }
+        catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or ArgumentException)
+        {
+            // Not in a state that can be drawn yet; the caller looks again.
+        }
     }
 }

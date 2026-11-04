@@ -41,6 +41,7 @@ internal sealed class InspectorPanel
 
     private readonly Dictionary<string, StripState> strips = [];
     private string? wallpaperCategory;
+    private string? selectedShortcutTrackId;
     private IReadOnlyList<WallpaperItem>? systemWallpapers;
 
     public InspectorPanel(EditorSession session, ScrollViewer scroller, StackPanel body, bool hasCamera, EditorTools tools)
@@ -322,7 +323,7 @@ internal sealed class InspectorPanel
                 {
                     d.Cursor.ThemeId = theme;
                     d.Cursor.VariantId = variants.Exists(item => item.Id == d.Cursor.VariantId) ? d.Cursor.VariantId : variants[0].Id;
-                }));
+                }), hoverFiles: variants.Skip(1).Select(item => item.File).ToList());
                 selectedTheme = isSelected ? card : selectedTheme;
                 themeRow.Children.Add(card);
             }
@@ -882,36 +883,62 @@ internal sealed class InspectorPanel
         Add(Slider("Shortcut labels size", () => Doc.Captions.ShortcutsSizeRatio, (d, v) => d.Captions.ShortcutsSizeRatio = v, 0.075, 0.25, 0.11));
         Add(Toggle("Show single key shortcuts", null, () => Doc.Captions.ShowSingleKeyShortcuts, (d, v) => d.Captions.ShowSingleKeyShortcuts = v));
         AddDivider();
-        ShortcutStyleSection(d => d.Captions.DefaultShortcutStyle);
+        var tracks = Doc.Captions.ShortcutTracks;
+        var active = tracks.Find(track => track.Id == selectedShortcutTrackId)?.Id ?? tracks.FirstOrDefault()?.Id;
+        if (tracks.Count > 1)
+        {
+            var row = new List<(string, bool, Action?)>();
+            foreach (var track in tracks)
+            {
+                var id = track.Id;
+                row.Add((track.Name, id == active, () =>
+                {
+                    selectedShortcutTrackId = id;
+                    Rebuild();
+                }));
+            }
+
+            Add(Labeled("Shortcut track", 10, OptionsWrap(row.ToArray())));
+        }
+
+        // The compositor draws a track's own style, so that is the one to edit.
+        ShortcutStyleSection(d => TimelineEdits.ShortcutTrackStyle(d, active));
     }
 
     /// <summary>Position, offsets and keycap colors of a style, edited through <paramref name="target"/> on the document.</summary>
     private void ShortcutStyleSection(Func<ProjectDocument, ShortcutStyleConfig> target)
     {
         var style = target(Doc);
+        ShortcutStyleConfig Writing(ProjectDocument d) => TimelineEdits.LinkDefaultShortcutStyle(d, target(d));
         Add(Labeled("Position", 10, Options(
-            ("Bottom", style.DockPosition == ShortcutDockPosition.Bottom, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Bottom)),
-            ("Top", style.DockPosition == ShortcutDockPosition.Top, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Top)),
-            ("Left", style.DockPosition == ShortcutDockPosition.Left, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Left)),
-            ("Right", style.DockPosition == ShortcutDockPosition.Right, () => Edit(d => target(d).DockPosition = ShortcutDockPosition.Right)))));
-        Add(Slider("Horizontal offset", () => target(Doc).OffsetX, (d, v) => target(d).OffsetX = v, -0.45, 0.45, 0));
-        Add(Slider("Vertical offset", () => target(Doc).OffsetY, (d, v) => target(d).OffsetY = v, -0.45, 0.45, 0));
+            ("Bottom", style.DockPosition == ShortcutDockPosition.Bottom, () => Edit(d => Writing(d).DockPosition = ShortcutDockPosition.Bottom)),
+            ("Top", style.DockPosition == ShortcutDockPosition.Top, () => Edit(d => Writing(d).DockPosition = ShortcutDockPosition.Top)),
+            ("Left", style.DockPosition == ShortcutDockPosition.Left, () => Edit(d => Writing(d).DockPosition = ShortcutDockPosition.Left)),
+            ("Right", style.DockPosition == ShortcutDockPosition.Right, () => Edit(d => Writing(d).DockPosition = ShortcutDockPosition.Right)))));
+        if (style.DockPosition is ShortcutDockPosition.Left or ShortcutDockPosition.Right)
+        {
+            Add(Note($"Keycaps are stacked vertically along the {style.DockPosition.ToString().ToLowerInvariant()} edge."));
+        }
+
+        Add(Slider("Horizontal offset", () => target(Doc).OffsetX, (d, v) => Writing(d).OffsetX = v, -0.45, 0.45, 0));
+        Add(Slider("Vertical offset", () => target(Doc).OffsetY, (d, v) => Writing(d).OffsetY = v, -0.45, 0.45, 0));
+        AddDivider();
         Add(Labeled("Keycap color", 10, Options(
-            ("Default", style.ColorMode == ShortcutColorMode.DefaultDark, () => Edit(d => target(d).ColorMode = ShortcutColorMode.DefaultDark)),
-            ("Solid", style.ColorMode == ShortcutColorMode.Solid, () => Edit(d => target(d).ColorMode = ShortcutColorMode.Solid)),
-            ("Gradient", style.ColorMode == ShortcutColorMode.Gradient, () => Edit(d => target(d).ColorMode = ShortcutColorMode.Gradient)))));
+            ("Default", style.ColorMode == ShortcutColorMode.DefaultDark, () => Edit(d => Writing(d).ColorMode = ShortcutColorMode.DefaultDark)),
+            ("Solid", style.ColorMode == ShortcutColorMode.Solid, () => Edit(d => Writing(d).ColorMode = ShortcutColorMode.Solid)),
+            ("Gradient", style.ColorMode == ShortcutColorMode.Gradient, () => Edit(d => Writing(d).ColorMode = ShortcutColorMode.Gradient)))));
         UIElement Field(string name, string hex, Action<ShortcutStyleConfig, string> set) => ColorField.Create(
             name,
             hex,
-            value => session.Mutate(d => set(target(d), value), "shortcut-color", structural: false),
-            value => Edit(d => set(target(d), value)));
+            value => session.Mutate(d => set(Writing(d), value), "shortcut-color", structural: false),
+            value => Edit(d => set(Writing(d), value)));
         if (style.ColorMode == ShortcutColorMode.Solid)
         {
             Add(Labeled("Key background", 8, Field("Key background", style.SolidColorHex, (item, value) => item.SolidColorHex = value)));
             Add(Action("Pick random color", () =>
             {
                 var picked = CuratedSolidColors[Random.Shared.Next(CuratedSolidColors.Length)];
-                Edit(d => target(d).SolidColorHex = picked);
+                Edit(d => Writing(d).SolidColorHex = picked);
             }));
         }
         else if (style.ColorMode == ShortcutColorMode.Gradient)
@@ -1075,14 +1102,14 @@ internal sealed class InspectorPanel
         {
             if (enabled)
             {
-                d.Captions.ShortcutStyleOverrides[cluster.Id] = ProjectJson.Clone(d.Captions.DefaultShortcutStyle);
+                d.Captions.ShortcutStyleOverrides[cluster.Id] = ProjectJson.Clone(TimelineEdits.EffectiveShortcutStyle(d, cluster));
             }
             else
             {
                 d.Captions.ShortcutStyleOverrides.Remove(cluster.Id);
             }
         })));
-        ShortcutStyleSection(d => d.Captions.ShortcutStyleOverrides.GetValueOrDefault(cluster.Id) ?? d.Captions.DefaultShortcutStyle);
+        ShortcutStyleSection(d => TimelineEdits.EffectiveShortcutStyle(d, cluster));
         Add(Action("Remove shortcut", session.DeleteSelected));
     }
 

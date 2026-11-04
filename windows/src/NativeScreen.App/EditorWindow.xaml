@@ -136,7 +136,7 @@
                 </Grid>
 
                 <Grid Grid.Row="2" Margin="14,8">
-                    <Button x:Name="SplitButton" Style="{StaticResource NsIconButton}" Click="ToggleSplit" HorizontalAlignment="Left" ToolTipService.ToolTip="Split clip (C)">
+                    <Button x:Name="SplitButton" Style="{StaticResource NsIconButton}" Click="ToggleSplit" HorizontalAlignment="Left" ToolTipService.ToolTip="Split clip (Alt)">
                         <FontIcon x:Name="SplitIcon" Glyph="&#xE8C6;" FontSize="15" FontFamily="{StaticResource NsIconFont}" />
                     </Button>
                     <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">

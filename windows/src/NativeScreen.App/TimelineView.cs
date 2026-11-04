@@ -2,6 +2,8 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Composition;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
@@ -11,7 +13,10 @@ using ZoomMode = NativeScreen.Core.ZoomMode;
 
 namespace NativeScreen.App;
 
-/// <summary>Multi-track timeline. Blocks are retained elements; the playhead moves by transform without a layout pass.</summary>
+/// <summary>
+/// Multi-track timeline. The ruler stays above the tracks and follows them sideways. Blocks are retained elements; the
+/// playhead and the hover ghost sit over both and move by transform without a layout pass.
+/// </summary>
 internal sealed class TimelineView
 {
     private const double LabelColumnWidth = 126;
@@ -22,6 +27,12 @@ internal sealed class TimelineView
     private const double MaskRowHeight = 34;
     private const double RowSpacing = 12;
     private const double EdgeHitWidth = 13;
+    private const double GhostDuckDistance = 26;
+    private const double GhostDuckDepth = 22;
+    private const float HandleRestScale = 0.95f;
+    private const float WiggleAmplitude = 1.65f;
+    private static readonly TimeSpan WiggleHalfPeriod = TimeSpan.FromMilliseconds(420);
+    private static readonly TimeSpan WiggleSettle = TimeSpan.FromMilliseconds(160);
     private const double MinBlockMs = 200;
 
     private readonly EditorSession session;
@@ -39,12 +50,32 @@ internal sealed class TimelineView
         VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
         HorizontalScrollMode = ScrollMode.Disabled
     };
-    private readonly Canvas canvas = new();
+    private readonly TrackSurface canvas = new();
     private readonly Canvas labels = new();
-    private readonly Canvas playhead = new() { IsHitTestVisible = false };
-    private readonly TranslateTransform playheadOffset = new();
-    private readonly Rectangle skimLine = new() { Width = 1, Fill = new SolidColorBrush(Color.FromArgb(150, 255, 255, 255)), IsHitTestVisible = false, Visibility = Visibility.Collapsed };
-    private readonly Rectangle stem = new() { Width = 1.5, Fill = new SolidColorBrush(Color.FromArgb(230, 112, 77, 255)) };
+    private readonly Grid rulerHost = new();
+    private readonly Canvas ruler = new() { Height = RulerHeight, HorizontalAlignment = HorizontalAlignment.Left, Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)) };
+    private readonly TranslateTransform rulerOffset = new();
+    private readonly Canvas marks = new() { IsHitTestVisible = false };
+    private readonly PlayheadMark playhead = new(Color.FromArgb(255, 112, 77, 255), Color.FromArgb(230, 112, 77, 255));
+    private readonly PlayheadMark ghost = new(Color.FromArgb(235, 64, 69, 87), Color.FromArgb(166, 64, 69, 87)) { Visibility = Visibility.Collapsed };
+    private readonly SolidColorBrush ghostStem = new(Color.FromArgb(166, 64, 69, 87));
+    private readonly SolidColorBrush ghostSplitStem = new(Color.FromArgb(230, 240, 82, 66));
+    private readonly LinearGradientBrush clipTick = new()
+    {
+        StartPoint = new Windows.Foundation.Point(0, 0),
+        EndPoint = new Windows.Foundation.Point(0, 1),
+        GradientStops =
+        {
+            new GradientStop { Color = Color.FromArgb(46, 255, 255, 255), Offset = 0 },
+            new GradientStop { Color = Color.FromArgb(0, 255, 255, 255), Offset = 1 }
+        }
+    };
+    private double rulerStepSeconds = 1;
+    private Grid? hoveredHandles;
+    private BlockGrid? hoveredBlock;
+    private bool splitCursor;
+    private readonly List<(UIElement Block, int Row)> wigglingBlocks = [];
+    private readonly List<double> blockRows = [];
     private double zoom = 1;
     private double viewportWidth = 800;
     private bool scrubbing;
@@ -56,15 +87,45 @@ internal sealed class TimelineView
         this.root = root;
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(LabelColumnWidth) });
         root.ColumnDefinitions.Add(new ColumnDefinition());
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RulerHeight) });
+        root.RowDefinitions.Add(new RowDefinition());
+
+        var corner = new Border { BorderBrush = Ui.Pal("Ink07"), BorderThickness = new Thickness(0, 0, 1, 0), Padding = new Thickness(14, 0, 0, 0) };
+        var cornerLabel = Ui.Text("Tracks", 10.5, "Ink45", medium: true);
+        cornerLabel.TextWrapping = TextWrapping.NoWrap;
+        corner.Child = cornerLabel;
+        root.Children.Add(corner);
+
+        ruler.RenderTransform = rulerOffset;
+        rulerHost.Children.Add(ruler);
+        Grid.SetColumn(rulerHost, 1);
+        root.Children.Add(rulerHost);
+
         labelScroller.Content = labels;
+        Grid.SetRow(labelScroller, 1);
         root.Children.Add(labelScroller);
         scroller.Content = canvas;
+        Grid.SetRow(scroller, 1);
         Grid.SetColumn(scroller, 1);
         root.Children.Add(scroller);
-        scroller.ViewChanged += (_, _) => labelScroller.ChangeView(null, scroller.VerticalOffset, null, true);
+
+        marks.Children.Add(ghost);
+        marks.Children.Add(playhead);
+        Grid.SetColumn(marks, 1);
+        Grid.SetRowSpan(marks, 2);
+        root.Children.Add(marks);
+
+        scroller.ViewChanged += (_, _) =>
+        {
+            labelScroller.ChangeView(null, scroller.VerticalOffset, null, true);
+            rulerOffset.X = -scroller.HorizontalOffset;
+            UpdatePlayhead();
+        };
         root.SizeChanged += (_, args) =>
         {
             viewportWidth = Math.Max(300, args.NewSize.Width - LabelColumnWidth);
+            rulerHost.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, viewportWidth, RulerHeight) };
+            marks.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, viewportWidth, args.NewSize.Height) };
             Rebuild();
         };
         canvas.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
@@ -78,16 +139,14 @@ internal sealed class TimelineView
             }
         }), handledEventsToo: true);
         canvas.PointerMoved += CanvasMoved;
-        canvas.PointerExited += (_, _) => EndSkim();
+        canvas.PointerExited += PointerLeft;
         canvas.PointerReleased += CanvasReleased;
         canvas.PointerCaptureLost += (_, _) => EndDrag();
-
-        stem.RenderTransform = new TranslateTransform { X = -0.75 };
-        playhead.Children.Add(stem);
-        var head = Ui.Shape("M0,0 A7,7 0 0 1 14,0 C14,6 9,11 7,16 C5,11 0,6 0,0 Z", 15, new SolidColorBrush(Color.FromArgb(255, 112, 77, 255)));
-        head.RenderTransform = new TranslateTransform { X = -7.5, Y = 3 };
-        playhead.Children.Add(head);
-        playhead.RenderTransform = playheadOffset;
+        ruler.PointerPressed += CanvasPressed;
+        ruler.PointerMoved += CanvasMoved;
+        ruler.PointerExited += PointerLeft;
+        ruler.PointerReleased += CanvasReleased;
+        ruler.PointerCaptureLost += (_, _) => EndDrag();
     }
 
     private float[]? waveform;
@@ -112,6 +171,69 @@ internal sealed class TimelineView
         Rebuild();
     }
 
+    /// <summary>Split mode hides the handles and turns the pointer into a crosshair over everything it can cut.</summary>
+    public void RefreshSplitMode()
+    {
+        if (splitCursor == session.IsSplitModeActive)
+        {
+            return;
+        }
+
+        splitCursor = session.IsSplitModeActive;
+        var shape = splitCursor ? InputSystemCursorShape.Cross : InputSystemCursorShape.Arrow;
+        canvas.SetCursor(shape);
+        hoveredBlock?.SetCursor(shape);
+        if (splitCursor)
+        {
+            StartWiggle();
+        }
+        else
+        {
+            StopWiggle();
+        }
+
+        if (hoveredHandles is not null)
+        {
+            ShowHandles(hoveredHandles, !splitCursor);
+        }
+
+        UpdatePlayhead();
+    }
+
+    /// <summary>
+    /// Split mode's tracks bob up and down, neighbors in opposite directions. It runs on the compositor, so the UI thread and
+    /// the pointer are left alone, and it costs nothing outside the mode (spec/06 ADR-35).
+    /// </summary>
+    private void StartWiggle()
+    {
+        foreach (var (block, row) in wigglingBlocks)
+        {
+            var visual = ElementCompositionPreview.GetElementVisual(block);
+            var compositor = visual.Compositor;
+            var direction = row % 2 == 0 ? 1f : -1f;
+            var ease = compositor.CreateCubicBezierEasingFunction(new System.Numerics.Vector2(0.42f, 0), new System.Numerics.Vector2(0.58f, 1));
+            var wiggle = compositor.CreateScalarKeyFrameAnimation();
+            wiggle.InsertKeyFrame(0, -WiggleAmplitude * direction);
+            wiggle.InsertKeyFrame(1, WiggleAmplitude * direction, ease);
+            wiggle.Duration = WiggleHalfPeriod;
+            wiggle.Direction = AnimationDirection.Alternate;
+            wiggle.IterationBehavior = AnimationIterationBehavior.Forever;
+            visual.StartAnimation("Translation.Y", wiggle);
+        }
+    }
+
+    private void StopWiggle()
+    {
+        foreach (var (block, _) in wigglingBlocks)
+        {
+            var visual = ElementCompositionPreview.GetElementVisual(block);
+            var settle = visual.Compositor.CreateScalarKeyFrameAnimation();
+            settle.InsertKeyFrame(1, 0);
+            settle.Duration = WiggleSettle;
+            visual.StartAnimation("Translation.Y", settle);
+        }
+    }
+
     /// <summary>Changes the scale with the playhead staying where it is in the viewport.</summary>
     public void SetZoom(double value)
     {
@@ -123,14 +245,36 @@ internal sealed class TimelineView
     }
 
     /// <summary>Called on every clock tick while playing, so it only moves a transform.</summary>
-    public void UpdatePlayhead() => playheadOffset.X = X(session.PlayheadTimelineMs);
+    public void UpdatePlayhead()
+    {
+        var height = root.ActualHeight;
+        var mainX = X(session.PlayheadTimelineMs) - scroller.HorizontalOffset;
+        playhead.Place(mainX, PlayheadMark.TopY, height);
+        if (session.HoverSkimTimelineMs is { } skim && !session.IsPlaying)
+        {
+            // The ghost's head ducks under the main one as it gets close, so the two never fight for the same spot.
+            var ghostX = X(skim) - scroller.HorizontalOffset;
+            var proximity = Math.Clamp(1 - Math.Abs(ghostX - mainX) / GhostDuckDistance, 0, 1);
+            ghost.Place(ghostX, PlayheadMark.TopY + GhostDuckDepth * proximity * (2 - proximity), height);
+            ghost.SetStem(session.IsSplitModeActive ? ghostSplitStem : ghostStem);
+            ghost.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ghost.Visibility = Visibility.Collapsed;
+        }
+    }
 
     public void Rebuild()
     {
         canvas.Children.Clear();
+        ruler.Children.Clear();
+        wigglingBlocks.Clear();
+        blockRows.Clear();
         labels.Children.Clear();
+        rulerStepSeconds = TimelineRuler.StepSeconds(session.DurationMs, TrackWidth);
         DrawRuler();
-        var y = RulerHeight + 8;
+        var y = 8.0;
         y = DrawTypingSuggestions(y);
         y = DrawClips(y);
         y = DrawZooms(y);
@@ -139,17 +283,19 @@ internal sealed class TimelineView
         y = DrawShortcuts(y);
         y = DrawVoiceovers(y);
         y += 12;
-        var height = Math.Max(y, root.ActualHeight);
+        var height = Math.Max(y, root.ActualHeight - RulerHeight);
         canvas.Width = TrackWidth + TrackInset * 2;
+        ruler.Width = canvas.Width;
         canvas.Height = height;
         labels.Height = height;
-        stem.Height = height;
         var rule = new Border { Width = 1, Height = height, Background = Ui.Pal("Ink07") };
         Canvas.SetLeft(rule, LabelColumnWidth - 1);
         labels.Children.Add(rule);
-        canvas.Children.Add(skimLine);
-        canvas.Children.Add(playhead);
         UpdatePlayhead();
+        if (splitCursor)
+        {
+            StartWiggle();
+        }
     }
 
     private double X(double timelineMs) => TrackInset + timelineMs / Math.Max(1, session.DurationMs) * TrackWidth;
@@ -177,31 +323,44 @@ internal sealed class TimelineView
 
     private void DrawRuler()
     {
-        var seconds = session.DurationMs / 1000;
-        var pixelsPerSecond = TrackWidth / Math.Max(0.001, seconds);
-        var step = new[] { 1.0, 2, 5, 10, 15, 30, 60, 120, 300, 600 }.FirstOrDefault(item => item * pixelsPerSecond >= 90, 1200);
-        for (var t = 0.0; t <= seconds + 0.001; t += step)
+        const double dotY = RulerHeight - 6;
+        const double labelWidth = 60;
+        var totalSeconds = Math.Max(1, session.DurationMs / 1000);
+        for (var index = 1; ; index++)
         {
-            if (t > 0)
+            var t = index * rulerStepSeconds;
+            if (t >= totalSeconds - 0.001)
             {
-                var minutes = (int)(t / 60);
-                var label = Ui.Text($"{minutes}:{(int)(t % 60):00}", 11, "Ink60");
-                label.TextWrapping = TextWrapping.NoWrap;
-                Canvas.SetLeft(label, X(t * 1000) - 11);
-                Canvas.SetTop(label, 8);
-                canvas.Children.Add(label);
+                break;
             }
 
-            var dot = new Ellipse { Width = 3, Height = 3, Fill = Ui.Pal("Ink28") };
-            Canvas.SetLeft(dot, X((t + step / 2) * 1000) - 1.5);
-            Canvas.SetTop(dot, 15);
-            if (t + step / 2 <= seconds)
+            var x = X(t * 1000);
+            var dot = new Ellipse { Width = 3.6, Height = 3.6, Fill = Ui.Pal("Ink45"), Opacity = 0.71 };
+            Canvas.SetLeft(dot, x - 1.8);
+            Canvas.SetTop(dot, dotY - 1.8);
+            ruler.Children.Add(dot);
+
+            // Half seconds get a dot only, and a label too close to either end is left out.
+            var ms = (long)Math.Round(t * 1000);
+            var fromStart = x - TrackInset;
+            if (ms % 1000 == 0 && fromStart >= 14 && fromStart <= TrackWidth - 14)
             {
-                canvas.Children.Add(dot);
+                var whole = ms / 1000;
+                var label = new TextBlock
+                {
+                    Text = $"{whole / 60}:{whole % 60:00}",
+                    Width = labelWidth,
+                    FontSize = 11,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Ui.Pal("Ink45"),
+                    Opacity = 0.76,
+                    TextAlignment = TextAlignment.Center
+                };
+                Canvas.SetLeft(label, x - labelWidth / 2);
+                Canvas.SetTop(label, dotY - 17);
+                ruler.Children.Add(label);
             }
         }
-
-        AddLabel("Tracks", 8, 18, eye: false);
     }
 
     private double DrawClips(double y)
@@ -222,16 +381,10 @@ internal sealed class TimelineView
                 slice.Id == session.SelectedSliceId,
                 false);
             AddWaveform(block, slice.SourceStartMs, slice.SourceEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
+            AddRulerTicks(block, mapped.TimelineStartMs, mapped.TimelineEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
             var id = slice.Id;
             var blockWidth = X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs);
-            block.PointerPressed += (_, args) =>
-            {
-                if (session.IsSplitModeActive)
-                {
-                    session.SplitSlice(TimeAt(args.GetCurrentPoint(canvas).Position.X));
-                    args.Handled = true;
-                }
-            };
+            block.SplitAt = time => session.SplitSlice(time);
             Draggable(
                 block,
                 blockWidth,
@@ -322,7 +475,26 @@ internal sealed class TimelineView
         Canvas.SetLeft(badge, X(timelineMs) - 15);
         Canvas.SetTop(badge, RulerHeight - 28);
         Canvas.SetZIndex(badge, 5);
-        canvas.Children.Add(badge);
+        ruler.Children.Add(badge);
+    }
+
+    /// <summary>Faint lines down from the top of a clip, under each ruler mark.</summary>
+    private void AddRulerTicks(BlockGrid block, double timelineStart, double timelineEnd, double width)
+    {
+        var stepMs = rulerStepSeconds * 1000;
+        var ticks = new Canvas { IsHitTestVisible = false };
+        for (var ms = Math.Ceiling(timelineStart / stepMs) * stepMs; ms < timelineEnd; ms += stepMs)
+        {
+            var x = (ms - timelineStart) / Math.Max(1, timelineEnd - timelineStart) * width;
+            if (x > 4 && x < width - 4)
+            {
+                var tick = new Rectangle { Width = 1, Height = ClipRowHeight * 0.65, Fill = clipTick };
+                Canvas.SetLeft(tick, x - 0.5);
+                ticks.Children.Add(tick);
+            }
+        }
+
+        block.Children.Insert(block.Children.Count - 1, ticks);
     }
 
     /// <summary>A filled envelope along the bottom of a clip; one point per 3 px is plenty, and it is rebuilt only on edits.</summary>
@@ -442,7 +614,8 @@ internal sealed class TimelineView
                     var high = neighbors.Where(other => other.SourceStartMs >= current.SourceEndMs).Select(other => other.SourceStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
                     return (current.SourceStartMs, current.SourceEndMs, low, high);
                 },
-                movedRows: rows => session.MoveVoiceoverToTrack(id, row + rows));
+                movedRows: rows => session.MoveVoiceoverToTrack(id, row + rows),
+                resizable: false);
             }
 
             y += MaskRowHeight + RowSpacing;
@@ -454,7 +627,17 @@ internal sealed class TimelineView
     private double DrawZooms(double y)
     {
         var timeline = session.Document.Timeline;
-        AddRowTarget(y, ZoomRowHeight, Palette.Zoom, time => session.AddZoomAt(ZoomPresentation.Screen, time));
+        AddRowTarget(
+            y,
+            ZoomRowHeight,
+            GhostStyle.Of(Palette.Zoom),
+            () => session.Document.Timeline.Zooms.Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+            500,
+            2800,
+            350,
+            session.AddZoomInRange,
+            seekToMiddle: false,
+            prompt: timeline.Zooms.Count == 0 ? "Click or drag to add zoom on cursor" : null);
         AddLabel("Zoom", y, ZoomRowHeight, eye: true, timeline.IsZoomTrackHidden, () =>
             session.Mutate(document => document.Timeline.IsZoomTrackHidden = !document.Timeline.IsZoomTrackHidden));
         foreach (var item in timeline.Zooms)
@@ -472,6 +655,7 @@ internal sealed class TimelineView
                 item.Id == session.SelectedZoomId,
                 item.Disabled || timeline.IsZoomTrackHidden);
             var id = item.Id;
+            block.SplitAt = time => session.SplitZoom(id, session.Mapper.SourceTime(time).SourceMs);
             Draggable(block, width, () => session.SelectZoom(id), (start, end) =>
             {
                 session.Mutate(document =>
@@ -506,7 +690,15 @@ internal sealed class TimelineView
             return y;
         }
 
-        AddRowTarget(y, MaskRowHeight, Palette.Layout, time => session.AddCameraLayoutAt(CameraTimelineLayoutType.CameraOverlay, time));
+        AddRowTarget(
+            y,
+            MaskRowHeight,
+            GhostStyle.Of(Palette.Layout),
+            () => session.Document.Timeline.CameraLayouts.Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+            450,
+            2800,
+            350,
+            (start, end) => session.AddCameraLayoutInRange(CameraTimelineLayoutType.CameraOverlay, start, end));
         AddLabel("Layouts", y, MaskRowHeight, eye: true, timeline.IsCameraLayoutsTrackHidden, () =>
             session.Mutate(document => document.Timeline.IsCameraLayoutsTrackHidden = !document.Timeline.IsCameraLayoutsTrackHidden));
         foreach (var layout in timeline.CameraLayouts)
@@ -515,6 +707,7 @@ internal sealed class TimelineView
             var width = X(TimelineOf(layout.SourceEndMs)) - left;
             var block = Block(left, y, width, MaskRowHeight, Palette.Layout, LayoutTitle(layout.LayoutType), null, layout.Id == session.SelectedLayoutId, layout.Disabled);
             var id = layout.Id;
+            block.SplitAt = time => session.SplitLayout(id, session.Mapper.SourceTime(time).SourceMs);
             Draggable(block, width, () => session.SelectLayout(id), (start, end) =>
             {
                 session.Mutate(document =>
@@ -546,7 +739,15 @@ internal sealed class TimelineView
         foreach (var track in session.Document.Timeline.MaskTracks)
         {
             var trackId = track.Id;
-            AddRowTarget(y, MaskRowHeight, Palette.Mask, time => session.AddMaskAt(MaskType.Blur, time));
+            AddRowTarget(
+                y,
+                MaskRowHeight,
+                GhostStyle.Of(Palette.Mask),
+                () => (session.Document.Timeline.MaskTracks.Find(other => other.Id == trackId)?.Items ?? []).Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+                450,
+                2800,
+                300,
+                (start, end) => session.AddMaskInRange(trackId, start, end));
             AddLabel(track.Name, y, MaskRowHeight, eye: true, track.IsHidden, () =>
                 session.Mutate(document =>
                 {
@@ -568,6 +769,7 @@ internal sealed class TimelineView
                     mask.Id == session.SelectedMaskId,
                     mask.Disabled || track.IsHidden);
                 var id = mask.Id;
+                block.SplitAt = time => session.SplitMask(id, session.Mapper.SourceTime(time).SourceMs);
                 Draggable(block, width, () => session.SelectMask(id), (start, end) =>
                 {
                     session.Mutate(document =>
@@ -616,7 +818,15 @@ internal sealed class TimelineView
         foreach (var track in captions.ShortcutTracks)
         {
             var trackId = track.Id;
-            AddRowTarget(y, MaskRowHeight, Palette.Layout, time => session.AddCustomShortcut(trackId, time));
+            AddRowTarget(
+                y,
+                MaskRowHeight,
+                GhostStyle.Shortcut,
+                () => session.Shortcuts().Where(item => item.TrackId == trackId).Select(item => (TimelineOf(item.DisplayStartMs), TimelineOf(item.DisplayEndMs))),
+                450,
+                1800,
+                300,
+                (start, end) => session.AddCustomShortcut(trackId, start, end));
             var trackHidden = track.IsHidden || !captions.ShowKeystrokes;
             AddLabel(track.Name, y, MaskRowHeight, eye: true, trackHidden, () => session.ToggleShortcutTrackHidden(trackId));
             var clusters = session.Shortcuts().Where(item => item.TrackId == track.Id).OrderBy(item => item.DisplayStartMs).ToList();
@@ -646,7 +856,8 @@ internal sealed class TimelineView
                     var low = others.Where(item => item.DisplayEndMs <= current.DisplayStartMs).Select(item => item.DisplayEndMs).DefaultIfEmpty(0).Max();
                     var high = others.Where(item => item.DisplayStartMs >= current.DisplayEndMs).Select(item => item.DisplayStartMs).DefaultIfEmpty(session.SourceDurationMs).Min();
                     return (current.DisplayStartMs, current.DisplayEndMs, low, high);
-                });
+                },
+                keycapHandles: true);
             }
 
             y += MaskRowHeight + RowSpacing;
@@ -664,39 +875,126 @@ internal sealed class TimelineView
         _ => "Camera overlay"
     };
 
-    /// <summary>An empty row shows a plus where the pointer is, and clicking it adds a block there. Blocks are drawn over it.</summary>
-    private void AddRowTarget(double y, double height, Palette palette, Action<double> add)
+    /// <summary>
+    /// Hovering an empty part of a row shows a ghost of the block a click would add, centered on the pointer and fitted to the
+    /// free gap. Blocks are drawn over the row, so it only hears the pointer where nothing is.
+    /// </summary>
+    private void AddRowTarget(
+        double y,
+        double height,
+        GhostStyle style,
+        Func<IEnumerable<(double Start, double End)>> occupied,
+        double minimumGapMs,
+        double desiredMs,
+        double minimumSourceMs,
+        Action<double, double> add,
+        bool seekToMiddle = true,
+        string? prompt = null)
     {
         var row = new Border { Width = TrackWidth, Height = height, Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)) };
+        var plus = Ui.Icon("\uE710", style.IconSize, Ui.Pal("Ink95"));
+        plus.HorizontalAlignment = HorizontalAlignment.Center;
+        plus.VerticalAlignment = VerticalAlignment.Center;
+        plus.IsHitTestVisible = false;
         var ghost = new Border
         {
-            Width = 34,
             Height = height,
-            CornerRadius = new CornerRadius(7),
-            Background = new SolidColorBrush(Color.FromArgb(70, palette.Top.R, palette.Top.G, palette.Top.B)),
-            BorderBrush = new SolidColorBrush(palette.Ring),
+            CornerRadius = new CornerRadius(style.Radius),
+            Background = Ui.Gradient(style.Top, style.Bottom),
+            BorderBrush = new SolidColorBrush(style.Ring),
             BorderThickness = new Thickness(1),
             IsHitTestVisible = false,
-            Visibility = Visibility.Collapsed,
-            Child = new TextBlock { Text = "+", FontSize = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Colors.White) }
+            Opacity = 0,
+            OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(120) },
+            Child = plus
         };
         Canvas.SetLeft(row, TrackInset);
         Canvas.SetTop(row, y);
         Canvas.SetTop(ghost, y);
+        Border? promptBox = null;
+        if (prompt is not null)
+        {
+            var text = Ui.Text(prompt, 12, "Ink45");
+            text.HorizontalAlignment = HorizontalAlignment.Center;
+            text.TextWrapping = TextWrapping.NoWrap;
+            promptBox = new Border
+            {
+                Width = TrackWidth,
+                Height = height,
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(Color.FromArgb(20, 77, 47, 245)),
+                IsHitTestVisible = false,
+                Child = text
+            };
+            Canvas.SetLeft(promptBox, TrackInset);
+            Canvas.SetTop(promptBox, y);
+        }
+
+        (double Start, double End, double SourceStart, double SourceEnd)? preview = null;
+        void Hide()
+        {
+            preview = null;
+            ghost.Opacity = 0;
+            if (promptBox is not null)
+            {
+                promptBox.Visibility = Visibility.Visible;
+            }
+        }
+
         row.PointerMoved += (_, args) =>
         {
-            if (drag is null && !scrubbing)
+            preview = null;
+            if (drag is null && !scrubbing && !session.IsSplitModeActive
+                && TimelineAddPreview.Span(TimeAt(args.GetCurrentPoint(canvas).Position.X), occupied(), session.DurationMs, 4.0 / TrackWidth * session.DurationMs, minimumGapMs, desiredMs) is { } span)
             {
-                ghost.Visibility = Visibility.Visible;
-                Canvas.SetLeft(ghost, args.GetCurrentPoint(canvas).Position.X - 17);
+                var sourceStart = session.Mapper.SourceTime(span.Start).SourceMs;
+                var sourceEnd = session.Mapper.SourceTime(span.End).SourceMs;
+                if (sourceEnd - sourceStart >= minimumSourceMs)
+                {
+                    preview = (span.Start, span.End, sourceStart, sourceEnd);
+                }
+            }
+
+            if (preview is { } shown)
+            {
+                Canvas.SetLeft(ghost, X(shown.Start));
+                ghost.Width = Math.Max(24, X(shown.End) - X(shown.Start));
+                ghost.Opacity = 1;
+                if (promptBox is not null)
+                {
+                    promptBox.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                Hide();
             }
         };
-        row.PointerExited += (_, _) => ghost.Visibility = Visibility.Collapsed;
+        row.PointerExited += (_, _) => Hide();
         row.PointerPressed += (_, args) =>
         {
+            // Without a ghost, as in split mode or in a gap too small for a block, the press only moves the playhead.
+            if (preview is not { } chosen)
+            {
+                return;
+            }
+
             args.Handled = true;
-            add(session.Mapper.SourceTime(TimeAt(args.GetCurrentPoint(canvas).Position.X)).SourceMs);
+            Hide();
+            if (seekToMiddle)
+            {
+                session.Scrub((chosen.Start + chosen.End) * 0.5);
+                UpdatePlayhead();
+                PlayheadScrubbed?.Invoke();
+            }
+
+            add(chosen.SourceStart, chosen.SourceEnd);
         };
+        if (promptBox is not null)
+        {
+            canvas.Children.Add(promptBox);
+        }
+
         canvas.Children.Add(row);
         canvas.Children.Add(ghost);
     }
@@ -757,6 +1055,15 @@ internal sealed class TimelineView
         Canvas.SetLeft(block, x);
         Canvas.SetTop(block, y);
         canvas.Children.Add(block);
+        ElementCompositionPreview.SetIsTranslationEnabled(block, true);
+        var row = blockRows.IndexOf(y);
+        if (row < 0)
+        {
+            row = blockRows.Count;
+            blockRows.Add(y);
+        }
+
+        wigglingBlocks.Add((block, row));
         return block;
     }
 
@@ -767,15 +1074,41 @@ internal sealed class TimelineView
         Action<double, double> apply,
         Func<(double Start, double End, double Low, double High)> bounds,
         bool canMove = true,
-        Action<int>? movedRows = null)
+        Action<int>? movedRows = null,
+        bool resizable = true,
+        bool keycapHandles = false)
     {
+        // Even the narrowest block keeps a part in the middle to move it by.
+        var edgeWidth = Math.Min(EdgeHitWidth, Math.Max(5.5, width * 0.34));
+        var handles = resizable ? AddHandles(block, width, keycapHandles) : null;
+        if (handles is not null)
+        {
+            block.PointerEntered += (_, _) =>
+            {
+                hoveredHandles = handles;
+                ShowHandles(handles, !session.IsSplitModeActive);
+            };
+            block.PointerExited += (_, _) =>
+            {
+                // A resize keeps its handles when the pointer runs ahead of the block.
+                if (drag?.Block != block)
+                {
+                    hoveredHandles = null;
+                    ShowHandles(handles, false);
+                }
+            };
+        }
+
+        block.PointerEntered += (_, _) => hoveredBlock = block;
+        block.PointerExited += (_, _) => hoveredBlock = hoveredBlock == block ? null : hoveredBlock;
+
         block.PointerMoved += (_, args) =>
         {
             if (drag is null)
             {
                 var x = args.GetCurrentPoint(block).Position.X;
-                var edge = x < EdgeHitWidth || x > width - EdgeHitWidth;
-                block.SetCursor(edge ? InputSystemCursorShape.SizeWestEast : InputSystemCursorShape.Arrow);
+                var edge = x < edgeWidth || x > width - edgeWidth;
+                block.SetCursor(session.IsSplitModeActive ? InputSystemCursorShape.Cross : edge ? InputSystemCursorShape.SizeWestEast : InputSystemCursorShape.Arrow);
             }
         };
         block.PointerPressed += (_, args) =>
@@ -785,9 +1118,29 @@ internal sealed class TimelineView
                 return;
             }
 
+            if (session.IsSplitModeActive)
+            {
+                args.Handled = true;
+                if (block.SplitAt is { } split)
+                {
+                    var time = TimeAt(args.GetCurrentPoint(canvas).Position.X);
+                    EndSkim();
+                    session.Scrub(time);
+                    split(time);
+                    UpdatePlayhead();
+                    PlayheadScrubbed?.Invoke();
+                }
+                else
+                {
+                    select();
+                }
+
+                return;
+            }
+
             // Selecting rebuilds every block, so it waits for release; a rebuild mid-press would cancel the drag.
             var x = args.GetCurrentPoint(block).Position.X;
-            var mode = x < EdgeHitWidth ? DragMode.Start : x > width - EdgeHitWidth ? DragMode.End : canMove ? DragMode.Move : DragMode.None;
+            var mode = x < edgeWidth ? DragMode.Start : x > width - edgeWidth ? DragMode.End : canMove ? DragMode.Move : DragMode.None;
             var (start, end, low, high) = bounds();
             session.BeginInteractiveEdit();
             var press = args.GetCurrentPoint(canvas).Position;
@@ -795,6 +1148,51 @@ internal sealed class TimelineView
             canvas.CapturePointer(args.Pointer);
             args.Handled = true;
         };
+    }
+
+    /// <summary>White bars inside both ends of a block, shown while it is hovered or being resized.</summary>
+    private static Grid? AddHandles(BlockGrid block, double width, bool keycap)
+    {
+        if (width < 10)
+        {
+            return null;
+        }
+
+        var barWidth = keycap ? (width < 24 ? 2.2 : 3.0) : (width < 24 ? 2.4 : 3.0);
+        var inset = keycap
+            ? Math.Min(5, Math.Max(2, (width - barWidth * 2 - 3) * 0.5))
+            : Math.Min(6.5, Math.Max(2.2, (width - barWidth * 2 - 3.5) * 0.5));
+        var barHeight = Math.Max(8, block.Height - (keycap ? 14 : 18));
+        var fill = new SolidColorBrush(Color.FromArgb((byte)(keycap ? 224 : 242), 255, 255, 255));
+        Border Bar(HorizontalAlignment side) => new()
+        {
+            Width = barWidth,
+            Height = barHeight,
+            CornerRadius = new CornerRadius(barWidth / 2),
+            Background = fill,
+            HorizontalAlignment = side,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = side == HorizontalAlignment.Left ? new Thickness(inset, 0, 0, 0) : new Thickness(0, 0, inset, 0),
+            CenterPoint = new System.Numerics.Vector3((float)barWidth / 2, (float)barHeight / 2, 0),
+            Scale = new System.Numerics.Vector3(1, HandleRestScale, 1),
+            ScaleTransition = new Vector3Transition { Duration = TimeSpan.FromMilliseconds(160) }
+        };
+
+        var handles = new Grid { IsHitTestVisible = false, Opacity = 0, OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(160) } };
+        handles.Children.Add(Bar(HorizontalAlignment.Left));
+        handles.Children.Add(Bar(HorizontalAlignment.Right));
+        block.Children.Add(handles);
+        return handles;
+    }
+
+    /// <summary>The bars fade and grow together, whether a pointer arrived or split mode ended.</summary>
+    private static void ShowHandles(Grid handles, bool show)
+    {
+        handles.Opacity = show ? 1 : 0;
+        foreach (var bar in handles.Children)
+        {
+            bar.Scale = new System.Numerics.Vector3(1, show ? 1 : HandleRestScale, 1);
+        }
     }
 
     private void CanvasPressed(object sender, PointerRoutedEventArgs args)
@@ -805,9 +1203,14 @@ internal sealed class TimelineView
         }
 
         EndSkim();
-        session.ClearSelection();
+        // The ruler only moves the playhead; a click on the tracks also leaves whatever is selected.
+        if (ReferenceEquals(sender, canvas))
+        {
+            session.ClearSelection();
+        }
+
         scrubbing = true;
-        canvas.CapturePointer(args.Pointer);
+        ((UIElement)sender).CapturePointer(args.Pointer);
         session.Scrub(TimeAt(args.GetCurrentPoint(canvas).Position.X));
         UpdatePlayhead();
         PlayheadScrubbed?.Invoke();
@@ -815,26 +1218,39 @@ internal sealed class TimelineView
 
     private void EndSkim()
     {
-        skimLine.Visibility = Visibility.Collapsed;
-        if (session.SetHoverSkim(null))
+        var changed = session.SetHoverSkim(null);
+        UpdatePlayhead();
+        if (changed)
         {
             Skimmed?.Invoke();
         }
     }
 
+    /// <summary>Crossing between the ruler and the tracks is still skimming; dropping it there would seek back and forth.</summary>
+    private void PointerLeft(object sender, PointerRoutedEventArgs args)
+    {
+        var point = args.GetCurrentPoint(root).Position;
+        var inColumn = point.X > LabelColumnWidth && point.X < root.ActualWidth;
+        var intoOther = ReferenceEquals(sender, canvas)
+            ? point.Y >= 0 && point.Y < RulerHeight
+            : point.Y >= RulerHeight && point.Y < root.ActualHeight;
+        if (!inColumn || !intoOther)
+        {
+            EndSkim();
+        }
+    }
+
     private void Skim(double x)
     {
-        if (session.IsPlaying || session.PendingAddMaskType is not null || session.IsSplitModeActive)
+        if (session.IsPlaying || session.PendingAddMaskType is not null)
         {
             EndSkim();
             return;
         }
 
-        var time = TimeAt(x);
-        Canvas.SetLeft(skimLine, X(time));
-        skimLine.Height = canvas.Height;
-        skimLine.Visibility = Visibility.Visible;
-        if (session.SetHoverSkim(time))
+        var changed = session.SetHoverSkim(TimeAt(x));
+        UpdatePlayhead();
+        if (changed)
         {
             Skimmed?.Invoke();
         }
@@ -899,7 +1315,7 @@ internal sealed class TimelineView
         var y = args.GetCurrentPoint(canvas).Position.Y;
         // Releasing raises PointerCaptureLost at once, which would end the drag without a drop row.
         EndDrag(y);
-        canvas.ReleasePointerCapture(args.Pointer);
+        ((UIElement)sender).ReleasePointerCapture(args.Pointer);
     }
 
     private void EndDrag(double? y = null)
@@ -936,13 +1352,75 @@ internal sealed class TimelineView
         public static readonly Palette Layout = new(Color.FromArgb(255, 101, 87, 94), Color.FromArgb(255, 141, 124, 132), Color.FromArgb(255, 209, 200, 205));
     }
 
+    /// <summary>A block-colored ghost for most rows; shortcuts have their own see-through purple.</summary>
+    private sealed record GhostStyle(Color Top, Color Bottom, Color Ring, double Radius, double IconSize)
+    {
+        public static readonly GhostStyle Shortcut = new(Color.FromArgb(66, 77, 47, 245), Color.FromArgb(15, 77, 47, 245), Color.FromArgb(158, 77, 47, 245), 7, 12);
+
+        public static GhostStyle Of(Palette palette) => new(palette.Top, palette.Bottom, Color.FromArgb(184, palette.Ring.R, palette.Ring.G, palette.Ring.B), 10, 15);
+    }
+
     private static class Colors
     {
         public static readonly Color White = Color.FromArgb(255, 255, 255, 255);
     }
 
+    /// <summary>A teardrop on a stem that starts exactly at its tip, so a translucent mark shows no brighter overlap and nothing sticks out above the head.</summary>
+    private sealed partial class PlayheadMark : Canvas
+    {
+        public const double TopY = 1.5;
+        private const double TipY = 17.49;
+
+        private readonly TranslateTransform offset = new();
+        private readonly TranslateTransform headOffset = new() { X = -9 };
+        private readonly TranslateTransform stemOffset = new() { X = -0.75 };
+        private readonly Rectangle stem = new() { Width = 1.5 };
+
+        public PlayheadMark(Color head, Color stemColor)
+        {
+            IsHitTestVisible = false;
+            RenderTransform = offset;
+            stem.Fill = new SolidColorBrush(stemColor);
+            stem.RenderTransform = stemOffset;
+            Children.Add(stem);
+            var shape = Ui.Shape("M3.594,10.386 A6.6,6.6 0 1 1 14.406,10.386 L9,17.49 Z", 18, new SolidColorBrush(head));
+            shape.Stretch = Stretch.None;
+            shape.RenderTransform = headOffset;
+            Children.Add(shape);
+        }
+
+        public void Place(double x, double headTop, double totalHeight)
+        {
+            offset.X = x;
+            headOffset.Y = headTop;
+            var tip = headTop + TipY;
+            stemOffset.Y = tip;
+            var height = Math.Max(10, totalHeight - tip);
+            if (double.IsNaN(stem.Height) || Math.Abs(stem.Height - height) > 0.25)
+            {
+                stem.Height = height;
+            }
+        }
+
+        public void SetStem(Brush brush)
+        {
+            if (!ReferenceEquals(stem.Fill, brush))
+            {
+                stem.Fill = brush;
+            }
+        }
+    }
+
     // UIElement.ProtectedCursor is only reachable from a subclass.
     private sealed partial class BlockGrid : Grid
+    {
+        /// <summary>What a click does in split mode, given the timeline time. Null for what cannot be cut.</summary>
+        public Action<double>? SplitAt { get; set; }
+
+        public void SetCursor(InputSystemCursorShape shape) => ProtectedCursor = InputSystemCursor.Create(shape);
+    }
+
+    private sealed partial class TrackSurface : Canvas
     {
         public void SetCursor(InputSystemCursorShape shape) => ProtectedCursor = InputSystemCursor.Create(shape);
     }

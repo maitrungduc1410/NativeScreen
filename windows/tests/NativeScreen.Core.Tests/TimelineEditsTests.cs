@@ -4,6 +4,29 @@ namespace NativeScreen.Core.Tests;
 
 public sealed class TimelineEditsTests
 {
+    [Fact]
+    public void ShortcutStyleEditsReachTheStyleThatIsDrawn()
+    {
+        var document = new ProjectDocument();
+        var first = new ShortcutTrackConfig { Id = "one" };
+        var second = new ShortcutTrackConfig { Id = "two" };
+        document.Captions.ShortcutTracks = [first, second];
+        var cluster = new ShortcutCluster { Id = "c", TrackId = "two", Modifiers = [], PrimaryKey = "A", Label = "A", KeyCaps = [] };
+
+        TimelineEdits.LinkDefaultShortcutStyle(document, TimelineEdits.ShortcutTrackStyle(document, "two")).OffsetX = 0.2;
+        Assert.Equal(0.2, second.Style.OffsetX);
+        Assert.Equal(0, document.Captions.DefaultShortcutStyle.OffsetX);
+        Assert.Same(second.Style, TimelineEdits.EffectiveShortcutStyle(document, cluster));
+
+        TimelineEdits.LinkDefaultShortcutStyle(document, TimelineEdits.ShortcutTrackStyle(document, "one")).OffsetY = 0.3;
+        Assert.Equal(0.3, first.Style.OffsetY);
+        Assert.Equal(0.3, document.Captions.DefaultShortcutStyle.OffsetY);
+
+        var custom = new ShortcutStyleConfig();
+        document.Captions.ShortcutStyleOverrides["c"] = custom;
+        Assert.Same(custom, TimelineEdits.EffectiveShortcutStyle(document, cluster));
+    }
+
     private static ProjectDocument Document()
     {
         var document = new ProjectDocument();

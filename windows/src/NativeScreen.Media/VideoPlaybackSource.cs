@@ -4,12 +4,14 @@ namespace NativeScreen.Media;
 
 /// <summary>
 /// One decode thread and a small ring of frames ahead of the requested time. The render thread never waits on it: it takes
-/// the newest frame at or before its clock, and asking for a time outside the ring makes the decoder seek (latest wins).
+/// the newest frame at or before its clock, and keeps the frame it already has while a seek runs, so seeking never shows an
+/// empty screen. A running seek follows the newest request forward instead of starting over (spec/06 ADR-34).
 /// </summary>
 public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
 {
     private const int RingCapacity = 6;
     private const double SeekThresholdMs = 500;
+    private const long SeekProgressIntervalMs = 100;
 
     private readonly VideoFileReader reader;
     private readonly VideoFramePool pool = new();
@@ -20,7 +22,9 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
     private VideoFrame? handed;
     private bool handedRetired;
     private double requestedMs;
+    private double coveredFromMs;
     private bool seekPending = true;
+    private bool seeking;
     private bool endOfStream;
     private volatile bool stopping;
 
@@ -34,14 +38,15 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
     public int Width => reader.Width;
     public int Height => reader.Height;
 
-    /// <summary>Raised on the decode thread when a frame that the UI might be waiting for arrives after a seek.</summary>
+    /// <summary>Raised on the decode thread when a seek has covered the newest request.</summary>
     public event Action? FrameDecoded;
 
     public VideoFrame? FrameAt(double sourceMs)
     {
         lock (gate)
         {
-            requestedMs = sourceMs;
+            // A camera delay can ask for a time before the recording; that is its first frame, not a seek.
+            requestedMs = Math.Max(0, sourceMs);
             VideoFrame? best = null;
             foreach (var frame in ring)
             {
@@ -51,16 +56,15 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
                 }
             }
 
-            var outside = ring.Count == 0
-                || sourceMs < ring[0].PresentationMs - 1
-                || sourceMs > ring[^1].PresentationMs + SeekThresholdMs;
-            if (outside && !(endOfStream && sourceMs >= (ring.Count > 0 ? ring[^1].PresentationMs : 0)))
+            var needsEarlier = requestedMs < coveredFromMs - 1;
+            if (needsEarlier && !seeking)
             {
                 seekPending = true;
             }
 
             wake.Set();
-            var chosen = best ?? (ring.Count > 0 ? ring[0] : null);
+            var first = ring.Count > 0 ? ring[0] : null;
+            var chosen = best ?? (needsEarlier ? handed ?? first : first ?? handed);
             if (!ReferenceEquals(chosen, handed))
             {
                 // The render thread is done with the last frame it was given, now that it asks again.
@@ -114,40 +118,38 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
         while (!stopping)
         {
             bool seek;
-            double target;
             bool hasRoom;
             lock (gate)
             {
                 seek = seekPending;
                 seekPending = false;
-                target = requestedMs;
-                while (!seek && ring.Count > 1 && ring[1].PresentationMs <= target)
+                while (!seek && ring.Count > 1 && ring[1].PresentationMs <= requestedMs)
                 {
                     // Keeps the frame at the clock and drops everything older.
                     Retire(ring[0]);
                     ring.RemoveAt(0);
+                    coveredFromMs = ring[0].PresentationMs;
                 }
 
+                // Falling behind jumps only to a later keyframe; going back to the same one would throw away the work done.
+                seek = seek || (ring.Count > 0 && !endOfStream && requestedMs > ring[^1].PresentationMs + SeekThresholdMs && reader.CanSkipAhead(ring[^1].PresentationMs, requestedMs));
+                seeking = seek;
                 hasRoom = seek || (ring.Count < RingCapacity && !endOfStream);
             }
 
             if (seek)
             {
-                reader.Seek(target);
-                lock (gate)
-                {
-                    RetireAll();
-                    endOfStream = false;
-                }
+                SeekToRequest();
+                continue;
             }
-            else if (!hasRoom)
+
+            if (!hasRoom)
             {
                 wake.WaitOne(50);
                 continue;
             }
 
             var frame = reader.ReadNext(pool);
-            var seeking = seek;
             lock (gate)
             {
                 if (frame is null)
@@ -159,39 +161,122 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
                     ring.Add(frame);
                 }
             }
+        }
+    }
 
-            if (seeking)
+    /// <summary>
+    /// A seek lands on a keyframe before the target, so it decodes forward until the newest request is covered. A short seek
+    /// publishes only its result; a long one shows a frame now and then, so a pointer outrunning the decoder still moves the
+    /// picture. The frame just before the target stays with it: a recording of a still screen can have seconds between
+    /// frames, and that older frame is the right one to show.
+    /// </summary>
+    private void SeekToRequest()
+    {
+        double target;
+        lock (gate)
+        {
+            target = requestedMs;
+            RetireAll();
+            endOfStream = false;
+        }
+
+        reader.Seek(target);
+        VideoFrame? before = null;
+        var reached = target;
+        var lastShown = Environment.TickCount64;
+        while (!stopping)
+        {
+            var frame = reader.ReadNext(pool);
+            var restart = false;
+            var covered = false;
+            lock (gate)
             {
-                // A seek lands on the keyframe before the target, so decode forward until the target is covered.
-                while (!stopping && frame is not null && frame.PresentationMs < target - 20)
+                var wanted = requestedMs;
+                if (wanted < reached - 1)
                 {
-                    lock (gate)
-                    {
-                        if (seekPending)
-                        {
-                            break;
-                        }
-                    }
-
-                    var next = reader.ReadNext(pool);
-                    lock (gate)
-                    {
-                        if (next is null)
-                        {
-                            endOfStream = true;
-                        }
-                        else
-                        {
-                            RetireAll();
-                            ring.Add(next);
-                        }
-                    }
-
-                    frame = next;
+                    // The request moved back past what this decode can still reach.
+                    restart = true;
+                }
+                else if (frame is null || frame.PresentationMs >= wanted - 0.5)
+                {
+                    covered = true;
+                    Publish(before, frame, target);
+                }
+                else if (reader.CanSkipAhead(frame.PresentationMs, wanted))
+                {
+                    restart = true;
+                }
+                else if (Environment.TickCount64 - lastShown >= SeekProgressIntervalMs)
+                {
+                    lastShown = Environment.TickCount64;
+                    RetireAll();
+                    ring.Add(frame);
+                    reached = frame.PresentationMs;
+                    ReturnToPool(before);
+                    before = null;
+                    frame = null;
                 }
 
-                FrameDecoded?.Invoke();
+                if (restart)
+                {
+                    target = wanted;
+                    reached = wanted;
+                    RetireAll();
+                }
             }
+
+            if (covered)
+            {
+                FrameDecoded?.Invoke();
+                return;
+            }
+
+            if (frame is not null)
+            {
+                ReturnToPool(before);
+                before = frame;
+                reached = frame.PresentationMs;
+            }
+
+            if (restart)
+            {
+                ReturnToPool(before);
+                before = null;
+                reader.Seek(target);
+            }
+        }
+
+        ReturnToPool(before);
+    }
+
+    /// <summary>Call under the gate. A frame shown during the seek counts as the one before the target when nothing newer does.</summary>
+    private void Publish(VideoFrame? before, VideoFrame? frame, double target)
+    {
+        if (before is not null)
+        {
+            RetireAll();
+            ring.Add(before);
+        }
+
+        // A keyframe can land just after the target, and asking again would land on it again.
+        coveredFromMs = ring.Count > 0 ? ring[0].PresentationMs : Math.Min(target, frame?.PresentationMs ?? target);
+        if (frame is null)
+        {
+            endOfStream = true;
+        }
+        else
+        {
+            ring.Add(frame);
+        }
+
+        seeking = false;
+    }
+
+    private void ReturnToPool(VideoFrame? frame)
+    {
+        if (frame is not null)
+        {
+            pool.Return(frame.Nv12);
         }
     }
 }
