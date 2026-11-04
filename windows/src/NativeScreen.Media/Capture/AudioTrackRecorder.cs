@@ -13,7 +13,7 @@ public sealed record CaptureDeviceInfo(string Id, string Name, bool IsDefault);
 /// One WASAPI capture stream written to a track on the recording timeline. Loopback delivers nothing while nothing plays and a
 /// device can start late, so the position always comes from the clock: gaps become silence and the track never drifts.
 /// </summary>
-public sealed class AudioTrackRecorder : IDisposable
+public sealed class AudioTrackRecorder : IRecordedAudioTrack
 {
     private const int SampleRate = 48000;
     private const double GapToleranceMs = 40;

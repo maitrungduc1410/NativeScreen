@@ -59,6 +59,24 @@ public static class TimelineEdits
     }
 
     /// <summary>Changes the layout under this time, or adds one in the free space. Returns its id, or null when there is no room.</summary>
+    /// <summary>Adds a layout over exactly a range the timeline already checked is free.</summary>
+    public static string AddCameraLayoutInRange(ProjectDocument document, double startMs, double endMs, CameraTimelineLayoutType type)
+    {
+        var segment = new CameraLayoutSegment
+        {
+            Id = EditorSession.NewId(),
+            SourceStartMs = startMs,
+            SourceEndMs = endMs,
+            LayoutType = type,
+            OverlayPosition01 = document.Camera.Position01,
+            CutoutPositionX01 = document.Camera.CutoutPositionX01
+        };
+        document.Timeline.IsCameraLayoutsTrackHidden = false;
+        document.Timeline.CameraLayouts.Add(segment);
+        document.Timeline.CameraLayouts.Sort((a, b) => a.SourceStartMs.CompareTo(b.SourceStartMs));
+        return segment.Id;
+    }
+
     public static string? AddCameraLayout(ProjectDocument document, double sourceMs, double maxDurationMs, CameraTimelineLayoutType type)
     {
         var layouts = document.Timeline.CameraLayouts;
@@ -92,6 +110,33 @@ public static class TimelineEdits
         return segment.Id;
     }
 
+    /// <summary>The style a track draws with. A document without tracks only has its default.</summary>
+    public static ShortcutStyleConfig ShortcutTrackStyle(ProjectDocument document, string? trackId)
+    {
+        var tracks = document.Captions.ShortcutTracks;
+        return (tracks.Find(track => track.Id == trackId) ?? tracks.FirstOrDefault())?.Style ?? document.Captions.DefaultShortcutStyle;
+    }
+
+    /// <summary>The style a shortcut draws with, in the compositor's order. Editing it edits only what wins.</summary>
+    public static ShortcutStyleConfig EffectiveShortcutStyle(ProjectDocument document, ShortcutCluster cluster)
+    {
+        var captions = document.Captions;
+        return captions.ShortcutStyleOverrides.GetValueOrDefault(cluster.Id)
+            ?? captions.CustomShortcuts.Find(item => item.Id == cluster.Id)?.CustomStyle
+            ?? ShortcutTrackStyle(document, cluster.TrackId);
+    }
+
+    /// <summary>The first track's style is also the document default, so an edit of it has to reach both.</summary>
+    public static ShortcutStyleConfig LinkDefaultShortcutStyle(ProjectDocument document, ShortcutStyleConfig style)
+    {
+        if (ReferenceEquals(document.Captions.ShortcutTracks.FirstOrDefault()?.Style, style))
+        {
+            document.Captions.DefaultShortcutStyle = style;
+        }
+
+        return style;
+    }
+
     public static string AddShortcutTrack(ProjectDocument document)
     {
         var index = document.Captions.ShortcutTracks.Count + 1;
@@ -107,7 +152,7 @@ public static class TimelineEdits
     }
 
     /// <summary>Adds a shortcut in the free space around a time. Returns its id, or null when the track is full there.</summary>
-    public static string? AddCustomShortcut(ProjectDocument document, IReadOnlyList<ShortcutCluster> clusters, string? trackId, double anchorMs, double maxDurationMs)
+    public static string? AddCustomShortcut(ProjectDocument document, IReadOnlyList<ShortcutCluster> clusters, string? trackId, double anchorMs, double maxDurationMs, double? endMs = null)
     {
         var track = trackId ?? document.Captions.ShortcutTracks.FirstOrDefault()?.Id ?? DefaultShortcutTrack;
         var existing = clusters.Where(item => item.TrackId == track).OrderBy(item => item.DisplayStartMs).ToList();
@@ -119,7 +164,7 @@ public static class TimelineEdits
         double end;
         if (next - previous >= MinimumShortcutGapMs)
         {
-            var length = Math.Min(DefaultShortcutMs, next - previous);
+            var length = Math.Min(endMs is { } wanted ? Math.Max(MinimumShortcutGapMs, wanted - anchorMs) : DefaultShortcutMs, next - previous);
             start = Math.Max(previous, Math.Min(next - length, anchorMs));
             end = Math.Min(next, start + length);
         }

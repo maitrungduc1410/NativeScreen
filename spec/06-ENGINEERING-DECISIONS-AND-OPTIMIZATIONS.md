@@ -703,3 +703,75 @@ The inspector rebuilds its controls on every edit, so a new `ScrollViewer` would
 
 ### Inspector tabs
 A disabled tab keeps its button enabled and ignores clicks, because a disabled WinUI button shows no tooltip and the tooltip gives the reason. The rail rebuilds only when availability changes, so a slider drag does not recreate it.
+
+---
+
+## 34. ADR-34: Windows Preview Seeking Never Shows an Empty Frame
+
+### The black flashes
+`VideoPlaybackSource` emptied its frame ring when a seek began and only refilled it after the first decode, so `FrameAt` returned null in between and the compositor drew no screen. On a 3072x1840 recording, hovering the ruler got null from 83% of the calls and playing after a seek from 88%. Three loops kept it going:
+
+- **Asking again for a frame just after the target.** A seek stopped on the first frame near its target. If that frame was slightly later, the request counted as outside the ring and seeked again, and every finished seek redrew the preview, so a parked pointer flashed for ever.
+- **Restarting from the same keyframe.** While decoding forward, the frame in the ring was more than 500 ms behind the clock, which also counted as outside the ring. Seeking returned to the same keyframe, so the decoder never caught up.
+- **A seek can land before the keyframe it asked for.** Fragmented recordings land up to about 750 ms before the target, for example at 2250 ms when asked for 3000 ms. So "is there a keyframe after this frame" stays true right after landing. `VideoFileReader.CanSkipAhead` therefore also compares against the last seek's own target.
+
+### The rules now
+- The frame already on screen stays until a newer one is ready. The render thread's held frame is only recycled once it is replaced.
+- A running seek follows the newest request. It restarts only when the request moved behind what it can still reach, or when a later keyframe really is closer.
+- A seek keeps the frame just before its target. A still screen can have seconds between frames, and that older frame is the correct one.
+- A seek that takes longer than 100 ms shows a frame every 100 ms, because a pointer can move faster than decode (about 1.9x real time at this size). Short seeks show only their result.
+- `coveredFromMs` records how far back the ring answers, including a landing just after the target, so a finished seek is never asked for again.
+
+Measured on the same recording afterwards: no null frames while hovering or playing, one seek for a parked pointer, and a median of 16 ms between the clock and the shown frame while playing.
+
+### Timeline
+- **Ruler.** It sits in its own row above the tracks and follows them sideways by a transform. `TimelineRuler.StepSeconds` is the same search as on macOS. Marks are at every step, labels only on whole seconds, and the clip's tick lines use the same step.
+- **Playhead and ghost.** Both live in one overlay over the ruler and tracks, placed in viewport coordinates, so scrolling moves them without a rebuild. The stem starts exactly at the head's tip. The ghost's head ducks with `22 * p * (2 - p)`, where `p` falls from 1 to 0 over 26 points of distance from the playhead.
+- **Crossing the ruler and tracks.** Leaving one for the other keeps skimming. Ending it there would send the preview to the playhead and back.
+
+### Shortcut styles
+The compositor draws a track's own style, but the inspector edited `defaultShortcutStyle`, so Position, the offsets and the keycap colors had no visible effect once a project had been saved and reopened. The inspector now edits the selected track's style, and the first track's style is also written to the default as on macOS. A shortcut's editor edits whichever style wins for it: its override, then its custom style, then its track's.
+
+---
+
+## 35. ADR-35: Windows Recording Bar Devices Before a Recording Starts
+
+**Not yet run on hardware.** Because of ADR-23, no agent has opened a microphone or camera with this code. The owner tests it.
+
+### Microphone meter
+An endpoint's peak meter stays at zero unless a stream is open on the device. `MicrophoneLevelMonitor` opens a shared `IAudioClient`, starts it and never reads a sample, then polls `IAudioMeterInformation` every 33 ms from a timer. This avoids the capture thread, event callback and buffer copying of `WasapiCapture`, the path under suspicion in ADR-23. It does still open the device, so it does not prove the risk is gone. The monitor runs while the microphone menu is open, or while a microphone is selected and the bar is showing. Choosing a microphone only takes effect in the meter and at recording start, and the default stays off.
+
+The meter has only a peak to work with, so the macOS curve loses its RMS term. Its attack, release and peak hold are the same.
+
+### One owner per device
+The meter and the preview release their devices and finish before `ScreenRecorder` is created, so a device is never open twice. All opening and closing runs in one chain off the UI thread. While recording, the floating preview takes frames from the recorder's own camera stream.
+
+### Differences from macOS
+- The preview window is a plain square. A WinUI window has no transparent background here, the same reason as ADR-33.
+
+### Per-app system audio
+Choosing apps replaces the all-apps loopback with one process loopback stream per app (`ProcessLoopbackStream`), through `ActivateAudioInterfaceAsync`. The documentation names Windows build 20348, but it was measured working on 19044, so it is offered from build 19041. **Builds from 20348 up have not been run.**
+
+- **The level on 19044 was far too high.** A tone played by another process came back 12 to 23 times louder than the all-apps loopback read it, at an output volume of -25 dB (17.8 times as a gain). It scaled with the tone but moved between runs, and the all-apps path also bent slightly, so a dynamics effect on that device is likely. Builds under 20348 multiply by the current output volume and read the stream as float, because 16 bits would clip before the gain brought it back. This correction fits one device at one volume setting, so treat it as approximate until other volumes and devices are measured. `NS_TEST_APP_AUDIO=1` runs the check.
+- **Opening a process right after its last stream closed fails for a moment.** It worked again after 1.5 s, and Restart hits this directly, so a start retries up to 6 times, 200 ms apart.
+
+- **An app is its process name**, matching how macOS keeps bundle ids. Names turn into processes when recording starts, so an app opened later is not recorded.
+- **Only the top of an app's tree is captured.** A stream already includes child processes, so also capturing a browser's helpers would play them twice. `AudioAppRoots` skips a process whose parent has the same name.
+- **The stream states its format.** This client has no mix format, so it asks for 48 kHz stereo 16-bit with `AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM`.
+- **Mixing is on the recording timeline.** `AudioFrameMixer` adds each source at its clock position and writes out 100 ms behind the clock, so a late packet still lands in place. A jump over 40 ms moves a source, and smaller jitter does not, which keeps its samples contiguous. Parts no source wrote come out as silence, which the MP4 sink needs (ADR-23).
+- **Nothing is silently lost.** If an app cannot be captured, or nothing runs under a chosen name, the track still exists and the recording bar says that some app sound is missing.
+- **Windows apps hosted by `ApplicationFrameHost`** are not listed, because the host process is not the one playing the sound.
+
+### Recording bar and screenshots
+As on macOS, the bar is left out of capture only from the moment recording starts until it ends, so a screenshot taken before then shows it.
+
+### Split mode
+Click toggles it and holding Alt alone holds it, as Option does on macOS. A hold ends when Alt is released, any other key is pressed, or the window loses focus, because Alt+Tab takes the release to another window. Clicking a clip, zoom, layout or mask cuts that block at the pointer. Resize handles scale from 0.95 to 1 and fade over 160 ms.
+
+**Tracks wiggle on Windows and not in the current macOS code.** Neighboring tracks move in opposite directions by 1.65 points, 0.42 s each way, and settle over 0.16 s. These values come from the macOS wiggle, which was later removed because its 60 Hz `TimelineView` kept resetting the cursor (see the Flicker-Free Split Mode Cursor entry above). Windows has that animation at the owner's request. It runs on the compositor through each block's `Translation`, so it invalidates nothing on the UI thread.
+
+### Adding from a track
+Hovering an empty part of a row shows a ghost of the block a click adds, as on macOS: centered on the pointer, up to 2.8 s (1.8 s for shortcuts), fitted to the free gap, and hidden within 4 points of a block or in a gap too small for one. `TimelineAddPreview` holds the placement. A click adds exactly the ghost's range, so what is shown is what is created. A press with no ghost on screen only moves the playhead.
+
+### Cursor cards
+An SVG decodes after its `Image` loads, so a measurement can find nothing drawn. It used to give up until the next inspector rebuild, leaving sprites off-center. It now measures again on `ImageOpened` and retries up to six times, 60 ms apart.

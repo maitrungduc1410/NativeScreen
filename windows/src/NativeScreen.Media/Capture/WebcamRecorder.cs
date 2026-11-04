@@ -58,6 +58,14 @@ public sealed class WebcamRecorder : IDisposable
 
     public static WebcamRecorder? TryStart(string deviceId, string path, int maxHeight, Func<double, double?> elapsed)
     {
+        return OpenCamera(deviceId, maxHeight) is { } opened
+            ? new WebcamRecorder(opened.Source, opened.Reader, path, opened.Width, opened.Height, opened.Fps, elapsed)
+            : null;
+    }
+
+    /// <summary>A started camera delivering NV12. Null when the device is gone or will not open.</summary>
+    internal static (IMFMediaSource Source, IMFSourceReader Reader, int Width, int Height, int Fps)? OpenCamera(string deviceId, int maxHeight)
+    {
         MediaFoundationRuntime.EnsureStarted();
         IMFMediaSource? source = null;
         ForEachCamera((activate, id, _) =>
@@ -87,7 +95,7 @@ public sealed class WebcamRecorder : IDisposable
             requested.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Video);
             requested.Set(MediaTypeAttributeKeys.Subtype, VideoFormats.Nv12);
             reader.SetCurrentMediaType(SourceReaderIndex.FirstVideoStream, requested);
-            return new WebcamRecorder(source, reader, path, RecordingRates.Even(nativeWidth), RecordingRates.Even(nativeHeight), fps, elapsed);
+            return (source, reader, RecordingRates.Even(nativeWidth), RecordingRates.Even(nativeHeight), fps);
         }
         catch (SharpGen.Runtime.SharpGenException)
         {
@@ -153,7 +161,7 @@ public sealed class WebcamRecorder : IDisposable
         buffer.Lock(out var pointer, out _, out var length);
         try
         {
-            CopyNv12(new ReadOnlySpan<byte>((void*)pointer, length));
+            CopyNv12(new ReadOnlySpan<byte>((void*)pointer, length), nv12, width, height);
         }
         finally
         {
@@ -175,7 +183,7 @@ public sealed class WebcamRecorder : IDisposable
         }
     }
 
-    private void CopyNv12(ReadOnlySpan<byte> frame)
+    internal static void CopyNv12(ReadOnlySpan<byte> frame, byte[] nv12, int width, int height)
     {
         // Decoders may pad rows to the macroblock height; chroma begins two thirds in (spec/06 ADR-21).
         var stride = (frame.Length * 2 / 3) / Math.Max(1, height);

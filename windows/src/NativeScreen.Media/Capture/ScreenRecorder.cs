@@ -19,7 +19,8 @@ public sealed record RecordingOptions(
     bool SystemAudio,
     string? MicrophoneId,
     string? CameraId,
-    int CameraMaxHeight = 1080);
+    int CameraMaxHeight = 1080,
+    IReadOnlyCollection<string>? SystemAudioApps = null);
 
 public readonly record struct RecordingStats(int FramesWritten, int FramesRepeated, int FramesDropped, double ConvertMsAverage);
 
@@ -51,7 +52,7 @@ public sealed class ScreenRecorder : IDisposable
     private readonly GpuNv12Converter converter;
     private readonly VideoFileWriter writer;
     private readonly TelemetryRecorder telemetry;
-    private readonly AudioTrackRecorder? systemAudio;
+    private readonly IRecordedAudioTrack? systemAudio;
     private readonly AudioTrackRecorder? microphone;
     private readonly WebcamRecorder? webcam;
     private readonly Thread worker;
@@ -127,7 +128,9 @@ public sealed class ScreenRecorder : IDisposable
         telemetry = new TelemetryRecorder(Path.Combine(recording, "telemetry"), target.Rect);
         if (options.SystemAudio)
         {
-            systemAudio = AudioTrackRecorder.TryLoopback(writer, ElapsedForTrack);
+            systemAudio = options.SystemAudioApps is { } apps
+                ? new AppAudioTrackRecorder(AudioApps.RootProcessIds(apps), (data, length, at, duration) => writer.WriteAudio(data.AsSpan(0, length), at, duration), ElapsedForTrack)
+                : AudioTrackRecorder.TryLoopback(writer, ElapsedForTrack);
         }
 
         if (options.MicrophoneId is { } microphoneId)
@@ -151,8 +154,31 @@ public sealed class ScreenRecorder : IDisposable
     }
 
     public bool HasSystemAudio => systemAudio is not null;
+
+    /// <summary>A chosen app is missing from the system audio track, because it closed or could not be captured.</summary>
+    public bool IsMissingAppAudio => systemAudio is AppAudioTrackRecorder { IsComplete: false };
+
     public bool HasMicrophone => microphone is not null;
     public bool HasWebcam => webcam is not null;
+
+    /// <summary>Camera frames for the floating preview, on the camera's thread. The buffer is reused after the call.</summary>
+    public event Action<byte[], int, int>? CameraFrame
+    {
+        add
+        {
+            if (webcam is not null)
+            {
+                webcam.PreviewFrame += value;
+            }
+        }
+        remove
+        {
+            if (webcam is not null)
+            {
+                webcam.PreviewFrame -= value;
+            }
+        }
+    }
 
     public double DurationMs { get; private set; }
 

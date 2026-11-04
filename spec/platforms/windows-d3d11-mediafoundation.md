@@ -194,6 +194,7 @@ Rules:
 | :--- | :--- |
 | Mixed-DPI multi-monitor setups, negative coordinates | Per-monitor DPI v2; use physical pixels end to end; test on a secondary monitor left of the primary. |
 | Hybrid GPU laptops | Create the D3D11 device on the adapter that drives the captured monitor; WGC frames from another adapter need a copy. |
+| A source reader seek can land well before the keyframe asked for | Never decide to seek again from the landed frame alone; compare with the last seek's target (`spec/06` ADR-34). |
 | Encoder differences (NVENC / QSV / AMF) | Never assume an `ICodecAPI` property is supported; check `IsSupported` and log the fallback. |
 | Sink writer silently falls back to software | Verify the active transform is hardware (`MFT_ENUM_HARDWARE_URL_Attribute`) and log it. |
 | Low-level hook timeouts | Callbacks over ~1 s get the hook removed; never do I/O in the callback. |

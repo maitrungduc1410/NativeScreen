@@ -138,6 +138,14 @@ public sealed partial class EditorWindow : Window
             clickSounds.Dispose();
         };
         session.SelectionChanged += SelectionChanged;
+        // Alt+Tab takes the key's release to another window.
+        Activated += (_, args) =>
+        {
+            if (args.WindowActivationState == WindowActivationState.Deactivated)
+            {
+                EndHeldSplit();
+            }
+        };
         AppTheme.Changed += ThemeChanged;
         Root.PreviewKeyDown += RootKeyDown;
         Root.PreviewKeyUp += RootKeyUp;
@@ -333,6 +341,35 @@ public sealed partial class EditorWindow : Window
         session.BeginInteractiveMaskSelection(type);
     }
 
+    private const double DockActiveFillOpacity = 0.24;
+    private readonly List<(MaskType Type, Button Button, FontIcon Icon)> maskDockButtons = [];
+
+    private Button MaskDockButton(string glyph, string tooltip, MaskType type)
+    {
+        var icon = Ui.Icon(glyph, 16);
+        var button = Ui.IconButton(icon, tooltip, () => BeginMaskDraw(type));
+        maskDockButtons.Add((type, button, icon));
+        return button;
+    }
+
+    /// <summary>While a mask is waiting to be drawn its button stays lit, so it is clear why the preview is taking the pointer.</summary>
+    private void RefreshMaskDock()
+    {
+        foreach (var (type, button, icon) in maskDockButtons)
+        {
+            if (session.PendingAddMaskType == type)
+            {
+                button.Background = Ui.Rgb(0.45, 0.36, 0.96, DockActiveFillOpacity);
+                icon.Foreground = Ui.Rgb(0.72, 0.64, 1);
+            }
+            else
+            {
+                button.ClearValue(Control.BackgroundProperty);
+                icon.Foreground = Ui.Pal("Ink88");
+            }
+        }
+    }
+
     private void BuildQuickDock()
     {
         QuickDock.Children.Add(DockGroup(
@@ -349,8 +386,8 @@ public sealed partial class EditorWindow : Window
         }
 
         QuickDock.Children.Add(DockGroup(
-            Ui.IconButton(Ui.Icon("", 16), "Sensitive data mask", () => BeginMaskDraw(MaskType.Blur)),
-            Ui.IconButton(Ui.Icon("", 16), "Highlight mask", () => BeginMaskDraw(MaskType.Spotlight))));
+            MaskDockButton("", "Sensitive data mask", MaskType.Blur),
+            MaskDockButton("", "Highlight mask", MaskType.Spotlight)));
         QuickDock.Children.Add(DockGroup(
             Ui.IconButton(Ui.Icon("", 16), "Add shortcut", () => session.AddCustomShortcut(null, session.SourceAtPlayhead)),
             Ui.IconButton(Ui.Icon("", 16), "Upload a voiceover", tools.UploadVoiceover)));
@@ -424,6 +461,17 @@ public sealed partial class EditorWindow : Window
         TotalTime.Text = Ui.Timecode(session.DurationMs);
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         SplitIcon.Foreground = session.IsSplitModeActive ? Ui.Rgb(0.65, 0.58, 1) : Ui.Pal("Ink88");
+        if (session.IsSplitModeActive)
+        {
+            SplitButton.Background = Ui.Rgb(0.45, 0.36, 0.96, DockActiveFillOpacity);
+        }
+        else
+        {
+            SplitButton.ClearValue(Control.BackgroundProperty);
+        }
+
+        timeline.RefreshSplitMode();
+        RefreshMaskDock();
         if (document.Canvas.AspectRatioMode == AspectRatioMode.Auto)
         {
             AspectName.Text = "Auto";
@@ -774,6 +822,7 @@ public sealed partial class EditorWindow : Window
 
     private void ToggleSplit(object sender, RoutedEventArgs e)
     {
+        altHeldForSplit = false;
         session.IsSplitModeActive = !session.IsSplitModeActive;
         RefreshChrome();
     }
@@ -804,6 +853,14 @@ public sealed partial class EditorWindow : Window
     {
         if (e.Key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu && altHeldForSplit)
         {
+            EndHeldSplit();
+        }
+    }
+
+    private void EndHeldSplit()
+    {
+        if (altHeldForSplit)
+        {
             altHeldForSplit = false;
             session.IsSplitModeActive = false;
             RefreshChrome();
@@ -812,13 +869,22 @@ public sealed partial class EditorWindow : Window
 
     private void RootKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // Holding Alt alone is the temporary split tool.
-        if (e.Key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu && !session.IsSplitModeActive)
+        // Holding Alt alone is the temporary split tool; any other key makes it a shortcut instead.
+        if (e.Key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu)
         {
-            altHeldForSplit = true;
-            session.IsSplitModeActive = true;
-            RefreshChrome();
-        }        var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
+            if (!session.IsSplitModeActive && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(Root.XamlRoot) is not TextBox)
+            {
+                altHeldForSplit = true;
+                session.IsSplitModeActive = true;
+                RefreshChrome();
+            }
+        }
+        else
+        {
+            EndHeldSplit();
+        }
+
+        var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
         var shift = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
         var typing = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox;
         if (control)
@@ -870,6 +936,7 @@ public sealed partial class EditorWindow : Window
                 }
                 else
                 {
+                    altHeldForSplit = false;
                     session.IsSplitModeActive = false;
                     session.ClearSelection();
                     RefreshChrome();

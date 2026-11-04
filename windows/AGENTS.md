@@ -66,6 +66,7 @@ Work is split between two agents on two machines. Know which one you are.
 | Frame fixture tests (Windows) | `dotnet test windows/tests/NativeScreen.Rendering.Tests -c Debug -p:Platform=x64`. Scores per frame go to `%TEMP%\ns-frame-report.txt`; set `NS_DUMP_FRAMES=<folder>` to write the composed PNGs. |
 | Real capture test (Windows) | `NS_TEST_CAPTURE=1 NS_TEST_CAPTURE_PARTS=system dotnet test windows/tests/NativeScreen.Media.Tests -c Debug -p:Platform=x64 --filter DisplayRecording`. `NS_TEST_CAPTURE_TARGET` is `window` or `area`. Adding `mic` reset one machine; read `spec/06` ADR-23 first. |
 | Performance numbers (Windows) | `NS_TEST_PERF=1 dotnet test windows/tests/NativeScreen.Rendering.Tests -c Debug -p:Platform=x64 --filter PerformanceMeasurements`. Results go to `%TEMP%\ns-perf-report.txt`. |
+| App audio test (Windows) | `NS_TEST_APP_AUDIO=1 dotnet test windows/tests/NativeScreen.Media.Tests -c Debug -p:Platform=x64 --filter AppAudioCapture`. Plays a quiet tone for a few seconds. Opens no microphone. |
 | Whisper test (Windows) | `NS_TEST_WHISPER=1 dotnet test windows/tests/NativeScreen.Rendering.Tests -c Debug -p:Platform=x64 --filter WhisperTranscript`. Downloads the 142 MB base model once. |
 | Preview frame statistics (Windows) | Run the app with `NS_PREVIEW_STATS=<file>`. Present intervals are written when the editor closes. |
 | Build the MSIX (Windows) | `powershell windows/scripts/package-msix.ps1` |
