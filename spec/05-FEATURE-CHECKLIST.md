@@ -136,6 +136,7 @@
 - [x] **AI Auto-Detect Sensitive Data (OCR) & Hide Faces:**
   - [x] Scan video frames using macOS native `Vision` (`VNRecognizeTextRequest` and `VNDetectFaceRectanglesRequest`) to automatically detect emails, phone numbers, card numbers, API keys/tokens, custom user phrases (`Custom phrases`), and faces on screen.
   - [x] One-click generation of tracked Blur Masks on the timeline (`Hide sensitive data` & `Hide faces` in Background Inspector).
+- [x] **Caption tracks:** multiple tracks on the timeline; move, trim, split and add captions, drag them between tracks, per-caption style with `Apply to all captions in this track`, 2D `Caption position` pad.
 - [x] **AI Auto-Captions & Edit by Transcript (100% Local On-Device Speech-to-Text):**
   - [x] On-device transcription using Apple `Speech` framework (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`) with language selector, custom `Keyterms` prompt, and `.srt` export.
   - [x] Animated `Line by line` / `Word by word` caption overlay renderer with `Font style` (`Sans-serif`, `Serif`, `Mono`), `Line growth` (`Full line`, `Expanding`, `Centered`), `Word animation` (`Appear`, `Fade in`, `Slide in`), and `Color` (`Dark`, `Light`).

@@ -44,6 +44,7 @@ public final class ProjectSession: Identifiable {
     public var isShowingStillFrameExportModal: Bool = false
     public var isShowingCameraCropModal: Bool = false
     public var isGeneratingTranscript: Bool = false
+    public var transcriptErrorMessage: String?
     public var isScanningSensitiveData: Bool = false
     public var isScanningFaces: Bool = false
     public var isRecordingVoiceover: Bool = false
@@ -56,6 +57,7 @@ public final class ProjectSession: Identifiable {
     public var selectedCameraLayoutId: String?
     public var selectedMaskId: String?
     public var selectedVoiceoverId: String?
+    public var selectedCaptionId: String?
     public var selectedShortcutId: String? {
         didSet {
             // The preview draws the selected keycaps highlighted.
@@ -74,6 +76,7 @@ public final class ProjectSession: Identifiable {
     }
     /// Keycap hit areas from the last preview frame, normalized with a top-left origin. Updated only when they change.
     public var previewShortcutHitRects01: [String: CGRect] = [:]
+    public var previewCaptionHitRects01: [String: CGRect] = [:]
     public var pendingAddMaskType: MaskType? = nil
     public var pendingAddMaskStyle: MaskStyle = .gaussian
     public var isDraggingTimelineSegment: Bool = false
@@ -240,6 +243,8 @@ public final class ProjectSession: Identifiable {
             ? []
             : Self.generateProceduralWaveform(durationMs: metadata.durationMs)
         self.microphoneWaveformSamples = []
+
+        self.document.captions.migrateTranscriptToCaptionTracksIfNeeded()
 
         // Synchronize `shortcutTracks` with actual shortcuts so projects without shortcuts never show an empty default Shortcuts track!
         let initialShortcutClusters = self.detectedShortcutClusters
@@ -670,7 +675,16 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    public func selectCaption(_ id: String?) {
+        clearTimelineSelection()
+        selectedCaptionId = id
+        if id != nil {
+            selectedInspectorTab = .captions
+        }
+    }
+
     public func selectSlice(_ id: String?) {
+        selectedCaptionId = nil
         selectedSliceId = id
         selectedZoomId = nil
         selectedCameraLayoutId = nil
@@ -682,6 +696,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func selectZoom(_ id: String?) {
+        selectedCaptionId = nil
         selectedZoomId = id
         selectedSliceId = nil
         selectedCameraLayoutId = nil
@@ -696,6 +711,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func selectCameraLayout(_ id: String?) {
+        selectedCaptionId = nil
         selectedCameraLayoutId = id
         selectedSliceId = nil
         selectedZoomId = nil
@@ -710,6 +726,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func selectMask(_ id: String?) {
+        selectedCaptionId = nil
         selectedMaskId = id
         selectedSliceId = nil
         selectedZoomId = nil
@@ -723,6 +740,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func selectVoiceover(_ id: String?) {
+        selectedCaptionId = nil
         selectedVoiceoverId = id
         selectedSliceId = nil
         selectedZoomId = nil
@@ -737,6 +755,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func selectShortcut(_ id: String?) {
+        selectedCaptionId = nil
         selectedShortcutId = id
         selectedSliceId = nil
         selectedZoomId = nil
@@ -751,6 +770,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func clearTimelineSelection() {
+        selectedCaptionId = nil
         selectedSliceId = nil
         selectedZoomId = nil
         selectedCameraLayoutId = nil
@@ -762,6 +782,10 @@ public final class ProjectSession: Identifiable {
     }
 
     public func deleteSelectedTimelineItem() {
+        if let captionId = selectedCaptionId {
+            deleteCaption(id: captionId)
+            return
+        }
         if let shortcutId = selectedShortcutId,
            let cluster = detectedShortcutClusters.first(where: { $0.id == shortcutId }) {
             deleteShortcut(cluster)
@@ -870,6 +894,241 @@ public final class ProjectSession: Identifiable {
                     selectedMaskId = secondHalf.id
                 }
                 return
+            }
+        }
+    }
+
+    // MARK: - Caption Tracks
+
+    private static let minCaptionDurationMs = 220.0
+
+    private var captionSourceBounds: (start: Double, end: Double) {
+        let start = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let end = document.timeline.slices.map(\.sourceEndMs).max() ?? max(500.0, metadata.durationMs)
+        return (start, end)
+    }
+
+    /// Free space around a caption on its track. Captions on one track never overlap.
+    private func captionNeighborBounds(blockId: String, trackId: String, around startMs: Double) -> (lower: Double, upper: Double) {
+        let bounds = captionSourceBounds
+        let others = document.captions.captionBlocks.filter { $0.trackId == trackId && $0.id != blockId }
+        let lower = others.filter { $0.sourceStartMs < startMs }.map(\.sourceEndMs).max() ?? bounds.start
+        let upper = others.filter { $0.sourceStartMs >= startMs }.map(\.sourceStartMs).min() ?? bounds.end
+        return (max(bounds.start, lower), min(bounds.end, upper))
+    }
+
+    @discardableResult
+    public func addCaptionTrack() -> String {
+        var newTrack = CaptionTrack(name: "Captions \(document.captions.captionTracks.count + 1)")
+        if document.captions.captionTracks.isEmpty {
+            newTrack.name = "Captions"
+        } else if let last = document.captions.captionTracks.last {
+            newTrack.style = last.style
+            // A second track at the same spot would cover the first.
+            newTrack.style.position01 = abs(last.style.position01.y - 1.0) < 0.1 ? Point01(x: 0.5, y: 0.0) : CaptionStyle.bottomPosition01
+        }
+        mutate { doc in
+            doc.captions.enabled = true
+            doc.captions.captionTracks.append(newTrack)
+        }
+        selectedCaptionId = nil
+        selectedInspectorTab = .captions
+        scrollToTimelineTrack("track_caption_\(newTrack.id)")
+        return newTrack.id
+    }
+
+    public func deleteCaptionTrack(id: String) {
+        if let selected = selectedCaptionId,
+           document.captions.captionBlocks.first(where: { $0.id == selected })?.trackId == id {
+            selectedCaptionId = nil
+        }
+        mutate { doc in
+            doc.captions.captionTracks.removeAll { $0.id == id }
+            doc.captions.captionBlocks.removeAll { $0.trackId == id }
+        }
+    }
+
+    public func toggleCaptionTrackVisibility(id: String) {
+        mutate { doc in
+            if let idx = doc.captions.captionTracks.firstIndex(where: { $0.id == id }) {
+                doc.captions.captionTracks[idx].isHidden.toggle()
+            }
+        }
+    }
+
+    public func addCaption(trackId: String, sourceStartMs: Double, sourceEndMs: Double, text: String = "New caption") {
+        let block = CaptionBlock(trackId: trackId, sourceStartMs: sourceStartMs, sourceEndMs: sourceEndMs, customText: text)
+        mutate { doc in
+            doc.captions.enabled = true
+            doc.captions.captionBlocks.append(block)
+        }
+        selectCaption(block.id)
+    }
+
+    public func deleteCaption(id: String) {
+        mutate { doc in
+            doc.captions.captionBlocks.removeAll { $0.id == id }
+        }
+        if selectedCaptionId == id {
+            selectedCaptionId = nil
+        }
+    }
+
+    public func moveCaption(id: String, desiredStartMs: Double, durationMs: Double) {
+        guard let idx = document.captions.captionBlocks.firstIndex(where: { $0.id == id }) else { return }
+        let block = document.captions.captionBlocks[idx]
+        let span = max(Self.minCaptionDurationMs, durationMs)
+        let room = captionNeighborBounds(blockId: id, trackId: block.trackId, around: block.sourceStartMs)
+        guard room.upper - room.lower >= span else { return }
+        let start = max(room.lower, min(room.upper - span, desiredStartMs))
+        document.captions.captionBlocks[idx].sourceStartMs = start
+        document.captions.captionBlocks[idx].sourceEndMs = start + span
+        renderRevision &+= 1
+    }
+
+    public func resizeCaption(id: String, newStartMs: Double, newEndMs: Double) {
+        guard let idx = document.captions.captionBlocks.firstIndex(where: { $0.id == id }) else { return }
+        let block = document.captions.captionBlocks[idx]
+        let room = captionNeighborBounds(blockId: id, trackId: block.trackId, around: block.sourceStartMs)
+        if abs(newEndMs - block.sourceEndMs) < 0.5 {
+            document.captions.captionBlocks[idx].sourceStartMs = max(room.lower, min(block.sourceEndMs - Self.minCaptionDurationMs, newStartMs))
+        } else {
+            document.captions.captionBlocks[idx].sourceEndMs = max(block.sourceStartMs + Self.minCaptionDurationMs, min(room.upper, newEndMs))
+        }
+        renderRevision &+= 1
+    }
+
+    /// Moves a caption to another track, or to a new one when dragged past the last track. It stays put if the target is taken.
+    public func moveCaptionToTrack(id: String, targetTrackIndex: Int) {
+        guard let block = document.captions.captionBlocks.first(where: { $0.id == id }) else { return }
+        mutate { doc in
+            guard let idx = doc.captions.captionBlocks.firstIndex(where: { $0.id == id }) else { return }
+            guard targetTrackIndex >= 0, targetTrackIndex < doc.captions.captionTracks.count else {
+                guard let currentTrack = doc.captions.captionTracks.first(where: { $0.id == block.trackId }) else { return }
+                var newTrack = CaptionTrack(name: "Captions \(doc.captions.captionTracks.count + 1)", style: currentTrack.style)
+                newTrack.style.position01 = abs(currentTrack.style.position01.y - 1.0) < 0.1 ? Point01(x: 0.5, y: 0.0) : CaptionStyle.bottomPosition01
+                if targetTrackIndex < 0 {
+                    doc.captions.captionTracks.insert(newTrack, at: 0)
+                } else {
+                    doc.captions.captionTracks.append(newTrack)
+                }
+                doc.captions.captionBlocks[idx].trackId = newTrack.id
+                return
+            }
+            let targetId = doc.captions.captionTracks[targetTrackIndex].id
+            let isTaken = doc.captions.captionBlocks.contains { other in
+                other.trackId == targetId
+                    && other.id != id
+                    && block.sourceEndMs > other.sourceStartMs + 20.0
+                    && block.sourceStartMs < other.sourceEndMs - 20.0
+            }
+            if !isTaken {
+                doc.captions.captionBlocks[idx].trackId = targetId
+            }
+        }
+    }
+
+    /// Splits between words. A caption shows at least one word on each side.
+    public func splitCaption(id: String, atSourceMs sourceMs: Double) {
+        guard let block = document.captions.captionBlocks.first(where: { $0.id == id }),
+              sourceMs > block.sourceStartMs, sourceMs < block.sourceEndMs else { return }
+
+        var first = block
+        var second = block
+        second.id = UUID().uuidString
+
+        if let custom = block.customText {
+            let words = custom.split(whereSeparator: \.isWhitespace).map(String.init)
+            let keep = Int(round(Double(words.count) * (sourceMs - block.sourceStartMs) / (block.sourceEndMs - block.sourceStartMs)))
+            guard words.count >= 2 else {
+                showToast("Can't split a caption with one word", durationMs: 2000)
+                return
+            }
+            let firstCount = max(1, min(words.count - 1, keep))
+            first.customText = words[..<firstCount].joined(separator: " ")
+            second.customText = words[firstCount...].joined(separator: " ")
+            first.sourceEndMs = sourceMs
+            second.sourceStartMs = sourceMs
+        } else {
+            let lookup = Dictionary(document.captions.segments.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let spoken = block.wordIds.compactMap { lookup[$0] }
+            guard spoken.count >= 2, let spokenFirst = spoken.first, let spokenLast = spoken.last else {
+                showToast("Can't split a caption with one word", durationMs: 2000)
+                return
+            }
+            let spokenSpan = max(1.0, spokenLast.sourceEndMs - spokenFirst.sourceStartMs)
+            let scale = (block.sourceEndMs - block.sourceStartMs) / spokenSpan
+            let displayStarts = spoken.map { block.sourceStartMs + ($0.sourceStartMs - spokenFirst.sourceStartMs) * scale }
+            let firstCount = max(1, min(spoken.count - 1, displayStarts.filter { $0 < sourceMs }.count))
+            // Cut where the next word starts, so words keep their timing.
+            let cut = displayStarts[firstCount]
+            first.wordIds = Array(block.wordIds[..<firstCount])
+            second.wordIds = Array(block.wordIds[firstCount...])
+            first.sourceEndMs = cut
+            second.sourceStartMs = cut
+        }
+
+        mutate { doc in
+            guard let idx = doc.captions.captionBlocks.firstIndex(where: { $0.id == id }) else { return }
+            doc.captions.captionBlocks.replaceSubrange(idx...idx, with: [first, second])
+        }
+        selectedCaptionId = second.id
+    }
+
+    /// Editing keeps the spoken timing while the word count is unchanged. Otherwise the caption becomes typed text.
+    public func updateCaptionText(id: String, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        mutate { doc in
+            guard let idx = doc.captions.captionBlocks.firstIndex(where: { $0.id == id }) else { return }
+            let parts = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+            let block = doc.captions.captionBlocks[idx]
+            let visibleIds = block.wordIds.filter { wordId in
+                doc.captions.segments.first(where: { $0.id == wordId })?.isHidden == false
+            }
+            if block.customText == nil, visibleIds.count == parts.count {
+                for (wordId, part) in zip(visibleIds, parts) {
+                    if let wordIdx = doc.captions.segments.firstIndex(where: { $0.id == wordId }) {
+                        doc.captions.segments[wordIdx].text = part
+                    }
+                }
+            } else {
+                doc.captions.captionBlocks[idx].customText = trimmed
+                doc.captions.captionBlocks[idx].wordIds = []
+            }
+        }
+    }
+
+    public func effectiveCaptionStyle(blockId: String?, trackId: String?) -> CaptionStyle {
+        let captions = document.captions
+        let block = captions.captionBlocks.first(where: { $0.id == blockId })
+        if let override = block?.styleOverride { return override }
+        let resolvedTrackId = block?.trackId ?? trackId
+        return captions.captionTracks.first(where: { $0.id == resolvedTrackId })?.style
+            ?? captions.captionTracks.first?.style
+            ?? CaptionStyle()
+    }
+
+    /// With `blockId`, changes only that caption. Otherwise changes the whole track, including captions that override it.
+    public func updateCaptionStyle(blockId: String?, trackId: String?, _ change: (inout CaptionStyle) -> Void) {
+        mutate { doc in
+            if let blockId, let idx = doc.captions.captionBlocks.firstIndex(where: { $0.id == blockId }) {
+                let block = doc.captions.captionBlocks[idx]
+                var style = block.styleOverride
+                    ?? doc.captions.captionTracks.first(where: { $0.id == block.trackId })?.style
+                    ?? CaptionStyle()
+                change(&style)
+                doc.captions.captionBlocks[idx].styleOverride = style
+                return
+            }
+            guard let trackIdx = doc.captions.captionTracks.firstIndex(where: { $0.id == trackId }) else { return }
+            change(&doc.captions.captionTracks[trackIdx].style)
+            let id = doc.captions.captionTracks[trackIdx].id
+            for idx in doc.captions.captionBlocks.indices where doc.captions.captionBlocks[idx].trackId == id {
+                if var override = doc.captions.captionBlocks[idx].styleOverride {
+                    change(&override)
+                    doc.captions.captionBlocks[idx].styleOverride = override
+                }
             }
         }
     }
@@ -1890,6 +2149,10 @@ public final class ProjectSession: Identifiable {
     /// Splits whichever item is currently selected at `currentSourceTimeMs` (or splits the Clip at Playhead) when pressing `C`.
     public func splitAtCurrentTimeShortcut() {
         let srcMs = currentSourceTimeMs
+        if let captionId = selectedCaptionId {
+            splitCaption(id: captionId, atSourceMs: srcMs)
+            return
+        }
         if let layoutId = selectedCameraLayoutId {
             splitCameraLayout(id: layoutId, atSourceMs: srcMs)
             return
@@ -3067,7 +3330,9 @@ public final class ProjectSession: Identifiable {
                 return (false, "Camera is hidden (see Camera Layout)")
             }
             return (true, nil)
-        case .captions, .transcript:
+        case .captions:
+            return (true, nil)
+        case .transcript:
             return (hasRecordedMicrophone, hasRecordedMicrophone ? nil : "No microphone recorded")
         case .audio:
             return (true, nil)
@@ -3083,20 +3348,12 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Generates a word-level transcript 100% locally on-device (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true` or local OpenAI Whisper model).
+    /// Generates a word-level transcript on-device, and shows why if it cannot.
     public func generateLocalOnDeviceTranscript() {
         guard !isGeneratingTranscript else { return }
 
-        if document.captions.localModelVariant == "whisper" {
-            let tier = WhisperModelTier(rawValue: document.captions.whisperModelTier) ?? .small
-            let manager = WhisperModelDownloadManager.shared
-            if !manager.isModelInstalled(tier) {
-                manager.promptUserAndStartDownload(for: tier)
-                return
-            }
-        }
-
         isGeneratingTranscript = true
+        transcriptErrorMessage = nil
 
         let audioSourceURL = microphoneAudioFileURL ?? videoFileURL
         let localeId = document.captions.transcriptLocale
@@ -3108,19 +3365,21 @@ public final class ProjectSession: Identifiable {
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            let generated = (try? await LocalOnDeviceMediaIntelligence.transcribeAudioFileOnDevice(
-                audioURL: audioSourceURL,
-                localeIdentifier: localeId,
-                customPromptWords: promptWords,
-                fallbackDurationMs: fallbackDur
-            )) ?? LocalOnDeviceMediaIntelligence.synthesizeLocalFallbackTranscript(
-                durationMs: fallbackDur,
-                customPromptWords: promptWords
-            )
-
-            self.mutate { doc in
-                doc.captions.segments = generated
-                doc.captions.enabled = true
+            do {
+                let generated = try await LocalOnDeviceMediaIntelligence.transcribeAudioFileOnDevice(
+                    audioURL: audioSourceURL,
+                    localeIdentifier: localeId,
+                    customPromptWords: promptWords,
+                    maxDurationMs: fallbackDur
+                )
+                self.selectedCaptionId = nil
+                self.mutate { doc in
+                    doc.captions.segments = generated
+                    doc.captions.rebuildTranscriptCaptionBlocks()
+                    doc.captions.enabled = true
+                }
+            } catch {
+                self.transcriptErrorMessage = error.localizedDescription
             }
             self.isGeneratingTranscript = false
         }

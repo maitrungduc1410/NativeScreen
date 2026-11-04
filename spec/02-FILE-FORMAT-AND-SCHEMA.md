@@ -294,7 +294,34 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
     "backgroundColor": "#000000CC",
     "position01": { "x": 0.5, "y": 0.88 },
     "animationStyle": "word-by-word",
-    "segments": []
+    "segments": [],
+    "captionTracks": [
+      {
+        "id": "uuid",
+        "name": "Captions",
+        "isHidden": false,
+        "style": {
+          "fontStyle": "sans-serif",
+          "fontSizeRatio": 0.045,
+          "wordsReveal": "line-by-line",
+          "lineGrowth": "left-anchored",
+          "wordAnimation": "appear",
+          "colorTheme": "dark",
+          "position01": { "x": 0.5, "y": 1.0 }
+        }
+      }
+    ],
+    "captionBlocks": [
+      {
+        "id": "uuid",
+        "trackId": "uuid",
+        "sourceStartMs": 120.0,
+        "sourceEndMs": 1440.0,
+        "wordIds": ["uuid"],
+        "customText": null,
+        "styleOverride": null
+      }
+    ]
   },
   "timeline": {
     "slices": [
@@ -362,3 +389,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
 ### Key Architectural Advantages:
 1. **`timeline.maskTracks` (Multi-Track Masks with Keyframes):** Instead of a flat single-track array where masks cannot overlap comfortably, `maskTracks` allows **unlimited parallel tracks of Blur / Pixelate / Spotlight regions**, and each mask item supports `keyframes` so a blur box can smoothly move when the user scrolls the page!
 2. **Self-Contained `assets/` Directory:** Copying the active wallpaper (`assets/background.jpg`) into the `.nativescreen` bundle ensures 100% cross-platform visual parity when opening a Mac project on Windows.
+
+### Caption tracks
+
+`segments` holds transcript words at their spoken times, which `Edit by transcript` uses to cut. What appears on screen comes from `captionBlocks`: a block shows its `wordIds` (or `customText`) stretched to fit its own time span, so moving a caption never changes a cut. `styleOverride` replaces the track's `style` for one block. A project with `segments` but no `captionTracks` is migrated on load: the older top-level style fields become the first track's style, and words are grouped at sentence ends, pauses of 750 ms or more, and every 6 words. In `position01`, `(0, 0)` is the top-left of the canvas margins and `(1, 1)` the bottom-right.

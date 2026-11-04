@@ -22,6 +22,7 @@ public struct MultiTrackTimelineView: View {
     @State private var zoomTrackHoverX: CGFloat? = nil
     @State private var cameraLayoutTrackHoverX: CGFloat? = nil
     @State private var maskTrackHoverX: [String: CGFloat] = [:]
+    @State private var captionTrackHoverX: [String: CGFloat] = [:]
     @State private var shortcutTrackHoverX: [String: CGFloat] = [:]
 
     private let labelColumnWidth: CGFloat = 126
@@ -132,6 +133,7 @@ public struct MultiTrackTimelineView: View {
                             session.isRecordingVoiceover ? session.voiceoverRecordingTrackIndex + 1 : 0
                         )
                         let hasShortcutsTrack = !session.document.captions.shortcutTracks.isEmpty
+                        let captionTracks = session.document.captions.captionTracks
 
                         ScrollViewReader { verticalScrollProxy in
                             ScrollView(.vertical, showsIndicators: false) {
@@ -285,6 +287,40 @@ public struct MultiTrackTimelineView: View {
                                                 .id("track_shortcut_\(sTrack.id)")
                                             }
                                         }
+
+                                        ForEach(captionTracks) { track in
+                                            let isTrackHidden = track.isHidden || !session.document.captions.enabled
+
+                                            HStack(spacing: 6) {
+                                                Button {
+                                                    session.toggleCaptionTrackVisibility(id: track.id)
+                                                } label: {
+                                                    Image(systemName: isTrackHidden ? "eye.slash" : "eye")
+                                                        .font(.system(size: 10, weight: .medium))
+                                                        .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.28 : 0.65))
+                                                        .frame(width: 22, height: 22)
+                                                        .contentShape(Rectangle())
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Button {
+                                                    session.selectCaption(nil)
+                                                    session.selectedInspectorTab = .captions
+                                                } label: {
+                                                    Text(track.name)
+                                                        .font(.system(size: 11, weight: .medium))
+                                                        .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.30 : 0.65))
+                                                        .lineLimit(1)
+                                                        .minimumScaleFactor(0.85)
+                                                        .frame(maxHeight: .infinity)
+                                                        .contentShape(Rectangle())
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                            .padding(.leading, 10)
+                                            .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .id("track_caption_\(track.id)")
+                                        }
                                     }
                                     .padding(.vertical, 8)
                                     .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
@@ -371,6 +407,18 @@ public struct MultiTrackTimelineView: View {
                                                         )
                                                         .modifier(splitWiggle(trackOrder: firstShortcutOrder + sIdx))
                                                     }
+                                                }
+
+                                                // Lane 5+: Caption Tracks
+                                                let firstCaptionOrder = firstShortcutOrder + (hasShortcutsTrack ? session.document.captions.shortcutTracks.count : 0)
+                                                ForEach(Array(captionTracks.enumerated()), id: \.element.id) { trackIdx, track in
+                                                    captionLaneView(
+                                                        track: track,
+                                                        trackIndex: trackIdx,
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                    .modifier(splitWiggle(trackOrder: firstCaptionOrder + trackIdx))
                                                 }
                                             }
                                             .padding(.vertical, 8)
@@ -1210,6 +1258,176 @@ public struct MultiTrackTimelineView: View {
         guard availEnd - availStart >= 450.0 else { return nil }
 
         let desiredDur = min(1800.0, availEnd - availStart)
+        let tStart = max(availStart, min(availEnd - desiredDur, hoverTimelineMs - desiredDur * 0.5))
+        let tEnd = min(availEnd, tStart + desiredDur)
+
+        let srcStart = session.timeMapper.sourceTime(forTimelineMs: tStart).sourceMs
+        let srcEnd = session.timeMapper.sourceTime(forTimelineMs: tEnd).sourceMs
+        guard srcEnd - srcStart >= 300.0 else { return nil }
+        return (tStart, tEnd, srcStart, srcEnd)
+    }
+
+    // MARK: - Caption Track Lane
+
+    @ViewBuilder
+    private func captionLaneView(
+        track: CaptionTrack,
+        trackIndex: Int,
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> some View {
+        let captions = session.document.captions
+        let blocks = captions.captionBlocks.filter { $0.trackId == track.id }
+        let isHidden = track.isHidden || !captions.enabled
+        let addPreview = (!session.isSplitModeActive && !session.isDraggingTimelineSegment && NSEvent.pressedMouseButtons == 0)
+            ? hoverAddCaptionSpan(trackId: track.id, blocks: blocks, contentWidth: contentWidth, totalTimelineMs: totalTimelineMs)
+            : nil
+
+        ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: maskRowHeight)
+                .contentShape(Rectangle())
+
+            if let preview = addPreview {
+                let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
+                let previewW = max(24.0, CGFloat((preview.tEndMs - preview.tStartMs) / totalTimelineMs) * contentWidth - 1.0)
+
+                Button {
+                    session.isPlaying = false
+                    session.seek(toTimelineMs: (preview.tStartMs + preview.tEndMs) * 0.5)
+                    session.addCaption(trackId: track.id, sourceStartMs: preview.srcStartMs, sourceEndMs: preview.srcEndMs)
+                } label: {
+                    ZStack {
+                        SegmentBodyCanvas(palette: .caption, isSelected: false, isPlayed: false)
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.96))
+                    }
+                    .frame(width: previewW, height: maskRowHeight)
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .offset(x: previewX)
+                .transition(.opacity.animation(.easeOut(duration: 0.12)))
+                .zIndex(5)
+            }
+
+            ForEach(blocks) { block in
+                if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: block.sourceStartMs, sourceEndMs: block.sourceEndMs) {
+                    let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                    let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
+                    let isSelected = (session.selectedCaptionId == block.id)
+                    let isOtherSelected = (session.selectedCaptionId != nil && !isSelected)
+                    let isPlayedNow = session.committedSourceTimeMs >= block.sourceStartMs
+                        && session.committedSourceTimeMs <= block.sourceEndMs
+
+                    TimelineInteractiveSegmentView(
+                        topTitle: "Caption",
+                        subtitleContent: .mask(text: CaptionLineLayout.displayText(of: block, in: captions)),
+                        palette: .caption,
+                        isSelected: isSelected,
+                        isPlayed: isPlayedNow,
+                        isDimmed: isHidden,
+                        isDimmedBySelection: isOtherSelected,
+                        isSplitMode: session.isSplitModeActive,
+                        xOffset: xStart,
+                        width: blockW,
+                        height: maskRowHeight,
+                        totalWidth: contentWidth,
+                        trackTotalDurationMs: totalTimelineMs,
+                        startMs: tStartMs,
+                        endMs: tEndMs,
+                        allowDragMove: true,
+                        allowVerticalTrackDrag: true,
+                        clipDecoration: nil,
+                        onClickAtLocalX: { localX in
+                            let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
+                            let clickedTimelineMs = session.hoverSkimTimelineMs
+                                ?? (tStartMs + frac * (tEndMs - tStartMs))
+                            session.isPlaying = false
+                            session.seek(toTimelineMs: clickedTimelineMs)
+                            if session.isSplitModeActive {
+                                let splitSourceMs = session.timeMapper.sourceTime(forTimelineMs: clickedTimelineMs).sourceMs
+                                session.splitCaption(id: block.id, atSourceMs: splitSourceMs)
+                            } else {
+                                session.selectCaption(block.id)
+                            }
+                        },
+                        onRightClick: { pointInView, parentView in
+                            session.selectCaption(block.id)
+                            NativeSegmentContextMenuPresenter.shared.presentCaptionContextMenu(
+                                session: session,
+                                block: block,
+                                at: pointInView,
+                                in: parentView
+                            )
+                        },
+                        onBeginInteractive: {
+                            session.selectCaption(block.id)
+                            session.beginInteractiveEdit()
+                        },
+                        onMoveBody: { desiredTimelineStartMs, constantTimelineDurMs in
+                            let dur = max(220.0, constantTimelineDurMs)
+                            let clampedTimelineStart = max(0.0, min(totalTimelineMs - dur, desiredTimelineStartMs))
+                            let clampedTimelineEnd = clampedTimelineStart + dur
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
+                            let newSrcEnd = max(newSrcStart + 220.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
+                            session.moveCaption(id: block.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
+                        },
+                        onResizeRange: { newTimelineStart, newTimelineEnd in
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
+                            let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs
+                            session.resizeCaption(id: block.id, newStartMs: newSrcStart, newEndMs: newSrcEnd)
+                        },
+                        onMoveVerticalTracks: { trackDelta in
+                            session.moveCaptionToTrack(id: block.id, targetTrackIndex: trackIndex + trackDelta)
+                        },
+                        onEndInteractive: {
+                            session.endInteractiveEdit()
+                        }
+                    )
+                }
+            }
+        }
+        .frame(width: contentWidth, height: maskRowHeight)
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let pt):
+                if session.isDraggingTimelineSegment || NSEvent.pressedMouseButtons != 0 {
+                    captionTrackHoverX.removeValue(forKey: track.id)
+                } else {
+                    captionTrackHoverX[track.id] = max(0.0, min(contentWidth, pt.x))
+                }
+            case .ended:
+                captionTrackHoverX.removeValue(forKey: track.id)
+            }
+        }
+    }
+
+    private func hoverAddCaptionSpan(
+        trackId: String,
+        blocks: [CaptionBlock],
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> (tStartMs: Double, tEndMs: Double, srcStartMs: Double, srcEndMs: Double)? {
+        guard let hoverX = captionTrackHoverX[trackId], contentWidth > 10 else { return nil }
+        let hoverTimelineMs = Double(hoverX / contentWidth) * totalTimelineMs
+
+        let spans = blocks
+            .compactMap { timelineSpan(forSourceStartMs: $0.sourceStartMs, sourceEndMs: $0.sourceEndMs) }
+            .sorted { $0.0 < $1.0 }
+
+        let marginMs = Double(6.0 / contentWidth) * totalTimelineMs
+        if spans.contains(where: { hoverTimelineMs >= $0.0 - marginMs && hoverTimelineMs <= $0.1 + marginMs }) {
+            return nil
+        }
+
+        let availStart = spans.last(where: { $0.1 <= hoverTimelineMs })?.1 ?? 0.0
+        let availEnd = spans.first(where: { $0.0 >= hoverTimelineMs })?.0 ?? totalTimelineMs
+        guard availEnd - availStart >= 450.0 else { return nil }
+
+        let desiredDur = min(2000.0, availEnd - availStart)
         let tStart = max(availStart, min(availEnd - desiredDur, hoverTimelineMs - desiredDur * 0.5))
         let tEnd = min(availEnd, tStart + desiredDur)
 
@@ -2297,6 +2515,18 @@ private struct SegmentShaderPalette: Equatable {
         ringBorder: Color(red: 0.863, green: 0.651, blue: 0.753),
         playedRingBorder: Color(red: 0.718, green: 0.294, blue: 0.502),
         selectedOuterOutline: Color(red: 0.776, green: 0.365, blue: 0.569).opacity(0.80)
+    )
+
+    /// Caption:
+    static let caption = SegmentShaderPalette(
+        fillTop: Color(red: 0.086, green: 0.388, blue: 0.431),
+        fillBottom: Color(red: 0.122, green: 0.561, blue: 0.620),
+        innerEdgeGlow: Color(red: 0.067, green: 0.310, blue: 0.345).opacity(0.80),
+        activeInnerEdgeGlow: Color(red: 0.067, green: 0.310, blue: 0.345).opacity(0.50),
+        playedInnerEdgeGlow: Color(red: 0.086, green: 0.388, blue: 0.431).opacity(0.50),
+        ringBorder: Color(red: 0.600, green: 0.871, blue: 0.906),
+        playedRingBorder: Color(red: 0.122, green: 0.561, blue: 0.620),
+        selectedOuterOutline: Color(red: 0.176, green: 0.690, blue: 0.757).opacity(0.80)
     )
 
     /// Camera Layout:

@@ -790,13 +790,9 @@ enum ConformanceFixtureGenerator {
     private static func captionRows(session: ProjectSession, times: [Double]) -> [CaptionRow] {
         let config = session.document.captions
         return times.map { t in
-            let words: [CaptionRow.Word]
-            if let line = CaptionLineLayout.activeLine(in: config, at: t) {
-                words = CaptionLineLayout.displayedWords(for: line, config: config, at: t).map {
-                    CaptionRow.Word(text: $0.segment.text, opacity: $0.opacity, isSpokenNow: $0.isSpokenNow)
-                }
-            } else {
-                words = []
+            let frames = CaptionLineLayout.frames(in: config, at: t, stageSize: CGSize(width: 1920, height: 1080))
+            let words = frames.flatMap(\.words).map {
+                CaptionRow.Word(text: $0.text, opacity: $0.opacity, isSpokenNow: $0.isSpokenNow)
             }
             return CaptionRow(sourceMs: t, words: words)
         }

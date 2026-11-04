@@ -792,3 +792,20 @@ The editor can be recorded, so a demo of editing can be made with the app itself
 - **The Dock icon stays while an editor is open.** `Hide Dock icon` would otherwise remove the menu bar from the app being recorded.
 
 **Known limits.** The crop is fixed when recording starts, so moving our own window during a recording does not move the capture. Windows from other apps opened during the recording are not in the exclusion list, and appear if they overlap the crop.
+
+---
+
+## 37. ADR-37: Caption Tracks and Spring-Driven Reveal (macOS)
+
+Editing caption timing in the inspector was slow, so captions are now blocks on timeline tracks, and they animate instead of being redrawn at word boundaries.
+
+- **Block timing is separate from spoken timing.** Words keep their spoken times because `Edit by transcript` cuts by them. A block has its own span and stretches its words to fit, so dragging a caption cannot change a cut.
+- **Animation is a function of time.** Preview, scrubbing and export must match, so nothing keeps state between frames. Each frame simulates the previous 500 ms on an absolute 240 Hz grid from a settled start. `frames()` averaged 0.7 ms per call on a 19-word transcript.
+- **Words are images, boxes are generators.** Each word is rasterized once and then moved and faded. Boxes use CoreImage generators, so a resizing box costs no rasterization.
+- **The current word stays through gaps in `Word by word`.** Using each word's end time made it flicker in the short pause before the next word.
+
+**Clicking a caption in the preview.** The Metal frame is only pixels, so the compositor records each visible box in `lastCaptionHitRects01` and invisible SwiftUI views sit over them, as for keycaps. The rects are rounded to 0.5% of the canvas so a growing box does not update SwiftUI on every frame.
+
+**Transcription never invents text.** A failure used to fall back to sample words, which made a recording show "Welcome to Native Screen" with no error. On a Mac with Siri and Dictation off, `SFSpeechRecognizer` always failed this way. macOS 26 and later now use `SpeechTranscriber`, which does not need them, and `SFSpeechRecognizer` remains for macOS 15. Errors appear in the inspector. Sample words are only used by the showcase project.
+
+**Video length on a still screen.** ScreenCaptureKit only delivers frames when the screen changes, so the video and the project ended at the last change, while audio and telemetry went on. `stopCapture` now repeats the last frame at the stop time.

@@ -310,30 +310,106 @@ public enum LocalOnDeviceMediaIntelligence {
         return items
     }
 
-    /// Transcribes an audio/video file 100% locally on-device using Apple's `SFSpeechRecognizer`.
+    public enum TranscriptionError: LocalizedError {
+        case permissionDenied
+        case unsupportedLanguage
+        case noSpeechFound
+
+        public var errorDescription: String? {
+            switch self {
+            case .permissionDenied:
+                return "Speech recognition is not allowed. Enable it for Native Screen in System Settings > Privacy & Security > Speech Recognition."
+            case .unsupportedLanguage:
+                return "On-device speech recognition does not support this language."
+            case .noSpeechFound:
+                return "No speech was found in this recording."
+            }
+        }
+    }
+
+    /// Transcribes an audio/video file on-device. Failures are thrown so the user sees them; a caption is never invented.
     public static func transcribeAudioFileOnDevice(
         audioURL: URL,
         localeIdentifier: String,
         customPromptWords: [String] = [],
-        fallbackDurationMs: Double
+        maxDurationMs: Double
+    ) async throws -> [CaptionSegment] {
+        let normalizedId = localeIdentifier.replacingOccurrences(of: "_", with: "-")
+        let segments: [CaptionSegment]
+        // `SpeechTranscriber` works with Siri and Dictation turned off, unlike `SFSpeechRecognizer`.
+        if #available(macOS 26.0, *) {
+            segments = try await transcribeWithSpeechAnalyzer(audioURL: audioURL, localeIdentifier: normalizedId)
+        } else {
+            segments = try await transcribeWithSpeechRecognizer(
+                audioURL: audioURL,
+                localeIdentifier: normalizedId,
+                customPromptWords: customPromptWords
+            )
+        }
+        guard !segments.isEmpty else { throw TranscriptionError.noSpeechFound }
+        return normalizeWordSegments(segments, maxDurationMs: maxDurationMs)
+    }
+
+    @available(macOS 26.0, *)
+    private static func transcribeWithSpeechAnalyzer(audioURL: URL, localeIdentifier: String) async throws -> [CaptionSegment] {
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: localeIdentifier)) else {
+            throw TranscriptionError.unsupportedLanguage
+        }
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: [],
+            reportingOptions: [],
+            attributeOptions: [.audioTimeRange]
+        )
+        // The language model is a system asset, downloaded once on first use.
+        if let installation = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try await installation.downloadAndInstall()
+        }
+
+        let collector = Task {
+            var words: [CaptionSegment] = []
+            for try await result in transcriber.results {
+                for run in result.text.runs {
+                    guard let range = run.audioTimeRange else { continue }
+                    let word = String(result.text[run.range].characters).trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !word.isEmpty else { continue }
+                    words.append(
+                        CaptionSegment(
+                            sourceStartMs: max(0.0, range.start.seconds * 1000.0),
+                            sourceEndMs: max(0.0, range.end.seconds * 1000.0),
+                            text: word
+                        )
+                    )
+                }
+            }
+            return words
+        }
+
+        let analyzer = SpeechAnalyzer(modules: [transcriber])
+        do {
+            let audioFile = try AVAudioFile(forReading: audioURL)
+            try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
+        } catch {
+            collector.cancel()
+            throw error
+        }
+        return try await collector.value
+    }
+
+    private static func transcribeWithSpeechRecognizer(
+        audioURL: URL,
+        localeIdentifier: String,
+        customPromptWords: [String]
     ) async throws -> [CaptionSegment] {
         let authStatus = await withCheckedContinuation { (cont: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
             SFSpeechRecognizer.requestAuthorization { status in
                 cont.resume(returning: status)
             }
         }
+        guard authStatus == .authorized else { throw TranscriptionError.permissionDenied }
 
-        guard authStatus == .authorized else {
-            return synthesizeLocalFallbackTranscript(durationMs: fallbackDurationMs, customPromptWords: customPromptWords)
-        }
-
-        let normalizedId = localeIdentifier.replacingOccurrences(of: "_", with: "-")
-        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: normalizedId))
-            ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-            ?? SFSpeechRecognizer()
-
-        guard let recognizer, recognizer.isAvailable else {
-            return synthesizeLocalFallbackTranscript(durationMs: fallbackDurationMs, customPromptWords: customPromptWords)
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)), recognizer.isAvailable else {
+            throw TranscriptionError.unsupportedLanguage
         }
 
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
@@ -341,58 +417,40 @@ public enum LocalOnDeviceMediaIntelligence {
             request.requiresOnDeviceRecognition = true
         }
         request.shouldReportPartialResults = false
-        if #available(macOS 13.0, *) {
-            request.addsPunctuation = true
-        }
+        request.addsPunctuation = true
         if !customPromptWords.isEmpty {
             request.contextualStrings = customPromptWords
         }
 
-        do {
-            let segments: [CaptionSegment] = try await withCheckedThrowingContinuation { continuation in
-                var hasResumed = false
-                recognizer.recognitionTask(with: request) { result, error in
-                    guard !hasResumed else { return }
-                    if let error {
-                        hasResumed = true
-                        continuation.resume(throwing: error)
-                        return
-                    }
-                    guard let result, result.isFinal else { return }
+        return try await withCheckedThrowingContinuation { continuation in
+            var hasResumed = false
+            recognizer.recognitionTask(with: request) { result, error in
+                guard !hasResumed else { return }
+                if let error {
                     hasResumed = true
-
-                    var extracted: [CaptionSegment] = []
-                    for seg in result.bestTranscription.segments {
-                        let word = seg.substring.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !word.isEmpty else { continue }
-                        let startMs = max(0.0, seg.timestamp * 1000.0)
-                        let durMs = max(120.0, seg.duration * 1000.0)
-                        extracted.append(
-                            CaptionSegment(
-                                sourceStartMs: startMs,
-                                sourceEndMs: startMs + durMs,
-                                text: word
-                            )
-                        )
-                    }
-                    continuation.resume(returning: extracted)
+                    continuation.resume(throwing: error)
+                    return
                 }
-            }
+                guard let result, result.isFinal else { return }
+                hasResumed = true
 
-            if !segments.isEmpty {
-                return normalizeWordSegments(segments, maxDurationMs: fallbackDurationMs)
+                var extracted: [CaptionSegment] = []
+                for seg in result.bestTranscription.segments {
+                    let word = seg.substring.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !word.isEmpty else { continue }
+                    let startMs = max(0.0, seg.timestamp * 1000.0)
+                    let durMs = max(120.0, seg.duration * 1000.0)
+                    extracted.append(CaptionSegment(sourceStartMs: startMs, sourceEndMs: startMs + durMs, text: word))
+                }
+                continuation.resume(returning: extracted)
             }
-        } catch {
-            // Fall through to local fallback if the audio track had no speech or on-device assets are still warming
         }
-
-        return synthesizeLocalFallbackTranscript(durationMs: fallbackDurationMs, customPromptWords: customPromptWords)
     }
 
+    /// Words past the end of the video have nothing to appear over, so they are dropped.
     private static func normalizeWordSegments(_ raw: [CaptionSegment], maxDurationMs: Double) -> [CaptionSegment] {
-        var sorted = raw.sorted { $0.sourceStartMs < $1.sourceStartMs }
+        var sorted = raw.filter { $0.sourceStartMs < maxDurationMs - 80.0 }.sorted { $0.sourceStartMs < $1.sourceStartMs }
         for i in sorted.indices {
-            sorted[i].sourceStartMs = max(0.0, min(maxDurationMs - 80.0, sorted[i].sourceStartMs))
             if i + 1 < sorted.count {
                 sorted[i].sourceEndMs = min(sorted[i].sourceEndMs, max(sorted[i].sourceStartMs + 60.0, sorted[i + 1].sourceStartMs))
             } else {
@@ -402,9 +460,7 @@ public enum LocalOnDeviceMediaIntelligence {
         return sorted
     }
 
-    /// Generates a realistic word-timed local transcript when testing on a recording without vocal speech so the user can test
-    /// all Captions animations (`Line by line` / `Word by word`, `Full line` / `Expanding` / `Centered`, `Appear` / `Fade in` / `Slide in`)
-    /// and `Edit by transcript` pause-tightening / filler-word removal immediately!
+    /// Sample words for the showcase project only, which has no real speech to transcribe.
     public static func synthesizeLocalFallbackTranscript(durationMs: Double, customPromptWords: [String] = []) -> [CaptionSegment] {
         let totalMs = max(3000.0, durationMs)
         let productName = customPromptWords.first(where: { !$0.isEmpty }) ?? "Native Screen"

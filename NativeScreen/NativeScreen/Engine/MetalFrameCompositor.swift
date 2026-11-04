@@ -2,6 +2,7 @@ import Foundation
 import Metal
 import MetalKit
 import CoreImage
+import CoreImage.CIFilterBuiltins
 import AVFoundation
 import AppKit
 import Vision
@@ -89,6 +90,8 @@ public final class MetalFrameCompositor {
     /// Where each visible keycap group was drawn in the last composed frame, normalized `0...1` with a top-left origin.
     /// The preview uses it to place hover / click targets over keycaps it no longer draws itself.
     public private(set) var lastShortcutHitRects01: [String: CGRect] = [:]
+    /// Visible caption boxes in the last frame, top-left origin. Rounded so a growing box does not update the views on every frame.
+    public private(set) var lastCaptionHitRects01: [String: CGRect] = [:]
 
     public var isAnimatingBackgroundTransition: Bool {
         guard previousUnblurredBackgroundImage != nil else { return false }
@@ -422,8 +425,9 @@ public final class MetalFrameCompositor {
                 )
             }
 
-            if doc.captions.enabled && !doc.captions.segments.isEmpty {
-                composite = renderCaptionsOverlayForExport(
+            lastCaptionHitRects01 = [:]
+            if doc.captions.enabled && !doc.captions.captionBlocks.isEmpty {
+                composite = renderCaptionTracks(
                     over: composite,
                     captionsConfig: doc.captions,
                     sourceTimeMs: sourceTimeMs,
@@ -2012,96 +2016,129 @@ public final class MetalFrameCompositor {
         return CIImage(cgImage: cg)
     }
 
-    private struct CaptionPillCacheKey: Equatable {
-        let words: [CaptionLineLayout.DisplayedWord]
+    private struct CaptionWordCacheKey: Hashable {
+        let text: String
         let fontSize: CGFloat
         let fontStyle: CaptionFontStyle
         let colorTheme: CaptionColorTheme
-        let wordAnimation: CaptionWordAnimation
     }
-    private var lastCaptionPillKey: CaptionPillCacheKey?
-    private var cachedCaptionPill: CIImage?
+    private var captionWordCache: [CaptionWordCacheKey: CIImage] = [:]
 
-    /// Bakes the same caption line the preview shows (`CaptionLineLayout`) into the exported frame.
-    /// The pill is rasterized with CoreGraphics straight into a bitmap (no TIFF round-trip) and cached until the
-    /// visible words or their opacities change, which happens only at word boundaries.
-    private func renderCaptionsOverlayForExport(
+    /// Draws each caption track from `CaptionLineLayout`. Boxes come from CoreImage generators, so a box that is resizing
+    /// costs nothing to redraw, and each word is rasterized once and then moved and faded as an image.
+    private func renderCaptionTracks(
         over background: CIImage,
         captionsConfig: CaptionsConfig,
         sourceTimeMs: Double,
         canvasRect: CGRect
     ) -> CIImage {
-        guard let line = CaptionLineLayout.activeLine(in: captionsConfig, at: sourceTimeMs) else {
-            return background
-        }
-        let words = CaptionLineLayout.displayedWords(for: line, config: captionsConfig, at: sourceTimeMs)
-        guard !words.isEmpty else { return background }
+        let frames = CaptionLineLayout.frames(in: captionsConfig, at: sourceTimeMs, stageSize: canvasRect.size)
+        var composite = background
 
-        let fontSize = max(14.0, canvasRect.height * CGFloat(captionsConfig.fontSizeRatio))
-        let key = CaptionPillCacheKey(
-            words: words,
-            fontSize: fontSize,
-            fontStyle: captionsConfig.fontStyle,
-            colorTheme: captionsConfig.colorTheme,
-            wordAnimation: captionsConfig.wordAnimation
-        )
-        let pill: CIImage
-        if key == lastCaptionPillKey, let cached = cachedCaptionPill {
-            pill = cached
-        } else {
-            guard let rendered = Self.rasterizeCaptionPill(key: key) else { return background }
-            lastCaptionPillKey = key
-            cachedCaptionPill = rendered
-            pill = rendered
-        }
+        for frame in frames {
+            let isDark = frame.style.colorTheme == .dark
+            let blurScale = min(canvasRect.width, canvasRect.height) / 1080.0
 
-        let cx = canvasRect.width * CGFloat(max(0.15, min(0.85, captionsConfig.position01.x)))
-        let cy = canvasRect.height * CGFloat(1.0 - max(0.12, min(0.90, captionsConfig.position01.y)))
-        let placed = pill.transformed(by: CGAffineTransform(
-            translationX: cx - pill.extent.width * 0.5,
-            y: cy - pill.extent.height * 0.5
-        ))
-        return placed.composited(over: background).cropped(to: canvasRect)
+            func toCanvas(_ rect: CGRect) -> CGRect {
+                CGRect(
+                    x: canvasRect.minX + rect.minX,
+                    y: canvasRect.minY + canvasRect.height - rect.maxY,
+                    width: rect.width,
+                    height: rect.height
+                )
+            }
+            func fadeBlurred(_ image: CIImage, opacity: Double) -> CIImage {
+                guard opacity < 0.99 else { return image }
+                return image.applyingGaussianBlur(sigma: (1.0 - opacity) * Self.captionFadeBlurRadius * Double(blurScale))
+            }
+
+            if frame.boxOpacity > 0.5 {
+                func rounded(_ value: CGFloat) -> CGFloat { (value * 200.0).rounded() / 200.0 }
+                lastCaptionHitRects01[frame.blockId] = CGRect(
+                    x: rounded(frame.boxRect.minX / canvasRect.width),
+                    y: rounded(frame.boxRect.minY / canvasRect.height),
+                    width: rounded(frame.boxRect.width / canvasRect.width),
+                    height: rounded(frame.boxRect.height / canvasRect.height)
+                )
+            }
+
+            let boxRect = toCanvas(frame.boxRect)
+            let radius = frame.fontSize * 0.3
+
+            if frame.boxOpacity > 0.002 {
+                let fill = CIFilter.roundedRectangleGenerator()
+                fill.extent = boxRect
+                fill.radius = Float(radius)
+                fill.color = CIColor(
+                    red: isDark ? 0.0 : 1.0,
+                    green: isDark ? 0.0 : 1.0,
+                    blue: isDark ? 0.0 : 1.0,
+                    alpha: (isDark ? 0.82 : 0.92) * frame.boxOpacity
+                )
+                let outline = CIFilter.roundedRectangleStrokeGenerator()
+                outline.extent = boxRect
+                outline.radius = Float(radius)
+                outline.width = Float(max(1.0, frame.fontSize * 0.025))
+                outline.color = CIColor(
+                    red: isDark ? 1.0 : 0.0,
+                    green: isDark ? 1.0 : 0.0,
+                    blue: isDark ? 1.0 : 0.0,
+                    alpha: 0.12 * frame.boxOpacity
+                )
+                if let fillImage = fill.outputImage, let outlineImage = outline.outputImage {
+                    let box = fadeBlurred(outlineImage.composited(over: fillImage), opacity: frame.boxOpacity)
+                    composite = box.composited(over: composite)
+                }
+            }
+
+            // Pushed words must not show outside the box.
+            let clipsToBox = frame.style.wordsReveal == .wordByWord
+            for word in frame.words {
+                guard let image = captionWordImage(
+                    text: word.text,
+                    fontSize: frame.fontSize,
+                    fontStyle: frame.style.fontStyle,
+                    colorTheme: frame.style.colorTheme
+                ) else { continue }
+
+                let target = toCanvas(word.rect)
+                var placed = image.transformed(by: CGAffineTransform(translationX: target.minX, y: target.minY))
+                if word.opacity < 0.999 {
+                    placed = placed.applyingFilter("CIColorMatrix", parameters: [
+                        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(word.opacity))
+                    ])
+                    if !word.isDimmedAtRest {
+                        placed = fadeBlurred(placed, opacity: word.opacity)
+                    }
+                }
+                if clipsToBox {
+                    placed = placed.cropped(to: boxRect)
+                }
+                composite = placed.composited(over: composite)
+            }
+        }
+        return composite.cropped(to: canvasRect)
     }
 
-    private static func rasterizeCaptionPill(key: CaptionPillCacheKey) -> CIImage? {
-        let fontSize = key.fontSize
-        let baseFont = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
-        let font: NSFont = {
-            let design: NSFontDescriptor.SystemDesign
-            switch key.fontStyle {
-            case .sansSerif: return baseFont
-            case .serif: design = .serif
-            case .mono: design = .monospaced
-            }
-            guard let desc = baseFont.fontDescriptor.withDesign(design) else { return baseFont }
-            return NSFont(descriptor: desc, size: fontSize) ?? baseFont
-        }()
-        let isDark = (key.colorTheme == .dark)
-        let textColor = isDark ? NSColor.white : NSColor.black
+    private static let captionFadeBlurRadius = 5.0
 
-        let spacing = fontSize * 0.28
-        let attributed = key.words.map { word in
-            NSAttributedString(string: word.segment.text, attributes: [
-                .font: font,
-                .foregroundColor: textColor.withAlphaComponent(CGFloat(word.opacity))
-            ])
+    private func captionWordImage(
+        text: String,
+        fontSize: CGFloat,
+        fontStyle: CaptionFontStyle,
+        colorTheme: CaptionColorTheme
+    ) -> CIImage? {
+        let key = CaptionWordCacheKey(text: text, fontSize: fontSize, fontStyle: fontStyle, colorTheme: colorTheme)
+        if let hit = captionWordCache[key] {
+            return hit
         }
-        let sizes = attributed.map { $0.size() }
-        let textW = sizes.reduce(0.0) { $0 + $1.width } + spacing * CGFloat(max(0, sizes.count - 1))
-        let textH = sizes.map(\.height).max() ?? fontSize
-        let padX = fontSize * 0.72
-        let padY = fontSize * 0.38
-        let pillW = ceil(textW + padX * 2.0)
-        let pillH = ceil(textH + padY * 2.0)
-
-        // Leave room for the soft drop shadow around the pill.
-        let shadowRadius = fontSize * 0.45
-        let shadowOffsetY = fontSize * 0.15
-        let margin = ceil(shadowRadius * 2.0 + shadowOffsetY)
-        let width = Int(pillW + margin * 2.0)
-        let height = Int(pillH + margin * 2.0)
-
+        let attributed = NSAttributedString(string: text, attributes: [
+            .font: CaptionLineLayout.font(style: fontStyle, size: fontSize),
+            .foregroundColor: colorTheme == .dark ? NSColor.white : NSColor.black
+        ])
+        let size = attributed.size()
+        let width = max(1, Int(ceil(size.width)))
+        let height = max(1, Int(ceil(size.height)))
         guard let ctx = CGContext(
             data: nil,
             width: width,
@@ -2112,36 +2149,18 @@ public final class MetalFrameCompositor {
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ) else { return nil }
 
-        let pillRect = CGRect(x: margin, y: margin, width: pillW, height: pillH)
-        let radius = fontSize * 0.42
-        let pillPath = CGPath(roundedRect: pillRect, cornerWidth: radius, cornerHeight: radius, transform: nil)
-
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: -shadowOffsetY), blur: shadowRadius * 2.0, color: NSColor.black.withAlphaComponent(0.38).cgColor)
-        ctx.addPath(pillPath)
-        ctx.setFillColor((isDark ? NSColor(white: 0.0, alpha: 0.82) : NSColor(white: 1.0, alpha: 0.92)).cgColor)
-        ctx.fillPath()
-        ctx.restoreGState()
-
-        ctx.addPath(CGPath(roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: radius, cornerHeight: radius, transform: nil))
-        ctx.setStrokeColor((isDark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.10)).cgColor)
-        ctx.setLineWidth(1.0)
-        ctx.strokePath()
-
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
-        var x = pillRect.minX + padX
-        for (idx, str) in attributed.enumerated() {
-            let size = sizes[idx]
-            // Same 1.5pt lift the preview applies to the spoken word in `Slide in` mode, scaled to export pixels.
-            let lift: CGFloat = (key.wordAnimation == .slideIn && key.words[idx].isSpokenNow) ? fontSize * 0.06 : 0.0
-            str.draw(at: CGPoint(x: x, y: pillRect.minY + padY + (textH - size.height) * 0.5 + lift))
-            x += size.width + spacing
-        }
+        attributed.draw(at: .zero)
         NSGraphicsContext.restoreGraphicsState()
 
         guard let cg = ctx.makeImage() else { return nil }
-        return CIImage(cgImage: cg)
+        let image = CIImage(cgImage: cg)
+        if captionWordCache.count > 512 {
+            captionWordCache.removeAll()
+        }
+        captionWordCache[key] = image
+        return image
     }
 }
 

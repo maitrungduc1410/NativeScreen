@@ -22,7 +22,7 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.004918981481481481,
         "text" : "Native"
       }
     ]
@@ -131,8 +131,13 @@
     "sourceMs" : 2800,
     "words" : [
       {
+        "isSpokenNow" : false,
+        "opacity" : 0.040909418534542275,
+        "text" : "same"
+      },
+      {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.9590905814654579,
         "text" : "frame"
       }
     ]
@@ -141,9 +146,9 @@
     "sourceMs" : 3000,
     "words" : [
       {
-        "isSpokenNow" : false,
-        "opacity" : 0.25,
-        "text" : "on"
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "frame"
       }
     ]
   },
@@ -152,7 +157,7 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.7133732219561231,
         "text" : "on"
       }
     ]
@@ -172,7 +177,12 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.5390565868621443,
+        "text" : "on"
+      },
+      {
+        "isSpokenNow" : true,
+        "opacity" : 0.4609434131378558,
         "text" : "every"
       }
     ]
@@ -192,7 +202,12 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.7653764096344583,
+        "text" : "every"
+      },
+      {
+        "isSpokenNow" : true,
+        "opacity" : 0.23462359036554178,
         "text" : "platform"
       }
     ]
@@ -212,7 +227,12 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.9302240291095276,
+        "text" : "platform"
+      },
+      {
+        "isSpokenNow" : true,
+        "opacity" : 0.06977597089047238,
         "text" : "today"
       }
     ]
@@ -232,7 +252,7 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.5390565868621443,
         "text" : "today"
       }
     ]
@@ -240,11 +260,7 @@
   {
     "sourceMs" : 5000,
     "words" : [
-      {
-        "isSpokenNow" : false,
-        "opacity" : 1,
-        "text" : "today"
-      }
+
     ]
   },
   {

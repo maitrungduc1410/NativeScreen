@@ -103,6 +103,12 @@
   "captions" : {
     "animationStyle" : "word-by-word",
     "backgroundColor" : "#000000CC",
+    "captionBlocks" : [
+
+    ],
+    "captionTracks" : [
+
+    ],
     "colorTheme" : "dark",
     "customPrompt" : "",
     "customShortcuts" : [

@@ -22,32 +22,32 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.004918981481481481,
         "text" : "Native"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.0024594907407407404,
         "text" : "Screen"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.0024594907407407404,
         "text" : "renders"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.0024594907407407404,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.0024594907407407404,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.0024594907407407404,
         "text" : "frame"
       }
     ]
@@ -62,27 +62,27 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "Screen"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "renders"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -97,27 +97,27 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "Screen"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "renders"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -137,22 +137,22 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "renders"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -172,22 +172,22 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "renders"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -212,17 +212,17 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -247,17 +247,17 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -287,12 +287,12 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -322,12 +322,12 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "same"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -362,7 +362,7 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -397,7 +397,7 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "frame"
       }
     ]
@@ -432,7 +432,7 @@
       },
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.9795452907327291,
         "text" : "frame"
       }
     ]
@@ -442,23 +442,33 @@
     "words" : [
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
-        "text" : "on"
+        "opacity" : 1,
+        "text" : "Native"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
-        "text" : "every"
+        "opacity" : 1,
+        "text" : "Screen"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
-        "text" : "platform"
+        "opacity" : 1,
+        "text" : "renders"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
-        "text" : "today"
+        "opacity" : 1,
+        "text" : "the"
+      },
+      {
+        "isSpokenNow" : false,
+        "opacity" : 1,
+        "text" : "same"
+      },
+      {
+        "isSpokenNow" : true,
+        "opacity" : 1,
+        "text" : "frame"
       }
     ]
   },
@@ -467,22 +477,22 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.7133732219561231,
         "text" : "on"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.35668661097806154,
         "text" : "every"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.35668661097806154,
         "text" : "platform"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.35668661097806154,
         "text" : "today"
       }
     ]
@@ -497,17 +507,17 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "every"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "platform"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "today"
       }
     ]
@@ -522,17 +532,17 @@
       },
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.7304717065689281,
         "text" : "every"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "platform"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "today"
       }
     ]
@@ -552,12 +562,12 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "platform"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "today"
       }
     ]
@@ -577,12 +587,12 @@
       },
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.617311795182771,
         "text" : "platform"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "today"
       }
     ]
@@ -607,7 +617,7 @@
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 0.38,
+        "opacity" : 0.5,
         "text" : "today"
       }
     ]
@@ -632,7 +642,7 @@
       },
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.5348879854452362,
         "text" : "today"
       }
     ]
@@ -667,22 +677,22 @@
     "words" : [
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.5390565868621443,
         "text" : "on"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.5390565868621443,
         "text" : "every"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.5390565868621443,
         "text" : "platform"
       },
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.5390565868621443,
         "text" : "today"
       }
     ]
@@ -690,26 +700,7 @@
   {
     "sourceMs" : 5000,
     "words" : [
-      {
-        "isSpokenNow" : false,
-        "opacity" : 1,
-        "text" : "on"
-      },
-      {
-        "isSpokenNow" : false,
-        "opacity" : 1,
-        "text" : "every"
-      },
-      {
-        "isSpokenNow" : false,
-        "opacity" : 1,
-        "text" : "platform"
-      },
-      {
-        "isSpokenNow" : false,
-        "opacity" : 1,
-        "text" : "today"
-      }
+
     ]
   },
   {

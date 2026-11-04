@@ -7,7 +7,6 @@ import UniformTypeIdentifiers
 /// non-truncating responsive controls, and quick "Reset" buttons on sliders.
 public struct InspectorSidebarView: View {
     @Bindable var session: ProjectSession
-    @Bindable private var whisperManager = WhisperModelDownloadManager.shared
     @State private var systemWallpapers: [SystemWallpaperItem] = []
     @State private var wallpaperThumbnailRevision: Int = 0
     @State private var isRotationSectionExpanded: Bool = false
@@ -17,6 +16,10 @@ public struct InspectorSidebarView: View {
     @State private var isCameraSizeDuringZoomExpanded: Bool = false
     @State private var isAdvancedCameraStyleExpanded: Bool = false
     @State private var isRegenerateTranscriptExpanded: Bool = false
+    @State private var captionInspectorTrackId: String?
+    @State private var captionApplyToTrack: Bool = false
+    @State private var captionDraftText: String = ""
+    @FocusState private var isCaptionTextFocused: Bool
     @State private var editingTranscriptWordId: String? = nil
     @State private var editingTranscriptDraftText: String = ""
     @State private var selectedTranscriptWordId: String? = nil
@@ -3040,10 +3043,19 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private var captionsInspector: some View {
         let cap = session.document.captions
-        let hasTranscript = !cap.segments.isEmpty
+        let selectedBlock = cap.captionBlocks.first(where: { $0.id == session.selectedCaptionId })
+        let activeTrackId = selectedBlock?.trackId
+            ?? cap.captionTracks.first(where: { $0.id == captionInspectorTrackId })?.id
+            ?? cap.captionTracks.first?.id
+        let style = session.effectiveCaptionStyle(blockId: selectedBlock?.id, trackId: activeTrackId)
+        // A selected caption changes alone unless `Apply to all` is on.
+        let targetBlockId = captionApplyToTrack ? nil : selectedBlock?.id
+        let applyStyle: ((inout CaptionStyle) -> Void) -> Void = { change in
+            session.updateCaptionStyle(blockId: targetBlockId, trackId: activeTrackId, change)
+        }
 
         VStack(alignment: .leading, spacing: 22) {
-            if hasTranscript {
+            if !cap.captionTracks.isEmpty {
                 // 1. `Captions` Header + `Disable captions` Toggle
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Captions")
@@ -3063,13 +3075,19 @@ public struct InspectorSidebarView: View {
                     )
                 }
 
+                captionTrackPicker(tracks: cap.captionTracks, activeTrackId: activeTrackId)
+
+                if let block = selectedBlock {
+                    captionSegmentControls(block: block)
+                }
+
                 if cap.enabled {
-                    // 2. `Caption size` Slider + Reset (`0.02 ... 0.125`, default `0.045`)
+                    // 2. `Caption size`
                     coalescedSlider(
                         title: "Caption size",
                         value: Binding(
-                            get: { cap.fontSizeRatio },
-                            set: { v in session.mutate { $0.captions.fontSizeRatio = v } }
+                            get: { style.fontSizeRatio },
+                            set: { v in applyStyle { $0.fontSizeRatio = v } }
                         ),
                         range: 0.02...0.10,
                         defaultValue: 0.045
@@ -3082,12 +3100,9 @@ public struct InspectorSidebarView: View {
                             .foregroundStyle(.ink.opacity(0.92))
 
                         HStack(spacing: 6) {
-                            ForEach(CaptionFontStyle.allCases) { style in
-                                inspectorPillOptionButton(
-                                    title: style.label,
-                                    isSelected: cap.fontStyle == style
-                                ) {
-                                    session.mutate { $0.captions.fontStyle = style }
+                            ForEach(CaptionFontStyle.allCases) { option in
+                                inspectorPillOptionButton(title: option.label, isSelected: style.fontStyle == option) {
+                                    applyStyle { $0.fontStyle = option }
                                 }
                             }
                         }
@@ -3101,23 +3116,20 @@ public struct InspectorSidebarView: View {
 
                         HStack(spacing: 6) {
                             ForEach(CaptionWordsReveal.allCases) { mode in
-                                inspectorPillOptionButton(
-                                    title: mode.label,
-                                    isSelected: cap.wordsReveal == mode
-                                ) {
-                                    session.mutate { $0.captions.wordsReveal = mode }
+                                inspectorPillOptionButton(title: mode.label, isSelected: style.wordsReveal == mode) {
+                                    applyStyle { $0.wordsReveal = mode }
                                 }
                             }
                         }
 
-                        Text(cap.wordsReveal.descriptionText)
+                        Text(style.wordsReveal.descriptionText)
                             .font(.system(size: 12.5, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.42))
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    // 5. `Line growth` (`Full line` | `Expanding` | `Centered`)
-                    if cap.wordsReveal == .lineByLine {
+                    if style.wordsReveal == .lineByLine {
+                        // 5. `Line growth` (`Full line` | `Expanding` | `Centered`)
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Line growth")
                                 .font(.system(size: 13, weight: .regular))
@@ -3125,16 +3137,13 @@ public struct InspectorSidebarView: View {
 
                             HStack(spacing: 6) {
                                 ForEach(CaptionLineGrowth.allCases) { growth in
-                                    inspectorPillOptionButton(
-                                        title: growth.label,
-                                        isSelected: cap.lineGrowth == growth
-                                    ) {
-                                        session.mutate { $0.captions.lineGrowth = growth }
+                                    inspectorPillOptionButton(title: growth.label, isSelected: style.lineGrowth == growth) {
+                                        applyStyle { $0.lineGrowth = growth }
                                     }
                                 }
                             }
 
-                            Text(cap.lineGrowth.descriptionText)
+                            Text(style.lineGrowth.descriptionText)
                                 .font(.system(size: 12.5, weight: .regular))
                                 .foregroundStyle(.ink.opacity(0.42))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -3147,17 +3156,14 @@ public struct InspectorSidebarView: View {
                                 .foregroundStyle(.ink.opacity(0.92))
 
                             HStack(spacing: 6) {
-                                ForEach(CaptionWordAnimation.allCases) { anim in
-                                    inspectorPillOptionButton(
-                                        title: anim.label,
-                                        isSelected: cap.wordAnimation == anim
-                                    ) {
-                                        session.mutate { $0.captions.wordAnimation = anim }
+                                ForEach(CaptionWordAnimation.allCases) { animation in
+                                    inspectorPillOptionButton(title: animation.label, isSelected: style.wordAnimation == animation) {
+                                        applyStyle { $0.wordAnimation = animation }
                                     }
                                 }
                             }
 
-                            Text(cap.wordAnimation.descriptionText)
+                            Text(style.wordAnimation.descriptionText)
                                 .font(.system(size: 12.5, weight: .regular))
                                 .foregroundStyle(.ink.opacity(0.42))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -3172,50 +3178,90 @@ public struct InspectorSidebarView: View {
 
                         HStack(spacing: 6) {
                             ForEach(CaptionColorTheme.allCases) { theme in
-                                inspectorPillOptionButton(
-                                    title: theme.label,
-                                    isSelected: cap.colorTheme == theme
-                                ) {
-                                    session.mutate {
-                                        $0.captions.colorTheme = theme
-                                        $0.captions.textColor = (theme == .dark) ? "#FFFFFF" : "#000000"
-                                        $0.captions.backgroundColor = (theme == .dark) ? "#000000CC" : "#FFFFFFE6"
-                                    }
+                                inspectorPillOptionButton(title: theme.label, isSelected: style.colorTheme == theme) {
+                                    applyStyle { $0.colorTheme = theme }
                                 }
                             }
                         }
                     }
 
-                    // 8. `Caption position` (`Bottom` | `Center`)
+                    // 8. `Caption position`: drag anywhere, or snap to `Bottom` | `Center`
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Caption position")
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.92))
 
-                        let isCenteredY = abs(cap.position01.y - 0.50) < 0.15
-                        HStack(spacing: 6) {
-                            inspectorPillOptionButton(
-                                title: "Bottom",
-                                isSelected: !isCenteredY
-                            ) {
-                                session.mutate { $0.captions.position01 = Point01(x: 0.5, y: 0.88) }
-                            }
+                        CaptionPositionPad(
+                            position01: style.position01,
+                            onBegin: { session.beginInteractiveEdit() },
+                            onChange: { point in applyStyle { $0.position01 = point } },
+                            onEnd: { session.endInteractiveEdit() }
+                        )
 
-                            inspectorPillOptionButton(
-                                title: "Center",
-                                isSelected: isCenteredY
-                            ) {
-                                session.mutate { $0.captions.position01 = Point01(x: 0.5, y: 0.50) }
+                        HStack(spacing: 6) {
+                            inspectorPillOptionButton(title: "Bottom", isSelected: style.position01 == CaptionStyle.bottomPosition01) {
+                                applyStyle { $0.position01 = CaptionStyle.bottomPosition01 }
+                            }
+                            inspectorPillOptionButton(title: "Center", isSelected: style.position01 == CaptionStyle.centerPosition01) {
+                                applyStyle { $0.position01 = CaptionStyle.centerPosition01 }
                             }
                         }
                     }
                 }
 
-                // 9. `Export transcript` (.srt) Button
+                if !cap.segments.isEmpty {
+                    // 9. `Export transcript` (.srt) Button
+                    Button {
+                        session.exportTranscriptAsSRT()
+                    } label: {
+                        Text("Export transcript")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.90))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.ink.opacity(0.04))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                inspectorDivider
+
+                // 10. Generate or `Re-Generate transcript`
+                if cap.segments.isEmpty {
+                    Text("Generate transcript")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.ink.opacity(0.45))
+
+                    localTranscriptGeneratorControls(isRegenerating: false)
+                } else {
+                    inspectorCollapsibleSection(
+                        title: "Re-Generate transcript",
+                        isExpanded: $isRegenerateTranscriptExpanded
+                    ) {
+                        localTranscriptGeneratorControls(isRegenerating: true)
+                    }
+                }
+            } else {
+                Text("Generate transcript")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.ink.opacity(0.45))
+
+                localTranscriptGeneratorControls(isRegenerating: false)
+
+                inspectorDivider
+
                 Button {
-                    session.exportTranscriptAsSRT()
+                    captionInspectorTrackId = session.addCaptionTrack()
                 } label: {
-                    Text("Export transcript")
+                    Text("Add caption track")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.ink.opacity(0.90))
                         .frame(maxWidth: .infinity)
@@ -3224,31 +3270,98 @@ public struct InspectorSidebarView: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(Color.ink.opacity(0.04))
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
-                        )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
-
-                inspectorDivider
-
-                // 10. `Re-Generate transcript` (100% Local On-Device!)
-                inspectorCollapsibleSection(
-                    title: "Re-Generate transcript",
-                    isExpanded: $isRegenerateTranscriptExpanded
-                ) {
-                    localTranscriptGeneratorControls(isRegenerating: true)
-                }
-            } else {
-                // Initial Generate Transcript View (100% Local On-Device!)
-                Text("Generate transcript")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.ink.opacity(0.45))
-
-                localTranscriptGeneratorControls(isRegenerating: false)
             }
+        }
+    }
+
+    /// Chooses the track the options below apply to when no caption is selected.
+    @ViewBuilder
+    private func captionTrackPicker(tracks: [CaptionTrack], activeTrackId: String?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Track")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.ink.opacity(0.92))
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(tracks) { track in
+                        inspectorPillOptionButton(title: track.name, isSelected: track.id == activeTrackId) {
+                            captionInspectorTrackId = track.id
+                            session.selectedCaptionId = nil
+                        }
+                    }
+
+                    Button {
+                        captionInspectorTrackId = session.addCaptionTrack()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.85))
+                            .frame(width: 34, height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.ink.opacity(0.04))
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if tracks.count > 1, let activeTrackId {
+                Button("Delete this track") {
+                    session.deleteCaptionTrack(id: activeTrackId)
+                    captionInspectorTrackId = nil
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.ink.opacity(0.55))
+            }
+        }
+    }
+
+    /// The selected caption's text and the `Apply to all` choice for the options below.
+    @ViewBuilder
+    private func captionSegmentControls(block: CaptionBlock) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Caption text")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.ink.opacity(0.92))
+
+            TextField("Caption text", text: $captionDraftText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.ink)
+                .lineLimit(1...4)
+                .focused($isCaptionTextFocused)
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.ink.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
+                )
+                .onSubmit { session.updateCaptionText(id: block.id, text: captionDraftText) }
+                .onChange(of: isCaptionTextFocused) { _, focused in
+                    if !focused {
+                        session.updateCaptionText(id: block.id, text: captionDraftText)
+                    }
+                }
+                .onChange(of: block.id, initial: true) { _, _ in
+                    captionDraftText = CaptionLineLayout.displayText(of: block, in: session.document.captions)
+                }
+
+            Toggle(isOn: $captionApplyToTrack) {
+                Text("Apply to all captions in this track")
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.ink.opacity(0.85))
+            }
+            .toggleStyle(.checkbox)
         }
     }
 
@@ -3270,240 +3383,17 @@ public struct InspectorSidebarView: View {
                     )
             }
 
-            // Local Method Selection (`Local` Apple Speech vs `Whisper` OpenAI On-Device with On-Demand Download & Checkmark!)
-            let selectedWhisperTier = WhisperModelTier(rawValue: cap.whisperModelTier) ?? .small
-            let isSelectedWhisperInstalled = whisperManager.isModelInstalled(selectedWhisperTier)
-            let anyWhisperInstalled = (whisperManager.anyInstalledTier != nil)
-
             VStack(alignment: .leading, spacing: 10) {
                 Text("Transcript method")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.ink.opacity(0.92))
 
-                ScrollViewReader { methodScrollProxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            inspectorPillOptionButton(
-                                title: "Local (Apple Speech)",
-                                isSelected: cap.localModelVariant == "system"
-                            ) {
-                                session.mutate { $0.captions.localModelVariant = "system" }
-                                withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
-                                    methodScrollProxy.scrollTo("system", anchor: .center)
-                                }
-                            }
-                            .id("system")
+                inspectorPillOptionButton(title: "Local", isSelected: true) {}
 
-                            // On-Device Whisper Button with Checkmark Badge & Instant Tooltip when downloaded!
-                            Button {
-                                if whisperManager.isModelInstalled(selectedWhisperTier) {
-                                    session.mutate { $0.captions.localModelVariant = "whisper" }
-                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
-                                        methodScrollProxy.scrollTo("whisper", anchor: .center)
-                                    }
-                                } else {
-                                    whisperManager.promptUserAndStartDownload(for: selectedWhisperTier) {
-                                        session.mutate { $0.captions.localModelVariant = "whisper" }
-                                        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
-                                            methodScrollProxy.scrollTo("whisper", anchor: .center)
-                                        }
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Text("On-Device Whisper")
-                                        .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundStyle(.ink.opacity(cap.localModelVariant != "system" ? 0.98 : 0.72))
-                                        .lineLimit(1)
-
-                                    if anyWhisperInstalled {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.48))
-                                    }
-                                }
-                                .fixedSize(horizontal: true, vertical: false)
-                                .padding(.horizontal, 12)
-                                .frame(height: 34)
-                                .background(
-                                    HoverMagnetBackgroundRepresentable(
-                                        tooltip: whisperManager.installedTooltipSummary
-                                            ?? "Click to download open-source OpenAI Whisper model (\(selectedWhisperTier.fileName), \(selectedWhisperTier.sizeDescription)) locally",
-                                        shortcutBadge: nil,
-                                        edge: .top,
-                                        cornerRadius: 8,
-                                        isActive: cap.localModelVariant != "system",
-                                        isDisabled: false,
-                                        isRailTab: false,
-                                        hasActiveBorder: true,
-                                        onViewReady: { _ in }
-                                    )
-                                )
-                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .id("whisper")
-                        }
-                        .padding(.vertical, 1)
-                    }
-                }
-
-                Text(
-                    cap.localModelVariant == "system"
-                        ? "Transcript will be generated locally using Apple's native speech recognition engine. No data is sent to any server."
-                        : "Transcript will be generated using open-source OpenAI Whisper AI model on your Mac. No data is sent to any server."
-                )
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.ink.opacity(0.42))
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            // Whisper AI Model Tier Picker (`Base` 142MB | `Small` 466MB | `Medium` 1.5GB) & Live Download Progress Bar
-            if cap.localModelVariant != "system" || whisperManager.activeDownloadTier != nil {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("AI model to use")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.ink.opacity(0.92))
-
-                    HStack(spacing: 6) {
-                        ForEach(WhisperModelTier.allCases) { tier in
-                            let isTierSelected = (selectedWhisperTier == tier)
-                            let isTierInstalled = whisperManager.isModelInstalled(tier)
-
-                            Button {
-                                session.mutate {
-                                    $0.captions.localModelVariant = "whisper"
-                                    $0.captions.whisperModelTier = tier.rawValue
-                                }
-                                if !isTierInstalled && whisperManager.activeDownloadTier == nil {
-                                    whisperManager.promptUserAndStartDownload(for: tier)
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(tier.label)
-                                        .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundStyle(.ink.opacity(isTierSelected ? 0.98 : 0.72))
-
-                                    if isTierInstalled {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.48))
-                                    }
-                                }
-                                .padding(.horizontal, 12)
-                                .frame(height: 32)
-                                .background(
-                                    HoverMagnetBackgroundRepresentable(
-                                        tooltip: isTierInstalled
-                                            ? "Model Whisper \(tier.label) (\(tier.fileName)) is downloaded locally"
-                                            : "Click to download Whisper \(tier.label) (\(tier.fileName), \(tier.sizeDescription))",
-                                        shortcutBadge: nil,
-                                        edge: .top,
-                                        cornerRadius: 8,
-                                        isActive: isTierSelected,
-                                        isDisabled: false,
-                                        isRailTab: false,
-                                        hasActiveBorder: true,
-                                        onViewReady: { _ in }
-                                    )
-                                )
-                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    Text(selectedWhisperTier.descriptionText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.ink.opacity(0.42))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Live Download Progress Card with Cancel Button!
-                    if let activeTier = whisperManager.activeDownloadTier {
-                        let pct = Int(round(whisperManager.downloadProgress01 * 100.0))
-                        let mbWritten = Double(whisperManager.downloadedBytes) / 1_048_576.0
-                        let mbTotal = Double(max(1, whisperManager.totalBytesExpected)) / 1_048_576.0
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                HStack(spacing: 6) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text("Downloading Whisper \(activeTier.label) (\(activeTier.fileName))… \(pct)%")
-                                        .font(.system(size: 12, weight: .medium).monospacedDigit())
-                                        .foregroundStyle(.ink.opacity(0.92))
-                                }
-                                Spacer()
-                                Button {
-                                    whisperManager.cancelActiveDownload()
-                                } label: {
-                                    Text("Cancel")
-                                        .font(.system(size: 11.5, weight: .medium))
-                                        .foregroundStyle(Color(red: 1.0, green: 0.42, blue: 0.38))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .fill(Color.red.opacity(0.14))
-                                        )
-                                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            GeometryReader { geo in
-                                let fillW = max(6.0, geo.size.width * CGFloat(whisperManager.downloadProgress01))
-                                ZStack(alignment: .leading) {
-                                    Capsule()
-                                        .fill(Color.ink.opacity(0.12))
-                                        .frame(height: 6)
-
-                                    Capsule()
-                                        .fill(Color(red: 0.44, green: 0.32, blue: 0.98))
-                                        .frame(width: fillW, height: 6)
-                                }
-                            }
-                            .frame(height: 6)
-
-                            Text(String(format: "%.1f MB of %.1f MB", mbWritten, mbTotal))
-                                .font(.system(size: 11, weight: .regular).monospacedDigit())
-                                .foregroundStyle(.ink.opacity(0.45))
-                        }
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.ink.opacity(0.04))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
-                        )
-                    } else if !isSelectedWhisperInstalled {
-                        Button {
-                            whisperManager.promptUserAndStartDownload(for: selectedWhisperTier)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.down.circle.fill")
-                                    .font(.system(size: 12.5, weight: .medium))
-                                Text("Download Whisper \(selectedWhisperTier.label) (\(selectedWhisperTier.sizeDescription))")
-                                    .font(.system(size: 12.5, weight: .medium))
-                            }
-                            .foregroundStyle(Color(red: 0.65, green: 0.56, blue: 1.0))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 34)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.ink.opacity(0.04))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
-                            )
-                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                Text("Transcript will be generated locally using Apple's native speech recognition engine. No data will be sent to any server.")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.ink.opacity(0.42))
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Language Picker (Export-FPS-style compact pill with smooth width interpolation when selecting short/long language names!)
@@ -3551,36 +3441,11 @@ public struct InspectorSidebarView: View {
                 .animation(.spring(response: 0.24, dampingFraction: 0.84), value: cap.transcriptLocale)
             }
 
-            // Keyterms / Prompt
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Keyterms")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.ink.opacity(0.92))
-
-                Text("Comma-separated list of custom words or product names in your recording.")
+            if let message = session.transcriptErrorMessage {
+                Text(message)
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.ink.opacity(0.42))
-
-                TextField(
-                    "e.g. Native Screen, Swift, Metal",
-                    text: Binding(
-                        get: { cap.customPrompt },
-                        set: { v in session.mutate { $0.captions.customPrompt = v } }
-                    )
-                )
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5, weight: .regular))
-                .foregroundStyle(.ink)
-                .padding(.horizontal, 10)
-                .frame(height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.ink.opacity(0.04))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
-                )
+                    .foregroundStyle(Color(red: 1.0, green: 0.48, blue: 0.42))
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Button {
@@ -6851,3 +6716,55 @@ private struct ZoomPositionPadView: View {
     }
 }
 
+// MARK: - Caption Position Pad
+
+/// A small picture of the canvas with a dot marking where the caption line sits.
+private struct CaptionPositionPad: View {
+    let position01: Point01
+    let onBegin: () -> Void
+    let onChange: (Point01) -> Void
+    let onEnd: () -> Void
+
+    @State private var isDragging = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let inset: CGFloat = 16.0
+            let usable = CGSize(width: max(1.0, geo.size.width - inset * 2.0), height: max(1.0, geo.size.height - inset * 2.0))
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.ink.opacity(0.08))
+
+                Circle()
+                    .fill(Color.surface(red: 0.13, green: 0.14, blue: 0.17))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.95), lineWidth: 1.0))
+                    .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
+                    .frame(width: 26, height: 26)
+                    .offset(
+                        x: inset + usable.width * CGFloat(position01.x) - 13.0,
+                        y: inset + usable.height * CGFloat(position01.y) - 13.0
+                    )
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if !isDragging {
+                            isDragging = true
+                            onBegin()
+                        }
+                        onChange(Point01(
+                            x: max(0.0, min(1.0, Double((value.location.x - inset) / usable.width))),
+                            y: max(0.0, min(1.0, Double((value.location.y - inset) / usable.height)))
+                        ))
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        onEnd()
+                    }
+            )
+        }
+        .frame(height: 170)
+    }
+}

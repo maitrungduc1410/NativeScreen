@@ -95,3 +95,7 @@ To keep **NativeScreen** distributable under its open-source license (MIT) on Gi
    - Capture the active system cursor image directly from macOS (`NSCursor` / CoreGraphics cursor APIs) during recording, or render clean vector cursor SVGs/PDFs designed specifically for NativeScreen.
 4. **Synthesized / Royalty-Free Click Sounds:**
    - Generate crisp mechanical & capacitive mouse click audio (`down.wav`, `up.wav`) procedurally via DSP synthesis (or CC0 Public Domain recordings).
+
+### Caption tracks in the inspector
+
+Selecting a caption shows its text and an `Apply to all captions in this track` checkbox, off by default: the options then change only that caption. With no caption selected, the options apply to the track chosen in `Track`. `Transcript method` offers `Local` only.

@@ -377,6 +377,36 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
     // MARK: - 3b. Present Keyboard Shortcut Block Native Context Menu
 
+    public func presentCaptionContextMenu(
+        session: ProjectSession,
+        block: CaptionBlock,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        let menu = NSMenu(title: "Caption Context Menu")
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        menu.addItem(makeCommandItem(title: "Split at playhead", keyEquivalent: "c", modifiers: []) {
+            session.splitCaption(id: block.id, atSourceMs: session.currentSourceTimeMs)
+        })
+        menu.addItem(makeCommandItem(title: "Add caption track", keyEquivalent: "", modifiers: []) {
+            session.addCaptionTrack()
+        })
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeDestructiveCommandItem(title: "Remove caption", symbolName: "trash") {
+            session.deleteCaption(id: block.id)
+        })
+        menu.addItem(makeDestructiveCommandItem(title: "Remove this track", symbolName: "trash") {
+            session.deleteCaptionTrack(id: block.trackId)
+        })
+
+        activeMenu = menu
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
+    }
+
     public func presentShortcutContextMenu(
         session: ProjectSession,
         cluster: ProjectSession.ShortcutPressCluster,

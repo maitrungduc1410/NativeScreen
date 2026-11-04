@@ -103,6 +103,53 @@
   "captions" : {
     "animationStyle" : "word-by-word",
     "backgroundColor" : "#000000CC",
+    "captionBlocks" : [
+      {
+        "id" : "F283981F-40D0-4C23-9E8F-A15137DB37FE",
+        "sourceEndMs" : 3060,
+        "sourceStartMs" : 600,
+        "trackId" : "9B5A8B57-356A-4E71-9A0F-181F77C886C2",
+        "wordIds" : [
+          "word-1",
+          "word-2",
+          "word-3",
+          "word-4",
+          "word-5",
+          "word-6"
+        ]
+      },
+      {
+        "id" : "757D56CB-728C-43CC-B143-0906E843395C",
+        "sourceEndMs" : 4740,
+        "sourceStartMs" : 3120,
+        "trackId" : "9B5A8B57-356A-4E71-9A0F-181F77C886C2",
+        "wordIds" : [
+          "word-7",
+          "word-8",
+          "word-9",
+          "word-10"
+        ]
+      }
+    ],
+    "captionTracks" : [
+      {
+        "id" : "9B5A8B57-356A-4E71-9A0F-181F77C886C2",
+        "isHidden" : false,
+        "name" : "Captions",
+        "style" : {
+          "colorTheme" : "dark",
+          "fontSizeRatio" : 0.045,
+          "fontStyle" : "sans-serif",
+          "lineGrowth" : "left-anchored",
+          "position01" : {
+            "x" : 0.5,
+            "y" : 0.86
+          },
+          "wordAnimation" : "slide-in",
+          "wordsReveal" : "word-by-word"
+        }
+      }
+    ],
     "colorTheme" : "dark",
     "customPrompt" : "",
     "customShortcuts" : [

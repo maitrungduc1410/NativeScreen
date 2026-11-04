@@ -664,6 +664,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 webcamVideoFrame: lastWebcamFrame,
                 isRealtimePreview: true
             )
+            if compositor.lastCaptionHitRects01 != session.previewCaptionHitRects01 {
+                session.previewCaptionHitRects01 = compositor.lastCaptionHitRects01
+            }
             if compositor.lastShortcutHitRects01 != session.previewShortcutHitRects01 {
                 session.previewShortcutHitRects01 = compositor.lastShortcutHitRects01
             }

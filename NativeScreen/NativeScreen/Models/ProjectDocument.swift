@@ -1238,6 +1238,85 @@ public struct CustomShortcutSegment: Codable, Equatable, Hashable, Identifiable,
     }
 }
 
+/// Look of a caption track, or of one caption that overrides its track.
+public struct CaptionStyle: Codable, Equatable, Hashable, Sendable {
+    public var fontStyle: CaptionFontStyle
+    public var fontSizeRatio: Double // Share of the canvas's shortest side
+    public var wordsReveal: CaptionWordsReveal
+    public var lineGrowth: CaptionLineGrowth
+    public var wordAnimation: CaptionWordAnimation
+    public var colorTheme: CaptionColorTheme
+    /// Where the line sits inside the canvas margins: `(0, 0)` is the top-left corner, `(1, 1)` the bottom-right.
+    public var position01: Point01
+
+    public static let bottomPosition01 = Point01(x: 0.5, y: 1.0)
+    public static let centerPosition01 = Point01(x: 0.5, y: 0.5)
+
+    public init(
+        fontStyle: CaptionFontStyle = .sansSerif,
+        fontSizeRatio: Double = 0.045,
+        wordsReveal: CaptionWordsReveal = .lineByLine,
+        lineGrowth: CaptionLineGrowth = .expanding,
+        wordAnimation: CaptionWordAnimation = .appear,
+        colorTheme: CaptionColorTheme = .dark,
+        position01: Point01 = CaptionStyle.bottomPosition01
+    ) {
+        self.fontStyle = fontStyle
+        self.fontSizeRatio = fontSizeRatio
+        self.wordsReveal = wordsReveal
+        self.lineGrowth = lineGrowth
+        self.wordAnimation = wordAnimation
+        self.colorTheme = colorTheme
+        self.position01 = position01
+    }
+}
+
+public struct CaptionTrack: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var isHidden: Bool
+    public var style: CaptionStyle
+
+    public init(id: String = UUID().uuidString, name: String, isHidden: Bool = false, style: CaptionStyle = CaptionStyle()) {
+        self.id = id
+        self.name = name
+        self.isHidden = isHidden
+        self.style = style
+    }
+}
+
+/// One caption on a track. Its timing is separate from the words' spoken times, so moving a caption
+/// never changes what `Edit by transcript` cuts. Words are stretched to fit `sourceStartMs ... sourceEndMs`.
+public struct CaptionBlock: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var trackId: String
+    public var sourceStartMs: Double
+    public var sourceEndMs: Double
+    /// Transcript words shown by this caption. Empty when `customText` is set.
+    public var wordIds: [String]
+    /// Text typed by hand, or a transcript caption whose word count was changed.
+    public var customText: String?
+    public var styleOverride: CaptionStyle?
+
+    public init(
+        id: String = UUID().uuidString,
+        trackId: String,
+        sourceStartMs: Double,
+        sourceEndMs: Double,
+        wordIds: [String] = [],
+        customText: String? = nil,
+        styleOverride: CaptionStyle? = nil
+    ) {
+        self.id = id
+        self.trackId = trackId
+        self.sourceStartMs = sourceStartMs
+        self.sourceEndMs = sourceEndMs
+        self.wordIds = wordIds
+        self.customText = customText
+        self.styleOverride = styleOverride
+    }
+}
+
 public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     public var enabled: Bool
     public var showKeystrokes: Bool
@@ -1270,6 +1349,8 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
     public var showDeletedTextInTranscript: Bool
     public var showHiddenWordsInTranscript: Bool
     public var segments: [CaptionSegment]
+    public var captionTracks: [CaptionTrack]
+    public var captionBlocks: [CaptionBlock]
 
     public init(
         enabled: Bool = false,
@@ -1302,7 +1383,9 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         customPrompt: String = "",
         showDeletedTextInTranscript: Bool = true,
         showHiddenWordsInTranscript: Bool = true,
-        segments: [CaptionSegment] = []
+        segments: [CaptionSegment] = [],
+        captionTracks: [CaptionTrack] = [],
+        captionBlocks: [CaptionBlock] = []
     ) {
         self.enabled = enabled
         self.showKeystrokes = showKeystrokes
@@ -1335,6 +1418,8 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.showDeletedTextInTranscript = showDeletedTextInTranscript
         self.showHiddenWordsInTranscript = showHiddenWordsInTranscript
         self.segments = segments
+        self.captionTracks = captionTracks
+        self.captionBlocks = captionBlocks
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1369,6 +1454,8 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         case showDeletedTextInTranscript
         case showHiddenWordsInTranscript
         case segments
+        case captionTracks
+        case captionBlocks
     }
 
     public init(from decoder: Decoder) throws {
@@ -1405,6 +1492,46 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         self.showDeletedTextInTranscript = try container.decodeIfPresent(Bool.self, forKey: .showDeletedTextInTranscript) ?? true
         self.showHiddenWordsInTranscript = try container.decodeIfPresent(Bool.self, forKey: .showHiddenWordsInTranscript) ?? true
         self.segments = try container.decodeIfPresent([CaptionSegment].self, forKey: .segments) ?? []
+        self.captionTracks = try container.decodeIfPresent([CaptionTrack].self, forKey: .captionTracks) ?? []
+        self.captionBlocks = try container.decodeIfPresent([CaptionBlock].self, forKey: .captionBlocks) ?? []
+    }
+
+    /// Projects saved before caption tracks keep their look: the old project-wide style becomes the first track's style.
+    public mutating func migrateTranscriptToCaptionTracksIfNeeded() {
+        guard captionTracks.isEmpty, !segments.isEmpty else { return }
+        captionTracks = [
+            CaptionTrack(
+                name: "Captions",
+                style: CaptionStyle(
+                    fontStyle: fontStyle,
+                    fontSizeRatio: fontSizeRatio,
+                    wordsReveal: wordsReveal,
+                    lineGrowth: lineGrowth,
+                    wordAnimation: wordAnimation,
+                    colorTheme: colorTheme,
+                    position01: position01
+                )
+            )
+        ]
+        rebuildTranscriptCaptionBlocks()
+    }
+
+    /// Fills the first track from the transcript. Captions typed by hand on other tracks stay.
+    public mutating func rebuildTranscriptCaptionBlocks() {
+        if captionTracks.isEmpty {
+            captionTracks = [CaptionTrack(name: "Captions")]
+        }
+        let trackId = captionTracks[0].id
+        captionBlocks.removeAll { !$0.wordIds.isEmpty || $0.trackId == trackId }
+        captionBlocks += CaptionLineLayout.groupWordsIntoLines(segments).compactMap { words in
+            guard let first = words.first, let last = words.last else { return nil }
+            return CaptionBlock(
+                trackId: trackId,
+                sourceStartMs: first.sourceStartMs,
+                sourceEndMs: last.sourceEndMs,
+                wordIds: words.map(\.id)
+            )
+        }
     }
 }
 

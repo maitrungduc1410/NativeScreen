@@ -501,6 +501,13 @@ public struct ProjectEditorWindowView: View {
                                         }
 
                                         quickDockIconButton(
+                                            icon: "captions.bubble",
+                                            tooltip: "Add caption track"
+                                        ) {
+                                            session.addCaptionTrack()
+                                        }
+
+                                        quickDockIconButton(
                                             icon: session.isRecordingVoiceover ? "stop.circle.fill" : "mic.badge.plus",
                                             tooltip: session.isRecordingVoiceover ? "Stop voiceover recording" : "Record voiceover",
                                             isActive: session.isRecordingVoiceover
@@ -971,7 +978,8 @@ public struct ProjectEditorWindowView: View {
                 if session.selectedSliceId != nil
                     || session.selectedMaskId != nil
                     || session.selectedZoomId != nil
-                    || session.selectedShortcutId != nil {
+                    || session.selectedShortcutId != nil
+                    || session.selectedCaptionId != nil {
                     withAnimation(.easeOut(duration: 0.14)) {
                         session.clearTimelineSelection()
                     }
@@ -1493,6 +1501,7 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
             // Camera, captions and keycaps are rendered inside the Metal frame (same pass as export).
             MetalPreviewView(session: session, canvasAspect: aspect)
             InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
+            CaptionHitTargetsView(session: session, canvasSize: fittedSize)
             ShortcutKeycapHitTargetsView(session: session, canvasSize: fittedSize)
 
             ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
@@ -1561,6 +1570,31 @@ private struct ShortcutKeycapHitTargetsView: View {
                     .onTapGesture {
                         withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
                             session.selectShortcut(entry.key)
+                        }
+                    }
+            }
+        }
+        .frame(width: canvasSize.width, height: canvasSize.height)
+    }
+}
+
+/// Invisible click targets over the caption boxes the Metal preview draws. A click opens that caption in the inspector.
+private struct CaptionHitTargetsView: View {
+    @Bindable var session: ProjectSession
+    let canvasSize: CGSize
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(session.previewCaptionHitRects01.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
+                let rect = entry.value
+                Color.clear
+                    .contentShape(Rectangle())
+                    .frame(width: rect.width * canvasSize.width, height: rect.height * canvasSize.height)
+                    .offset(x: rect.minX * canvasSize.width, y: rect.minY * canvasSize.height)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                            session.selectCaption(entry.key)
                         }
                     }
             }
