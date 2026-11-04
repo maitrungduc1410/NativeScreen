@@ -1821,8 +1821,8 @@ private struct UnifiedPlayheadCanvasView: View {
 // MARK: - Split Mode Track Wiggle
 
 /// Bobs a track up and down while Split Mode is on, then settles it.
-/// The state lives here and only `SplitWiggleEffect` reads it, so each frame recomputes one transform and never re-evaluates
-/// a lane's body. Nothing runs outside Split Mode: when the amplitude reaches zero the repeating animation is removed.
+/// The state lives here and only the two modifiers below read it, so a frame never re-evaluates a lane's body.
+/// Nothing runs outside Split Mode: when the amplitude reaches zero the repeating animation is removed.
 private struct SplitModeWiggle: ViewModifier {
     let isActive: Bool
     let direction: CGFloat
@@ -1833,14 +1833,12 @@ private struct SplitModeWiggle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .modifier(SplitWiggleEffect(cycle: cycle, strength: strength, direction: direction))
+            .modifier(SplitWiggleStrength(cycle: cycle, strength: strength, direction: direction))
             .onChange(of: isActive, initial: true) { _, active in
                 if active {
                     isRunning = true
-                    withAnimation(.linear(duration: 0.84).repeatForever(autoreverses: false)) {
-                        cycle = 1.0
-                    }
                     withAnimation(.easeOut(duration: 0.16)) {
+                        cycle = 1.0
                         strength = 1.0
                     }
                 } else if isRunning {
@@ -1861,19 +1859,36 @@ private struct SplitModeWiggle: ViewModifier {
     }
 }
 
+/// Animates the amplitude with the caller's transaction and gives `cycle` its own repeating animation.
+/// One transaction covers every state change in a tick, so the two curves cannot be set with two `withAnimation` calls:
+/// the last one would drive both and end the repeat after a single beat.
+private struct SplitWiggleStrength: ViewModifier, Animatable {
+    let cycle: CGFloat
+    var strength: CGFloat
+    let direction: CGFloat
+
+    var animatableData: CGFloat {
+        get { strength }
+        set { strength = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.animation(.linear(duration: 0.84).repeatForever(autoreverses: false)) {
+            $0.modifier(SplitWiggleEffect(cycle: cycle, strength: strength, direction: direction))
+        }
+    }
+}
+
 private struct SplitWiggleEffect: GeometryEffect {
     private static let amplitude: CGFloat = 1.65
 
     var cycle: CGFloat
-    var strength: CGFloat
+    let strength: CGFloat
     let direction: CGFloat
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(cycle, strength) }
-        set {
-            cycle = newValue.first
-            strength = newValue.second
-        }
+    var animatableData: CGFloat {
+        get { cycle }
+        set { cycle = newValue }
     }
 
     func effectValue(size: CGSize) -> ProjectionTransform {
