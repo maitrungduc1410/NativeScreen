@@ -38,6 +38,31 @@ public sealed class NLETimeMapper
         TotalTimelineDurationMs = Math.Max(1, current);
     }
 
+    /// <summary>
+    /// Where a range of the recording shows on the timeline: from the first kept part to the last. Null when no slice keeps any of
+    /// it. The segment's own times never change, so it comes back when a slice grows over it again.
+    /// </summary>
+    public (double Start, double End)? TimelineSpan(double sourceStartMs, double sourceEndMs)
+    {
+        double? earliest = null;
+        double? latest = null;
+        foreach (var mapped in MappedSlices)
+        {
+            var overlapStart = Math.Max(sourceStartMs, mapped.Slice.SourceStartMs);
+            var overlapEnd = Math.Min(sourceEndMs, mapped.Slice.SourceEndMs);
+            if (overlapEnd > overlapStart)
+            {
+                var speed = Math.Max(0.1, mapped.Slice.Speed);
+                var start = mapped.TimelineStartMs + (overlapStart - mapped.Slice.SourceStartMs) / speed;
+                var end = mapped.TimelineStartMs + (overlapEnd - mapped.Slice.SourceStartMs) / speed;
+                earliest = Math.Min(earliest ?? start, start);
+                latest = Math.Max(latest ?? end, end);
+            }
+        }
+
+        return earliest is { } first && latest is { } last && last > first ? (first, last) : null;
+    }
+
     public (double SourceMs, ClipSlice? Slice) SourceTime(double timelineMs)
     {
         if (MappedSlices.Count == 0)

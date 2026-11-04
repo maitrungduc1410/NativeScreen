@@ -420,6 +420,7 @@ OS theme rather than the app theme, so their glyphs disappeared on the dark titl
 - **Timeline blocks are retained XAML elements, not Win2D.** A project has few blocks and they change only on edits. The
   playhead moves by transform with no layout pass. Revisit with a measured stall (`spec/08` phase 6 allows 8 ms). Waveforms did not
   need a drawn surface (ADR-39).
+- **The ruler holds still while a clip is resized**, as on macOS. `BeginInteractiveEdit` freezes the duration the timeline's width stands for, so the clip gets shorter under the pointer and leaves empty room at the right, and the ruler updates on the drop. Later clips, other tracks and the trim badges still close up during the drag: they move in place, since the drag cannot rebuild the tree. A segment shows from the first kept part of its range to the last (`NLETimeMapper.TimelineSpan`), and hides when no clip keeps any of it. Its own times do not change, so it returns when the clip grows back over it. Hidden segments are still created, so a drag can bring them back, and they do not block adding a new segment in their place.
 - **A timeline drag never rebuilds the tree.** Selecting a block rebuilds every block, and a rebuild during a press
   cancels the drag, so selection waits for release and a drag moves its one element in place.
   `BeginInteractiveEdit` / `EndInteractiveEdit` make the whole drag one undo step, like `ProjectSession`.
@@ -853,3 +854,15 @@ The dock button records, as on macOS: a click starts the microphone and the prev
 - **The file starts when the preview does.** Opening a device and priming preview audio both take time on Windows and neither is on the UI thread. `VoiceoverRecorder` opens the stream first and drops samples until `MarkStart`, which runs once the clock is moving. Otherwise the take would lie early by that delay.
 - **The default input device**, as on macOS, not the one chosen on the recording bar.
 - **Closing the window keeps the take.** The segment is added before the final save and the file finishes off the UI thread.
+
+---
+
+## 41. ADR-41: Opening a Project from Explorer on Windows
+
+A package is a folder and Windows applies file type associations only to files, so a double-click always opens File Explorer (ADR-24). Windows gets a context menu verb instead: "Open in Native Screen" under `HKCU\Software\Classes\Directory\shell`, limited to `*.nativescreen` by `AppliesTo`.
+
+- **It is written at each launch**, per user and without elevation, so it follows the app when it moves. There is no uninstaller yet, so a deleted app leaves an entry that fails to run.
+- **Not in the MSIX.** A packaged app's registry writes stay in its private view, so it skips this. A packaged verb needs a registered shell extension. Windows 11 also lists this entry only under "Show more options".
+- **One process per copy of the app.** Explorer starts a new process each time, which would add a second tray icon and recording bar. The later process hands its path to the running one over a named pipe and exits. The names include the executable's path, so two builds can run side by side. If the running process does not answer within 3 s, the new one carries on by itself.
+- **One editor per package.** Opening a package that is already open brings its window forward, since two editors would overwrite each other's saves.
+

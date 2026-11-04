@@ -153,6 +153,9 @@ internal sealed class TimelineView
     private static readonly Color WhiteWaveColor = Color.FromArgb(255, 255, 255, 255);
 
     private readonly List<WaveLayer> waveLayers = [];
+    private readonly List<(BlockGrid Block, double SourceStart, double SourceEnd)> followers = [];
+    private readonly List<(BlockGrid Block, string SliceId, Canvas Ticks)> clipBlocks = [];
+    private readonly List<UIElement> trimBadges = [];
     private readonly Dictionary<string, WaveformEnvelope> voiceoverWaves = [];
     private WaveformEnvelope? systemWave;
     private WaveformEnvelope? microphoneWave;
@@ -295,9 +298,12 @@ internal sealed class TimelineView
         ruler.Children.Clear();
         wigglingBlocks.Clear();
         waveLayers.Clear();
+        followers.Clear();
+        clipBlocks.Clear();
+        trimBadges.Clear();
         blockRows.Clear();
         labels.Children.Clear();
-        rulerStepSeconds = TimelineRuler.StepSeconds(session.DurationMs, TrackWidth);
+        rulerStepSeconds = TimelineRuler.StepSeconds(session.TimelineScaleDurationMs, TrackWidth);
         DrawRuler();
         var y = 8.0;
         y = DrawTypingSuggestions(y);
@@ -324,9 +330,9 @@ internal sealed class TimelineView
         }
     }
 
-    private double X(double timelineMs) => TrackInset + timelineMs / Math.Max(1, session.DurationMs) * TrackWidth;
+    private double X(double timelineMs) => TrackInset + timelineMs / session.TimelineScaleDurationMs * TrackWidth;
 
-    private double TimeAt(double x) => Math.Clamp((x - TrackInset) / TrackWidth * session.DurationMs, 0, session.DurationMs);
+    private double TimeAt(double x) => Math.Clamp((x - TrackInset) / TrackWidth * session.TimelineScaleDurationMs, 0, session.DurationMs);
 
     /// <summary>A source time inside a removed part of the recording snaps to the next kept slice.</summary>
     private double TimelineOf(double sourceMs)
@@ -347,11 +353,33 @@ internal sealed class TimelineView
         return session.DurationMs;
     }
 
+    /// <summary>Left and width of a segment. One no slice keeps gets its plain length, for when a clip drag brings it back.</summary>
+    private (double Left, double Width) Place(double sourceStart, double sourceEnd)
+    {
+        if (session.Mapper.TimelineSpan(sourceStart, sourceEnd) is { } span)
+        {
+            var left = X(span.Start);
+            return (left, X(span.End) - left);
+        }
+
+        return (0, (sourceEnd - sourceStart) / session.TimelineScaleDurationMs * TrackWidth);
+    }
+
+    /// <summary>A segment no slice keeps is made anyway, hidden: a clip drag can bring it back, and a drag cannot add to the tree.</summary>
+    private void Follow(BlockGrid block, double sourceStart, double sourceEnd)
+    {
+        followers.Add((block, sourceStart, sourceEnd));
+        if (session.Mapper.TimelineSpan(sourceStart, sourceEnd) is null)
+        {
+            block.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private void DrawRuler()
     {
         const double dotY = RulerHeight - 6;
         const double labelWidth = 60;
-        var totalSeconds = Math.Max(1, session.DurationMs / 1000);
+        var totalSeconds = Math.Max(1, session.TimelineScaleDurationMs / 1000);
         for (var index = 1; ; index++)
         {
             var t = index * rulerStepSeconds;
@@ -389,6 +417,95 @@ internal sealed class TimelineView
         }
     }
 
+    private static string ClipSubtitle(double timelineMs, double speed) => $"{timelineMs / 1000:0.#}s  ·  {speed:0.##}x";
+
+    /// <summary>
+    /// A clip's edge moved: the ruler and scale stay, and everything after the edge closes up, so the drag shows how much was
+    /// taken off. No tree rebuild, since the pointer is captured and this runs on every move (spec/06 ADR-19).
+    /// </summary>
+    private void FollowClipEdit(BlockGrid edited)
+    {
+        foreach (var mapped in session.Mapper.MappedSlices)
+        {
+            var entry = clipBlocks.Find(item => item.SliceId == mapped.Slice.Id);
+            if (entry.Block is null)
+            {
+                continue;
+            }
+
+            var left = X(mapped.TimelineStartMs);
+            var width = X(mapped.TimelineEndMs) - left;
+            Canvas.SetLeft(entry.Block, left);
+            entry.Block.Width = Math.Max(6, width);
+            if (entry.Block.Subtitle is { } subtitle)
+            {
+                subtitle.Text = ClipSubtitle(mapped.TimelineEndMs - mapped.TimelineStartMs, mapped.Slice.Speed);
+            }
+
+            FillRulerTicks(entry.Ticks, mapped.TimelineStartMs, mapped.TimelineEndMs, width);
+            if (entry.Block == edited)
+            {
+                RetraceClipWaves(edited, mapped.Slice, width);
+            }
+        }
+
+        foreach (var (block, sourceStart, sourceEnd) in followers)
+        {
+            var shown = session.Mapper.TimelineSpan(sourceStart, sourceEnd) is not null;
+            block.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+            if (shown)
+            {
+                var (left, width) = Place(sourceStart, sourceEnd);
+                Canvas.SetLeft(block, left);
+                block.Width = Math.Max(6, width);
+            }
+        }
+
+        // A voiceover cut short by the edit fits its whole wave into what is left, as it will after the drop.
+        foreach (var layer in waveLayers)
+        {
+            var innerWidth = layer.Owner.Width - layer.Owner.BorderThickness.Left * 2;
+            if (!clipBlocks.Exists(item => item.Block == layer.Owner) && Math.Abs(innerWidth - layer.Width) > 0.5)
+            {
+                layer.Width = innerWidth;
+                layer.Drawn = -1;
+                UpdateWave(layer);
+            }
+        }
+
+        foreach (var badge in trimBadges)
+        {
+            ruler.Children.Remove(badge);
+        }
+
+        trimBadges.Clear();
+        DrawTrimBadges();
+    }
+
+    private void RetraceClipWaves(BlockGrid block, ClipSlice slice, double width)
+    {
+        var (start, end) = WaveRange(slice);
+        foreach (var layer in waveLayers)
+        {
+            if (layer.Owner == block)
+            {
+                layer.Start = start;
+                layer.End = end;
+                layer.Width = width - block.BorderThickness.Left * 2;
+                layer.Drawn = -1;
+                layer.FullTraced = false;
+                UpdateWave(layer);
+            }
+        }
+    }
+
+    private (double Start, double End) WaveRange(ClipSlice slice)
+    {
+        var total = Math.Max(1, session.SourceDurationMs);
+        var start = Math.Clamp(slice.SourceStartMs / total, 0, 1);
+        return (start, Math.Max(start + 0.001, Math.Min(1, slice.SourceEndMs / total)));
+    }
+
     private double DrawClips(double y)
     {
         AddLabel("Clip", y, ClipRowHeight, eye: false);
@@ -403,12 +520,13 @@ internal sealed class TimelineView
                 ClipRowHeight,
                 Palette.Clip,
                 "Clip",
-                $"{seconds / 1000:0.#}s  ·  {slice.Speed:0.##}x",
+                ClipSubtitle(seconds, slice.Speed),
                 slice.Id == session.SelectedSliceId,
                 false);
             AddClipWaveforms(block, slice, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
-            AddRulerTicks(block, mapped.TimelineStartMs, mapped.TimelineEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
             var id = slice.Id;
+            var ticks = AddRulerTicks(block, mapped.TimelineStartMs, mapped.TimelineEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
+            clipBlocks.Add((block, id, ticks));
             var blockWidth = X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs);
             block.SplitAt = time => session.SplitSlice(time);
             Draggable(
@@ -502,13 +620,22 @@ internal sealed class TimelineView
         Canvas.SetTop(badge, RulerHeight - 28);
         Canvas.SetZIndex(badge, 5);
         ruler.Children.Add(badge);
+        trimBadges.Add(badge);
     }
 
     /// <summary>Faint lines down from the top of a clip, under each ruler mark.</summary>
-    private void AddRulerTicks(BlockGrid block, double timelineStart, double timelineEnd, double width)
+    private Canvas AddRulerTicks(BlockGrid block, double timelineStart, double timelineEnd, double width)
     {
-        var stepMs = rulerStepSeconds * 1000;
         var ticks = new Canvas { IsHitTestVisible = false };
+        FillRulerTicks(ticks, timelineStart, timelineEnd, width);
+        block.Children.Insert(block.Children.Count - 1, ticks);
+        return ticks;
+    }
+
+    private void FillRulerTicks(Canvas ticks, double timelineStart, double timelineEnd, double width)
+    {
+        ticks.Children.Clear();
+        var stepMs = rulerStepSeconds * 1000;
         for (var ms = Math.Ceiling(timelineStart / stepMs) * stepMs; ms < timelineEnd; ms += stepMs)
         {
             var x = (ms - timelineStart) / Math.Max(1, timelineEnd - timelineStart) * width;
@@ -519,16 +646,12 @@ internal sealed class TimelineView
                 ticks.Children.Add(tick);
             }
         }
-
-        block.Children.Insert(block.Children.Count - 1, ticks);
     }
 
     /// <summary>System audio in purple and the microphone in white, both following their volumes.</summary>
     private void AddClipWaveforms(BlockGrid block, ClipSlice slice, double width)
     {
-        var total = Math.Max(1, session.SourceDurationMs);
-        var start = Math.Clamp(slice.SourceStartMs / total, 0, 1);
-        var end = Math.Max(start + 0.001, Math.Min(1, slice.SourceEndMs / total));
+        var (start, end) = WaveRange(slice);
         var id = slice.Id;
         var layer = 0;
         if (systemWave is { } system)
@@ -610,7 +733,7 @@ internal sealed class TimelineView
             block.Children.Insert(index, full);
         }
 
-        var layer = new WaveLayer(fill, full, envelope, startFraction, endFraction, innerWidth, innerHeight, Math.Max(0, block.CornerRadius.TopLeft - border), volume);
+        var layer = new WaveLayer(block, fill, full, envelope, startFraction, endFraction, innerWidth, innerHeight, Math.Max(0, block.CornerRadius.TopLeft - border), volume);
         waveLayers.Add(layer);
         UpdateWave(layer);
     }
@@ -670,9 +793,9 @@ internal sealed class TimelineView
 
         foreach (var item in suggestions)
         {
-            var left = X(TimelineOf(item.SourceStartMs));
-            var width = X(TimelineOf(item.SourceEndMs)) - left;
+            var (left, width) = Place(item.SourceStartMs, item.SourceEndMs);
             var bar = Block(left, y, width, 16, Palette.Clip, "", null, false, false);
+            Follow(bar, item.SourceStartMs, item.SourceEndMs);
             var target = item;
             bar.PointerPressed += (_, args) =>
             {
@@ -729,9 +852,9 @@ internal sealed class TimelineView
 
             foreach (var voiceover in timeline.Voiceovers.Where(item => item.TrackIndex == row))
             {
-                var left = X(TimelineOf(voiceover.SourceStartMs));
-                var width = X(TimelineOf(voiceover.SourceEndMs)) - left;
+                var (left, width) = Place(voiceover.SourceStartMs, voiceover.SourceEndMs);
                 var block = Block(left, y, width, MaskRowHeight, Palette.Mask, "Voiceover", $"{Math.Round(voiceover.Volume * 100):0}%", false, voiceover.Disabled || hidden || voiceover.Volume <= 0.001);
+                Follow(block, voiceover.SourceStartMs, voiceover.SourceEndMs);
                 var id = voiceover.Id;
                 if (voiceoverWaves.TryGetValue(id, out var voiceoverWave))
                 {
@@ -816,7 +939,7 @@ internal sealed class TimelineView
             y,
             ZoomRowHeight,
             GhostStyle.Of(Palette.Zoom),
-            () => session.Document.Timeline.Zooms.Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+            () => session.Document.Timeline.Zooms.Select(item => session.Mapper.TimelineSpan(item.SourceStartMs, item.SourceEndMs)).OfType<(double Start, double End)>(),
             500,
             2800,
             350,
@@ -827,8 +950,7 @@ internal sealed class TimelineView
             session.Mutate(document => document.Timeline.IsZoomTrackHidden = !document.Timeline.IsZoomTrackHidden));
         foreach (var item in timeline.Zooms)
         {
-            var left = X(TimelineOf(item.SourceStartMs));
-            var width = X(TimelineOf(item.SourceEndMs)) - left;
+            var (left, width) = Place(item.SourceStartMs, item.SourceEndMs);
             var block = Block(
                 left,
                 y,
@@ -839,6 +961,7 @@ internal sealed class TimelineView
                 $"{item.Scale:0.#}x  ·  {(item.Mode == ZoomMode.FollowCursor ? "Auto" : "Manual")}",
                 item.Id == session.SelectedZoomId,
                 item.Disabled || timeline.IsZoomTrackHidden);
+            Follow(block, item.SourceStartMs, item.SourceEndMs);
             var id = item.Id;
             block.SplitAt = time => session.SplitZoom(id, session.Mapper.SourceTime(time).SourceMs);
             Draggable(block, width, () => session.SelectZoom(id), (start, end) =>
@@ -879,7 +1002,7 @@ internal sealed class TimelineView
             y,
             MaskRowHeight,
             GhostStyle.Of(Palette.Layout),
-            () => session.Document.Timeline.CameraLayouts.Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+            () => session.Document.Timeline.CameraLayouts.Select(item => session.Mapper.TimelineSpan(item.SourceStartMs, item.SourceEndMs)).OfType<(double Start, double End)>(),
             450,
             2800,
             350,
@@ -888,9 +1011,9 @@ internal sealed class TimelineView
             session.Mutate(document => document.Timeline.IsCameraLayoutsTrackHidden = !document.Timeline.IsCameraLayoutsTrackHidden));
         foreach (var layout in timeline.CameraLayouts)
         {
-            var left = X(TimelineOf(layout.SourceStartMs));
-            var width = X(TimelineOf(layout.SourceEndMs)) - left;
+            var (left, width) = Place(layout.SourceStartMs, layout.SourceEndMs);
             var block = Block(left, y, width, MaskRowHeight, Palette.Layout, LayoutTitle(layout.LayoutType), null, layout.Id == session.SelectedLayoutId, layout.Disabled);
+            Follow(block, layout.SourceStartMs, layout.SourceEndMs);
             var id = layout.Id;
             block.SplitAt = time => session.SplitLayout(id, session.Mapper.SourceTime(time).SourceMs);
             Draggable(block, width, () => session.SelectLayout(id), (start, end) =>
@@ -928,7 +1051,7 @@ internal sealed class TimelineView
                 y,
                 MaskRowHeight,
                 GhostStyle.Of(Palette.Mask),
-                () => (session.Document.Timeline.MaskTracks.Find(other => other.Id == trackId)?.Items ?? []).Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+                () => (session.Document.Timeline.MaskTracks.Find(other => other.Id == trackId)?.Items ?? []).Select(item => session.Mapper.TimelineSpan(item.SourceStartMs, item.SourceEndMs)).OfType<(double Start, double End)>(),
                 450,
                 2800,
                 300,
@@ -941,8 +1064,7 @@ internal sealed class TimelineView
                 }));
             foreach (var mask in track.Items)
             {
-                var left = X(TimelineOf(mask.SourceStartMs));
-                var width = X(TimelineOf(mask.SourceEndMs)) - left;
+                var (left, width) = Place(mask.SourceStartMs, mask.SourceEndMs);
                 var block = Block(
                     left,
                     y,
@@ -953,6 +1075,7 @@ internal sealed class TimelineView
                     mask.Type == MaskType.Spotlight ? "Highlight" : "Sensitive data",
                     mask.Id == session.SelectedMaskId,
                     mask.Disabled || track.IsHidden);
+                Follow(block, mask.SourceStartMs, mask.SourceEndMs);
                 var id = mask.Id;
                 block.SplitAt = time => session.SplitMask(id, session.Mapper.SourceTime(time).SourceMs);
                 Draggable(block, width, () => session.SelectMask(id), (start, end) =>
@@ -1007,7 +1130,7 @@ internal sealed class TimelineView
                 y,
                 MaskRowHeight,
                 GhostStyle.Shortcut,
-                () => session.Shortcuts().Where(item => item.TrackId == trackId).Select(item => (TimelineOf(item.DisplayStartMs), TimelineOf(item.DisplayEndMs))),
+                () => session.Shortcuts().Where(item => item.TrackId == trackId).Select(item => session.Mapper.TimelineSpan(item.DisplayStartMs, item.DisplayEndMs)).OfType<(double Start, double End)>(),
                 450,
                 1800,
                 300,
@@ -1017,9 +1140,9 @@ internal sealed class TimelineView
             var clusters = session.Shortcuts().Where(item => item.TrackId == track.Id).OrderBy(item => item.DisplayStartMs).ToList();
             foreach (var shortcut in clusters)
             {
-                var left = X(TimelineOf(shortcut.DisplayStartMs));
-                var width = X(TimelineOf(shortcut.DisplayEndMs)) - left;
+                var (left, width) = Place(shortcut.DisplayStartMs, shortcut.DisplayEndMs);
                 var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, trackHidden || SegmentEdits.IsShortcutHidden(session.Document, shortcut));
+                Follow(block, shortcut.DisplayStartMs, shortcut.DisplayEndMs);
                 var pressed = shortcut;
                 block.RightTapped += (_, args) =>
                 {
@@ -1063,7 +1186,7 @@ internal sealed class TimelineView
                 y,
                 MaskRowHeight,
                 GhostStyle.Of(Palette.Caption),
-                () => session.Document.Captions.CaptionBlocks.Where(item => item.TrackId == trackId).Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+                () => session.Document.Captions.CaptionBlocks.Where(item => item.TrackId == trackId).Select(item => session.Mapper.TimelineSpan(item.SourceStartMs, item.SourceEndMs)).OfType<(double Start, double End)>(),
                 450,
                 2000,
                 300,
@@ -1072,9 +1195,9 @@ internal sealed class TimelineView
             AddLabel(track.Name, y, MaskRowHeight, eye: true, hidden, () => session.ToggleCaptionTrackHidden(trackId));
             foreach (var item in captions.CaptionBlocks.Where(item => item.TrackId == trackId))
             {
-                var left = X(TimelineOf(item.SourceStartMs));
-                var width = X(TimelineOf(item.SourceEndMs)) - left;
+                var (left, width) = Place(item.SourceStartMs, item.SourceEndMs);
                 var block = Block(left, y, width, MaskRowHeight, Palette.Caption, "Caption", CaptionLineLayout.DisplayText(item, captions), item.Id == session.SelectedCaptionId, hidden);
+                Follow(block, item.SourceStartMs, item.SourceEndMs);
                 var id = item.Id;
                 block.SplitAt = time => session.SplitCaption(id, session.Mapper.SourceTime(time).SourceMs);
                 Draggable(block, width, () => session.SelectCaption(id), (start, end) =>
@@ -1291,7 +1414,7 @@ internal sealed class TimelineView
         });
         if (subtitle is not null)
         {
-            text.Children.Add(new TextBlock
+            text.Children.Add(block.Subtitle = new TextBlock
             {
                 Text = subtitle,
                 FontSize = 11.5,
@@ -1396,7 +1519,7 @@ internal sealed class TimelineView
             var (start, end, low, high) = bounds();
             session.BeginInteractiveEdit();
             var press = args.GetCurrentPoint(canvas).Position;
-            drag = new Drag(block, press.X, press.Y, Canvas.GetTop(block), session.DurationMs, mode, start, end, low, high, apply, select, movedRows);
+            drag = new Drag(block, press.X, press.Y, Canvas.GetTop(block), mode, start, end, low, high, apply, select, movedRows);
             canvas.CapturePointer(args.Pointer);
             args.Handled = true;
         };
@@ -1526,8 +1649,7 @@ internal sealed class TimelineView
                 return;
             }
 
-            // The scale at the press: trimming a clip changes the total duration under the pointer.
-            var delta = (x - active.PressX) / TrackWidth * active.PressDurationMs;
+            var delta = (x - active.PressX) / TrackWidth * session.TimelineScaleDurationMs;
             double start = active.Start;
             double end = active.End;
             switch (active.Mode)
@@ -1546,9 +1668,18 @@ internal sealed class TimelineView
             }
 
             active.Apply(start, end);
-            var left = X(TimelineOf(start));
-            Canvas.SetLeft(active.Block, left);
-            active.Block.Width = Math.Max(6, X(TimelineOf(end)) - left);
+            if (clipBlocks.Exists(item => item.Block == active.Block))
+            {
+                FollowClipEdit(active.Block);
+            }
+            else
+            {
+                var left = X(TimelineOf(start));
+                Canvas.SetLeft(active.Block, left);
+                active.Block.Width = Math.Max(6, X(TimelineOf(end)) - left);
+            }
+
+            UpdatePlayhead();
         }
         else if (scrubbing)
         {
@@ -1594,16 +1725,17 @@ internal sealed class TimelineView
         End
     }
 
-    private sealed record Drag(BlockGrid Block, double PressX, double PressY, double BlockY, double PressDurationMs, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select, Action<int>? MovedRows);
+    private sealed record Drag(BlockGrid Block, double PressX, double PressY, double BlockY, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select, Action<int>? MovedRows);
 
-    private sealed class WaveLayer(Polygon fill, Polygon? full, WaveformEnvelope envelope, double start, double end, double width, double height, double radius, Func<double> volume)
+    private sealed class WaveLayer(BlockGrid owner, Polygon fill, Polygon? full, WaveformEnvelope envelope, double start, double end, double width, double height, double radius, Func<double> volume)
     {
+        public BlockGrid Owner { get; } = owner;
         public Polygon Fill { get; } = fill;
         public Polygon? Full { get; } = full;
         public WaveformEnvelope Envelope { get; } = envelope;
-        public double Start { get; } = start;
-        public double End { get; } = end;
-        public double Width { get; } = width;
+        public double Start { get; set; } = start;
+        public double End { get; set; } = end;
+        public double Width { get; set; } = width;
         public double Height { get; } = height;
         public double Radius { get; } = radius;
         public Func<double> Volume { get; } = volume;
@@ -1687,6 +1819,8 @@ internal sealed class TimelineView
     {
         /// <summary>What a click does in split mode, given the timeline time. Null for what cannot be cut.</summary>
         public Action<double>? SplitAt { get; set; }
+
+        public TextBlock? Subtitle { get; set; }
 
         public void SetCursor(InputSystemCursorShape shape) => ProtectedCursor = InputSystemCursor.Create(shape);
     }

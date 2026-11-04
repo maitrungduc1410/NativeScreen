@@ -98,6 +98,12 @@ public sealed partial class EditorSession
     public NLETimeMapper Mapper { get; private set; }
     public double SourceDurationMs { get; }
     public double DurationMs => Mapper.TotalTimelineDurationMs;
+
+    /// <summary>The duration at the start of a timeline drag. Resizing a clip changes the real one, and the ruler must hold still until the drop.</summary>
+    public double? FrozenPlaybackDurationMs { get; private set; }
+
+    /// <summary>The duration the timeline's width stands for.</summary>
+    public double TimelineScaleDurationMs => Math.Max(1000, FrozenPlaybackDurationMs ?? DurationMs);
     public double PlayheadTimelineMs { get; private set; }
     public bool IsPlaying => clock.IsRunning;
     public InspectorTab SelectedTab { get; private set; } = InspectorTab.Background;
@@ -302,12 +308,14 @@ public sealed partial class EditorSession
     /// <summary>Every edit until EndInteractiveEdit (a timeline drag) becomes a single undo step.</summary>
     public void BeginInteractiveEdit()
     {
+        FrozenPlaybackDurationMs ??= DurationMs;
         interactiveEditActive = true;
         interactiveEditCommitted = false;
     }
 
     public void EndInteractiveEdit()
     {
+        FrozenPlaybackDurationMs = null;
         interactiveEditActive = false;
         interactiveEditCommitted = false;
     }

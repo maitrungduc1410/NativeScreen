@@ -38,13 +38,24 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Explorer passes a package's folder, or the project.json inside it.
+        var argument = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
+        var folder = argument is null ? null : File.Exists(argument) ? Path.GetDirectoryName(argument) : argument;
+        if (!SingleInstance.TryClaim() && SingleInstance.Forward(folder))
+        {
+            Environment.Exit(0);
+        }
+
         // Nothing may end the process when a window closes: the recording bar can be hidden with no editor open.
         DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
         tray = new TrayIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"), "Native Screen", () => RecordingHudWindow.Show(), TrayMenu);
+        SingleInstance.Listen(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(), OpenRequested);
+        _ = Task.Run(ExplorerContextMenu.Register);
+        OpenRequested(folder);
+    }
 
-        // Double-clicking a package passes its folder, or the project.json inside it.
-        var argument = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
-        var folder = argument is null ? null : File.Exists(argument) ? Path.GetDirectoryName(argument) : argument;
+    private static void OpenRequested(string? folder)
+    {
         if (folder is not null && File.Exists(Path.Combine(folder, "project.json")))
         {
             _ = Projects.Open(folder, null);

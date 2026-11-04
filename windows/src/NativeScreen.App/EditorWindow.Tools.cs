@@ -637,10 +637,27 @@ internal static class Projects
 
     public static async Task Open(string path, XamlRoot? xamlRoot, string afterOpening = "project")
     {
+        // Two editors on one package would overwrite each other's saves.
+        var key = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (OpenEditors.TryGetValue(key, out var existing))
+        {
+            existing.Activate();
+            existing.ExportAfterOpening(afterOpening);
+            return;
+        }
+
         try
         {
             var project = await Task.Run(() => new LoadedProject(path));
+            if (OpenEditors.TryGetValue(key, out existing))
+            {
+                existing.Activate();
+                return;
+            }
+
             var editor = new EditorWindow(EditorSource.Package(path, project));
+            OpenEditors[key] = editor;
+            editor.Closed += (_, _) => OpenEditors.Remove(key);
             editor.Activate();
             editor.ExportAfterOpening(afterOpening);
             AppSettings.Shared.NoteRecent(path);
@@ -660,6 +677,8 @@ internal static class Projects
             }
         }
     }
+
+    private static readonly Dictionary<string, EditorWindow> OpenEditors = new(StringComparer.OrdinalIgnoreCase);
 
     public static async Task ImportVideo(string file, XamlRoot? xamlRoot)
     {
