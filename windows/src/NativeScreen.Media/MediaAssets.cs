@@ -48,8 +48,8 @@ public static class MediaAssets
         return best;
     }
 
-    /// <summary>Peak per bin, normalized. Null when the file has no audio this machine can decode.</summary>
-    public static float[]? ReadWaveform(string path, double durationMs, CancellationToken cancel)
+    /// <summary>The levels the timeline draws. Null when the file is silent or has no audio this machine can decode.</summary>
+    public static float[]? ReadWaveform(string path, int binCount, CancellationToken cancel)
     {
         using var reader = AudioFileReader.TryOpen(path);
         if (reader is null)
@@ -57,31 +57,24 @@ public static class MediaAssets
             return null;
         }
 
-        var bins = new float[Waveform.BinCount(durationMs)];
-        var perBin = Math.Max(1.0, durationMs / 1000 * reader.SampleRate / bins.Length);
-        var frame = 0L;
-        var any = false;
+        var peaks = new List<float>(8192);
         while (reader.ReadBlock() is { } block)
         {
             cancel.ThrowIfCancellationRequested();
-            any = true;
-            for (var index = 0; index < block.Samples.Length; index += reader.Channels)
+            for (var offset = 0; offset < block.Samples.Length; offset += Waveform.PeakChunkSamples)
             {
-                var bin = (int)(frame++ / perBin);
-                if (bin >= bins.Length)
+                var end = Math.Min(block.Samples.Length, offset + Waveform.PeakChunkSamples);
+                var loudest = 0f;
+                for (var index = offset; index < end; index++)
                 {
-                    return Waveform.Normalize(bins);
+                    loudest = Math.Max(loudest, Math.Abs(block.Samples[index] / 32768f));
                 }
 
-                var value = Math.Abs(block.Samples[index] / 32768f);
-                if (value > bins[bin])
-                {
-                    bins[bin] = value;
-                }
+                peaks.Add(loudest);
             }
         }
 
-        return any ? Waveform.Normalize(bins) : null;
+        return Waveform.BinsFromPeaks(peaks, binCount);
     }
 
     /// <summary>16 kHz mono floats, the input of the speech model.</summary>

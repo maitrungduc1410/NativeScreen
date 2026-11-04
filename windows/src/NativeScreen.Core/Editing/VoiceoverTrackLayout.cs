@@ -45,6 +45,31 @@ public static class VoiceoverTrackLayout
         return count;
     }
 
+    /// <summary>Where a recording goes: its length is not known yet, so the track must have nothing after the start.</summary>
+    public static int FirstTrackEmptyAfter(IReadOnlyList<VoiceoverSegment> voiceovers, double startMs)
+    {
+        var count = TrackCount(voiceovers);
+        for (var track = 0; track < count; track++)
+        {
+            var empty = true;
+            foreach (var segment in voiceovers)
+            {
+                if (segment.TrackIndex == track && segment.SourceEndMs > startMs)
+                {
+                    empty = false;
+                    break;
+                }
+            }
+
+            if (empty)
+            {
+                return track;
+            }
+        }
+
+        return count;
+    }
+
     /// <summary>Applies the rules and closes up empty tracks. A project saved with the single hide flag loads with every track hidden.</summary>
     public static void Normalize(TimelineConfig timeline)
     {

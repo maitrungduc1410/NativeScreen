@@ -33,25 +33,39 @@ internal sealed class PreviewOverlay
         this.session = session;
         this.canvas = canvas;
         this.source = source;
-        // A click that lands on a drawn keycap opens that shortcut's editor; masks sit above and take their own clicks.
+        // A click that lands on a drawn keycap or caption opens its editor; masks sit above and take their own clicks.
         canvas.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
         canvas.PointerPressed += (_, args) =>
         {
-            if (active is not null || session.IsPlaying || ShortcutHits?.Invoke() is not { Count: > 0 } hits)
+            if (active is not null)
             {
                 return;
             }
 
             var point = args.GetCurrentPoint(canvas).Position;
             var (x, y) = (point.X / Math.Max(1, canvas.ActualWidth), point.Y / Math.Max(1, canvas.ActualHeight));
-            foreach (var (id, rect) in hits)
+            static string? HitIn(IReadOnlyDictionary<string, System.Numerics.Vector4>? hits, double x, double y)
             {
-                if (x >= rect.X && x <= rect.X + rect.Z && y >= rect.Y && y <= rect.Y + rect.W)
+                foreach (var (id, rect) in hits ?? new Dictionary<string, System.Numerics.Vector4>())
                 {
-                    session.SelectShortcut(id);
-                    args.Handled = true;
-                    return;
+                    if (x >= rect.X && x <= rect.X + rect.Z && y >= rect.Y && y <= rect.Y + rect.W)
+                    {
+                        return id;
+                    }
                 }
+
+                return null;
+            }
+
+            if (!session.IsPlaying && HitIn(ShortcutHits?.Invoke(), x, y) is { } shortcut)
+            {
+                session.SelectShortcut(shortcut);
+                args.Handled = true;
+            }
+            else if (HitIn(CaptionHits?.Invoke(), x, y) is { } caption)
+            {
+                session.SelectCaption(caption);
+                args.Handled = true;
             }
         };
         canvas.PointerMoved += Moved;
@@ -62,6 +76,8 @@ internal sealed class PreviewOverlay
     public bool ShowSafeZones { get; set; }
 
     public Func<IReadOnlyDictionary<string, System.Numerics.Vector4>>? ShortcutHits { get; set; }
+
+    public Func<IReadOnlyDictionary<string, System.Numerics.Vector4>>? CaptionHits { get; set; }
 
     public void Refresh()
     {

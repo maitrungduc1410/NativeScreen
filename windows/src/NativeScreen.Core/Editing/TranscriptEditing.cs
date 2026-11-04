@@ -469,28 +469,3 @@ public static class SpeechRegions
         return regions;
     }
 }
-
-/// <summary>Peak levels per bin for the timeline, normalized to the loudest bin.</summary>
-public static class Waveform
-{
-    public static float[] Normalize(float[] peaks)
-    {
-        var loudest = 0f;
-        foreach (var peak in peaks)
-        {
-            loudest = Math.Max(loudest, peak);
-        }
-
-        if (loudest > 0.0001f)
-        {
-            for (var index = 0; index < peaks.Length; index++)
-            {
-                peaks[index] /= loudest;
-            }
-        }
-
-        return peaks;
-    }
-
-    public static int BinCount(double durationMs) => Math.Clamp((int)(durationMs / 1000 * 240), 256, 16384);
-}

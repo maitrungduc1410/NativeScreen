@@ -99,6 +99,14 @@ public sealed partial class EditorWindow : Window
 
         session = new EditorSession(source.Document, source.DurationMs) { HasRecordedCamera = source.HasCamera, HasMicrophoneTrack = source.Project?.Metadata.Tracks.MicrophoneAudio is not null, CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
         tools = new EditorTools(this, session, source, ShowToast);
+        tools.StartPlayback = () => session.IsPlaying ? Task.CompletedTask : TogglePlaybackAsync();
+        tools.PausePlayback = () =>
+        {
+            if (session.IsPlaying)
+            {
+                TogglePlayback();
+            }
+        };
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
         tools.Changed += inspector.Rebuild;
         inspector.SeekRequested = SeekTo;
@@ -134,6 +142,7 @@ public sealed partial class EditorWindow : Window
         session.DocumentChanged += DocumentChanged;
         Closed += (_, _) =>
         {
+            tools.FinishVoiceoverRecordingForClose();
             tools.CancelTranscript();
             clickSounds.Dispose();
         };
@@ -269,6 +278,7 @@ public sealed partial class EditorWindow : Window
         record.Items.Add(Menu("Record display", () => RecordingHudWindow.Show(CaptureTargetMode.Display)));
         record.Items.Add(Menu("Record window", () => RecordingHudWindow.Show(CaptureTargetMode.Window)));
         record.Items.Add(Menu("Record area", () => RecordingHudWindow.Show(CaptureTargetMode.Area)));
+        record.Items.Add(Menu("Record this project window", () => RecordingHudWindow.RecordWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))));
         var export = new MenuFlyoutSubItem { Text = "Export" };
         export.Items.Add(Menu("Export", ShowExportOverlay, "Ctrl+E"));
         export.Items.Add(Menu("Quick export to clipboard", () => _ = QuickExportToClipboard()));
@@ -284,6 +294,24 @@ public sealed partial class EditorWindow : Window
             view.Items.Add(item);
         }
 
+        view.Items.Add(new MenuFlyoutSeparator());
+        var showWaveform = new ToggleMenuFlyoutItem { Text = "Show audio waveform", IsChecked = AppSettings.Shared.ShowAudioWaveform };
+        var smoothWaveform = new ToggleMenuFlyoutItem { Text = "Smooth waveform", IsChecked = AppSettings.Shared.SmoothWaveform, IsEnabled = AppSettings.Shared.ShowAudioWaveform };
+        showWaveform.Click += (_, _) =>
+        {
+            AppSettings.Shared.ShowAudioWaveform = showWaveform.IsChecked;
+            AppSettings.Shared.Save();
+            smoothWaveform.IsEnabled = showWaveform.IsChecked;
+            timeline.Rebuild();
+        };
+        smoothWaveform.Click += (_, _) =>
+        {
+            AppSettings.Shared.SmoothWaveform = smoothWaveform.IsChecked;
+            AppSettings.Shared.Save();
+            timeline.Rebuild();
+        };
+        view.Items.Add(showWaveform);
+        view.Items.Add(smoothWaveform);
         view.Items.Add(new MenuFlyoutSeparator());
         view.Items.Add(Menu("Show safe zones for short videos", () =>
         {
@@ -343,6 +371,8 @@ public sealed partial class EditorWindow : Window
 
     private const double DockActiveFillOpacity = 0.24;
     private readonly List<(MaskType Type, Button Button, FontIcon Icon)> maskDockButtons = [];
+    private Button? voiceoverDockButton;
+    private FontIcon? voiceoverDockIcon;
 
     private Button MaskDockButton(string glyph, string tooltip, MaskType type)
     {
@@ -353,10 +383,36 @@ public sealed partial class EditorWindow : Window
     }
 
     /// <summary>While a mask is waiting to be drawn its button stays lit, so it is clear why the preview is taking the pointer.</summary>
+    private void RefreshVoiceoverDock()
+    {
+        if (voiceoverDockButton is null || voiceoverDockIcon is null)
+        {
+            return;
+        }
+
+        var recording = session.IsRecordingVoiceover;
+        HoverMagnet.SetIsActive(voiceoverDockButton, recording);
+        voiceoverDockIcon.Glyph = recording ? "\uE71A" : "\uE720";
+        var tooltip = recording ? "Stop voiceover recording" : "Record voiceover";
+        ToolTipService.SetToolTip(voiceoverDockButton, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(voiceoverDockButton, tooltip);
+        if (recording)
+        {
+            voiceoverDockButton.Background = Ui.Rgb(0.45, 0.36, 0.96, DockActiveFillOpacity);
+            voiceoverDockIcon.Foreground = Ui.Rgb(0.72, 0.64, 1);
+        }
+        else
+        {
+            voiceoverDockButton.ClearValue(Control.BackgroundProperty);
+            voiceoverDockIcon.Foreground = Ui.Pal("Ink88");
+        }
+    }
+
     private void RefreshMaskDock()
     {
         foreach (var (type, button, icon) in maskDockButtons)
         {
+            HoverMagnet.SetIsActive(button, session.PendingAddMaskType == type);
             if (session.PendingAddMaskType == type)
             {
                 button.Background = Ui.Rgb(0.45, 0.36, 0.96, DockActiveFillOpacity);
@@ -390,7 +446,15 @@ public sealed partial class EditorWindow : Window
             MaskDockButton("", "Highlight mask", MaskType.Spotlight)));
         QuickDock.Children.Add(DockGroup(
             Ui.IconButton(Ui.Icon("", 16), "Add shortcut", () => session.AddCustomShortcut(null, session.SourceAtPlayhead)),
-            Ui.IconButton(Ui.Icon("", 16), "Upload a voiceover", tools.UploadVoiceover)));
+            Ui.IconButton(Ui.Icon("\uE8BD", 16), "Add caption track", () => session.AddCaptionTrack()),
+            VoiceoverDockButton()));
+    }
+
+    private Button VoiceoverDockButton()
+    {
+        voiceoverDockIcon = Ui.Icon("\uE720", 16);
+        voiceoverDockButton = Ui.IconButton(voiceoverDockIcon, "Record voiceover", tools.ToggleVoiceoverRecording);
+        return voiceoverDockButton;
     }
 
     private static StackPanel DockGroup(params UIElement[] buttons)
@@ -461,6 +525,7 @@ public sealed partial class EditorWindow : Window
         TotalTime.Text = Ui.Timecode(session.DurationMs);
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         SplitIcon.Foreground = session.IsSplitModeActive ? Ui.Rgb(0.65, 0.58, 1) : Ui.Pal("Ink88");
+        HoverMagnet.SetIsActive(SplitButton, session.IsSplitModeActive);
         if (session.IsSplitModeActive)
         {
             SplitButton.Background = Ui.Rgb(0.45, 0.36, 0.96, DockActiveFillOpacity);
@@ -472,6 +537,7 @@ public sealed partial class EditorWindow : Window
 
         timeline.RefreshSplitMode();
         RefreshMaskDock();
+        RefreshVoiceoverDock();
         if (document.Canvas.AspectRatioMode == AspectRatioMode.Auto)
         {
             AspectName.Text = "Auto";
@@ -559,9 +625,11 @@ public sealed partial class EditorWindow : Window
         {
             inspector.Rebuild();
             timeline.Rebuild();
+            _ = LoadVoiceoverWaveforms();
         }
         else
         {
+            timeline.RefreshWaveformVolumes();
             DrawPreview();
         }
     }
@@ -600,6 +668,7 @@ public sealed partial class EditorWindow : Window
         SwapChainPanelInterop.SetSwapChain(Preview, swapChain.SwapChain.NativePointer);
         renderer = new PreviewRenderer(compositor, swapChain, width, height);
         overlay.ShortcutHits = () => compositor.ShortcutHitRects01;
+        overlay.CaptionHits = () => compositor.CaptionHitRects01;
         screenPlayback = OpenPlayback(source.Project?.Metadata.Tracks.DisplayVideo);
         webcamPlayback = OpenPlayback(source.Project?.Metadata.Tracks.WebcamVideo);
         FitPreview();
@@ -716,7 +785,9 @@ public sealed partial class EditorWindow : Window
 
     private void TogglePlay(object sender, RoutedEventArgs e) => TogglePlayback();
 
-    private async void TogglePlayback()
+    private async void TogglePlayback() => await TogglePlaybackAsync();
+
+    private async Task TogglePlaybackAsync()
     {
         var request = ++playRequest;
         if (session.IsPlaying)

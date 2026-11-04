@@ -20,6 +20,8 @@ public sealed class AppSettings
     public string? DefaultPresetId { get; set; }
     public string AfterRecording { get; set; } = "project";
     public bool HighlightRecordedArea { get; set; } = true;
+    public bool ShowAudioWaveform { get; set; } = true;
+    public bool SmoothWaveform { get; set; } = true;
 
     public string ProjectsDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Native Screen Projects");

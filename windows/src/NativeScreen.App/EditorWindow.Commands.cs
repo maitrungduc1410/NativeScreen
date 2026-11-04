@@ -290,7 +290,8 @@ public sealed partial class EditorWindow
 
         Add("Camera Layout", "Add camera layout at playhead", "", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.CameraOverlay));
 
-        Add("Voiceover", "Upload voiceover audio file", "", tools.UploadVoiceover);
+        Add("Voiceover", session.IsRecordingVoiceover ? "Stop voiceover recording" : "Record voiceover...", "", tools.ToggleVoiceoverRecording);
+        Add("Voiceover", "Upload voiceover audio file...", "", tools.UploadVoiceover);
 
         var mockup = document.FrameStyle.DeviceMockup.Enabled;
         Add("Device", mockup ? "Disable device mockup" : "Use device mockup", "", () =>

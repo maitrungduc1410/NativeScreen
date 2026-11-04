@@ -131,6 +131,20 @@ public sealed class RecordingHudWindow : Window
         }
     }
 
+    /// <summary>Record > Record this project window: starts on an editor window without going through the picker.</summary>
+    public static void RecordWindow(nint window)
+    {
+        shared ??= new RecordingHudWindow();
+        if (shared.recorder is not null || shared.pending is not null || shared.busy || CaptureTargets.WindowInfo(window) is not { } info)
+        {
+            return;
+        }
+
+        shared.Reveal();
+        shared.CancelPicking();
+        shared.BeginCountdown(new CaptureTarget(CaptureTargetMode.Window, CaptureTargets.DisplayOf(info.Bounds), info, info.Bounds));
+    }
+
     /// <summary>An editor opened, so the bar steps aside. A running recording keeps it.</summary>
     public static void HideIfIdle()
     {
@@ -1264,17 +1278,10 @@ public sealed class RecordingHudWindow : Window
     }
 
     /// <summary>
-    /// The app's own windows never appear in its recordings. The bar is excluded only while recording, so a screenshot of it
-    /// works the rest of the time.
+    /// Only the recording UI stays off camera: editors are recordable, so editing can be demoed. The bar is excluded only while
+    /// recording, so a screenshot of it works the rest of the time.
     /// </summary>
-    private void AppExclusion(bool excluded)
-    {
-        CaptureTargets.SetExcludedFromCapture(Handle, excluded);
-        foreach (var window in AppTheme.OpenWindows())
-        {
-            CaptureTargets.SetExcludedFromCapture(WinRT.Interop.WindowNative.GetWindowHandle(window), excluded);
-        }
-    }
+    private void AppExclusion(bool excluded) => CaptureTargets.SetExcludedFromCapture(Handle, excluded);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Point32

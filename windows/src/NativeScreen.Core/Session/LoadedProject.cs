@@ -31,6 +31,8 @@ public sealed class LoadedProject
         var webcam = Metadata.Tracks.WebcamVideo;
         HasRecordedCamera = webcam is not null || File.Exists(Path.Combine(recording, "webcam.mp4"));
 
+        Document.Captions.MigrateTranscriptToCaptionTracksIfNeeded();
+        Document.Captions.RemoveEmptyCaptionTracks();
         var clusters = ShortcutEngine.Detect(Document, KeyEvents);
         if (clusters.Count > 0 && Document.Captions.ShortcutTracks.Count == 0)
         {

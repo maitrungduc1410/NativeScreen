@@ -80,6 +80,8 @@ public sealed partial class EditorSession
         }
 
         VoiceoverTrackLayout.Normalize(initial.Timeline);
+        initial.Captions.MigrateTranscriptToCaptionTracksIfNeeded();
+        initial.Captions.RemoveEmptyCaptionTracks();
         History = new UndoStack(initial);
         SourceDurationMs = durationMs;
         Mapper = new NLETimeMapper(History.Current.Timeline.Slices);
@@ -164,7 +166,9 @@ public sealed partial class EditorSession
                 }
 
                 return Document.Camera.Enabled ? (true, null) : (false, "Camera is hidden (see Camera Layout)");
-            case InspectorTab.Captions or InspectorTab.Transcript:
+            case InspectorTab.Captions:
+                return (true, null);
+            case InspectorTab.Transcript:
                 return HasRecordedMicrophone ? (true, null) : (false, "No microphone recorded");
             case InspectorTab.Shortcuts:
                 var hasShortcuts = KeyEvents.Count > 0 || Document.Captions.CustomShortcuts.Count > 0 || Document.Captions.ShortcutTracks.Count > 0;
@@ -272,6 +276,7 @@ public sealed partial class EditorSession
     {
         var now = Environment.TickCount64;
         var coalesced = interactiveKey is not null && interactiveKey == coalesceKey && now - coalesceAt < CoalesceWindowMs;
+        var hadCaptionTracks = History.Current.Captions.CaptionTracks.Count > 0;
         if (coalesced || interactiveEditCommitted)
         {
             change(History.Current);
@@ -288,6 +293,7 @@ public sealed partial class EditorSession
         coalesceAt = now;
         renderDocument = null;
         NormalizeMaskTracks();
+        NormalizeCaptionTracks(hadCaptionTracks);
         Mapper = new NLETimeMapper(History.Current.Timeline.Slices);
         PlayheadTimelineMs = Math.Clamp(PlayheadTimelineMs, 0, DurationMs);
         DocumentChanged?.Invoke(structural);
@@ -576,7 +582,11 @@ public sealed partial class EditorSession
 
     public void DeleteSelected()
     {
-        if (SelectedZoomId is { } zoomId)
+        if (SelectedCaptionId is { } captionId)
+        {
+            DeleteCaption(captionId);
+        }
+        else if (SelectedZoomId is { } zoomId)
         {
             Mutate(document => document.Timeline.Zooms.RemoveAll(zoom => zoom.Id == zoomId));
         }
@@ -656,8 +666,20 @@ public sealed partial class EditorSession
         }
     }
 
+    private void NormalizeCaptionTracks(bool hadTracks)
+    {
+        var captions = History.Current.Captions;
+        captions.RemoveEmptyCaptionTracks();
+        if (hadTracks && captions.CaptionTracks.Count == 0)
+        {
+            // Words without tracks read as a project saved before tracks existed: the next load would bring the deleted captions back.
+            captions.Segments.Clear();
+        }
+    }
+
     private void ClearSelectionState()
     {
+        SelectedCaptionId = null;
         SelectedSliceId = null;
         SelectedZoomId = null;
         SelectedMaskId = null;

@@ -538,37 +538,136 @@ internal sealed class InspectorPanel
         Add(Collapsible("Advanced", () => Slider("Camera delay", () => Doc.Camera.DelayAdjustmentMs, (d, v) => d.Camera.DelayAdjustmentMs = v, -200, 200, 0)));
     }
 
+    private string? captionInspectorTrackId;
+    private bool captionApplyToTrack;
+
     private void Captions()
     {
         var captions = Doc.Captions;
         Add(Text("Captions", medium: true));
         Add(Toggle("Disable captions", null, () => !Doc.Captions.Enabled, (d, v) => d.Captions.Enabled = !v));
-        Add(Slider("Caption size", () => Doc.Captions.FontSizeRatio, (d, v) => d.Captions.FontSizeRatio = v, 0.02, 0.10, 0.045));
-        var centered = Math.Abs(captions.Position01.Y - 0.5) < 0.15;
-        Add(Labeled("Caption position", 10, Options(
-            ("Bottom", !centered, () => Edit(d => d.Captions.Position01 = new Point01(0.5, 0.88))),
-            ("Center", centered, () => Edit(d => d.Captions.Position01 = new Point01(0.5, 0.5))))));
+        if (captions.CaptionTracks.Count == 0)
+        {
+            Add(Note("Generate transcript"));
+            TranscriptControls();
+            AddDivider();
+            Add(Action("Add caption track", () => captionInspectorTrackId = session.AddCaptionTrack()));
+            return;
+        }
+
+        var selected = session.SelectedCaption;
+        var selectedId = selected?.Id;
+        var activeTrackId = selected?.TrackId ?? captions.CaptionTracks.Find(track => track.Id == captionInspectorTrackId)?.Id ?? captions.CaptionTracks[0].Id;
+        var style = session.EffectiveCaptionStyle(selectedId, activeTrackId);
+        // A selected caption changes alone unless Apply to all is on.
+        var targetBlock = captionApplyToTrack ? null : selectedId;
+        Action Apply(Action<CaptionStyle> change) => () => session.UpdateCaptionStyle(targetBlock, activeTrackId, change);
+        var tracks = new List<(string, bool, Action?)>();
+        foreach (var track in captions.CaptionTracks)
+        {
+            var id = track.Id;
+            tracks.Add((track.Name, id == activeTrackId, () =>
+            {
+                captionInspectorTrackId = id;
+                session.SelectCaption(null);
+            }));
+        }
+
+        tracks.Add(("+", false, () => captionInspectorTrackId = session.AddCaptionTrack()));
+        Add(Labeled("Track", 10, OptionsWrap(tracks.ToArray())));
+        if (captions.CaptionTracks.Count > 1)
+        {
+            Add(Action("Delete this track", () =>
+            {
+                captionInspectorTrackId = null;
+                session.DeleteCaptionTrack(activeTrackId);
+            }));
+        }
+
+        if (selected is not null)
+        {
+            CaptionSegmentControls(selected);
+        }
+
+        Add(Slider(
+            "Caption size",
+            () => session.EffectiveCaptionStyle(selectedId, activeTrackId).FontSizeRatio,
+            (d, v) => EditorSession.ApplyCaptionStyle(d, targetBlock, activeTrackId, item => item.FontSizeRatio = v),
+            0.02,
+            0.10,
+            0.045));
         Add(Labeled("Font style", 10, Options(
-            ("Sans-serif", captions.FontStyle == CaptionFontStyle.SansSerif, () => Edit(d => d.Captions.FontStyle = CaptionFontStyle.SansSerif)),
-            ("Serif", captions.FontStyle == CaptionFontStyle.Serif, () => Edit(d => d.Captions.FontStyle = CaptionFontStyle.Serif)),
-            ("Mono", captions.FontStyle == CaptionFontStyle.Mono, () => Edit(d => d.Captions.FontStyle = CaptionFontStyle.Mono)))));
+            ("Sans-serif", style.FontStyle == CaptionFontStyle.SansSerif, Apply(item => item.FontStyle = CaptionFontStyle.SansSerif)),
+            ("Serif", style.FontStyle == CaptionFontStyle.Serif, Apply(item => item.FontStyle = CaptionFontStyle.Serif)),
+            ("Mono", style.FontStyle == CaptionFontStyle.Mono, Apply(item => item.FontStyle = CaptionFontStyle.Mono)))));
         Add(Labeled("Word reveal", 10, Options(
-            ("Line by line", captions.WordsReveal == CaptionWordsReveal.LineByLine, () => Edit(d => d.Captions.WordsReveal = CaptionWordsReveal.LineByLine)),
-            ("Word by word", captions.WordsReveal == CaptionWordsReveal.WordByWord, () => Edit(d => d.Captions.WordsReveal = CaptionWordsReveal.WordByWord)))));
-        Add(Labeled("Line growth", 10, Options(
-            ("Full line", captions.LineGrowth == CaptionLineGrowth.FullLine, () => Edit(d => d.Captions.LineGrowth = CaptionLineGrowth.FullLine)),
-            ("Expanding", captions.LineGrowth == CaptionLineGrowth.Expanding, () => Edit(d => d.Captions.LineGrowth = CaptionLineGrowth.Expanding)),
-            ("Centered", captions.LineGrowth == CaptionLineGrowth.Centered, () => Edit(d => d.Captions.LineGrowth = CaptionLineGrowth.Centered)))));
-        Add(Labeled("Word animation", 10, Options(
-            ("Appear", captions.WordAnimation == CaptionWordAnimation.Appear, () => Edit(d => d.Captions.WordAnimation = CaptionWordAnimation.Appear)),
-            ("Fade in", captions.WordAnimation == CaptionWordAnimation.FadeIn, () => Edit(d => d.Captions.WordAnimation = CaptionWordAnimation.FadeIn)),
-            ("Slide in", captions.WordAnimation == CaptionWordAnimation.SlideIn, () => Edit(d => d.Captions.WordAnimation = CaptionWordAnimation.SlideIn)))));
+            ("Line by line", style.WordsReveal == CaptionWordsReveal.LineByLine, Apply(item => item.WordsReveal = CaptionWordsReveal.LineByLine)),
+            ("Word by word", style.WordsReveal == CaptionWordsReveal.WordByWord, Apply(item => item.WordsReveal = CaptionWordsReveal.WordByWord)))));
+        if (style.WordsReveal == CaptionWordsReveal.LineByLine)
+        {
+            Add(Labeled("Line growth", 10, Options(
+                ("Full line", style.LineGrowth == CaptionLineGrowth.FullLine, Apply(item => item.LineGrowth = CaptionLineGrowth.FullLine)),
+                ("Expanding", style.LineGrowth == CaptionLineGrowth.Expanding, Apply(item => item.LineGrowth = CaptionLineGrowth.Expanding)),
+                ("Centered", style.LineGrowth == CaptionLineGrowth.Centered, Apply(item => item.LineGrowth = CaptionLineGrowth.Centered)))));
+            Add(Labeled("Word animation", 10, Options(
+                ("Appear", style.WordAnimation == CaptionWordAnimation.Appear, Apply(item => item.WordAnimation = CaptionWordAnimation.Appear)),
+                ("Fade in", style.WordAnimation == CaptionWordAnimation.FadeIn, Apply(item => item.WordAnimation = CaptionWordAnimation.FadeIn)),
+                ("Slide in", style.WordAnimation == CaptionWordAnimation.SlideIn, Apply(item => item.WordAnimation = CaptionWordAnimation.SlideIn)))));
+        }
+
         Add(Labeled("Color", 10, Options(
-            ("Dark", captions.ColorTheme == CaptionColorTheme.Dark, () => Edit(d => d.Captions.ColorTheme = CaptionColorTheme.Dark)),
-            ("Light", captions.ColorTheme == CaptionColorTheme.Light, () => Edit(d => d.Captions.ColorTheme = CaptionColorTheme.Light)))));
+            ("Dark", style.ColorTheme == CaptionColorTheme.Dark, Apply(item => item.ColorTheme = CaptionColorTheme.Dark)),
+            ("Light", style.ColorTheme == CaptionColorTheme.Light, Apply(item => item.ColorTheme = CaptionColorTheme.Light)))));
+        var position = style.Position01;
+        bool At(Point01 point) => Math.Abs(position.X - point.X) < 0.001 && Math.Abs(position.Y - point.Y) < 0.001;
+        Add(Labeled(
+            "Caption position",
+            10,
+            new CaptionPositionPad(session, targetBlock, activeTrackId, position, Rebuild).Element,
+            Options(
+                ("Bottom", At(CaptionStyle.BottomPosition01), Apply(item => item.Position01 = CaptionStyle.BottomPosition01)),
+                ("Center", At(CaptionStyle.CenterPosition01), Apply(item => item.Position01 = CaptionStyle.CenterPosition01)))));
+        if (captions.Segments.Count > 0)
+        {
+            Add(Action("Export transcript", tools.ExportSrt));
+        }
+
         AddDivider();
+        Add(Note(captions.Segments.Count == 0 ? "Generate transcript" : "Re-Generate transcript"));
         TranscriptControls();
-        Add(Action("Export transcript", tools.ExportSrt));
+    }
+
+    /// <summary>The selected caption's text and the Apply to all choice for the options below.</summary>
+    private void CaptionSegmentControls(CaptionBlock block)
+    {
+        var id = block.Id;
+        var text = new TextBox { Text = CaptionLineLayout.DisplayText(block, Doc.Captions), AcceptsReturn = false, TextWrapping = TextWrapping.Wrap };
+        AutomationName(text, "Caption text");
+        void Save()
+        {
+            if (Doc.Captions.CaptionBlocks.Find(item => item.Id == id) is { } current && text.Text != CaptionLineLayout.DisplayText(current, Doc.Captions))
+            {
+                session.UpdateCaptionText(id, text.Text);
+            }
+        }
+
+        text.LostFocus += (_, _) => Save();
+        text.KeyDown += (_, args) =>
+        {
+            if (args.Key == Windows.System.VirtualKey.Enter)
+            {
+                Save();
+                args.Handled = true;
+            }
+        };
+        Add(Labeled("Caption text", 8, text));
+        var apply = new CheckBox { Content = "Apply to all captions in this track", IsChecked = captionApplyToTrack };
+        apply.Click += (_, _) =>
+        {
+            captionApplyToTrack = apply.IsChecked == true;
+            Rebuild();
+        };
+        Add(apply);
     }
 
     /// <summary>Asks the window to move the playhead and redraw.</summary>
@@ -739,15 +838,6 @@ internal sealed class InspectorPanel
             ("Base", captions.WhisperModelTier == "base", () => Edit(d => d.Captions.WhisperModelTier = "base")),
             ("Small", captions.WhisperModelTier == "small", () => Edit(d => d.Captions.WhisperModelTier = "small")),
             ("Medium", captions.WhisperModelTier == "medium", () => Edit(d => d.Captions.WhisperModelTier = "medium")))));
-        var keyterms = new TextBox { PlaceholderText = "Names and terms, separated by commas", Text = captions.CustomPrompt };
-        keyterms.LostFocus += (_, _) =>
-        {
-            if (keyterms.Text != Doc.Captions.CustomPrompt)
-            {
-                session.Mutate(document => document.Captions.CustomPrompt = keyterms.Text, structural: false);
-            }
-        };
-        Add(Labeled("Keyterms", 8, keyterms));
         if (tools.IsTranscribing)
         {
             Add(Note(tools.Status ?? "Transcribing"));
@@ -858,7 +948,7 @@ internal sealed class InspectorPanel
 
         AddDivider();
         Add(Text("Voiceovers", 12.5, "Ink45", true));
-        Add(Action("Upload audio", tools.UploadVoiceover));
+        Add(VoiceoverActions());
         foreach (var voiceover in Doc.Timeline.Voiceovers)
         {
             var id = voiceover.Id;
@@ -1379,6 +1469,29 @@ internal sealed class InspectorPanel
         var button = Ui.Option(title, false, click);
         button.HorizontalAlignment = HorizontalAlignment.Stretch;
         return button;
+    }
+
+    /// <summary>Record and upload side by side. Record is red, and solid while a take is running.</summary>
+    private Grid VoiceoverActions()
+    {
+        var recording = session.IsRecordingVoiceover;
+        var record = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center };
+        var foreground = recording ? Ui.Pal("Ink95") : Ui.Rgb(1, 0.45, 0.45);
+        record.Children.Add(Ui.Icon(recording ? "\uE71A" : "\uE7C8", 13, foreground));
+        record.Children.Add(new TextBlock { Text = recording ? "Stop Recording" : "Record voiceover", FontSize = 12.5, FontWeight = Microsoft.UI.Text.FontWeights.Medium, Foreground = foreground });
+        var recordButton = Ui.Option("", false, tools.ToggleVoiceoverRecording);
+        recordButton.Content = record;
+        recordButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+        recordButton.Background = Ui.Rgb(1, 0, 0, recording ? 1 : 0.14);
+        recordButton.BorderBrush = Ui.Rgb(1, 0, 0, 0.35);
+        var upload = Action("Upload audio…", tools.UploadVoiceover);
+        var grid = new Grid { ColumnSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        Grid.SetColumn(upload, 1);
+        grid.Children.Add(recordButton);
+        grid.Children.Add(upload);
+        return grid;
     }
 
     private static Button CloseEditor(string title, Action click)

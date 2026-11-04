@@ -12,6 +12,10 @@ namespace NativeScreen.Rendering;
 public sealed partial class FrameCompositor
 {
     private const string SansFont = "Segoe UI";
+    private const double CaptionFadeBlurRadius = 5;
+    private const double MinimumCaptionBlur = 0.05;
+    private const int CaptionPatchStep = 64;
+    private const int MaximumCaptionWordSprites = 256;
     private readonly Dictionary<string, ID3D11ShaderResourceView> lutViews = [];
     private readonly Dictionary<string, RenderLayer> keycapSprites = [];
     private ID3D11Buffer? lutConstants;
@@ -19,7 +23,8 @@ public sealed partial class FrameCompositor
     private ID3D11ShaderResourceView? wallpaperView;
     private (string Path, int Width, int Height)? wallpaperInfo;
     private string? cameraShadowKey;
-    private string? captionKey;
+    private readonly Dictionary<(string Text, double Size, CaptionFontStyle Style, CaptionColorTheme Theme), RenderLayer> captionWords = [];
+    private CaptionTextMeasure? captionMeasure;
     private string? bezelKey;
 
     private OverlayRasterizer Overlays => overlays ??= new OverlayRasterizer(_graphics.Device);
@@ -33,9 +38,13 @@ public sealed partial class FrameCompositor
         }
 
         var captions = request.Document.Captions;
-        if (captions.Enabled && captions.Segments.Count > 0)
+        if (captions.Enabled && captions.CaptionBlocks.Count > 0)
         {
             DrawCaptions(frame, captions, request.SourceMs, width, height);
+        }
+        else if (CaptionHitRects01.Count > 0)
+        {
+            CaptionHitRects01 = new Dictionary<string, Vector4>();
         }
 
         DrawKeycaps(frame, request, width, height);
@@ -326,105 +335,176 @@ public sealed partial class FrameCompositor
 
     // MARK: Captions
 
+    /// <summary>Visible caption boxes in the last frame, normalized, for clicks on the preview. Swapped whole, so another thread may read it.</summary>
+    public IReadOnlyDictionary<string, Vector4> CaptionHitRects01 { get; private set; } = new Dictionary<string, Vector4>();
+
+    /// <summary>Each track draws the frame from CaptionLineLayout. Boxes come from the box shader, and each word is rasterized once and then moved and faded.</summary>
     private void DrawCaptions(RenderLayer frame, CaptionsConfig config, double sourceMs, int width, int height)
     {
-        if (CaptionLineLayout.ActiveLine(config, sourceMs) is not { } line)
+        captionMeasure ??= MeasureCaption;
+        var frames = CaptionLineLayout.Frames(config, sourceMs, width, height, captionMeasure);
+        Dictionary<string, Vector4>? hits = null;
+        if (captionWords.Count > MaximumCaptionWordSprites)
         {
-            return;
+            foreach (var sprite in captionWords.Values)
+            {
+                sprite.Dispose();
+            }
+
+            captionWords.Clear();
         }
 
-        var words = CaptionLineLayout.DisplayedWords(line, config, sourceMs);
-        if (words.Count == 0)
+        // Direct2D must finish before the pipeline is bound for the frame.
+        foreach (var track in frames)
         {
-            return;
+            foreach (var word in track.Words)
+            {
+                CaptionWordSprite(word.Text, track);
+            }
+
+            if (track.BoxOpacity > 0.5)
+            {
+                hits ??= [];
+                hits[track.BlockId] = new Vector4(
+                    RoundedHit(track.BoxRect.X / width),
+                    RoundedHit(track.BoxRect.Y / height),
+                    RoundedHit(track.BoxRect.Width / width),
+                    RoundedHit(track.BoxRect.Height / height));
+            }
         }
 
-        var font = (float)CompositeMetrics.CaptionFontPx(height, config.FontSizeRatio);
-        var key = FormattableString.Invariant($"{string.Join("|", words)}|{font}|{config.FontStyle}|{config.ColorTheme}|{config.WordAnimation}|{config.Position01.X}|{config.Position01.Y}|{width}x{height}");
-        var pill = Layer("caption", width, height);
-        if (key != captionKey)
+        if (hits is not null || CaptionHitRects01.Count > 0)
         {
-            captionKey = key;
-            RasterizeCaption(pill, config, words, font, width, height);
+            CaptionHitRects01 = hits ?? new Dictionary<string, Vector4>();
+        }
+
+        if (frames.Count == 0)
+        {
+            return;
         }
 
         RebindPipeline(frame);
-        _graphics.Context.OMSetBlendState(_sourceOver);
-        DrawQuad(pill.View, Identity(width, height), default, 0, 1);
-    }
-
-    private void RasterizeCaption(RenderLayer output, CaptionsConfig config, List<CaptionLineLayout.DisplayedWord> words, float font, int width, int height)
-    {
-        var overlay = Overlays;
-        var dark = config.ColorTheme == CaptionColorTheme.Dark;
-        var family = config.FontStyle switch
+        var blurScale = Math.Min(width, height) / 1080.0;
+        foreach (var track in frames)
         {
-            CaptionFontStyle.Serif => "Georgia",
-            CaptionFontStyle.Mono => "Consolas",
-            _ => SansFont
-        };
-        using var format = overlay.WriteFactory.CreateTextFormat(family, FontWeight.SemiBold, FontStyle.Normal, FontStretch.Normal, font);
-        var layouts = words.Select(word => overlay.WriteFactory.CreateTextLayout(word.Text, format, 4096, 4096)).ToList();
-        var spacing = font * 0.28f;
-        var textWidth = layouts.Sum(item => item.Metrics.WidthIncludingTrailingWhitespace) + spacing * Math.Max(0, layouts.Count - 1);
-        var textHeight = layouts.Max(item => item.Metrics.Height);
-        var padX = font * 0.72f;
-        var padY = font * 0.38f;
-        var pillWidth = MathF.Ceiling(textWidth + padX * 2);
-        var pillHeight = MathF.Ceiling(textHeight + padY * 2);
-        var centerX = width * (float)Math.Clamp(config.Position01.X, 0.15, 0.85);
-        var centerY = height * (float)Math.Clamp(config.Position01.Y, 0.12, 0.90);
-        var rect = new Rect(centerX - pillWidth / 2, centerY - pillHeight / 2, pillWidth, pillHeight);
-        var radius = font * 0.42f;
-        var fillAlpha = dark ? 0.82f : 0.92f;
-
-        // The shadow comes from the pill's fill: black at 38% times its alpha, offset down, Gaussian sigma 0.45 em.
-        var shadow = Layer("caption-shadow", width, height);
-        overlay.Draw(shadow, () =>
-        {
-            using var brush = overlay.Context.CreateSolidColorBrush(new Color4(0, 0, 0, 0.38f * fillAlpha));
-            overlay.Context.FillRoundedRectangle(
-                new RoundedRectangle { Rect = new Rect(rect.X, rect.Y + font * 0.15f, rect.Width, rect.Height), RadiusX = radius, RadiusY = radius },
-                brush);
-        });
-        RebindPipeline(shadow);
-        Blur(shadow, font * 0.45);
-        _graphics.Context.ClearState();
-
-        overlay.Draw(output, () =>
-        {
-            var context = overlay.Context;
-            using var fill = context.CreateSolidColorBrush(dark ? new Color4(0, 0, 0, 0.82f) : new Color4(1, 1, 1, 0.92f));
-            using var stroke = context.CreateSolidColorBrush(dark ? new Color4(1, 1, 1, 0.12f) : new Color4(0, 0, 0, 0.10f));
-            context.FillRoundedRectangle(new RoundedRectangle { Rect = rect, RadiusX = radius, RadiusY = radius }, fill);
-            context.DrawRoundedRectangle(
-                new RoundedRectangle { Rect = new Rect(rect.X + 0.5f, rect.Y + 0.5f, rect.Width - 1, rect.Height - 1), RadiusX = radius, RadiusY = radius },
-                stroke,
-                1);
-            var x = rect.X + padX;
-            for (var i = 0; i < words.Count; i++)
+            DrawCaptionBox(frame, track, blurScale);
+            // Pushed words must not show outside the box.
+            var clip = track.Style.WordsReveal == CaptionWordsReveal.WordByWord
+                ? new Vector4((float)track.BoxRect.X, (float)track.BoxRect.Y, (float)track.BoxRect.Width, (float)track.BoxRect.Height)
+                : default;
+            foreach (var word in track.Words)
             {
-                var lift = config.WordAnimation == CaptionWordAnimation.SlideIn && words[i].IsSpokenNow ? font * 0.06f : 0;
-                using var text = context.CreateSolidColorBrush(dark ? new Color4(1, 1, 1, (float)words[i].Opacity) : new Color4(0, 0, 0, (float)words[i].Opacity));
-                context.DrawTextLayout(new Vector2(x, rect.Y + padY + (textHeight - layouts[i].Metrics.Height) / 2 - lift), layouts[i], text, DrawTextOptions.None);
-                x += layouts[i].Metrics.WidthIncludingTrailingWhitespace + spacing;
+                var sprite = CaptionWordSprite(word.Text, track);
+                var sigma = word.Opacity < 0.99 && !word.IsDimmedAtRest ? (1 - word.Opacity) * CaptionFadeBlurRadius * blurScale : 0;
+                if (sigma < MinimumCaptionBlur)
+                {
+                    _graphics.Context.OMSetBlendState(_sourceOver);
+                    DrawQuad(sprite.View, PlacedAt(word.Rect.X, word.Rect.Y, sprite.Width, sprite.Height), clip, 0, (float)word.Opacity);
+                    continue;
+                }
+
+                DrawBlurred(frame, word.Rect.X, word.Rect.Y, sprite.Width, sprite.Height, sigma, clip, (float)word.Opacity, (left, top) =>
+                    DrawQuad(sprite.View, PlacedAt(left, top, sprite.Width, sprite.Height), default, 0, 1));
             }
-        });
-        foreach (var layout in layouts)
-        {
-            layout.Dispose();
         }
 
-        // Shadow under the finished pill, kept together so the result can be cached until a word changes.
-        var scratch = Layer("caption-final", width, height);
-        RebindPipeline(scratch);
-        var pipeline = _graphics.Context;
-        pipeline.ClearRenderTargetView(scratch.Target, new Color4(0, 0, 0, 0));
-        pipeline.OMSetBlendState(_sourceOver);
-        DrawQuad(shadow.View, Identity(width, height), default, 0, 1);
-        DrawQuad(output.View, Identity(width, height), default, 0, 1);
-        pipeline.UnsetRenderTargets();
-        pipeline.CopyResource(output.Texture, scratch.Texture);
+        _graphics.Context.UnsetRenderTargets();
+    }
+
+    private void DrawCaptionBox(RenderLayer frame, CaptionLineLayout.TrackFrame track, double blurScale)
+    {
+        if (track.BoxOpacity <= 0.002)
+        {
+            return;
+        }
+
+        var dark = track.Style.ColorTheme == CaptionColorTheme.Dark;
+        var box = track.BoxRect;
+        var radius = (float)(track.FontSize * 0.3);
+        var ring = (float)Math.Max(1, track.FontSize * 0.025);
+        var shade = dark ? 0f : 1f;
+        var fill = new Vector4(shade, shade, shade, (float)((dark ? 0.82 : 0.92) * track.BoxOpacity));
+        var edge = new Vector4(1 - shade, 1 - shade, 1 - shade, (float)(0.12 * track.BoxOpacity));
+        void Draw(double left, double top)
+        {
+            var rect = new Vector4((float)left, (float)top, (float)box.Width, (float)box.Height);
+            DrawBox(rect, radius, 0, fill);
+            DrawBox(rect, radius, ring, edge);
+        }
+
+        var sigma = track.BoxOpacity < 0.99 ? (1 - track.BoxOpacity) * CaptionFadeBlurRadius * blurScale : 0;
+        if (sigma < MinimumCaptionBlur)
+        {
+            _graphics.Context.OMSetBlendState(_sourceOver);
+            Draw(box.X, box.Y);
+            return;
+        }
+
+        DrawBlurred(frame, box.X, box.Y, box.Width, box.Height, sigma, default, 1, Draw);
+    }
+
+    /// <summary>Draws something small into its own patch and blurs only that, so a fading word never blurs a whole canvas.</summary>
+    private void DrawBlurred(RenderLayer frame, double x, double y, double width, double height, double sigma, Vector4 clip, float opacity, Action<double, double> draw)
+    {
+        var margin = Math.Ceiling(sigma * 3) + 2;
+        // Sized in steps, since a growing box would otherwise ask for a new texture every frame.
+        var patch = Layer(
+            "caption-patch",
+            (int)(Math.Ceiling((width + margin * 2) / CaptionPatchStep) * CaptionPatchStep),
+            (int)(Math.Ceiling((height + margin * 2) / CaptionPatchStep) * CaptionPatchStep));
+        var context = _graphics.Context;
+        context.PSSetShaderResource(0, null!);
+        context.ClearRenderTargetView(patch.Target, new Color4(0, 0, 0, 0));
+        BindTarget(patch);
+        context.OMSetBlendState(_sourceOver);
+        draw(margin, margin);
+        Blur(patch, sigma);
+        BindTarget(frame);
+        context.OMSetBlendState(_sourceOver);
+        DrawQuad(patch.View, PlacedAt(x - margin, y - margin, patch.Width, patch.Height), clip, 0, opacity);
+    }
+
+    private static QuadMap PlacedAt(double left, double top, double width, double height) => new(
+        new Vector4((float)(1 / width), 0, (float)(-left / width), 0),
+        new Vector4(0, (float)(1 / height), (float)(-top / height), 0));
+
+    private static float RoundedHit(double value) => (float)(Math.Round(value * 200) / 200);
+
+    private static string CaptionFamily(CaptionFontStyle style) => style switch
+    {
+        CaptionFontStyle.Serif => "Georgia",
+        CaptionFontStyle.Mono => "Consolas",
+        _ => SansFont
+    };
+
+    private (double Width, double Height) MeasureCaption(string text, CaptionFontStyle style, double size)
+    {
+        var overlay = Overlays;
+        using var format = overlay.WriteFactory.CreateTextFormat(CaptionFamily(style), FontWeight.Medium, FontStyle.Normal, FontStretch.Normal, (float)size);
+        using var layout = overlay.WriteFactory.CreateTextLayout(text, format, 4096, 4096);
+        return (layout.Metrics.WidthIncludingTrailingWhitespace, layout.Metrics.Height);
+    }
+
+    private RenderLayer CaptionWordSprite(string text, CaptionLineLayout.TrackFrame track)
+    {
+        var key = (text, track.FontSize, track.Style.FontStyle, track.Style.ColorTheme);
+        if (captionWords.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        var overlay = Overlays;
+        using var format = overlay.WriteFactory.CreateTextFormat(CaptionFamily(track.Style.FontStyle), FontWeight.Medium, FontStyle.Normal, FontStretch.Normal, (float)track.FontSize);
+        using var layout = overlay.WriteFactory.CreateTextLayout(text, format, 4096, 4096);
+        var sprite = new RenderLayer(_graphics.Device, Math.Max(1, (int)Math.Ceiling(layout.Metrics.WidthIncludingTrailingWhitespace)), Math.Max(1, (int)Math.Ceiling(layout.Metrics.Height)));
+        var color = track.Style.ColorTheme == CaptionColorTheme.Dark ? new Color4(1, 1, 1, 1) : new Color4(0, 0, 0, 1);
+        overlay.Draw(sprite, () =>
+        {
+            using var brush = overlay.Context.CreateSolidColorBrush(color);
+            overlay.Context.DrawTextLayout(Vector2.Zero, layout, brush, DrawTextOptions.None);
+        });
+        captionWords[key] = sprite;
+        return sprite;
     }
 
     // MARK: Keycaps

@@ -13,7 +13,7 @@ public sealed class InspectorTabAvailabilityTests
         Assert.Equal((false, "There is no mouse cursor recorded"), session.TabAvailability(InspectorTab.Cursor));
         Assert.Equal((false, "No camera recorded"), session.TabAvailability(InspectorTab.CameraLayout));
         Assert.Equal((false, "No camera recorded"), session.TabAvailability(InspectorTab.CameraStyle));
-        Assert.Equal((false, "No microphone recorded"), session.TabAvailability(InspectorTab.Captions));
+        Assert.Equal((true, null), session.TabAvailability(InspectorTab.Captions));
         Assert.Equal((false, "No microphone recorded"), session.TabAvailability(InspectorTab.Transcript));
         Assert.Equal((false, "No keyboard shortcuts during recording"), session.TabAvailability(InspectorTab.Shortcuts));
     }

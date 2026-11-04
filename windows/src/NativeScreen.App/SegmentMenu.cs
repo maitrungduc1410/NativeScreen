@@ -93,6 +93,17 @@ internal sealed class SegmentMenu
         menu.Show(anchor, at);
     }
 
+    public static void ForCaption(EditorSession session, string id, string trackId, FrameworkElement anchor, Point at)
+    {
+        var menu = new SegmentMenu();
+        menu.Command("Split at playhead", "C", () => session.SplitCaption(id, session.SourceAtPlayhead));
+        menu.Command("Add caption track", "", () => session.AddCaptionTrack());
+        menu.Separator();
+        menu.Danger("Remove caption", "Delete", () => session.DeleteCaption(id));
+        menu.Danger("Remove this track", "", () => session.DeleteCaptionTrack(trackId));
+        menu.Show(anchor, at);
+    }
+
     public static void ForMask(EditorSession session, string id, FrameworkElement anchor, Point at)
     {
         var mask = session.Document.Timeline.MaskTracks.SelectMany(track => track.Items).FirstOrDefault(item => item.Id == id);

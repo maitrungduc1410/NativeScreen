@@ -418,8 +418,8 @@ OS theme rather than the app theme, so their glyphs disappeared on the dark titl
 - **`AppWindow` sizes are physical pixels.** `Ui.SizeWindow` takes DIPs and fits the work area; passing DIPs directly made
   windows two thirds of the intended size at 150% scale, and the title bar controls overlapped.
 - **Timeline blocks are retained XAML elements, not Win2D.** A project has few blocks and they change only on edits. The
-  playhead moves by transform with no layout pass. Revisit with a measured stall (`spec/08` phase 6 allows 8 ms) or when
-  waveforms need a drawn surface.
+  playhead moves by transform with no layout pass. Revisit with a measured stall (`spec/08` phase 6 allows 8 ms). Waveforms did not
+  need a drawn surface (ADR-39).
 - **A timeline drag never rebuilds the tree.** Selecting a block rebuilds every block, and a rebuild during a press
   cancels the drag, so selection waits for release and a drag moves its one element in place.
   `BeginInteractiveEdit` / `EndInteractiveEdit` make the whole drag one undo step, like `ProjectSession`.
@@ -519,7 +519,6 @@ On one Intel MacBook Pro running Boot Camp (i9-9880H, Radeon Pro 5500M, Windows 
 - The macOS fallback that invents a transcript when speech recognition fails. On Windows the failure is reported instead.
 - Generated background music tracks. Custom audio files work.
 - Person cutout. It needs a segmentation model whose license allows redistribution (`spec/07` 7.3). None was chosen, so cutout mode draws the plain camera rectangle.
-- Voiceover recording, until the microphone problem in ADR-23 is understood. Uploading audio files works.
 
 ---
 
@@ -781,7 +780,11 @@ An SVG decodes after its `Image` loads, so a measurement can find nothing drawn.
 
 ---
 
-## 36. ADR-36: Recording the App's Own Editor Windows (macOS)
+## 36. ADR-36: Recording the App's Own Editor Windows
+
+On Windows the picker lists this app's windows except those excluded from capture, and only the recording bar is excluded while recording. An own window captures its monitor and crops to the window, for the same reason as macOS below. Windows cannot leave other apps out of a monitor capture, so one overlapping the crop appears. The still-screen problem did not exist there, since the recorder already repeats the last frame at stop.
+
+macOS:
 
 The editor can be recorded, so a demo of editing can be made with the app itself. Before this, the picker skipped every window of this process and every capture filter removed them.
 
@@ -795,7 +798,11 @@ The editor can be recorded, so a demo of editing can be made with the app itself
 
 ---
 
-## 37. ADR-37: Caption Tracks and Spring-Driven Reveal (macOS)
+## 37. ADR-37: Caption Tracks and Spring-Driven Reveal
+
+Windows has the same model and the same `CaptionLineLayout`. Its boxes use the rounded rect shader, each word is a cached sprite, and a fading item is blurred in its own small patch rather than across the canvas. Text is measured through DirectWrite by a delegate, so Core stays free of graphics. Windows keeps Whisper as its only engine, so its transcript controls keep the model choice; `Keyterms` is gone from the inspector as on macOS.
+
+macOS:
 
 Editing caption timing in the inspector was slow, so captions are now blocks on timeline tracks, and they animate instead of being redrawn at word boundaries.
 
@@ -804,8 +811,45 @@ Editing caption timing in the inspector was slow, so captions are now blocks on 
 - **Words are images, boxes are generators.** Each word is rasterized once and then moved and faded. Boxes use CoreImage generators, so a resizing box costs no rasterization.
 - **The current word stays through gaps in `Word by word`.** Using each word's end time made it flicker in the short pause before the next word.
 
+**A track always holds a caption**, as mask tracks do. Adding a track also adds a 2 second caption at the playhead, in one undo step, and any edit that leaves a track with no captions removes it and renumbers the rest. Dragging the only caption of a track past the ends does nothing, because it would only replace the track with a copy at another spot. When the last track goes, the transcript words go with it: a project with words and no tracks reads as one saved before tracks existed, so the next load would bring every deleted caption back. Undo restores them.
+
 **Clicking a caption in the preview.** The Metal frame is only pixels, so the compositor records each visible box in `lastCaptionHitRects01` and invisible SwiftUI views sit over them, as for keycaps. The rects are rounded to 0.5% of the canvas so a growing box does not update SwiftUI on every frame.
 
 **Transcription never invents text.** A failure used to fall back to sample words, which made a recording show "Welcome to Native Screen" with no error. On a Mac with Siri and Dictation off, `SFSpeechRecognizer` always failed this way. macOS 26 and later now use `SpeechTranscriber`, which does not need them, and `SFSpeechRecognizer` remains for macOS 15. Errors appear in the inspector. Sample words are only used by the showcase project.
 
 **Video length on a still screen.** ScreenCaptureKit only delivers frames when the screen changes, so the video and the project ended at the last change, while audio and telemetry went on. `stopCapture` now repeats the last frame at the stop time.
+
+---
+
+## 38. ADR-38: Directional Hover Highlight on Windows
+
+Tool buttons have the same highlight as macOS: it flies in from the side the pointer entered, leans toward the pointer by 2 points, and flies out the way the pointer left. The constants match: a spring of stiffness 1500, damping 100 and mass 2, an escape distance of 10 times the offset, and an entry scale of 0.8.
+
+- **It runs on the compositor.** macOS steps its springs on a 120 Hz timer. Here two springs drive a property set, and expressions turn it into translation, scale and opacity, so nothing runs on the UI thread between pointer events and nothing runs at rest.
+- **Spring constants become a period and a damping ratio**: 0.0365 s and 0.913. `Period` is not the oscillation period its name suggests: it acts as `1 / omega`, so `Period = sqrt(mass / stiffness)`. Measured on screen, 0.0365 s reaches 99% in 197 ms against 196 ms for the macOS spring; the textbook value, `2 pi / omega` = 0.229 s, took 1.2 s. Compositor springs do not keep velocity when retargeted the way the macOS solver does, so a fast reversal can differ slightly.
+- **Rest is judged by time.** A compositor value cannot be read back, so 250 ms since the pointer left counts as settled, in place of the macOS check on the spring's value.
+- **Which buttons.** `NsIconButton` and `NsPillButton`. Option pills and primary buttons keep their plain fill. A lit tool button (mask, split) only leans and does not fly.
+- **Made on first hover.** A panel of buttons costs nothing for those never touched, which matters because the inspector rebuilds its controls.
+
+---
+
+## 39. ADR-39: Timeline Waveforms on Windows
+
+Clips and voiceovers draw the same waveforms as macOS, from the same data: the levels (95th percentile reference, power curve 0.62), the mip pyramid and Catmull-Rom spline of ADR-10, the heights and the colors. `Waveform`, `WaveformEnvelope` and `WaveformOutline` live in Core so this is tested without a window.
+
+- **System audio comes from the video when no track names it.** Projects usually carry it inside `display.mp4`, with `systemAudio` unset. Reading only the named track left those clips with no waveform.
+- **Each wave is a XAML polygon**, traced on edits and when a volume changes, so nothing runs at rest and a volume slider moves only the waves it affects. At the largest zoom a clip has about 6000 points, which traces in well under a frame.
+- **The polygon follows the rounded corners itself**, so the look does not depend on how a block clips its children.
+- **A louder or quieter clip changes the wave height**, and below 100% a faint copy shows the wave at full volume, as on macOS.
+
+---
+
+## 40. ADR-40: Voiceover Recording on Windows
+
+**Not yet run on hardware.** The owner chose to add this with ADR-23 still open and tests it. No agent has opened a microphone with this code. It uses `WasapiCapture`, the path under suspicion there, so the risk is unchanged, and the dock now offers it in one click. Update this section with the result, on which machine, before relying on it.
+
+The dock button records, as on macOS: a click starts the microphone and the preview from the playhead, and another click stops both and adds a segment on the first track with nothing after the start. Upload stays in the inspector, the command menu and the voiceover's context menu.
+
+- **The file starts when the preview does.** Opening a device and priming preview audio both take time on Windows and neither is on the UI thread. `VoiceoverRecorder` opens the stream first and drops samples until `MarkStart`, which runs once the clock is moving. Otherwise the take would lie early by that delay.
+- **The default input device**, as on macOS, not the one chosen on the recording bar.
+- **Closing the window keeps the take.** The segment is added before the final save and the file finishes off the UI thread.

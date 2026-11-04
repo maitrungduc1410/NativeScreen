@@ -147,8 +147,7 @@ public sealed class ConformanceTests
         foreach (var row in expected.RootElement.EnumerateArray())
         {
             var t = row.GetProperty("sourceMs").GetDouble();
-            var line = CaptionLineLayout.ActiveLine(loaded.Document.Captions, t);
-            var words = line is null ? [] : CaptionLineLayout.DisplayedWords(line, loaded.Document.Captions, t);
+            var words = CaptionLineLayout.Frames(loaded.Document.Captions, t, 1920, 1080, (text, _, size) => (text.Length * size * 0.5, size * 1.2)).SelectMany(frame => frame.Words).ToList();
             var expectedWords = row.GetProperty("words").EnumerateArray().ToList();
             Assert.Equal(expectedWords.Count, words.Count);
             for (var i = 0; i < words.Count; i++)

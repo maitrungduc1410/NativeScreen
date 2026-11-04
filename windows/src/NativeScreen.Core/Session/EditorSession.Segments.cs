@@ -174,7 +174,11 @@ public sealed partial class EditorSession
     public void SplitAtCurrentTime()
     {
         var at = SourceAtPlayhead;
-        if (SelectedLayoutId is { } layout)
+        if (SelectedCaptionId is { } caption)
+        {
+            SplitCaption(caption, at);
+        }
+        else if (SelectedLayoutId is { } layout)
         {
             SplitLayout(layout, at);
         }

@@ -75,14 +75,14 @@ public static class CaptureTargets
         return results;
     }
 
-    /// <summary>Normal on-screen windows of other processes, front to back. Same filters as the macOS picker.</summary>
+    /// <summary>Normal on-screen windows, front to back, including this app's editors so editing can be demoed. The recording UI stays out.</summary>
     public static IReadOnlyList<CaptureWindow> WindowsFrontToBack()
     {
-        var own = Environment.ProcessId;
         var results = new List<CaptureWindow>();
         EnumWindows((hwnd, _) =>
         {
-            if (Describe(hwnd, own) is { } window)
+            var excluded = GetWindowDisplayAffinity(hwnd, out var affinity) && affinity != 0;
+            if (!excluded && Describe(hwnd, -1) is { } window)
             {
                 results.Add(window);
             }
@@ -93,6 +93,12 @@ public static class CaptureTargets
     }
 
     public static CaptureWindow? WindowInfo(nint hwnd) => Describe(hwnd, -1);
+
+    public static bool IsOwnWindow(nint hwnd)
+    {
+        _ = GetWindowThreadProcessId(hwnd, out var processId);
+        return processId == Environment.ProcessId;
+    }
 
     public static CaptureDisplay DisplayAt(int x, int y)
     {
@@ -257,6 +263,9 @@ public static class CaptureTargets
     private delegate bool MonitorEnumProc(nint monitor, nint hdc, nint rect, nint data);
 
     private delegate bool WindowEnumProc(nint hwnd, nint data);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowDisplayAffinity(nint hwnd, out uint affinity);
 
     [DllImport("user32.dll")]
     private static extern bool EnumDisplayMonitors(nint hdc, nint clip, MonitorEnumProc callback, nint data);

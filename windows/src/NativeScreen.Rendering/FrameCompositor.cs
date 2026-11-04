@@ -128,6 +128,11 @@ public sealed partial class FrameCompositor : IDisposable
             upload.Dispose();
         }
 
+        foreach (var word in captionWords.Values)
+        {
+            word.Dispose();
+        }
+
         overlays?.Dispose();
         foreach (var view in lutViews.Values)
         {

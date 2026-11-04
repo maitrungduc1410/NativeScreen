@@ -44,6 +44,57 @@ public sealed class CustomShortcutSegment
     public ShortcutStyleConfig? CustomStyle { get; set; }
 }
 
+/// <summary>Look of a caption track, or of one caption that overrides its track.</summary>
+public sealed class CaptionStyle
+{
+    public static Point01 BottomPosition01 => new(0.5, 1);
+    public static Point01 CenterPosition01 => new(0.5, 0.5);
+
+    public CaptionFontStyle FontStyle { get; set; } = CaptionFontStyle.SansSerif;
+    /// <summary>Share of the canvas's shortest side.</summary>
+    public double FontSizeRatio { get; set; } = 0.045;
+    public CaptionWordsReveal WordsReveal { get; set; } = CaptionWordsReveal.LineByLine;
+    public CaptionLineGrowth LineGrowth { get; set; } = CaptionLineGrowth.Expanding;
+    public CaptionWordAnimation WordAnimation { get; set; } = CaptionWordAnimation.Appear;
+    public CaptionColorTheme ColorTheme { get; set; } = CaptionColorTheme.Dark;
+    /// <summary>Where the line sits inside the canvas margins: (0, 0) is the top-left corner, (1, 1) the bottom-right.</summary>
+    public Point01 Position01 { get; set; } = BottomPosition01;
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class CaptionTrack
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "Captions";
+    public bool IsHidden { get; set; }
+    public CaptionStyle Style { get; set; } = new();
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// One caption on a track. Its timing is separate from the words' spoken times, so moving a caption never changes what Edit by
+/// transcript cuts. Words are stretched to fit the block's span.
+/// </summary>
+public sealed class CaptionBlock
+{
+    public string Id { get; set; } = "";
+    public string TrackId { get; set; } = "";
+    public double SourceStartMs { get; set; }
+    public double SourceEndMs { get; set; }
+    /// <summary>Transcript words shown by this caption. Empty when CustomText is set.</summary>
+    public List<string> WordIds { get; set; } = [];
+    /// <summary>Text typed by hand, or a transcript caption whose word count was changed.</summary>
+    public string? CustomText { get; set; }
+    public CaptionStyle? StyleOverride { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
 public sealed class CaptionsConfig
 {
     public bool Enabled { get; set; }
@@ -77,6 +128,67 @@ public sealed class CaptionsConfig
     public bool ShowDeletedTextInTranscript { get; set; } = true;
     public bool ShowHiddenWordsInTranscript { get; set; } = true;
     public List<CaptionSegment> Segments { get; set; } = [];
+    public List<CaptionTrack> CaptionTracks { get; set; } = [];
+    public List<CaptionBlock> CaptionBlocks { get; set; } = [];
+
+    /// <summary>Projects saved before caption tracks keep their look: the old project-wide style becomes the first track's style.</summary>
+    public void MigrateTranscriptToCaptionTracksIfNeeded()
+    {
+        if (CaptionTracks.Count > 0 || Segments.Count == 0)
+        {
+            return;
+        }
+
+        CaptionTracks.Add(new CaptionTrack
+        {
+            Id = EditorSession.NewId(),
+            Name = "Captions",
+            Style = new CaptionStyle
+            {
+                FontStyle = FontStyle,
+                FontSizeRatio = FontSizeRatio,
+                WordsReveal = WordsReveal,
+                LineGrowth = LineGrowth,
+                WordAnimation = WordAnimation,
+                ColorTheme = ColorTheme,
+                Position01 = new Point01(Position01.X, Position01.Y)
+            }
+        });
+        RebuildTranscriptCaptionBlocks();
+    }
+
+    /// <summary>A track always holds a caption. The rest are numbered by position.</summary>
+    public void RemoveEmptyCaptionTracks()
+    {
+        CaptionTracks.RemoveAll(track => !CaptionBlocks.Exists(block => block.TrackId == track.Id));
+        for (var index = 0; index < CaptionTracks.Count; index++)
+        {
+            CaptionTracks[index].Name = index == 0 ? "Captions" : $"Captions {index + 1}";
+        }
+    }
+
+    /// <summary>Fills the first track from the transcript. Captions typed by hand on other tracks stay.</summary>
+    public void RebuildTranscriptCaptionBlocks()
+    {
+        if (CaptionTracks.Count == 0)
+        {
+            CaptionTracks.Add(new CaptionTrack { Id = EditorSession.NewId(), Name = "Captions" });
+        }
+
+        var trackId = CaptionTracks[0].Id;
+        CaptionBlocks.RemoveAll(block => block.WordIds.Count > 0 || block.TrackId == trackId);
+        foreach (var words in CaptionLineLayout.GroupWordsIntoLines(Segments))
+        {
+            CaptionBlocks.Add(new CaptionBlock
+            {
+                Id = EditorSession.NewId(),
+                TrackId = trackId,
+                SourceStartMs = words[0].SourceStartMs,
+                SourceEndMs = words[^1].SourceEndMs,
+                WordIds = words.Select(word => word.Id).ToList()
+            });
+        }
+    }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

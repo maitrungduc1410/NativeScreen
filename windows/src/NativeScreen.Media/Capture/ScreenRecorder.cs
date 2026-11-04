@@ -94,12 +94,15 @@ public sealed class ScreenRecorder : IDisposable
             Marshal.Release(inspectable);
         }
 
-        item = target.Mode == CaptureTargetMode.Window
+        // A capture of one window drops the flyouts, menus and tooltips a demo of the editor needs. Those are separate windows of
+        // this app, so its own windows capture the monitor and crop to the window.
+        var cropsMonitor = target.Mode == CaptureTargetMode.Area || (target.Window is { } own && CaptureTargets.IsOwnWindow(own.Handle));
+        item = target.Mode == CaptureTargetMode.Window && !cropsMonitor
             ? CaptureItemInterop.ForWindow(target.Window!.Handle)
             : CaptureItemInterop.ForMonitor(target.Display.Handle);
         poolSize = item.Size;
-        (sourceX, sourceY) = target.Mode == CaptureTargetMode.Area
-            ? (target.Rect.X - target.Display.Bounds.X, target.Rect.Y - target.Display.Bounds.Y)
+        (sourceX, sourceY) = cropsMonitor
+            ? (Math.Max(0, target.Rect.X - target.Display.Bounds.X), Math.Max(0, target.Rect.Y - target.Display.Bounds.Y))
             : (0, 0);
         frameCopy = device.CreateTexture2D(new Texture2DDescription
         {

@@ -149,7 +149,14 @@ internal sealed class TimelineView
         ruler.PointerCaptureLost += (_, _) => EndDrag();
     }
 
-    private float[]? waveform;
+    private static readonly Color SystemWaveColor = Color.FromArgb(255, 77, 47, 245);
+    private static readonly Color WhiteWaveColor = Color.FromArgb(255, 255, 255, 255);
+
+    private readonly List<WaveLayer> waveLayers = [];
+    private readonly Dictionary<string, WaveformEnvelope> voiceoverWaves = [];
+    private WaveformEnvelope? systemWave;
+    private WaveformEnvelope? microphoneWave;
+    private Border? recordingVoiceoverBlock;
 
     private double TrackWidth => Math.Max(260, viewportWidth - TrackInset * 2) * zoom;
 
@@ -165,10 +172,26 @@ internal sealed class TimelineView
     /// <summary>The playhead was moved by hand, so the clock label and the preview must follow it.</summary>
     public event Action? PlayheadScrubbed;
 
-    public void SetWaveform(float[] peaks)
+    public void SetRecordingWaveforms(float[]? system, float[]? microphone)
     {
-        waveform = peaks;
+        systemWave = system is null ? null : new WaveformEnvelope(system);
+        microphoneWave = microphone is null ? null : new WaveformEnvelope(microphone);
         Rebuild();
+    }
+
+    public void SetVoiceoverWaveform(string id, float[] samples)
+    {
+        voiceoverWaves[id] = new WaveformEnvelope(samples);
+        Rebuild();
+    }
+
+    /// <summary>A volume slider moved. Only the waves it changed are traced again.</summary>
+    public void RefreshWaveformVolumes()
+    {
+        foreach (var layer in waveLayers)
+        {
+            UpdateWave(layer);
+        }
     }
 
     /// <summary>Split mode hides the handles and turns the pointer into a crosshair over everything it can cut.</summary>
@@ -247,6 +270,7 @@ internal sealed class TimelineView
     /// <summary>Called on every clock tick while playing, so it only moves a transform.</summary>
     public void UpdatePlayhead()
     {
+        UpdateRecordingVoiceoverBlock();
         var height = root.ActualHeight;
         var mainX = X(session.PlayheadTimelineMs) - scroller.HorizontalOffset;
         playhead.Place(mainX, PlayheadMark.TopY, height);
@@ -270,6 +294,7 @@ internal sealed class TimelineView
         canvas.Children.Clear();
         ruler.Children.Clear();
         wigglingBlocks.Clear();
+        waveLayers.Clear();
         blockRows.Clear();
         labels.Children.Clear();
         rulerStepSeconds = TimelineRuler.StepSeconds(session.DurationMs, TrackWidth);
@@ -282,6 +307,7 @@ internal sealed class TimelineView
         y = DrawMasks(y);
         y = DrawShortcuts(y);
         y = DrawVoiceovers(y);
+        y = DrawCaptions(y);
         y += 12;
         var height = Math.Max(y, root.ActualHeight - RulerHeight);
         canvas.Width = TrackWidth + TrackInset * 2;
@@ -380,7 +406,7 @@ internal sealed class TimelineView
                 $"{seconds / 1000:0.#}s  ·  {slice.Speed:0.##}x",
                 slice.Id == session.SelectedSliceId,
                 false);
-            AddWaveform(block, slice.SourceStartMs, slice.SourceEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
+            AddClipWaveforms(block, slice, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
             AddRulerTicks(block, mapped.TimelineStartMs, mapped.TimelineEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
             var id = slice.Id;
             var blockWidth = X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs);
@@ -497,33 +523,141 @@ internal sealed class TimelineView
         block.Children.Insert(block.Children.Count - 1, ticks);
     }
 
-    /// <summary>A filled envelope along the bottom of a clip; one point per 3 px is plenty, and it is rebuilt only on edits.</summary>
-    private void AddWaveform(BlockGrid block, double sourceStart, double sourceEnd, double width)
+    /// <summary>System audio in purple and the microphone in white, both following their volumes.</summary>
+    private void AddClipWaveforms(BlockGrid block, ClipSlice slice, double width)
     {
-        if (waveform is null || width < 8)
+        var total = Math.Max(1, session.SourceDurationMs);
+        var start = Math.Clamp(slice.SourceStartMs / total, 0, 1);
+        var end = Math.Max(start + 0.001, Math.Min(1, slice.SourceEndMs / total));
+        var id = slice.Id;
+        var layer = 0;
+        if (systemWave is { } system)
+        {
+            AddWave(block, width, ClipRowHeight, system, start, end, SystemWaveColor, 0.52, 0.25, ghost: true, layer++, () =>
+            {
+                var audio = session.Document.Audio;
+                var current = session.Document.Timeline.Slices.Find(other => other.Id == id);
+                return current is null || current.Muted || audio.MuteSystemAudio ? 0 : current.SystemAudioVolume * audio.SystemAudioVolume;
+            });
+        }
+
+        if (microphoneWave is { } microphone)
+        {
+            AddWave(block, width, ClipRowHeight, microphone, start, end, WhiteWaveColor, 0.44, 0.20, ghost: false, layer, () =>
+            {
+                var audio = session.Document.Audio;
+                var current = session.Document.Timeline.Slices.Find(other => other.Id == id);
+                return current is null || current.Muted || audio.MuteMicrophone ? 0 : audio.MicrophoneVolume;
+            });
+        }
+    }
+
+    /// <summary>A filled envelope along the bottom of a block, under its ticks and text. Drawn once per edit, and at rest it costs nothing.</summary>
+    private void AddWave(
+        BlockGrid block,
+        double width,
+        double height,
+        WaveformEnvelope envelope,
+        double startFraction,
+        double endFraction,
+        Color color,
+        double topOpacity,
+        double bottomOpacity,
+        bool ghost,
+        int index,
+        Func<double> volume)
+    {
+        if (!AppSettings.Shared.ShowAudioWaveform || width < 8)
         {
             return;
         }
 
-        var points = new PointCollection();
-        var msPerBin = session.SourceDurationMs / waveform.Length;
-        var count = Math.Max(2, (int)(width / 3));
-        points.Add(new Windows.Foundation.Point(0, ClipRowHeight));
-        for (var index = 0; index <= count; index++)
+        // Children are laid out inside the border, so the wave fits what is left.
+        var border = block.BorderThickness.Top;
+        var innerWidth = width - border * 2;
+        var innerHeight = height - border * 2;
+        var maximum = WaveformOutline.MaximumHeight(innerHeight);
+        var fill = new Polygon
         {
-            var from = sourceStart + (sourceEnd - sourceStart) * index / count;
-            var to = sourceStart + (sourceEnd - sourceStart) * (index + 1) / count;
-            var peak = 0f;
-            for (var bin = (int)(from / msPerBin); bin < Math.Min(waveform.Length, (int)(to / msPerBin) + 1); bin++)
+            IsHitTestVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Fill = new LinearGradientBrush
             {
-                peak = Math.Max(peak, waveform[Math.Max(0, bin)]);
+                MappingMode = BrushMappingMode.Absolute,
+                StartPoint = new Windows.Foundation.Point(0, innerHeight - maximum),
+                EndPoint = new Windows.Foundation.Point(0, innerHeight),
+                GradientStops =
+                {
+                    new GradientStop { Color = Color.FromArgb((byte)(topOpacity * 255), color.R, color.G, color.B), Offset = 0 },
+                    new GradientStop { Color = Color.FromArgb((byte)(bottomOpacity * 255), color.R, color.G, color.B), Offset = 1 }
+                }
             }
-
-            points.Add(new Windows.Foundation.Point(width * index / count, ClipRowHeight - peak * ClipRowHeight * 0.55));
+        };
+        block.Children.Insert(index, fill);
+        Polygon? full = null;
+        if (ghost)
+        {
+            // Below 100% volume, the wave at 100% stays as a faint outline.
+            full = new Polygon
+            {
+                IsHitTestVisible = false,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Fill = new SolidColorBrush(Color.FromArgb(31, color.R, color.G, color.B)),
+                Visibility = Visibility.Collapsed
+            };
+            block.Children.Insert(index, full);
         }
 
-        points.Add(new Windows.Foundation.Point(width, ClipRowHeight));
-        block.Children.Insert(0, new Polygon { Points = points, Fill = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)), IsHitTestVisible = false });
+        var layer = new WaveLayer(fill, full, envelope, startFraction, endFraction, innerWidth, innerHeight, Math.Max(0, block.CornerRadius.TopLeft - border), volume);
+        waveLayers.Add(layer);
+        UpdateWave(layer);
+    }
+
+    private static void UpdateWave(WaveLayer layer)
+    {
+        var volume = Math.Clamp(layer.Volume(), 0, 1.5);
+        if (Math.Abs(volume - layer.Drawn) < 0.001)
+        {
+            return;
+        }
+
+        layer.Drawn = volume;
+        layer.Fill.Visibility = volume > 0.005 ? Visibility.Visible : Visibility.Collapsed;
+        if (volume > 0.005)
+        {
+            layer.Fill.Points = TraceWave(layer, volume);
+        }
+
+        if (layer.Full is { } full)
+        {
+            full.Visibility = volume > 0.005 && volume < 0.99 ? Visibility.Visible : Visibility.Collapsed;
+            if (full.Visibility == Visibility.Visible && !layer.FullTraced)
+            {
+                full.Points = TraceWave(layer, 1);
+                layer.FullTraced = true;
+            }
+        }
+    }
+
+    private static PointCollection TraceWave(WaveLayer layer, double volume)
+    {
+        var samplesPerBin = layer.Envelope.SamplesPerBin(layer.Start, layer.End, layer.Width);
+        var maximum = WaveformOutline.MaximumHeight(layer.Height);
+        var ceiling = WaveformOutline.Ceiling(layer.Height);
+        var outline = WaveformOutline.Points(layer.Width, layer.Height, layer.Radius, AppSettings.Shared.SmoothWaveform, fraction =>
+        {
+            var position = (layer.Start + fraction * (layer.End - layer.Start)) * layer.Envelope.SampleCount;
+            return Math.Min(ceiling, layer.Envelope.Read(position, samplesPerBin) * maximum * volume);
+        });
+        var points = new PointCollection();
+        foreach (var (x, y) in outline)
+        {
+            points.Add(new Windows.Foundation.Point(x, y));
+        }
+
+        return points;
     }
 
     private double DrawTypingSuggestions(double y)
@@ -576,23 +710,39 @@ internal sealed class TimelineView
     private double DrawVoiceovers(double y)
     {
         var timeline = session.Document.Timeline;
-        if (timeline.Voiceovers.Count == 0)
+        recordingVoiceoverBlock = null;
+        if (timeline.Voiceovers.Count == 0 && !session.IsRecordingVoiceover)
         {
             return y;
         }
 
-        var count = VoiceoverTrackLayout.TrackCount(timeline.Voiceovers);
+        var count = Math.Max(VoiceoverTrackLayout.TrackCount(timeline.Voiceovers), session.IsRecordingVoiceover ? session.VoiceoverRecordingTrackIndex + 1 : 0);
         for (var track = 0; track < count; track++)
         {
             var row = track;
             var hidden = VoiceoverTrackLayout.IsTrackHidden(timeline, row);
             AddLabel(row == 0 ? "Voiceovers" : $"Voiceovers {row + 1}", y, MaskRowHeight, eye: true, hidden, () => session.ToggleVoiceoverTrackHidden(row));
+            if (session.IsRecordingVoiceover && session.VoiceoverRecordingTrackIndex == row)
+            {
+                AddRecordingVoiceoverBlock(y);
+            }
+
             foreach (var voiceover in timeline.Voiceovers.Where(item => item.TrackIndex == row))
             {
                 var left = X(TimelineOf(voiceover.SourceStartMs));
                 var width = X(TimelineOf(voiceover.SourceEndMs)) - left;
-                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, "Voiceover", null, false, voiceover.Disabled || hidden);
+                var block = Block(left, y, width, MaskRowHeight, Palette.Mask, "Voiceover", $"{Math.Round(voiceover.Volume * 100):0}%", false, voiceover.Disabled || hidden || voiceover.Volume <= 0.001);
                 var id = voiceover.Id;
+                if (voiceoverWaves.TryGetValue(id, out var voiceoverWave))
+                {
+                    AddWave(block, width, MaskRowHeight, voiceoverWave, 0, 1, WhiteWaveColor, 0.44, 0.20, ghost: false, 0, () =>
+                    {
+                        var timelineNow = session.Document.Timeline;
+                        var current = timelineNow.Voiceovers.Find(other => other.Id == id);
+                        return current is null || current.Disabled || VoiceoverTrackLayout.IsTrackHidden(timelineNow, current.TrackIndex) ? 0 : current.Volume;
+                    });
+                }
+
                 ToolTipService.SetToolTip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
                 block.RightTapped += (_, args) =>
                 {
@@ -622,6 +772,41 @@ internal sealed class TimelineView
         }
 
         return y;
+    }
+
+    /// <summary>Grows with the playhead while a take is running.</summary>
+    private void AddRecordingVoiceoverBlock(double y)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
+        content.Children.Add(new Ellipse { Width = 7, Height = 7, Fill = new SolidColorBrush(Color.FromArgb(255, 255, 59, 48)), VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = "Recording voiceover…", FontSize = 11.5, FontWeight = FontWeights.Medium, Foreground = Ui.Pal("Ink95"), TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center });
+        recordingVoiceoverBlock = new Border
+        {
+            Height = MaskRowHeight,
+            CornerRadius = new CornerRadius(10),
+            Background = new SolidColorBrush(Color.FromArgb(82, 255, 59, 48)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(217, 255, 59, 48)),
+            BorderThickness = new Thickness(1.2),
+            IsHitTestVisible = false,
+            Child = content
+        };
+        Canvas.SetTop(recordingVoiceoverBlock, y);
+        Canvas.SetZIndex(recordingVoiceoverBlock, 3);
+        canvas.Children.Add(recordingVoiceoverBlock);
+        UpdateRecordingVoiceoverBlock();
+    }
+
+    private void UpdateRecordingVoiceoverBlock()
+    {
+        if (recordingVoiceoverBlock is not { } block)
+        {
+            return;
+        }
+
+        var start = TimelineOf(session.VoiceoverRecordingStartSourceMs);
+        var current = Math.Max(start + 100, session.PlayheadTimelineMs);
+        Canvas.SetLeft(block, X(start));
+        block.Width = Math.Max(24, X(current) - X(start));
     }
 
     private double DrawZooms(double y)
@@ -866,6 +1051,72 @@ internal sealed class TimelineView
         return y;
     }
 
+    private double DrawCaptions(double y)
+    {
+        var captions = session.Document.Captions;
+        for (var index = 0; index < captions.CaptionTracks.Count; index++)
+        {
+            var track = captions.CaptionTracks[index];
+            var trackId = track.Id;
+            var hidden = track.IsHidden || !captions.Enabled;
+            AddRowTarget(
+                y,
+                MaskRowHeight,
+                GhostStyle.Of(Palette.Caption),
+                () => session.Document.Captions.CaptionBlocks.Where(item => item.TrackId == trackId).Select(item => (TimelineOf(item.SourceStartMs), TimelineOf(item.SourceEndMs))),
+                450,
+                2000,
+                300,
+                (start, end) => session.AddCaption(trackId, start, end),
+                marginPoints: 6);
+            AddLabel(track.Name, y, MaskRowHeight, eye: true, hidden, () => session.ToggleCaptionTrackHidden(trackId));
+            foreach (var item in captions.CaptionBlocks.Where(item => item.TrackId == trackId))
+            {
+                var left = X(TimelineOf(item.SourceStartMs));
+                var width = X(TimelineOf(item.SourceEndMs)) - left;
+                var block = Block(left, y, width, MaskRowHeight, Palette.Caption, "Caption", CaptionLineLayout.DisplayText(item, captions), item.Id == session.SelectedCaptionId, hidden);
+                var id = item.Id;
+                block.SplitAt = time => session.SplitCaption(id, session.Mapper.SourceTime(time).SourceMs);
+                Draggable(block, width, () => session.SelectCaption(id), (start, end) =>
+                {
+                    session.Mutate(document =>
+                    {
+                        if (document.Captions.CaptionBlocks.Find(other => other.Id == id) is { } target)
+                        {
+                            target.SourceStartMs = start;
+                            target.SourceEndMs = Math.Max(start + EditorSession.MinimumCaptionMs, end);
+                        }
+                    }, structural: false);
+                }, () =>
+                {
+                    var current = session.Document.Captions.CaptionBlocks.First(other => other.Id == id);
+                    var (low, high) = session.CaptionNeighborBounds(id, current.TrackId, current.SourceStartMs);
+                    return (current.SourceStartMs, current.SourceEndMs, low, high);
+                },
+                movedRows: rows =>
+                {
+                    var captionsNow = session.Document.Captions;
+                    var currentTrack = captionsNow.CaptionBlocks.Find(other => other.Id == id)?.TrackId;
+                    var from = captionsNow.CaptionTracks.FindIndex(other => other.Id == currentTrack);
+                    if (from >= 0)
+                    {
+                        session.MoveCaptionToTrack(id, from + rows);
+                    }
+                });
+                block.RightTapped += (_, args) =>
+                {
+                    args.Handled = true;
+                    session.SelectCaption(id);
+                    SegmentMenu.ForCaption(session, id, trackId, canvas, args.GetPosition(canvas));
+                };
+            }
+
+            y += MaskRowHeight + RowSpacing;
+        }
+
+        return y;
+    }
+
     private static string LayoutTitle(CameraTimelineLayoutType type) => type switch
     {
         CameraTimelineLayoutType.SplitScreen => "Split screen",
@@ -889,7 +1140,8 @@ internal sealed class TimelineView
         double minimumSourceMs,
         Action<double, double> add,
         bool seekToMiddle = true,
-        string? prompt = null)
+        string? prompt = null,
+        double marginPoints = 4)
     {
         var row = new Border { Width = TrackWidth, Height = height, Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)) };
         var plus = Ui.Icon("\uE710", style.IconSize, Ui.Pal("Ink95"));
@@ -945,7 +1197,7 @@ internal sealed class TimelineView
         {
             preview = null;
             if (drag is null && !scrubbing && !session.IsSplitModeActive
-                && TimelineAddPreview.Span(TimeAt(args.GetCurrentPoint(canvas).Position.X), occupied(), session.DurationMs, 4.0 / TrackWidth * session.DurationMs, minimumGapMs, desiredMs) is { } span)
+                && TimelineAddPreview.Span(TimeAt(args.GetCurrentPoint(canvas).Position.X), occupied(), session.DurationMs, marginPoints / TrackWidth * session.DurationMs, minimumGapMs, desiredMs) is { } span)
             {
                 var sourceStart = session.Mapper.SourceTime(span.Start).SourceMs;
                 var sourceEnd = session.Mapper.SourceTime(span.End).SourceMs;
@@ -1344,11 +1596,30 @@ internal sealed class TimelineView
 
     private sealed record Drag(BlockGrid Block, double PressX, double PressY, double BlockY, double PressDurationMs, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select, Action<int>? MovedRows);
 
+    private sealed class WaveLayer(Polygon fill, Polygon? full, WaveformEnvelope envelope, double start, double end, double width, double height, double radius, Func<double> volume)
+    {
+        public Polygon Fill { get; } = fill;
+        public Polygon? Full { get; } = full;
+        public WaveformEnvelope Envelope { get; } = envelope;
+        public double Start { get; } = start;
+        public double End { get; } = end;
+        public double Width { get; } = width;
+        public double Height { get; } = height;
+        public double Radius { get; } = radius;
+        public Func<double> Volume { get; } = volume;
+
+        /// <summary>The volume the wave was last traced at. Starts out of range so the first update always traces.</summary>
+        public double Drawn { get; set; } = -1;
+
+        public bool FullTraced { get; set; }
+    }
+
     private sealed record Palette(Color Top, Color Bottom, Color Ring)
     {
         public static readonly Palette Clip = new(Color.FromArgb(255, 147, 97, 12), Color.FromArgb(255, 218, 144, 18), Color.FromArgb(255, 244, 198, 119));
         public static readonly Palette Zoom = new(Color.FromArgb(255, 77, 47, 245), Color.FromArgb(255, 139, 120, 249), Color.FromArgb(255, 244, 242, 254));
         public static readonly Palette Mask = new(Color.FromArgb(255, 130, 52, 90), Color.FromArgb(255, 183, 75, 128), Color.FromArgb(255, 220, 166, 192));
+        public static readonly Palette Caption = new(Color.FromArgb(255, 22, 99, 110), Color.FromArgb(255, 31, 143, 158), Color.FromArgb(255, 153, 222, 231));
         public static readonly Palette Layout = new(Color.FromArgb(255, 101, 87, 94), Color.FromArgb(255, 141, 124, 132), Color.FromArgb(255, 209, 200, 205));
     }
 

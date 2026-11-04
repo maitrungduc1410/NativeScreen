@@ -15,6 +15,16 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     private const int ThumbnailLimit = 24;
 
     private CancellationTokenSource? transcriptCancel;
+    private VoiceoverRecorder? voiceoverRecorder;
+    private string? voiceoverRelativePath;
+    private bool voiceoverBusy;
+    private bool closing;
+
+    /// <summary>Starts the preview if it is paused, and finishes when it is moving.</summary>
+    public Func<Task>? StartPlayback { get; set; }
+
+    /// <summary>Pauses the preview if it is playing.</summary>
+    public Action? PausePlayback { get; set; }
 
     /// <summary>A long job moved on, so the inspector should redraw its status.</summary>
     public event Action? Changed;
@@ -127,6 +137,139 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                     document.Audio.BackgroundMusic.Muted = false;
                 });
                 toast("Background audio file added");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a recording, or finishes the one running. The microphone opens before the preview moves, and the file starts when
+    /// the preview does, so the take lines up with what was on screen (spec/06 ADR-40).
+    /// </summary>
+    public async void ToggleVoiceoverRecording()
+    {
+        if (voiceoverBusy)
+        {
+            return;
+        }
+
+        voiceoverBusy = true;
+        try
+        {
+            if (voiceoverRecorder is null)
+            {
+                await StartVoiceoverRecording();
+            }
+            else
+            {
+                await StopVoiceoverRecording();
+            }
+        }
+        finally
+        {
+            voiceoverBusy = false;
+        }
+    }
+
+    private async Task StartVoiceoverRecording()
+    {
+        if (source.PackagePath is not { } package)
+        {
+            toast("Open a saved project first");
+            return;
+        }
+
+        var name = $"voiceover-{EditorSession.NewId()}.m4a";
+        var path = Path.Combine(package, "assets", name);
+        var recorder = await Task.Run(() =>
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            return VoiceoverRecorder.TryStart(path);
+        });
+        if (recorder is null)
+        {
+            toast("Could not start microphone voiceover recording");
+            return;
+        }
+
+        if (StartPlayback is { } start)
+        {
+            await start();
+        }
+
+        if (closing)
+        {
+            _ = Task.Run(() => FinishRecorder(recorder, 0));
+            return;
+        }
+
+        recorder.MarkStart();
+        voiceoverRecorder = recorder;
+        voiceoverRelativePath = "assets/" + name;
+        session.BeginVoiceoverRecording();
+        toast("Recording voiceover… Click again to finish");
+    }
+
+    private async Task StopVoiceoverRecording()
+    {
+        var (recorder, relative, recordedMs) = TakeRecording();
+        PausePlayback?.Invoke();
+        session.EndVoiceoverRecording();
+        var finished = await Task.Run(() => FinishRecorder(recorder, recordedMs));
+        if (finished)
+        {
+            session.AddRecordedVoiceover(relative, recordedMs);
+            toast("Voiceover added");
+        }
+        else
+        {
+            toast("Could not finish the voiceover recording");
+        }
+    }
+
+    /// <summary>The window is closing. A take still running is kept: the segment goes in now, so the final save includes it.</summary>
+    public void FinishVoiceoverRecordingForClose()
+    {
+        closing = true;
+        if (voiceoverRecorder is null)
+        {
+            return;
+        }
+
+        var (recorder, relative, recordedMs) = TakeRecording();
+        session.EndVoiceoverRecording();
+        session.AddRecordedVoiceover(relative, recordedMs);
+        _ = Task.Run(() => FinishRecorder(recorder, recordedMs));
+    }
+
+    private (VoiceoverRecorder Recorder, string Relative, double RecordedMs) TakeRecording()
+    {
+        var recorder = voiceoverRecorder!;
+        var relative = voiceoverRelativePath!;
+        voiceoverRecorder = null;
+        voiceoverRelativePath = null;
+        return (recorder, relative, recorder.ElapsedMs);
+    }
+
+    private static bool FinishRecorder(VoiceoverRecorder recorder, double recordedMs)
+    {
+        try
+        {
+            recorder.Stop(recordedMs);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException or InvalidOperationException)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                recorder.Dispose();
+            }
+            catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or InvalidOperationException)
+            {
+                // The device went away; there is nothing left to release.
             }
         }
     }
@@ -523,9 +666,13 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                 session.SourceDurationMs,
                 new Progress<double>(share => Report($"Transcribing • {share:P0}")),
                 cancel.Token);
+            session.SelectCaption(null);
+            var duration = session.SourceDurationMs;
             session.Mutate(next =>
             {
-                next.Captions.Segments = segments;
+                // A model can place words past the end of the audio, where no frame would ever show them.
+                next.Captions.Segments = segments.Where(word => word.SourceStartMs < duration).ToList();
+                next.Captions.RebuildTranscriptCaptionBlocks();
                 next.Captions.Enabled = true;
             });
             toast(segments.Count == 0 ? "No speech found" : $"Transcribed {segments.Count} words");

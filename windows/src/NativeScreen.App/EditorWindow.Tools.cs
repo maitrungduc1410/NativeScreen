@@ -90,6 +90,8 @@ public sealed partial class EditorWindow
 
     // MARK: Waveform
 
+    private readonly HashSet<string> requestedVoiceoverWaveforms = [];
+
     private async Task LoadWaveform()
     {
         if (source.PackagePath is not { } package || source.Project is not { } project)
@@ -97,18 +99,45 @@ public sealed partial class EditorWindow
             return;
         }
 
+        // System audio usually lives inside the video, and then the metadata names no separate track for it.
         var tracks = project.Metadata.Tracks;
-        var track = tracks.SystemAudio ?? tracks.MicrophoneAudio;
-        if (track is null)
+        var recording = Path.Combine(package, "recording");
+        var systemPath = Path.Combine(recording, tracks.SystemAudio ?? tracks.DisplayVideo);
+        var microphonePath = tracks.MicrophoneAudio is { } microphone ? Path.Combine(recording, microphone) : null;
+        var bins = Waveform.BinCount(source.DurationMs);
+        var (system, recordedMicrophone) = await Task.Run(() => (
+            MediaAssets.ReadWaveform(systemPath, bins, CancellationToken.None),
+            microphonePath is null ? null : MediaAssets.ReadWaveform(microphonePath, bins, CancellationToken.None)));
+        if (!closed)
+        {
+            timeline.SetRecordingWaveforms(system, recordedMicrophone);
+        }
+
+        await LoadVoiceoverWaveforms();
+    }
+
+    /// <summary>Reads the voiceovers not read yet, one at a time. A voiceover's file never changes, so its id is enough to know.</summary>
+    private async Task LoadVoiceoverWaveforms()
+    {
+        if (source.PackagePath is not { } package)
         {
             return;
         }
 
-        var path = Path.Combine(package, "recording", track);
-        var waveform = await Task.Run(() => MediaAssets.ReadWaveform(path, source.DurationMs, CancellationToken.None));
-        if (!closed && waveform is not null)
+        foreach (var voiceover in session.Document.Timeline.Voiceovers.ToList())
         {
-            timeline.SetWaveform(waveform);
+            if (closed || !requestedVoiceoverWaveforms.Add(voiceover.Id))
+            {
+                continue;
+            }
+
+            var path = Path.Combine(package, voiceover.RelativePath);
+            var bins = Waveform.VoiceoverBinCount(voiceover.DurationMs);
+            var samples = await Task.Run(() => MediaAssets.ReadWaveform(path, bins, CancellationToken.None));
+            if (!closed)
+            {
+                timeline.SetVoiceoverWaveform(voiceover.Id, samples ?? Waveform.Procedural(voiceover.DurationMs, Math.Max(96, bins)));
+            }
         }
     }
 

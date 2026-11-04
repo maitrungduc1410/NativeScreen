@@ -24,6 +24,7 @@ public sealed class IntelligenceAndAssetsTests : IDisposable
         document.Captions.FontSizeRatio = 0.06;
         document.Captions.WordsReveal = CaptionWordsReveal.LineByLine;
         document.Captions.Segments = [new CaptionSegment { Id = "a", SourceStartMs = 0, SourceEndMs = 60000, Text = text }];
+        document.Captions.MigrateTranscriptToCaptionTracksIfNeeded();
         document.Timeline.Slices = [new ClipSlice { Id = "s", SourceStartMs = 0, SourceEndMs = 60000 }];
         using var compositor = new FrameCompositor();
         var layer = compositor.Compose(
@@ -153,7 +154,7 @@ public sealed class IntelligenceAndAssetsTests : IDisposable
             writer.Finish();
         }
 
-        var peaks = MediaAssets.ReadWaveform(path, 4000, CancellationToken.None);
+        var peaks = MediaAssets.ReadWaveform(path, Waveform.BinCount(4000), CancellationToken.None);
         Assert.NotNull(peaks);
         var quarter = peaks.Length / 4;
         Assert.True(peaks.Take(quarter).Max() < 0.2f, "the silent half has sound");

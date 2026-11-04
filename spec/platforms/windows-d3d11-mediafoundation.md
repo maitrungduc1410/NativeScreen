@@ -181,7 +181,7 @@ Rules:
   editor window, Desktop Acrylic on HUD and popups, custom title bar with the app menu (`MenuBar`) since Windows has no
   global menu bar, keyboard accelerators with `Ctrl` instead of `Cmd`.
 - Timeline: retained XAML blocks on a `Canvas`, with the playhead moved by transform (`spec/06` ADR-19). Move to Win2D
-  `CanvasVirtualControl` when waveforms need a drawn surface or a stall is measured.
+  `CanvasVirtualControl` when a stall is measured. Waveforms are XAML polygons (`spec/06` ADR-39).
 - Tooltips and hover magnet: Composition animations (`spec/06` ADR on retained-layer hover physics).
 - Multiple projects open at once, each in its own window with its own session, undo stack and render thread.
 - Light and dark themes (`RequestedTheme`), driven by settings.
