@@ -1516,6 +1516,15 @@ public struct CaptionsConfig: Codable, Equatable, Hashable, Sendable {
         rebuildTranscriptCaptionBlocks()
     }
 
+    /// A track always holds a caption. The rest are numbered by position.
+    public mutating func removeEmptyCaptionTracks() {
+        let usedTrackIds = Set(captionBlocks.map(\.trackId))
+        captionTracks.removeAll { !usedTrackIds.contains($0.id) }
+        for idx in captionTracks.indices {
+            captionTracks[idx].name = idx == 0 ? "Captions" : "Captions \(idx + 1)"
+        }
+    }
+
     /// Fills the first track from the transcript. Captions typed by hand on other tracks stay.
     public mutating func rebuildTranscriptCaptionBlocks() {
         if captionTracks.isEmpty {

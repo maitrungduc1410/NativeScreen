@@ -245,6 +245,7 @@ public final class ProjectSession: Identifiable {
         self.microphoneWaveformSamples = []
 
         self.document.captions.migrateTranscriptToCaptionTracksIfNeeded()
+        self.document.captions.removeEmptyCaptionTracks()
 
         // Synchronize `shortcutTracks` with actual shortcuts so projects without shortcuts never show an empty default Shortcuts track!
         let initialShortcutClusters = self.detectedShortcutClusters
@@ -418,6 +419,13 @@ public final class ProjectSession: Identifiable {
             next.timeline.maskTracks.removeAll { $0.items.isEmpty }
             for idx in next.timeline.maskTracks.indices {
                 next.timeline.maskTracks[idx].name = idx == 0 ? "Masks" : "Masks \(idx + 1)"
+            }
+        }
+        if next.captions.captionTracks != document.captions.captionTracks || next.captions.captionBlocks != document.captions.captionBlocks {
+            next.captions.removeEmptyCaptionTracks()
+            if next.captions.captionTracks.isEmpty, !document.captions.captionTracks.isEmpty {
+                // Words without tracks read as a project saved before tracks existed: the next load would bring the deleted captions back.
+                next.captions.segments = []
             }
         }
 
@@ -901,6 +909,7 @@ public final class ProjectSession: Identifiable {
     // MARK: - Caption Tracks
 
     private static let minCaptionDurationMs = 220.0
+    private static let newCaptionDurationMs = 2000.0
 
     private var captionSourceBounds: (start: Double, end: Double) {
         let start = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
@@ -917,6 +926,7 @@ public final class ProjectSession: Identifiable {
         return (max(bounds.start, lower), min(bounds.end, upper))
     }
 
+    /// A track always holds a caption, so a new one starts with one at the playhead, kept whole near the end.
     @discardableResult
     public func addCaptionTrack() -> String {
         var newTrack = CaptionTrack(name: "Captions \(document.captions.captionTracks.count + 1)")
@@ -927,12 +937,20 @@ public final class ProjectSession: Identifiable {
             // A second track at the same spot would cover the first.
             newTrack.style.position01 = abs(last.style.position01.y - 1.0) < 0.1 ? Point01(x: 0.5, y: 0.0) : CaptionStyle.bottomPosition01
         }
+        let bounds = captionSourceBounds
+        let start = max(bounds.start, min(currentSourceTimeMs, bounds.end - Self.newCaptionDurationMs))
+        let block = CaptionBlock(
+            trackId: newTrack.id,
+            sourceStartMs: start,
+            sourceEndMs: min(bounds.end, start + Self.newCaptionDurationMs),
+            customText: "New caption"
+        )
         mutate { doc in
             doc.captions.enabled = true
             doc.captions.captionTracks.append(newTrack)
+            doc.captions.captionBlocks.append(block)
         }
-        selectedCaptionId = nil
-        selectedInspectorTab = .captions
+        selectCaption(block.id)
         scrollToTimelineTrack("track_caption_\(newTrack.id)")
         return newTrack.id
     }
@@ -1005,6 +1023,8 @@ public final class ProjectSession: Identifiable {
             guard let idx = doc.captions.captionBlocks.firstIndex(where: { $0.id == id }) else { return }
             guard targetTrackIndex >= 0, targetTrackIndex < doc.captions.captionTracks.count else {
                 guard let currentTrack = doc.captions.captionTracks.first(where: { $0.id == block.trackId }) else { return }
+                // Its track would go away with it, leaving the same layout with the caption at another spot.
+                guard doc.captions.captionBlocks.contains(where: { $0.trackId == block.trackId && $0.id != id }) else { return }
                 var newTrack = CaptionTrack(name: "Captions \(doc.captions.captionTracks.count + 1)", style: currentTrack.style)
                 newTrack.style.position01 = abs(currentTrack.style.position01.y - 1.0) < 0.1 ? Point01(x: 0.5, y: 0.0) : CaptionStyle.bottomPosition01
                 if targetTrackIndex < 0 {
