@@ -21,7 +21,7 @@
   1. **Close (`xmark.circle.fill`)**
   2. **Target Mode Selector:**
      - `Display` (`display`) — Full screen capture.
-     - `Window` (`macwindow`) — Interactive single-window picker.
+     - `Window` (`macwindow`) — Interactive single-window picker. Includes the app's own editor windows, so editing can be demoed.
      - `Area` (`viewfinder`) — Interactive drag-to-crop rectangle with size presets (`16:9`, `9:16`, `1:1`).
      - `Device` (`iphone`) — Connected iOS device capture (Phase 3).
   3. **Input Toggles:**

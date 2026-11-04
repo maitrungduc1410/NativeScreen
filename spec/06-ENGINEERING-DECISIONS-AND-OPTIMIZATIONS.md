@@ -778,3 +778,17 @@ Hovering an empty part of a row shows a ghost of the block a click adds, as on m
 
 ### Cursor cards
 An SVG decodes after its `Image` loads, so a measurement can find nothing drawn. It used to give up until the next inspector rebuild, leaving sprites off-center. It now measures again on `ImageOpened` and retries up to six times, 60 ms apart.
+
+---
+
+## 36. ADR-36: Recording the App's Own Editor Windows (macOS)
+
+The editor can be recorded, so a demo of editing can be made with the app itself. Before this, the picker skipped every window of this process and every capture filter removed them.
+
+- **What stays off camera.** Only the recording UI: the windows with `sharingType = .none` (HUD, picker overlays, camera preview, area highlight) are excluded. Editor, crop and settings windows follow the same rules as any other app's windows.
+- **Window mode uses a cropped display filter for our own windows.** `desktopIndependentWindow` drops popovers, menus and tooltips, which are separate windows and much of what a demo shows. The filter is the display minus the recording UI and every other app's windows, with `sourceRect` set to the chosen window. Two alternatives failed on macOS 27: an `including: [app]` filter makes the system replace the window controls with a sharing badge, and `excludingApplications:` gave black frames. In that initializer `exceptingWindows` also means windows to keep, not to remove.
+- **No Accessibility calls into our own process.** The picker runs on the main thread at 60 Hz, and such a call would block waiting on itself. Own windows use a fixed 26 pt corner radius, and `Resize` uses `NSWindow` directly, clamped to the window's minimum size.
+- **ESC goes to the editor while recording.** The recording bar's local ESC monitor used to swallow the key even though it does nothing during a recording, so it now passes the event through.
+- **The Dock icon stays while an editor is open.** `Hide Dock icon` would otherwise remove the menu bar from the app being recorded.
+
+**Known limits.** The crop is fixed when recording starts, so moving our own window during a recording does not move the capture. Windows from other apps opened during the recording are not in the exclusion list, and appear if they overlap the crop.

@@ -73,7 +73,9 @@ public enum WindowDiscoveryService {
     }
 
     /// Lists all normal on-screen windows across ALL connected monitors in front-to-back Z-order using `CGWindowListCopyWindowInfo`.
-    public static func listFrontToBackWindows(excludingPIDs: Set<pid_t> = [ProcessInfo.processInfo.processIdentifier]) -> [CapturableWindowInfo] {
+    /// This app's editor windows are included; its HUD and overlays sit above layer 0 and are filtered out by level.
+    public static func listFrontToBackWindows(excludingPIDs: Set<pid_t> = []) -> [CapturableWindowInfo] {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return []
@@ -111,7 +113,8 @@ public enum WindowDiscoveryService {
                     appName: runningApp?.localizedName ?? ownerName,
                     bundleId: bundleId,
                     bounds: bounds,
-                    borderRadius: detectWindowCornerRadius(pid: ownerPID, windowBounds: bounds)
+                    // Accessibility calls into our own process would block the main thread waiting on itself.
+                    borderRadius: ownerPID == ownPID ? 26.0 : detectWindowCornerRadius(pid: ownerPID, windowBounds: bounds)
                 )
             )
         }
@@ -180,7 +183,12 @@ public enum WindowDiscoveryService {
 
     /// Brings the target application & window to the front before starting window capture.
     public static func bringWindowToFront(_ window: CapturableWindowInfo) {
-        if let app = NSRunningApplication(processIdentifier: window.pid) {
+        if window.pid == ProcessInfo.processInfo.processIdentifier {
+            MainActor.assumeIsolated {
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.window(withWindowNumber: Int(window.id))?.makeKeyAndOrderFront(nil)
+            }
+        } else if let app = NSRunningApplication(processIdentifier: window.pid) {
             app.activate()
         }
     }
@@ -188,6 +196,13 @@ public enum WindowDiscoveryService {
     /// Resizes a target application's window using macOS Accessibility API (`AXUIElement`).
     @discardableResult
     public static func resizeWindow(_ window: CapturableWindowInfo, toWidth width: Double, height: Double) -> Bool {
+        if window.pid == ProcessInfo.processInfo.processIdentifier {
+            return MainActor.assumeIsolated {
+                guard let own = NSApp.window(withWindowNumber: Int(window.id)) else { return false }
+                own.setContentSize(NSSize(width: max(width, own.contentMinSize.width), height: max(height, own.contentMinSize.height)))
+                return true
+            }
+        }
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(options) else {
             return false

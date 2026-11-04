@@ -47,6 +47,12 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         return dir
     }
 
+    /// The active project's editor window as a capture target, or `nil` if it is not on screen (minimized, for example).
+    public var activeEditorCaptureWindow: CapturableWindowInfo? {
+        guard let id = activeSessionID, let window = editorWindowsBySessionID[id] else { return nil }
+        return WindowDiscoveryService.listFrontToBackWindows().first { $0.id == UInt32(window.windowNumber) }
+    }
+
     public func registerSession(_ session: ProjectSession) {
         sessionsByID[session.id] = session
         addRecentProject(session.packageURL)

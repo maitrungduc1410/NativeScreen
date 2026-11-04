@@ -26,6 +26,7 @@
   - [x] Display target app icon, app name, window dimensions (`W × H`), and `[Resize]` preset menu (via `AXUIElement`).
 - [x] **Area Mode:** Drag-to-select screen region with aspect ratio presets (`16:9`, `9:16`, `1:1`, `4:3`, Custom) and dimmed outside cover.
 - [x] Exclude NativeScreen's own HUD/overlay windows from capture (`excludedWindowIds`).
+- [x] Record NativeScreen's own editor windows: pickable in Window mode, visible in Display and Area mode, and `Record > Record this project window` starts directly.
 - [x] Hide real system cursor from the captured video stream (`showsCursor = false` in `SCStreamConfiguration`) so cursor can be rendered synthetically in post.
 
 ### 1.3. Multi-Channel Capture & Telemetry Writer

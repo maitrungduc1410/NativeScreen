@@ -801,7 +801,9 @@ public final class RecordingCoordinator {
     private func installEscapeKeyMonitors() {
         removeEscapeKeyMonitors()
         escLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 { // ESC key
+            // While recording, ESC belongs to the editor window that may be on camera.
+            let isRecording = MainActor.assumeIsolated { self?.isRecording ?? false }
+            if event.keyCode == 53, !isRecording { // ESC key
                 Task { @MainActor [weak self] in
                     guard let self = self, !self.isRecording else { return }
                     if self.isCountingDown {
@@ -998,7 +1000,9 @@ public final class RecordingCoordinator {
             }
 
             let myPID = ProcessInfo.processInfo.processIdentifier
-            let ownWindows = shareable.windows.filter { $0.owningApplication?.processID == myPID }
+            // Only the recording UI stays off camera (it all has `sharingType = .none`). Editor windows are recordable.
+            let recordingUIWindowIDs = Set(NSApp.windows.filter { $0.sharingType == .none }.map { UInt32($0.windowNumber) })
+            let recordingUIWindows = shareable.windows.filter { recordingUIWindowIDs.contains($0.windowID) }
 
             let filter: SCContentFilter
             let logicalBounds: CGRect
@@ -1014,24 +1018,38 @@ public final class RecordingCoordinator {
                 if let chosen = hoveredWindow ?? WindowDiscoveryService.listFrontToBackWindows().first,
                    let scWindow = shareable.windows.first(where: { $0.windowID == chosen.id }) {
                     WindowDiscoveryService.bringWindowToFront(chosen)
-                    filter = SCContentFilter(desktopIndependentWindow: scWindow)
                     logicalBounds = chosen.bounds
-                    sourceRect = nil
                     targetWindowId = chosen.id
                     targetBundleId = chosen.bundleId
                     targetAppName = chosen.appName
                     targetWindowTitle = chosen.title
 
-                    if let matchingScreen = NSScreen.screens.first(where: {
+                    let matchingScreen = NSScreen.screens.first(where: {
                         WindowDiscoveryService.quartzFrame(for: $0).intersects(chosen.bounds)
-                    }) {
+                    })
+                    if let matchingScreen {
                         let dID = WindowDiscoveryService.displayID(for: matchingScreen)
                         if let scDisp = shareable.displays.first(where: { $0.displayID == dID }) {
                             targetDisplay = scDisp
                         }
                     }
+
+                    if chosen.pid == myPID,
+                       let matchingScreen {
+                        // A single-window filter would drop the popovers, menus and tooltips a demo of the editor needs.
+                        // Those are separate windows of this app, so capture the display without other windows and crop to the window.
+                        // It stays a display filter because the system swaps the window controls for a sharing badge on app filters.
+                        filter = SCContentFilter(
+                            display: targetDisplay,
+                            excludingWindows: recordingUIWindows + shareable.windows.filter { $0.owningApplication?.processID != myPID }
+                        )
+                        sourceRect = WindowDiscoveryService.localTopLeftRect(fromQuartzRect: chosen.bounds, on: matchingScreen)
+                    } else {
+                        filter = SCContentFilter(desktopIndependentWindow: scWindow)
+                        sourceRect = nil
+                    }
                 } else {
-                    filter = SCContentFilter(display: targetDisplay, excludingWindows: ownWindows)
+                    filter = SCContentFilter(display: targetDisplay, excludingWindows: recordingUIWindows)
                     let screen = NSScreen.screens.first(where: { WindowDiscoveryService.displayID(for: $0) == targetDisplay.displayID })
                     logicalBounds = screen.map { WindowDiscoveryService.quartzFrame(for: $0) }
                         ?? CGRect(x: 0, y: 0, width: targetDisplay.width, height: targetDisplay.height)
@@ -1051,11 +1069,11 @@ public final class RecordingCoordinator {
                 } else {
                     sourceRect = selectedAreaRectQuartz
                 }
-                filter = SCContentFilter(display: targetDisplay, excludingWindows: ownWindows)
+                filter = SCContentFilter(display: targetDisplay, excludingWindows: recordingUIWindows)
                 logicalBounds = selectedAreaRectQuartz
 
             case .display, .device:
-                filter = SCContentFilter(display: targetDisplay, excludingWindows: ownWindows)
+                filter = SCContentFilter(display: targetDisplay, excludingWindows: recordingUIWindows)
                 let screen = NSScreen.screens.first(where: { WindowDiscoveryService.displayID(for: $0) == targetDisplay.displayID })
                 logicalBounds = screen.map { WindowDiscoveryService.quartzFrame(for: $0) }
                     ?? CGRect(x: 0, y: 0, width: targetDisplay.width, height: targetDisplay.height)
@@ -1103,7 +1121,8 @@ public final class RecordingCoordinator {
             )
 
             // Apply "While Recording" options: Hide Dock Icon & Highlight Recorded Area
-            if hideDockIcon {
+            // An open editor keeps the Dock icon: without it the app loses its menu bar, which the editor may be demoing.
+            if hideDockIcon && !ProjectWorkspaceStore.shared.hasOpenEditorWindows {
                 NSApp.setActivationPolicy(.accessory)
                 hudPanel?.orderFrontRegardless()
             }
@@ -1412,6 +1431,15 @@ public final class RecordingCoordinator {
         if !(selectedMode == mode && isPickingTarget) {
             selectMode(mode)
         }
+    }
+
+    /// `Record > Record this project window`: starts recording an editor window without going through the picker.
+    public func startRecordingWindow(_ window: CapturableWindowInfo) {
+        guard !isRecording && !isCountingDown else { return }
+        showRecordingHUD()
+        selectedMode = .window
+        hoveredWindow = window
+        requestStartRecording()
     }
 
     public func toggleRecordingHUD() {

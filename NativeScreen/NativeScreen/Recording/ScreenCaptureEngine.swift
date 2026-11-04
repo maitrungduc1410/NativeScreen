@@ -410,6 +410,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private var isWritingSessionStarted = false
     private var firstSampleTime: CMTime = .invalid
     private var lastSampleTime: CMTime = .zero
+    private var lastVideoSample: CMSampleBuffer?
     // Pause intervals on the host clock (the same clock as `SCStream`, `AVCaptureSession` and `systemUptime`).
     // Every writer (screen, system audio, webcam, mic) and the telemetry recorder subtract the SAME wall-clock
     // intervals, so pausing never shifts one track against another. Guarded by `pauseLock` because samples
@@ -662,7 +663,50 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         }
     }
 
+    /// When the recording ended on the video timeline: a pause in progress ends it at the moment it began.
+    private func videoEndTime(atUptime uptimeSec: TimeInterval) -> CMTime {
+        pauseLock.lock()
+        defer { pauseLock.unlock() }
+        var end = CMTime(seconds: uptimeSec, preferredTimescale: 1_000_000_000)
+        var offset = CMTime.zero
+        for interval in pauseIntervals {
+            guard let intervalEnd = interval.end else {
+                end = interval.start
+                break
+            }
+            offset = CMTimeAdd(offset, CMTimeSubtract(intervalEnd, interval.start))
+        }
+        return CMTimeSubtract(end, offset)
+    }
+
+    /// ScreenCaptureKit only delivers frames when the screen changes, so a still screen would end the video at its last change.
+    /// Repeating the last frame at the stop time makes the video as long as the recording.
+    private func holdLastFrame(until endTime: CMTime) {
+        guard let sample = lastVideoSample,
+              let input = videoInput,
+              CMTimeGetSeconds(CMTimeSubtract(endTime, lastSampleTime)) > 1.0 / 60.0 else { return }
+        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: endTime, decodeTimeStamp: .invalid)
+        var held: CMSampleBuffer?
+        CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sample,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &held
+        )
+        guard let held else { return }
+        var waitedMs = 0
+        while !input.isReadyForMoreMediaData, waitedMs < 500 {
+            Thread.sleep(forTimeInterval: 0.01)
+            waitedMs += 10
+        }
+        if input.isReadyForMoreMediaData, input.append(held) {
+            lastSampleTime = endTime
+        }
+    }
+
     public func stopCapture() async {
+        let endTime = videoEndTime(atUptime: ProcessInfo.processInfo.systemUptime)
         if let activeStream = stream {
             try? await activeStream.stopCapture()
             stream = nil
@@ -729,6 +773,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                     continuation.resume()
                     return
                 }
+                self.holdLastFrame(until: endTime)
+                self.lastVideoSample = nil
                 if self.firstSampleTime.isValid && self.lastSampleTime.isValid {
                     let delta = CMTimeSubtract(self.lastSampleTime, self.firstSampleTime)
                     self.recordedDurationMs = max(500.0, CMTimeGetSeconds(delta) * 1000.0)
@@ -785,6 +831,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 onFirstVideoFrameArrived?(resolvedOriginSec)
             }
             lastSampleTime = pts
+            lastVideoSample = adjustedBuffer
 
             if let vInput = videoInput, vInput.isReadyForMoreMediaData {
                 vInput.append(adjustedBuffer)

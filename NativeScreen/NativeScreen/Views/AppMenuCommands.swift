@@ -139,6 +139,13 @@ struct AppMenuCommands: Commands {
                 .keyboardShortcut("5", modifiers: [.command, .option])
                 .disabled(recorder.isRecording)
 
+            Button("Record this project window", systemImage: "macwindow.badge.plus") {
+                if let window = workspace.activeEditorCaptureWindow {
+                    recorder.startRecordingWindow(window)
+                }
+            }
+            .disabled(recorder.isRecording || session == nil)
+
             Picker("After Recording", selection: $recorder.afterRecordingAction) {
                 ForEach(RecordingCoordinator.AfterRecordingAction.allCases) { action in
                     Text(action.title).tag(action)
