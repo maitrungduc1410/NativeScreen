@@ -19,7 +19,6 @@ public struct MultiTrackTimelineView: View {
     @State private var verticalContentHeight: CGFloat = 180.0
     @State private var horizontalScrollView: NSScrollView?
     @State private var lastZoomForAnchor: Double = 1.0
-    @State private var splitWigglePhase: Bool = false
     @State private var zoomTrackHoverX: CGFloat? = nil
     @State private var cameraLayoutTrackHoverX: CGFloat? = nil
     @State private var maskTrackHoverX: [String: CGFloat] = [:]
@@ -316,12 +315,14 @@ public struct MultiTrackTimelineView: View {
                                                     totalTimelineMs: totalTimelineMs,
                                                     minorTickStepSec: stepInfo.minor
                                                 )
+                                                .modifier(splitWiggle(trackOrder: 0))
 
                                                 // Lane 2: Auto-Zooms (`46pt` height, touching edge-to-edge)
                                                 zoomLaneView(
                                                     contentWidth: contentWidth,
                                                     totalTimelineMs: totalTimelineMs
                                                 )
+                                                .modifier(splitWiggle(trackOrder: 1))
 
                                                 // Lane 2B: Camera Layouts
                                                 if hasCameraLayoutsTrack {
@@ -329,9 +330,13 @@ public struct MultiTrackTimelineView: View {
                                                         contentWidth: contentWidth,
                                                         totalTimelineMs: totalTimelineMs
                                                     )
+                                                    .modifier(splitWiggle(trackOrder: 2))
                                                 }
 
                                                 // Lane 3+: Dynamic Mask Tracks (`34pt` height)
+                                                let firstMaskOrder = hasCameraLayoutsTrack ? 3 : 2
+                                                let firstVoiceoverOrder = firstMaskOrder + session.document.timeline.maskTracks.count
+                                                let firstShortcutOrder = firstVoiceoverOrder + voiceoverTrackCount
                                                 ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
                                                     maskLaneView(
                                                         track: track,
@@ -339,6 +344,7 @@ public struct MultiTrackTimelineView: View {
                                                         contentWidth: contentWidth,
                                                         totalTimelineMs: totalTimelineMs
                                                     )
+                                                    .modifier(splitWiggle(trackOrder: firstMaskOrder + trackIdx))
                                                 }
 
                                                 // Lane 3B: Voiceovers Track
@@ -349,6 +355,7 @@ public struct MultiTrackTimelineView: View {
                                                             contentWidth: contentWidth,
                                                             totalTimelineMs: totalTimelineMs
                                                         )
+                                                        .modifier(splitWiggle(trackOrder: firstVoiceoverOrder + voTrack))
                                                     }
                                                 }
 
@@ -362,6 +369,7 @@ public struct MultiTrackTimelineView: View {
                                                             contentWidth: contentWidth,
                                                             totalTimelineMs: totalTimelineMs
                                                         )
+                                                        .modifier(splitWiggle(trackOrder: firstShortcutOrder + sIdx))
                                                     }
                                                 }
                                             }
@@ -524,6 +532,11 @@ public struct MultiTrackTimelineView: View {
             }
         }
         .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
+    }
+
+    /// Neighboring tracks move in opposite directions.
+    private func splitWiggle(trackOrder: Int) -> SplitModeWiggle {
+        SplitModeWiggle(isActive: session.isSplitModeActive, direction: trackOrder % 2 == 0 ? 1.0 : -1.0)
     }
 
     private struct ScrollMetrics: Equatable {
@@ -1802,6 +1815,70 @@ private struct UnifiedPlayheadCanvasView: View {
             )
             context.fill(Path(stemRect), with: .color(stemColor))
         }
+    }
+}
+
+// MARK: - Split Mode Track Wiggle
+
+/// Bobs a track up and down while Split Mode is on, then settles it.
+/// The state lives here and only `SplitWiggleEffect` reads it, so each frame recomputes one transform and never re-evaluates
+/// a lane's body. Nothing runs outside Split Mode: when the amplitude reaches zero the repeating animation is removed.
+private struct SplitModeWiggle: ViewModifier {
+    let isActive: Bool
+    let direction: CGFloat
+
+    @State private var cycle: CGFloat = 0.0
+    @State private var strength: CGFloat = 0.0
+    @State private var isRunning = false
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(SplitWiggleEffect(cycle: cycle, strength: strength, direction: direction))
+            .onChange(of: isActive, initial: true) { _, active in
+                if active {
+                    isRunning = true
+                    withAnimation(.linear(duration: 0.84).repeatForever(autoreverses: false)) {
+                        cycle = 1.0
+                    }
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        strength = 1.0
+                    }
+                } else if isRunning {
+                    isRunning = false
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        strength = 0.0
+                    } completion: {
+                        // Split Mode may have come back on during the settle.
+                        guard !isRunning else { return }
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            cycle = 0.0
+                        }
+                    }
+                }
+            }
+    }
+}
+
+private struct SplitWiggleEffect: GeometryEffect {
+    private static let amplitude: CGFloat = 1.65
+
+    var cycle: CGFloat
+    var strength: CGFloat
+    let direction: CGFloat
+
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(cycle, strength) }
+        set {
+            cycle = newValue.first
+            strength = newValue.second
+        }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let y = Self.amplitude * direction * strength * sin(cycle * 2.0 * .pi)
+        return ProjectionTransform(CGAffineTransform(translationX: 0.0, y: y))
     }
 }
 
