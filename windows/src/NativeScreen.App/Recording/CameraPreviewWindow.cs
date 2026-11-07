@@ -34,7 +34,7 @@ internal sealed class CameraPreviewWindow : Window
     {
         // A frame can still arrive while the window closes, when its own queue is no longer reachable.
         dispatcher = DispatcherQueue;
-        Title = "Native Screen Camera Preview";
+        Title = Loc.T("Native Screen Camera Preview");
         image.Source = bitmap;
         root.Children.Add(image);
         root.Children.Add(new Border { BorderThickness = new Thickness(1), BorderBrush = Ui.Rgb(1, 1, 1, 0.18), IsHitTestVisible = false });

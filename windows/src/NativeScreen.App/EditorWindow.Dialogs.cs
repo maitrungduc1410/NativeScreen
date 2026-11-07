@@ -58,6 +58,7 @@ public sealed partial class EditorWindow
 
     private static StackPanel ExportSection(string title, string glyph)
     {
+        title = Loc.T(title);
         var section = new StackPanel { Spacing = 10 };
         var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         header.Children.Add(new Border
@@ -81,7 +82,7 @@ public sealed partial class EditorWindow
         pill.HorizontalAlignment = HorizontalAlignment.Stretch;
         pill.MinWidth = 0;
         pill.Padding = new Thickness(4, 0, 4, 0);
-        ToolTipService.SetToolTip(pill, null);
+        Ui.Tip(pill, null);
         return pill;
     }
 
@@ -244,6 +245,8 @@ public sealed partial class EditorWindow
 
     private UIElement GifToggle(string title, string description, bool value, Action<bool> change)
     {
+        title = Loc.T(title);
+        description = Loc.T(description);
         var grid = new Grid { ColumnSpacing = 12 };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -440,7 +443,7 @@ public sealed partial class EditorWindow
             ? remembered
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
         var folderText = new TextBlock { Text = folder, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Ui.Pal("Ink60") };
-        ToolTipService.SetToolTip(folderText, folder);
+        Ui.Tip(folderText, folder);
 
         ExportCard.Width = 660;
         ExportCard.Height = 460;
@@ -474,7 +477,7 @@ public sealed partial class EditorWindow
             {
                 folder = chosen.Path;
                 folderText.Text = folder;
-                ToolTipService.SetToolTip(folderText, folder);
+                Ui.Tip(folderText, folder);
             }
         }, 30);
         Grid.SetColumn(pick, 1);
@@ -510,7 +513,7 @@ public sealed partial class EditorWindow
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(22, 8, 22, 0) };
         var cancel = ExportPill("Cancel", false, () => ExportOverlay.Visibility = Visibility.Collapsed, 34);
         cancel.Width = 88;
-        var export = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = "Export", Width = 92, Height = 34, CornerRadius = new CornerRadius(9) };
+        var export = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = Loc.T("Export"), Width = 92, Height = 34, CornerRadius = new CornerRadius(9) };
         export.Click += (_, _) => _ = ExportStill(name.Text, folder, export);
         buttons.Children.Add(cancel);
         buttons.Children.Add(export);
@@ -521,6 +524,7 @@ public sealed partial class EditorWindow
 
     private static Grid StillRow(string title, UIElement field)
     {
+        title = Loc.T(title);
         var row = new Grid { ColumnSpacing = 8 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
         row.ColumnDefinitions.Add(new ColumnDefinition());
@@ -556,9 +560,9 @@ public sealed partial class EditorWindow
             {
                 XamlRoot = Root.XamlRoot,
                 Title = $"\"{Path.GetFileName(path)}\" already exists",
-                Content = "Do you want to replace it?",
-                PrimaryButtonText = "Replace",
-                CloseButtonText = "Cancel",
+                Content = Loc.T("Do you want to replace it?"),
+                PrimaryButtonText = Loc.T("Replace"),
+                CloseButtonText = Loc.T("Cancel"),
                 DefaultButton = ContentDialogButton.Close
             };
             if (await replace.ShowAsync() != ContentDialogResult.Primary)
@@ -568,7 +572,7 @@ public sealed partial class EditorWindow
         }
 
         stillBusy = true;
-        button.Content = "Exporting…";
+        button.Content = Loc.T("Exporting…");
         button.IsEnabled = false;
         try
         {

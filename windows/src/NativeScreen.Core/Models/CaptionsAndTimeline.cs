@@ -201,6 +201,16 @@ public sealed class ClipSlice
     public double SourceEndMs { get; set; }
     public double Speed { get; set; } = 1;
     public double SystemAudioVolume { get; set; } = 1;
+
+    /// <summary>Multiplies the project's microphone volume while this slice plays. Missing in older files, read as 1.</summary>
+    public double MicrophoneVolume
+    {
+        get => microphoneVolume;
+        set => microphoneVolume = Math.Clamp(value, 0, 2);
+    }
+
+    private double microphoneVolume = 1;
+
     public bool Muted { get; set; }
     public bool HideCursor { get; set; }
     public bool DisableSmoothCursor { get; set; }

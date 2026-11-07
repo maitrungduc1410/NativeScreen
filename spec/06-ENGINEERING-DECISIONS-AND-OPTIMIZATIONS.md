@@ -879,6 +879,8 @@ A lowered clip used to draw only a shorter wave, so it was hard to tell how much
 - **Cost.** The bitmap is rebuilt only when the decoration's inputs change (`Equatable`), and only rows under the tallest wave are visited. Not yet timed on a long clip at high zoom.
 - **`View > Smooth waveform` off** keeps the 2 pt bars on a 3 pt pitch, each sampled at its center; the fade and the full-wave copy apply to bars too.
 
+- **Windows.** `Core/Editing/WaveformRaster.cs` is the same rasterizer, writing premultiplied BGRA into a `WriteableBitmap` shown by an `Image` (`Stretch = Fill`), so no conversion is needed. It also cuts the block's rounded bottom corners per pixel, since the block does not clip its children. Voiceover blocks use it with one white layer at the voiceover's volume. The old polygon outline is gone.
+
 ---
 
 ## 43. ADR-43: Timeline Snapping
@@ -891,6 +893,8 @@ With several tracks, lining items up by eye was slow. While an item is dragged o
 - **Guide line.** A 1 pt line in the theme purple marks the edge it snapped to, until the drag ends. It is its own view that observes only the guide, so the tracks are not re-evaluated while it moves.
 - **Not snapped:** clip slices, since trimming a clip moves everything after it and its edges are source times.
 - **Toggle:** a button next to the split button, lit purple while on, plus `View > Snap timeline items`. On by default, remembered app-wide in `NativeScreen.View.SnapToSegments`.
+
+- **Windows.** `Core/Timeline/TimelineSnapping.cs` (`TimelineSnapController`, `TimelineSnapTargets.Collect`). Windows drags work in source time, so an edge goes to timeline time, snaps there, and goes back through the mapper at the speed of the slice it lands in. Targets are collected on press, which also reads the playhead. The guide is a 1 px `#704DFF` line at 90% in the overlay canvas above the tracks. The toggle is next to the split button, and `View > Snap timeline items` is stored as `SnapToSegments` in `settings.json`. Checked with a real mouse drag: the second shortcut's start landed on the first one's end, and the guide showed until the drop.
 
 ---
 
@@ -907,6 +911,12 @@ The UI is available in English, Vietnamese, Simplified Chinese, Japanese, German
 - **Not translated:** the exported video (keycap names, caption text), file names, product and format names, and the Reel mode mock content's handle.
 - **Layout.** German and French run up to 40% longer. Fixed-width labels shrink (`minimumScaleFactor`) or size to their text instead of wrapping: the recording bar's mode labels and the slider `Reset` button were the ones that broke.
 
+- **Windows.** The app ships the macOS `Localizable.xcstrings` as content (linked in the csproj) and reads only the chosen language at launch (`App/Localization/Loc.cs`): `Loc.T(english)` falls back to the key, and `Loc.F(key, ...)` turns `%lld`, `%d` and `%@` (also `%1$@`) into `{0}`, `{1}`... and `%%` into `%`.
+  - **Where text is translated.** Text is translated where it is shown, not at each call site. That covers the shared helpers (`Ui.Text`, `Ui.Option`, `Ui.IconButton`, `Ui.Tip` for every tooltip, the inspector rows, segment menu rows, command menu items, timeline block titles and track labels), literal `Text`, `Title` and dialog button initializers, and `Loc.Apply`, which walks a window's XAML once after `InitializeComponent`. Ids, tab keys and stored names stay English.
+  - **Track names.** `Loc.TrackName` translates a default track name and its number (`Captions 2`, `Voiceovers 2` through `Voiceovers %lld`).
+  - **Windows-only strings** (File Explorer, `Ctrl` key hints, Windows menus such as `Edit` and `View` that macOS takes from the system) are their own keys in the same catalog with `extractionState: manual`. The file is rewritten with Xcode's layout (` : `, two-space indent, sorted keys), so the diff only adds keys.
+  - **Choosing the language.** `Settings > General > Language` stores `Language` in `settings.json` (empty means the system language). It also sets `PrimaryLanguageOverride` when the app is packaged, and `Restart Now` releases the single-instance claim before it starts the new process. `NS_LANGUAGE=<id>` overrides the setting for one run, to check a layout.
+
 ---
 
 ## 45. ADR-45: Cmd + Scroll Zooms the Timeline at the Cursor
@@ -916,6 +926,8 @@ Holding `⌘` (`Ctrl` on Windows) and scrolling anywhere over the timeline (rule
 - **Anchor.** Before the zoom, the cursor's time is `(scrollX + cursorX - inset) / contentWidth` of the timeline. After it, the scroll offset is set so that time sits at the same `cursorX`, clamped to the scroll range. Over the label column there is no time under the cursor, so it falls back to the playhead.
 - **Step.** A mouse wheel notch multiplies the zoom by 1.15 (at most 4 notches per event, as wheels accelerate); a trackpad or other precise device multiplies it by `exp(0.01 * points)`. Wheel away from you or two fingers up zooms in, whatever the natural scrolling setting. The zoom range stays 1x to 6x.
 - **Event path.** The lanes' horizontal scroll view gets wheel events first, so a local event monitor catches them, checks that the cursor is over the timeline's frame in this window, and consumes the event so the timeline does not also scroll. Scrolling without `⌘` is left alone.
+
+- **Windows.** `Ctrl` + wheel is caught on the timeline's root grid with `handledEventsToo`, so the ruler, labels and lanes all zoom and the lanes do not scroll. A delta that is a multiple of 120 counts as wheel notches (1.15 each, at most 4). A touchpad, or any other delta, uses `exp(delta / 1200)`. The cursor anchor is resolved in `SetZoom` before the zoom changes, and the scroll is applied right after the layout pass, clamped. Over the label column it keeps the playhead. Checked with synthesized wheel events: the 0:05 tick stayed at the same pixel through 3 notches in and 2 out. A wheel without `Ctrl` still scrolls.
 
 ---
 
@@ -930,6 +942,13 @@ Zooming re-lays out every segment, since every x and width scales with the zoom.
 
 The anchor (playhead or cursor) lands in the same layout pass as the zoom: measured drift after each frame is under 0.1 pt. What is left is SwiftUI layout of the segment views and AppKit recomputing the window's drag regions.
 
+- **Windows.** A zoom step used to rebuild the whole timeline tree. Measured on a 10 s project (Release build, 40 `Ctrl` + touchpad-sized wheel steps from 1x to 6x, with `SetZoom` and the layout pass timed through `NS_TIMELINE_ZOOM_STATS=<file>`):
+  - **Before:** 17.8 ms median and 39.9 ms worst; the rebuild alone took 11.3 ms median.
+  - **After:** 8.3 ms median and 20.2 ms worst. A zoom step now only moves and widens the existing blocks, ruler ticks, trim badges and full-width hover rows (`Relayout`, the same path a clip drag uses). Edge hit areas read the block's width at each event, so they follow the zoom.
+  - **Waveforms:** the bitmap for each slice and voiceover is cached across rebuilds, keyed by everything except width. A zoom shows it stretched and re-rasterizes on a worker thread 90 ms after the width stops changing.
+  - **Skim:** hover skim pauses for 150 ms after each wheel zoom step.
+  - **Still to do:** the window's own resize still rebuilds the tree.
+
 ---
 
 ## 47. ADR-47: Per-Slice Microphone and System Audio Volume
@@ -942,3 +961,5 @@ A clip slice's context menu has one volume slider per recorded source: `Micropho
 - **Voiceover ducking.** After a voiceover that hides the recording, the microphone returns to the volume of the slice playing at that time, not the project-wide one.
 
 The recording HUD sizes its window from the bar's reported width (`onGeometryChange`) instead of reading `fittingSize` right after a state change, which could still return the old layout: a longer microphone name made the bar wider than its window and cut off both rounded ends. The window grows at once and only animates when shrinking.
+
+- **Windows.** `ClipSlice.MicrophoneVolume` (clamped 0 to 2 on read), `SegmentEdits.SetSliceMicrophoneVolume` / `SetSliceSystemAudioVolume` (0 to 1, clear `Muted`), and `AudioMix.MicrophoneGain` multiplies by it. The mixer computes gain per sample frame from the slice under it, in preview and export, so the volume after a hiding voiceover is that slice's without extra code. The clip menu shows each slider only when the metadata names that track (`microphoneAudio`, `systemAudio`). The conformance fixtures gained `"microphoneVolume" : 1` on each slice, which is what the macOS writer now produces. The recording bar also refits when its own size changes, not only after a rebuild, so a label that changes in place cannot overflow the window. Not listened to on Windows yet.

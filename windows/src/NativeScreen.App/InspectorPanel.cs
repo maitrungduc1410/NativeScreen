@@ -123,7 +123,7 @@ internal sealed class InspectorPanel
         if (background.Type == BackgroundType.Image)
         {
             var drop = new Border { Height = 96, CornerRadius = new CornerRadius(10), Background = Ui.Pal("Ink04"), BorderBrush = Ui.Pal("Ink14"), BorderThickness = new Thickness(1), AllowDrop = true, Padding = new Thickness(12) };
-            drop.Child = new TextBlock { Text = "Click to select, drop image, or press Ctrl+V while hovering.", FontSize = 12.5, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = Ui.Pal("Ink60") };
+            drop.Child = new TextBlock { Text = Loc.T("Click to select, drop image, or press Ctrl+V while hovering."), FontSize = 12.5, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = Ui.Pal("Ink60") };
             drop.Tapped += (_, _) => tools.PickBackgroundImage();
             drop.PointerEntered += (_, _) => tools.IsHoveringBackgroundDrop = true;
             drop.PointerExited += (_, _) => tools.IsHoveringBackgroundDrop = false;
@@ -286,7 +286,7 @@ internal sealed class InspectorPanel
         Add(ToolToggle("Hide sensitive data", "Scan the recording on device and blur emails, keys and phone numbers.", Doc.Background.HideSensitiveData, tools.SetHideSensitive));
         if (Doc.Background.HideSensitiveData)
         {
-            var phrases = new TextBox { PlaceholderText = "Custom phrases, separated by commas", Text = string.Join(", ", Doc.Background.SensitiveDataCustomPhrases) };
+            var phrases = new TextBox { PlaceholderText = Loc.T("Custom phrases, separated by commas"), Text = string.Join(", ", Doc.Background.SensitiveDataCustomPhrases) };
             phrases.LostFocus += (_, _) =>
             {
                 if (phrases.Text != string.Join(", ", Doc.Background.SensitiveDataCustomPhrases))
@@ -506,9 +506,9 @@ internal sealed class InspectorPanel
         addLook.Click += (_, _) =>
         {
             var menu = new MenuFlyout();
-            var create = new MenuFlyoutItem { Text = "Create your color preset..." };
+            var create = new MenuFlyoutItem { Text = Loc.T("Create your color preset...") };
             create.Click += (_, _) => _ = tools.CreateColorPreset();
-            var load = new MenuFlyoutItem { Text = "Load your LUT file..." };
+            var load = new MenuFlyoutItem { Text = Loc.T("Load your LUT file...") };
             load.Click += (_, _) => tools.LoadLutFile();
             menu.Items.Add(create);
             menu.Items.Add(load);
@@ -661,7 +661,7 @@ internal sealed class InspectorPanel
             }
         };
         Add(Labeled("Caption text", 8, text));
-        var apply = new CheckBox { Content = "Apply to all captions in this track", IsChecked = captionApplyToTrack };
+        var apply = new CheckBox { Content = Loc.T("Apply to all captions in this track"), IsChecked = captionApplyToTrack };
         apply.Click += (_, _) =>
         {
             captionApplyToTrack = apply.IsChecked == true;
@@ -733,7 +733,7 @@ internal sealed class InspectorPanel
             CornerRadius = new CornerRadius(13),
             Background = Ui.Pal("Ink07")
         };
-        ToolTipService.SetToolTip(pause, open ? "Pause — click to tighten to a natural breath" : "Tightened pause — click to restore");
+        Ui.Tip(pause, open ? "Pause — click to tighten to a natural breath" : "Tightened pause — click to restore");
         pause.Click += (_, _) => session.Mutate(document =>
         {
             if (open)
@@ -753,7 +753,7 @@ internal sealed class InspectorPanel
         var (id, start, end) = (segment.Id, Math.Max(0, segment.SourceStartMs - 25), Math.Min(session.SourceDurationMs, segment.SourceEndMs + 25));
         var present = TranscriptEditing.IsRangePresent(Doc, segment.SourceStartMs, segment.SourceEndMs);
         var bar = new StackPanel { Spacing = 8, Padding = new Thickness(10), CornerRadius = new CornerRadius(10), Background = Ui.Pal("Ink04") };
-        var word = new TextBox { Text = segment.Text, PlaceholderText = "Word" };
+        var word = new TextBox { Text = segment.Text, PlaceholderText = Loc.T("Word") };
         AutomationName(word, "Word");
         void SaveWord()
         {
@@ -1101,7 +1101,7 @@ internal sealed class InspectorPanel
         ClipSlice Find(ProjectDocument d) => d.Timeline.Slices.First(item => item.Id == id);
         Add(CloseEditor("Close clip editor", () => session.SelectSlice(null)));
         Add(Slider("Speed", () => session.SelectedSlice?.Speed ?? 1, (d, v) => Find(d).Speed = Math.Round(v * 20) / 20, 0.25, 8, 1));
-        Add(Slider("Clip audio volume", () => session.SelectedSlice?.SystemAudioVolume ?? 1, (d, v) => Find(d).SystemAudioVolume = v, 0, 1, 1));
+        Add(Slider("Clip audio volume", () => session.SelectedSlice?.SystemAudioVolume ?? 1, (d, v) => SegmentEdits.SetSliceSystemAudioVolume(Find(d), v), 0, 1, 1));
         Add(Toggle("Mute clip", null, () => session.SelectedSlice?.Muted ?? false, (d, v) => Find(d).Muted = v));
         Add(Toggle("Hide cursor in this clip", null, () => session.SelectedSlice?.HideCursor ?? false, (d, v) => Find(d).HideCursor = v));
         Add(Toggle("Disable smooth cursor", null, () => session.SelectedSlice?.DisableSmoothCursor ?? false, (d, v) => Find(d).DisableSmoothCursor = v));
@@ -1144,7 +1144,7 @@ internal sealed class InspectorPanel
     private void ShortcutEditor(ShortcutCluster cluster)
     {
         Add(CloseEditor("Close Shortcut editor", () => session.SelectShortcut(null)));
-        var key = new TextBox { Text = cluster.PrimaryKey, PlaceholderText = "Key" };
+        var key = new TextBox { Text = cluster.PrimaryKey, PlaceholderText = Loc.T("Key") };
         AutomationName(key, "Shortcut key");
         void Save(List<string> modifiers, string primary)
         {
@@ -1448,6 +1448,7 @@ internal sealed class InspectorPanel
 
     private static Button Swatch(Brush fill, string tooltip, bool selected, Action click)
     {
+        tooltip = Loc.T(tooltip);
         var button = new Button
         {
             Style = Ui.StyleOf("NsIconButton"),
@@ -1458,7 +1459,7 @@ internal sealed class InspectorPanel
             BorderBrush = selected ? Ui.Rgb(0.65, 0.58, 0.99) : Ui.Pal("Ink10"),
             BorderThickness = new Thickness(selected ? 2 : 1)
         };
-        ToolTipService.SetToolTip(button, tooltip);
+        Ui.Tip(button, tooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
         button.Click += (_, _) => click();
         return button;
@@ -1496,6 +1497,7 @@ internal sealed class InspectorPanel
 
     private static Button CloseEditor(string title, Action click)
     {
+        title = Loc.T(title);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         row.Children.Add(Ui.Icon("", 11));
         row.Children.Add(new TextBlock { Text = title, FontSize = 13 });
@@ -1507,6 +1509,7 @@ internal sealed class InspectorPanel
 
     private UIElement Slider(string title, Func<double> get, Action<ProjectDocument, double> set, double min, double max, double fallback)
     {
+        title = Loc.T(title);
         var slider = new Slider
         {
             Minimum = min,
@@ -1522,7 +1525,7 @@ internal sealed class InspectorPanel
         var reset = new Button
         {
             Style = Ui.StyleOf("NsOptionButton"),
-            Content = "Reset",
+            Content = Loc.T("Reset"),
             Width = 66,
             Height = 32,
             Padding = new Thickness(0),
@@ -1549,6 +1552,8 @@ internal sealed class InspectorPanel
 
     private UIElement Toggle(string title, string? description, Func<bool> get, Action<ProjectDocument, bool> set)
     {
+        title = Loc.T(title);
+        description = Loc.T(description);
         var toggle = new ToggleSwitch
         {
             IsOn = get(),
@@ -1586,6 +1591,8 @@ internal sealed class InspectorPanel
 
     private UIElement ToolToggle(string title, string description, bool isOn, Action<bool> set)
     {
+        title = Loc.T(title);
+        description = Loc.T(description);
         var toggle = new ToggleSwitch { OnContent = "", OffContent = "", MinWidth = 0, IsOn = isOn, Margin = new Thickness(0, 0, -6, 0), HorizontalAlignment = HorizontalAlignment.Right };
         AutomationName(toggle, title);
         toggle.Toggled += (_, _) => set(toggle.IsOn);
@@ -1598,9 +1605,12 @@ internal sealed class InspectorPanel
         return row;
     }
 
-    private static UIElement Disabled(string title, string description)    {
+    private static UIElement Disabled(string title, string description)
+    {
+        title = Loc.T(title);
+        description = Loc.T(description);
         var toggle = new ToggleSwitch { OnContent = "", OffContent = "", MinWidth = 0, IsEnabled = false, Margin = new Thickness(0, 0, -6, 0), HorizontalAlignment = HorizontalAlignment.Right };
-        ToolTipService.SetToolTip(toggle, Ui.FeatureNotReady);
+        Ui.Tip(toggle, Ui.FeatureNotReady);
         var row = new Grid { ColumnSpacing = 12 };
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1612,6 +1622,7 @@ internal sealed class InspectorPanel
 
     private UIElement Collapsible(string title, Func<UIElement> content)
     {
+        title = Loc.T(title);
         var isOpen = expanded.Contains(title);
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition());

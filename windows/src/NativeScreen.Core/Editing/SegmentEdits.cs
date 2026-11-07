@@ -41,10 +41,20 @@ public static class SegmentEdits
     public static void ResetAllSlices(ProjectDocument document, double maxDurationMs) =>
         document.Timeline.Slices = [new ClipSlice { Id = EditorSession.NewId(), SourceStartMs = 0, SourceEndMs = maxDurationMs, Speed = 1 }];
 
-    public static void SetSliceVolume(ClipSlice slice, double volume)
+    /// <summary>
+    /// Volume sliders never set Muted: it silences every source of the slice, so the system audio slider at 0 used to mute the
+    /// microphone too. Moving a slider clears a mute left that way (spec/06 ADR-47).
+    /// </summary>
+    public static void SetSliceSystemAudioVolume(ClipSlice slice, double volume)
     {
-        slice.SystemAudioVolume = Math.Clamp(volume, 0, 2);
-        slice.Muted = slice.SystemAudioVolume <= 0.001;
+        slice.SystemAudioVolume = Math.Clamp(volume, 0, 1);
+        slice.Muted = false;
+    }
+
+    public static void SetSliceMicrophoneVolume(ClipSlice slice, double volume)
+    {
+        slice.MicrophoneVolume = Math.Clamp(volume, 0, 1);
+        slice.Muted = false;
     }
 
     /// <summary>Returns the second half's id, or null when a side would be too short.</summary>

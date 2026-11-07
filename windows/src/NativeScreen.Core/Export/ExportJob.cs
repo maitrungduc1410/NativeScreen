@@ -21,7 +21,7 @@ public static class AudioMix
             return 0;
         }
 
-        return slice.Muted ? 0 : ClampGain(audio.MicrophoneVolume * master);
+        return slice.Muted ? 0 : ClampGain(slice.MicrophoneVolume * audio.MicrophoneVolume * master);
     }
 
     public static double VoiceoverGain(VoiceoverSegment segment, double master, bool trackHidden) =>

@@ -69,6 +69,8 @@ Work is split between two agents on two machines. Know which one you are.
 | App audio test (Windows) | `NS_TEST_APP_AUDIO=1 dotnet test windows/tests/NativeScreen.Media.Tests -c Debug -p:Platform=x64 --filter AppAudioCapture`. Plays a quiet tone for a few seconds. Opens no microphone. |
 | Whisper test (Windows) | `NS_TEST_WHISPER=1 dotnet test windows/tests/NativeScreen.Rendering.Tests -c Debug -p:Platform=x64 --filter WhisperTranscript`. Downloads the 142 MB base model once. |
 | Preview frame statistics (Windows) | Run the app with `NS_PREVIEW_STATS=<file>`. Present intervals are written when the editor closes. |
+| Timeline zoom cost (Windows) | Run the app with `NS_TIMELINE_ZOOM_STATS=<file>`. Each zoom step appends the zoom, the relayout ms and the total ms. |
+| UI in another language (Windows) | Run the app with `NS_LANGUAGE=<id>` (`vi`, `zh-Hans`, `ja`, `de`, `fr`, `es`, `pt-BR`, `en`) for one run. |
 | Build the MSIX (Windows) | `powershell windows/scripts/package-msix.ps1` |
 | Regenerate conformance fixtures (macOS) | `"Native Screen.app/Contents/MacOS/Native Screen" --generate-conformance conformance` |
 

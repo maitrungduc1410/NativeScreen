@@ -24,9 +24,13 @@ public sealed partial class SettingsWindow : Window
 
     private string tab = TabTitles[0];
 
+    /// <summary>The language this run started with, to tell whether a restart is needed.</summary>
+    private static readonly string startLanguage = AppSettings.Shared.Language;
+
     public SettingsWindow()
     {
         InitializeComponent();
+        Loc.Apply(Content);
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragBar);
         AppTheme.Register(this);
@@ -64,6 +68,29 @@ public sealed partial class SettingsWindow : Window
         Options(
             ("Dark", AppTheme.Current == ElementTheme.Dark, () => AppTheme.Set(ElementTheme.Dark)),
             ("Light", AppTheme.Current == ElementTheme.Light, () => AppTheme.Set(ElementTheme.Light)));
+        Heading("Language");
+        var languages = new ComboBox { MinWidth = 220 };
+        languages.Items.Add(Loc.T("System"));
+        foreach (var (_, name) in Loc.Languages)
+        {
+            languages.Items.Add(name);
+        }
+
+        var chosen = Array.FindIndex(Loc.Languages, item => item.Id == AppSettings.Shared.Language);
+        languages.SelectedIndex = chosen + 1;
+        Body.Children.Add(languages);
+        var restart = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Visibility = AppSettings.Shared.Language == startLanguage ? Visibility.Collapsed : Visibility.Visible };
+        var note = Ui.Text("Restart Native Screen to use the new language.", 12, "Ink60");
+        note.VerticalAlignment = VerticalAlignment.Center;
+        restart.Children.Add(note);
+        restart.Children.Add(Ui.Option("Restart Now", false, App.Restart));
+        Body.Children.Add(restart);
+        languages.SelectionChanged += (_, _) =>
+        {
+            AppSettings.Shared.Language = languages.SelectedIndex <= 0 ? "" : Loc.Languages[languages.SelectedIndex - 1].Id;
+            AppSettings.Shared.Save();
+            restart.Visibility = AppSettings.Shared.Language == startLanguage ? Visibility.Collapsed : Visibility.Visible;
+        };
         Heading("Projects folder");
         Body.Children.Add(Ui.Text(AppSettings.Shared.ProjectsDirectory, 12, "Ink60"));
         Options(("Change", false, () => _ = ChooseProjectsFolder()));

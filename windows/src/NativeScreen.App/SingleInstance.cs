@@ -44,6 +44,21 @@ internal static partial class SingleInstance
         return true;
     }
 
+    /// <summary>Gives up the claim, so a copy started now becomes the running one.</summary>
+    public static void Release()
+    {
+        try
+        {
+            owned?.ReleaseMutex();
+        }
+        catch (ApplicationException)
+        {
+        }
+
+        owned?.Dispose();
+        owned = null;
+    }
+
     /// <summary>Hands the request to the running process. An empty path asks it to show the recording bar.</summary>
     public static bool Forward(string? path)
     {

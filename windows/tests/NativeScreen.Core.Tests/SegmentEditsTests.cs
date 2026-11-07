@@ -33,11 +33,42 @@ public sealed class SegmentEditsTests
         Assert.Equal(12000, Assert.Single(document.Timeline.Slices).SourceEndMs);
 
         var slice = document.Timeline.Slices[0];
-        SegmentEdits.SetSliceVolume(slice, 0);
-        Assert.True(slice.Muted);
-        SegmentEdits.SetSliceVolume(slice, 3);
-        Assert.Equal(2, slice.SystemAudioVolume);
+        SegmentEdits.SetSliceSystemAudioVolume(slice, 0);
+        Assert.Equal(0, slice.SystemAudioVolume);
         Assert.False(slice.Muted);
+        SegmentEdits.SetSliceSystemAudioVolume(slice, 3);
+        Assert.Equal(1, slice.SystemAudioVolume);
+    }
+
+    [Fact]
+    public void SliceVolumesNeverMuteAndClearAnOldMute()
+    {
+        var slice = new ClipSlice { Id = "a", SourceEndMs = 1000, Muted = true };
+        SegmentEdits.SetSliceMicrophoneVolume(slice, 0.2);
+        Assert.Equal(0.2, slice.MicrophoneVolume);
+        Assert.False(slice.Muted);
+        SegmentEdits.SetSliceMicrophoneVolume(slice, -1);
+        Assert.Equal(0, slice.MicrophoneVolume);
+        SegmentEdits.SetSliceMicrophoneVolume(slice, 5);
+        Assert.Equal(1, slice.MicrophoneVolume);
+
+        // System audio at 0 leaves the microphone playing.
+        SegmentEdits.SetSliceSystemAudioVolume(slice, 0);
+        var audio = new AudioConfig();
+        Assert.Equal(0, AudioMix.SystemGain(audio, slice, 1));
+        Assert.Equal(1, AudioMix.MicrophoneGain(audio, slice, 1, hiddenByVoiceover: false));
+        SegmentEdits.SetSliceMicrophoneVolume(slice, 0.25);
+        Assert.Equal(0.25, AudioMix.MicrophoneGain(audio, slice, 1, hiddenByVoiceover: false));
+    }
+
+    [Fact]
+    public void ASliceWithoutAMicrophoneVolumeReadsAsFull()
+    {
+        var slice = ProjectJson.Deserialize<ClipSlice>("{\"id\":\"a\",\"sourceEndMs\":1000}");
+        Assert.Equal(1, slice.MicrophoneVolume);
+        var loud = ProjectJson.Deserialize<ClipSlice>("{\"id\":\"a\",\"microphoneVolume\":7}");
+        Assert.Equal(2, loud.MicrophoneVolume);
+        Assert.Contains("\"microphoneVolume\"", ProjectJson.Serialize(slice));
     }
 
     [Fact]

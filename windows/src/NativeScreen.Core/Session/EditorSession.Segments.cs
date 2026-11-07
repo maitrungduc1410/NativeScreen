@@ -155,8 +155,11 @@ public sealed partial class EditorSession
 
     public void SetSliceSpeed(string id, double speed) => Mutate(document => document.Timeline.Slices.First(slice => slice.Id == id).Speed = Math.Clamp(speed, 0.25, 8));
 
-    public void SetSliceVolume(string id, double volume) =>
-        Mutate(document => SegmentEdits.SetSliceVolume(document.Timeline.Slices.First(slice => slice.Id == id), volume), "slice-volume:" + id, structural: false);
+    public void SetSliceSystemAudioVolume(string id, double volume) =>
+        Mutate(document => SegmentEdits.SetSliceSystemAudioVolume(document.Timeline.Slices.First(slice => slice.Id == id), volume), "slice-volume:" + id, structural: false);
+
+    public void SetSliceMicrophoneVolume(string id, double volume) =>
+        Mutate(document => SegmentEdits.SetSliceMicrophoneVolume(document.Timeline.Slices.First(slice => slice.Id == id), volume), "slice-microphone-volume:" + id, structural: false);
 
     public void ToggleSliceHideCursor(string id) => Mutate(document =>
     {

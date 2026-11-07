@@ -267,6 +267,7 @@
         "disableSmoothCursor" : false,
         "hideCursor" : false,
         "id" : "slice-1",
+        "microphoneVolume" : 1,
         "muted" : false,
         "sourceEndMs" : 6000,
         "sourceStartMs" : 0,

@@ -76,7 +76,7 @@ public sealed class RecordingHudWindow : Window
 
     private RecordingHudWindow()
     {
-        Title = "Native Screen Recording";
+        Title = Loc.T("Native Screen Recording");
         root.RequestedTheme = ElementTheme.Dark;
         root.Background = Ui.Rgb(0.09, 0.09, 0.11);
         root.Children.Add(new Border
@@ -86,6 +86,14 @@ public sealed class RecordingHudWindow : Window
             IsHitTestVisible = false
         });
         root.Children.Add(bar);
+        // A label that changes in place (a longer microphone name) changes the bar without a rebuild: follow its own size.
+        bar.SizeChanged += (_, _) =>
+        {
+            if (isShown)
+            {
+                FitToContent();
+            }
+        };
         root.PointerPressed += DragStarted;
         root.PointerMoved += DragMoved;
         root.PointerReleased += DragEnded;
@@ -194,6 +202,11 @@ public sealed class RecordingHudWindow : Window
         var scale = Scale;
         var width = (int)((bar.DesiredSize.Width + 32) * scale);
         var height = (int)(BarHeight * scale);
+        if (AppWindow.Size.Width == width && AppWindow.Size.Height == height && AppWindow.IsVisible)
+        {
+            return;
+        }
+
         var (x, y) = PlaceFor(width, height, scale);
         AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(x, y, width, height));
     }
@@ -274,7 +287,7 @@ public sealed class RecordingHudWindow : Window
         };
         if (tooltip is not null)
         {
-            ToolTipService.SetToolTip(button, tooltip);
+            Ui.Tip(button, tooltip);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
         }
 
@@ -284,7 +297,7 @@ public sealed class RecordingHudWindow : Window
 
     private static TextBlock Label(string text, double size, double opacity, bool medium = false) => new()
     {
-        Text = text,
+        Text = Loc.T(text),
         FontSize = size,
         Foreground = Ui.Rgb(1, 1, 1, opacity),
         FontWeight = medium ? Microsoft.UI.Text.FontWeights.Medium : Microsoft.UI.Text.FontWeights.Normal,
@@ -295,6 +308,7 @@ public sealed class RecordingHudWindow : Window
 
     private static StackPanel IconAndText(string glyph, string text, double maxWidth, bool active)
     {
+        text = Loc.T(text);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Padding = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
         row.Children.Add(Ui.Icon(glyph, 14.5, Ui.Rgb(1, 1, 1, active ? 0.96 : 0.65)));
         var label = Label(text, 13, active ? 0.96 : 0.65, active);
@@ -305,6 +319,7 @@ public sealed class RecordingHudWindow : Window
 
     private static MenuFlyoutItem MenuItem(string title, Action click)
     {
+        title = Loc.T(title);
         var item = new MenuFlyoutItem { Text = title };
         item.Click += (_, _) => click();
         return item;
@@ -344,6 +359,7 @@ public sealed class RecordingHudWindow : Window
 
     private Button ModeButton(string glyph, string title, CaptureTargetMode mode)
     {
+        title = Loc.T(title);
         var selected = pickingMode == mode;
         var stack = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var icon = Ui.Icon(glyph, 16.5, Ui.Rgb(1, 1, 1, selected ? 1 : 0.92));
@@ -485,6 +501,7 @@ public sealed class RecordingHudWindow : Window
 
     private static (Grid Row, ToggleSwitch Toggle) SwitchRow(string title, bool isOn, Action<bool> changed, UIElement? icon = null)
     {
+        title = Loc.T(title);
         var toggle = new ToggleSwitch { IsOn = isOn, OnContent = "", OffContent = "", MinWidth = 0, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, -12, 0) };
         toggle.Toggled += (_, _) => changed(toggle.IsOn);
         var row = new Grid { ColumnSpacing = 10, MinHeight = 32, Padding = new Thickness(14, 0, 8, 0) };
@@ -939,7 +956,7 @@ public sealed class RecordingHudWindow : Window
         {
             var menu = new MenuFlyout { ShouldConstrainToRootBounds = false };
             var settings = AppSettings.Shared;
-            var header = new MenuFlyoutSubItem { Text = "Countdown" };
+            var header = new MenuFlyoutSubItem { Text = Loc.T("Countdown") };
             foreach (var (title, seconds) in new[] { ("Off", 0), ("3s", 3), ("5s", 5), ("10s", 10) })
             {
                 var value = seconds;
@@ -953,21 +970,21 @@ public sealed class RecordingHudWindow : Window
             }
 
             menu.Items.Add(header);
-            var zooms = new ToggleMenuFlyoutItem { Text = "Automatically create zooms", IsChecked = settings.AutoCreateZooms };
+            var zooms = new ToggleMenuFlyoutItem { Text = Loc.T("Automatically create zooms"), IsChecked = settings.AutoCreateZooms };
             zooms.Click += (_, _) =>
             {
                 settings.AutoCreateZooms = zooms.IsChecked;
                 settings.Save();
             };
             menu.Items.Add(zooms);
-            var highlight = new ToggleMenuFlyoutItem { Text = "Highlight recorded area", IsChecked = settings.HighlightRecordedArea };
+            var highlight = new ToggleMenuFlyoutItem { Text = Loc.T("Highlight recorded area"), IsChecked = settings.HighlightRecordedArea };
             highlight.Click += (_, _) =>
             {
                 settings.HighlightRecordedArea = highlight.IsChecked;
                 settings.Save();
             };
             menu.Items.Add(highlight);
-            var after = new MenuFlyoutSubItem { Text = "After recording" };
+            var after = new MenuFlyoutSubItem { Text = Loc.T("After recording") };
             foreach (var (title, action) in new[] { ("Create project", "project"), ("Export to clipboard", "clipboard"), ("Export to file", "file") })
             {
                 var value = action;
@@ -1103,7 +1120,7 @@ public sealed class RecordingHudWindow : Window
             AppExclusion(false);
             ShowIdle();
             UpdateDevices();
-            await new ContentDialog { XamlRoot = root.XamlRoot, RequestedTheme = ElementTheme.Dark, Title = "Could not start recording", Content = exception.Message, CloseButtonText = "OK" }.ShowAsync();
+            await new ContentDialog { XamlRoot = root.XamlRoot, RequestedTheme = ElementTheme.Dark, Title = Loc.T("Could not start recording"), Content = exception.Message, CloseButtonText = Loc.T("OK") }.ShowAsync();
         }
     }
 
@@ -1242,9 +1259,9 @@ public sealed class RecordingHudWindow : Window
         {
             XamlRoot = root.XamlRoot,
             RequestedTheme = ElementTheme.Dark,
-            Title = "Delete this recording?",
-            PrimaryButtonText = "Delete",
-            CloseButtonText = "Keep recording"
+            Title = Loc.T("Delete this recording?"),
+            PrimaryButtonText = Loc.T("Delete"),
+            CloseButtonText = Loc.T("Keep recording")
         }.ShowAsync();
         if (answer == ContentDialogResult.Primary)
         {

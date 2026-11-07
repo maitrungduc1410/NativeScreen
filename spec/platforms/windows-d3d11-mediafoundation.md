@@ -181,7 +181,11 @@ Rules:
   editor window, Desktop Acrylic on HUD and popups, custom title bar with the app menu (`MenuBar`) since Windows has no
   global menu bar, keyboard accelerators with `Ctrl` instead of `Cmd`.
 - Timeline: retained XAML blocks on a `Canvas`, with the playhead moved by transform (`spec/06` ADR-19). Move to Win2D
-  `CanvasVirtualControl` when a stall is measured. Waveforms are XAML polygons (`spec/06` ADR-39).
+  `CanvasVirtualControl` when a stall is measured. Waveforms are per-pixel BGRA bitmaps (`spec/06` ADR-42), cached per
+  slice and stretched during a zoom. A zoom step moves existing blocks instead of rebuilding them (ADR-46).
+- Text: every user-visible string goes through `Loc` (`App/Localization/Loc.cs`), backed by the shared macOS catalog
+  (`spec/06` ADR-44). New UI goes through the shared helpers or `Loc.T`; a Windows-only string becomes a `manual` key in
+  `Localizable.xcstrings` with all 8 languages.
 - Tooltips and hover magnet: Composition animations (`spec/06` ADR on retained-layer hover physics).
 - Multiple projects open at once, each in its own window with its own session, undo stack and render thread.
 - Light and dark themes (`RequestedTheme`), driven by settings.

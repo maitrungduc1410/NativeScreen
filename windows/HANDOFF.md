@@ -27,6 +27,34 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-07, Windows port: slice volumes, waveform look, snapping, Ctrl + scroll zoom, zoom cost, HUD width, localization
+
+### Verifier
+- **Result:** PASS for what could be checked here. Not yet heard: per-slice volumes in preview and export.
+- **Build and tests:** the solution builds in Debug and Release (x64) with 0 warnings. Core 253, Rendering 21 and Media 20 tests pass.
+- **Measurements** (this machine, 2400 x 1500 window at 200%, Release build):
+  - **Zoom step:** 40 `Ctrl` + wheel steps from 1x to 6x on a 10 s project, timed with `NS_TIMELINE_ZOOM_STATS`. Before, 17.8 ms median and 39.9 ms worst. After, 8.3 ms median and 20.2 ms worst.
+  - **What cost the time:** rebuilding the timeline tree took 11.3 ms per step. A zoom step now only moves and widens what is there (ADR-46).
+- **Checked in the running app**, on copies of a project in a scratch folder, with real mouse and wheel input:
+  - **Snapping:** dragging the second shortcut toward the first one's end stuck its start to that edge and showed the purple guide, which went away on the drop.
+  - **Ctrl + wheel:** 3 notches in and 2 out over the 0:05 tick kept it at the same pixel. A plain wheel still scrolls and does not zoom.
+  - **Waveforms:** a voiceover at 80% shows its full wave faintly behind the scaled one.
+  - **Vietnamese:** run with `NS_LANGUAGE=vi`, the editor, inspector, timeline labels and the hover prompt are translated.
+- **Changes made:**
+  - **Per-slice volume:** `ClipSlice.MicrophoneVolume`, the two setters (neither sets `Muted`), `AudioMix.MicrophoneGain`, a clip menu slider per source from the metadata, and the inspector's `Clip audio volume` through the same setter.
+  - **Waveforms:** `Core/Editing/WaveformRaster.cs` replaces the polygon outline, which is deleted. The timeline caches one bitmap per slice and voiceover, stretches it during a zoom, and sharpens it on a worker thread after 90 ms.
+  - **Snapping:** `Core/Timeline/TimelineSnapping.cs` with tests, wired into every drag and trim except clips. The toggle sits next to split, plus `View > Snap timeline items`.
+  - **Zoom:** `Ctrl` + wheel over the whole timeline, anchored at the cursor. Over the labels it keeps the playhead. Hover skim pauses for 150 ms after each step.
+  - **Recording bar:** it refits on its own `SizeChanged`.
+  - **Localization:** `App/Localization/Loc.cs` reads the shared `Localizable.xcstrings`, and the shared helpers translate at display. `Settings > General > Language` has `Restart Now`. 92 Windows-only keys were added to the catalog with all 7 translations, and no existing key changed.
+  - **Fixtures:** `"microphoneVolume" : 1` was added to each slice in `conformance/cases/*/project.json`.
+- **Spec updates:** Windows notes in `spec/06` ADR-42 to ADR-47, the UI section in `spec/platforms/windows-d3d11-mediafoundation.md`, and the `NS_TIMELINE_ZOOM_STATS` and `NS_LANGUAGE` rows in `windows/AGENTS.md`.
+- **Next / open:**
+  - **Volumes:** listen to the per-slice volumes in preview and export. The test recording has no real microphone, and no microphone was opened.
+  - **Strings:** the new Windows-only translations were written by an agent and need review by native speakers.
+  - **Literals left:** some interpolated strings are still English (for example `Display 2` on the screen picker, and `Stop` / `Play` with a track name).
+  - **macOS:** rebuild the macOS app once to confirm Xcode accepts the added catalog keys as they are.
+
 ## 2026-11-07, Smooth timeline zoom, per-slice microphone volume, HUD width (macOS side done, Windows port pending)
 
 ### Writer

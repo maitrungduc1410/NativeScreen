@@ -118,7 +118,7 @@ public sealed partial class EditorWindow
 
         if (commandRows.Count == 0)
         {
-            CommandRows.Children.Add(new TextBlock { Text = "No commands found", FontSize = 13.5, Foreground = Ui.Pal("Ink45"), Margin = new Thickness(10, 12, 10, 12) });
+            CommandRows.Children.Add(new TextBlock { Text = Loc.T("No commands found"), FontSize = 13.5, Foreground = Ui.Pal("Ink45"), Margin = new Thickness(10, 12, 10, 12) });
         }
 
         HighlightCommand(0);
@@ -177,7 +177,7 @@ public sealed partial class EditorWindow
     {
         var items = new List<CommandItem>();
         void Add(string group, string title, string glyph, Action run, string? badge = null, bool destructive = false) =>
-            items.Add(new CommandItem(group, title, glyph, run, badge, destructive));
+            items.Add(new CommandItem(Loc.T(group), Loc.T(title), glyph, run, badge, destructive));
 
         var document = session.Document;
         var timeline = document.Timeline;

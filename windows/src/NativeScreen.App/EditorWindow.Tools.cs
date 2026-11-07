@@ -34,10 +34,10 @@ public sealed partial class EditorWindow
         {
             XamlRoot = Root.XamlRoot,
             RequestedTheme = AppTheme.Current,
-            Title = "Remove this project?",
-            Content = "The project moves to the Recycle Bin, together with its recording.",
-            PrimaryButtonText = "Remove",
-            CloseButtonText = "Cancel"
+            Title = Loc.T("Remove this project?"),
+            Content = Loc.T("The project moves to the Recycle Bin, together with its recording."),
+            PrimaryButtonText = Loc.T("Remove"),
+            CloseButtonText = Loc.T("Cancel")
         }.ShowAsync();
         if (answer != ContentDialogResult.Primary)
         {
@@ -101,6 +101,8 @@ public sealed partial class EditorWindow
 
         // System audio usually lives inside the video, and then the metadata names no separate track for it.
         var tracks = project.Metadata.Tracks;
+        timeline.HasMicrophone = tracks.MicrophoneAudio is not null;
+        timeline.HasSystemAudio = tracks.SystemAudio is not null;
         var recording = Path.Combine(package, "recording");
         var systemPath = Path.Combine(recording, tracks.SystemAudio ?? tracks.DisplayVideo);
         var microphonePath = tracks.MicrophoneAudio is { } microphone ? Path.Combine(recording, microphone) : null;
@@ -203,7 +205,7 @@ public sealed partial class EditorWindow
 
         var apply = new Button { Style = Ui.StyleOf("NsIconButton"), Content = title, Width = double.NaN, Height = 34, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 0, 8, 0) };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(apply, preset.Name);
-        ToolTipService.SetToolTip(apply, "Click to apply");
+        Ui.Tip(apply, "Click to apply");
         apply.Click += (_, _) =>
         {
             flyout.Hide();
@@ -220,7 +222,7 @@ public sealed partial class EditorWindow
                 flyout.Hide();
                 _ = RenamePreset(preset);
             }));
-            var useDefault = new ToggleMenuFlyoutItem { Text = "Use as default for new projects", IsChecked = settings.DefaultPresetId == preset.Id };
+            var useDefault = new ToggleMenuFlyoutItem { Text = Loc.T("Use as default for new projects"), IsChecked = settings.DefaultPresetId == preset.Id };
             useDefault.Click += (_, _) =>
             {
                 settings.DefaultPresetId = settings.DefaultPresetId == preset.Id ? null : preset.Id;
@@ -265,7 +267,7 @@ public sealed partial class EditorWindow
     private async Task RenamePreset(ProjectPreset preset)
     {
         var name = new TextBox { Text = preset.Name };
-        var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = AppTheme.Current, Title = "Rename preset", Content = name, PrimaryButtonText = "Rename", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = AppTheme.Current, Title = Loc.T("Rename preset"), Content = name, PrimaryButtonText = Loc.T("Rename"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary && name.Text.Trim().Length > 0)
         {
             tools.Presets.Delete(preset);
@@ -276,15 +278,15 @@ public sealed partial class EditorWindow
 
     private async Task SavePreset()
     {
-        var name = new TextBox { PlaceholderText = "Preset name" };
+        var name = new TextBox { PlaceholderText = Loc.T("Preset name") };
         var answer = await new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
             RequestedTheme = AppTheme.Current,
-            Title = "Save preset",
+            Title = Loc.T("Save preset"),
             Content = name,
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel"
+            PrimaryButtonText = Loc.T("Save"),
+            CloseButtonText = Loc.T("Cancel")
         }.ShowAsync();
         if (answer == ContentDialogResult.Primary && name.Text.Trim().Length > 0)
         {
@@ -565,7 +567,7 @@ public sealed partial class EditorWindow
             }));
         }
 
-        var apply = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = "Apply" };
+        var apply = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = Loc.T("Apply") };
         apply.Click += (_, _) =>
         {
             var crop = new Rect01(left, top, right - left, bottom - top);
@@ -670,9 +672,9 @@ internal static class Projects
                 {
                     XamlRoot = xamlRoot,
                     RequestedTheme = AppTheme.Current,
-                    Title = "Could not open this project",
+                    Title = Loc.T("Could not open this project"),
                     Content = $"{path}\n\n{exception.Message}",
-                    CloseButtonText = "OK"
+                    CloseButtonText = Loc.T("OK")
                 }.ShowAsync();
             }
         }
@@ -697,7 +699,7 @@ internal static class Projects
                     RequestedTheme = AppTheme.Current,
                     Title = $"Could not create a project from {Path.GetFileName(file)}",
                     Content = exception.Message,
-                    CloseButtonText = "OK"
+                    CloseButtonText = Loc.T("OK")
                 }.ShowAsync();
             }
         }

@@ -30,7 +30,7 @@ internal sealed class SegmentMenu
         flyout.Content = rows;
     }
 
-    public static void ForClip(EditorSession session, string id, FrameworkElement anchor, Point at)
+    public static void ForClip(EditorSession session, string id, bool hasMicrophone, bool hasSystemAudio, FrameworkElement anchor, Point at)
     {
         var slices = session.Document.Timeline.Slices;
         var index = slices.FindIndex(item => item.Id == id);
@@ -48,8 +48,21 @@ internal sealed class SegmentMenu
         menu.Heading("Set speed");
         menu.Choices([0.5, 1, 1.25, 1.5, 2, 4], speed => $"{speed:0.##}x", speed => Math.Abs(slice.Speed - speed) < 0.03, speed => session.SetSliceSpeed(id, speed));
         menu.Separator();
-        menu.Slider("System audio volume", slice.Muted ? 0 : slice.SystemAudioVolume, 0, 1.5, value => $"{Math.Round(value * 100)}%", value => session.SetSliceVolume(id, value));
-        menu.Separator();
+        // One slider per recorded source, each applied only to this slice (spec/06 ADR-47).
+        if (hasMicrophone)
+        {
+            menu.Slider("Microphone volume", slice.Muted ? 0 : slice.MicrophoneVolume, 0, 1, value => $"{Math.Round(value * 100)}%", value => session.SetSliceMicrophoneVolume(id, value));
+        }
+
+        if (hasSystemAudio)
+        {
+            menu.Slider("System audio volume", slice.Muted ? 0 : slice.SystemAudioVolume, 0, 1, value => $"{Math.Round(value * 100)}%", value => session.SetSliceSystemAudioVolume(id, value));
+        }
+
+        if (hasMicrophone || hasSystemAudio)
+        {
+            menu.Separator();
+        }
         menu.Check("Hide mouse cursor", slice.HideCursor, () => session.ToggleSliceHideCursor(id));
         menu.Check("Disable smooth mouse movement", slice.DisableSmoothCursor, () => session.ToggleSliceDisableSmoothCursor(id));
         menu.Separator();
@@ -215,6 +228,7 @@ internal sealed class SegmentMenu
 
     private Button Row(string title, string? shortcut, Brush? color, Action? click, bool? isChecked = null)
     {
+        title = Loc.T(title);
         var grid = new Grid { ColumnSpacing = 8 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -269,7 +283,7 @@ internal sealed class SegmentMenu
     private void Separator() => rows.Children.Add(new Border { Height = 1, Margin = new Thickness(4, 4, 4, 4), Background = Ui.Pal("Ink10") });
 
     private void Heading(string title) =>
-        rows.Children.Add(new TextBlock { Text = title, FontSize = 12, Margin = new Thickness(8, 4, 8, 2), Foreground = Ui.Pal("Ink60") });
+        rows.Children.Add(new TextBlock { Text = Loc.T(title), FontSize = 12, Margin = new Thickness(8, 4, 8, 2), Foreground = Ui.Pal("Ink60") });
 
     private void Choices(double[] values, Func<double, string> label, Func<double, bool> selected, Action<double> choose)
     {
@@ -322,6 +336,7 @@ internal sealed class SegmentMenu
 
     private void Slider(string title, double value, double minimum, double maximum, Func<double, string> format, Action<double> change, double? step = null)
     {
+        title = Loc.T(title);
         var grid = new Grid { Margin = new Thickness(8, 4, 8, 2) };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

@@ -74,8 +74,13 @@ internal static class Ui
         return path;
     }
 
+    /// <summary>Sets a tooltip; plain text is translated.</summary>
+    public static void Tip(DependencyObject element, object? tip) =>
+        ToolTipService.SetToolTip(element, tip is string text ? Loc.T(text) : tip);
+
     public static TextBlock Text(string text, double size = 13, string ink = "Ink88", bool medium = false)
     {
+        text = Loc.T(text);
         var block = new TextBlock
         {
             Text = text,
@@ -94,8 +99,9 @@ internal static class Ui
 
     public static Button IconButton(UIElement content, string tooltip, Action? click, double size = 36)
     {
+        tooltip = Loc.T(tooltip);
         var button = new Button { Style = StyleOf("NsIconButton"), Content = content, Width = size, Height = size };
-        ToolTipService.SetToolTip(button, tooltip);
+        Ui.Tip(button, tooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
         if (click is null)
         {
@@ -112,6 +118,7 @@ internal static class Ui
     /// <summary>A pill option with the selected fill and border of the macOS inspector.</summary>
     public static Button Option(string title, bool selected, Action? click)
     {
+        title = Loc.T(title);
         var button = new Button { Style = StyleOf("NsOptionButton"), Content = title };
         if (selected)
         {
@@ -124,7 +131,7 @@ internal static class Ui
         if (click is null)
         {
             button.IsEnabled = false;
-            ToolTipService.SetToolTip(button, FeatureNotReady);
+            Ui.Tip(button, FeatureNotReady);
         }
         else
         {

@@ -92,6 +92,7 @@ public sealed partial class EditorWindow : Window
     {
         source = editorSource ?? EditorSource.Empty;
         InitializeComponent();
+        Loc.Apply(Content);
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppTheme.Register(this);
@@ -254,7 +255,7 @@ public sealed partial class EditorWindow : Window
 
     private void BuildAppMenu()
     {
-        var file = new MenuFlyoutSubItem { Text = "File" };
+        var file = new MenuFlyoutSubItem { Text = Loc.T("File") };
         file.Items.Add(Menu("Open project", () => _ = OpenProjectCommand()));
         file.Items.Add(RecentMenu());
         file.Items.Add(Menu("Create project from video", () => _ = ImportVideoCommand()));
@@ -265,7 +266,7 @@ public sealed partial class EditorWindow : Window
         file.Items.Add(Menu("Save as", source.PackagePath is null ? null : SaveAsCommand));
         file.Items.Add(new MenuFlyoutSeparator());
         file.Items.Add(Menu("Settings", OpenSettings, "Ctrl+,"));
-        var edit = new MenuFlyoutSubItem { Text = "Edit" };
+        var edit = new MenuFlyoutSubItem { Text = Loc.T("Edit") };
         edit.Items.Add(Menu("Undo", session.Undo, "Ctrl+Z"));
         edit.Items.Add(Menu("Redo", session.Redo, "Ctrl+Shift+Z"));
         edit.Items.Add(Menu("Delete", session.DeleteSelected, "Delete"));
@@ -273,18 +274,18 @@ public sealed partial class EditorWindow : Window
         edit.Items.Add(Menu("Cut", () => HandleSelectionControlKey(VirtualKey.X), "Ctrl+X"));
         edit.Items.Add(Menu("Copy", () => HandleSelectionControlKey(VirtualKey.C), "Ctrl+C"));
         edit.Items.Add(Menu("Paste", session.PasteFromClipboard, "Ctrl+V"));
-        var record = new MenuFlyoutSubItem { Text = "Record" };
+        var record = new MenuFlyoutSubItem { Text = Loc.T("Record") };
         record.Items.Add(Menu("New recording", () => RecordingHudWindow.Show()));
         record.Items.Add(Menu("Record display", () => RecordingHudWindow.Show(CaptureTargetMode.Display)));
         record.Items.Add(Menu("Record window", () => RecordingHudWindow.Show(CaptureTargetMode.Window)));
         record.Items.Add(Menu("Record area", () => RecordingHudWindow.Show(CaptureTargetMode.Area)));
         record.Items.Add(Menu("Record this project window", () => RecordingHudWindow.RecordWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))));
-        var export = new MenuFlyoutSubItem { Text = "Export" };
+        var export = new MenuFlyoutSubItem { Text = Loc.T("Export") };
         export.Items.Add(Menu("Export", ShowExportOverlay, "Ctrl+E"));
         export.Items.Add(Menu("Quick export to clipboard", () => _ = QuickExportToClipboard()));
         export.Items.Add(Menu("Export current frame as image", ShowFrameExportOverlay));
         export.Items.Add(Menu("Extract raw recording files", source.PackagePath is null ? null : () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{Path.Combine(source.PackagePath, "recording")}\"") { UseShellExecute = true })));
-        var view = new MenuFlyoutSubItem { Text = "View" };
+        var view = new MenuFlyoutSubItem { Text = Loc.T("View") };
         foreach (var (tab, _) in TabIcons)
         {
             var target = tab;
@@ -295,8 +296,8 @@ public sealed partial class EditorWindow : Window
         }
 
         view.Items.Add(new MenuFlyoutSeparator());
-        var showWaveform = new ToggleMenuFlyoutItem { Text = "Show audio waveform", IsChecked = AppSettings.Shared.ShowAudioWaveform };
-        var smoothWaveform = new ToggleMenuFlyoutItem { Text = "Smooth waveform", IsChecked = AppSettings.Shared.SmoothWaveform, IsEnabled = AppSettings.Shared.ShowAudioWaveform };
+        var showWaveform = new ToggleMenuFlyoutItem { Text = Loc.T("Show audio waveform"), IsChecked = AppSettings.Shared.ShowAudioWaveform };
+        var smoothWaveform = new ToggleMenuFlyoutItem { Text = Loc.T("Smooth waveform"), IsChecked = AppSettings.Shared.SmoothWaveform, IsEnabled = AppSettings.Shared.ShowAudioWaveform };
         showWaveform.Click += (_, _) =>
         {
             AppSettings.Shared.ShowAudioWaveform = showWaveform.IsChecked;
@@ -312,6 +313,9 @@ public sealed partial class EditorWindow : Window
         };
         view.Items.Add(showWaveform);
         view.Items.Add(smoothWaveform);
+        snapMenuItem = new ToggleMenuFlyoutItem { Text = Loc.T("Snap timeline items"), IsChecked = AppSettings.Shared.SnapToSegments };
+        snapMenuItem.Click += (_, _) => ToggleSnap(this, new RoutedEventArgs());
+        view.Items.Add(snapMenuItem);
         view.Items.Add(new MenuFlyoutSeparator());
         view.Items.Add(Menu("Show safe zones for short videos", () =>
         {
@@ -328,6 +332,7 @@ public sealed partial class EditorWindow : Window
 
     private static MenuFlyoutItem Menu(string title, Action? click, string? accelerator = null)
     {
+        title = Loc.T(title);
         var item = new MenuFlyoutItem { Text = title, IsEnabled = click is not null };
         if (accelerator is not null)
         {
@@ -394,7 +399,7 @@ public sealed partial class EditorWindow : Window
         HoverMagnet.SetIsActive(voiceoverDockButton, recording);
         voiceoverDockIcon.Glyph = recording ? "\uE71A" : "\uE720";
         var tooltip = recording ? "Stop voiceover recording" : "Record voiceover";
-        ToolTipService.SetToolTip(voiceoverDockButton, tooltip);
+        Ui.Tip(voiceoverDockButton, tooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(voiceoverDockButton, tooltip);
         if (recording)
         {
@@ -536,11 +541,12 @@ public sealed partial class EditorWindow : Window
         }
 
         timeline.RefreshSplitMode();
+        RefreshSnapButton();
         RefreshMaskDock();
         RefreshVoiceoverDock();
         if (document.Canvas.AspectRatioMode == AspectRatioMode.Auto)
         {
-            AspectName.Text = "Auto";
+            AspectName.Text = Loc.T("Auto");
             AspectRatio.Text = "";
         }
         else
@@ -851,7 +857,7 @@ public sealed partial class EditorWindow : Window
     private void RefreshTransport()
     {
         PlayIcon.Glyph = session.IsPlaying ? "" : "";
-        ToolTipService.SetToolTip(PlayButton, session.IsPlaying ? "Pause (Space)" : "Play (Space)");
+        Ui.Tip(PlayButton, session.IsPlaying ? "Pause (Space)" : "Play (Space)");
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         timeline.UpdatePlayhead();
     }
@@ -891,6 +897,37 @@ public sealed partial class EditorWindow : Window
         DrawPreview();
     }
 
+    /// <summary>Lit like the split button while on (spec/04 "Timeline snapping").</summary>
+    private void RefreshSnapButton()
+    {
+        var on = AppSettings.Shared.SnapToSegments;
+        SnapIcon.Stroke = on ? Ui.Rgb(0.65, 0.58, 1) : Ui.Pal("Ink88");
+        HoverMagnet.SetIsActive(SnapButton, on);
+        Ui.Tip(SnapButton, on ? "Snapping on" : "Snapping off");
+        if (on)
+        {
+            SnapButton.Background = Ui.Rgb(0.45, 0.36, 0.96, DockActiveFillOpacity);
+        }
+        else
+        {
+            SnapButton.ClearValue(Control.BackgroundProperty);
+        }
+
+        if (snapMenuItem is not null)
+        {
+            snapMenuItem.IsChecked = on;
+        }
+    }
+
+    private ToggleMenuFlyoutItem? snapMenuItem;
+
+    private void ToggleSnap(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Shared.SnapToSegments = !AppSettings.Shared.SnapToSegments;
+        AppSettings.Shared.Save();
+        RefreshSnapButton();
+    }
+
     private void ToggleSplit(object sender, RoutedEventArgs e)
     {
         altHeldForSplit = false;
@@ -910,6 +947,7 @@ public sealed partial class EditorWindow : Window
 
     private void ShowToast(string message)
     {
+        message = Loc.T(message);
         ToastText.Text = message;
         Toast.Visibility = Visibility.Visible;
         toastTimer.Stop();
@@ -1085,7 +1123,7 @@ public sealed partial class EditorWindow : Window
 
     private MenuFlyoutSubItem RecentMenu()
     {
-        var menu = new MenuFlyoutSubItem { Text = "Open recent" };
+        var menu = new MenuFlyoutSubItem { Text = Loc.T("Open recent") };
         foreach (var path in AppSettings.Shared.RecentProjects)
         {
             var target = path;

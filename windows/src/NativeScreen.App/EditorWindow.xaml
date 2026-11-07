@@ -136,9 +136,15 @@
                 </Grid>
 
                 <Grid Grid.Row="2" Margin="14,8">
-                    <Button x:Name="SplitButton" Style="{StaticResource NsIconButton}" Click="ToggleSplit" HorizontalAlignment="Left" ToolTipService.ToolTip="Split clip (Alt)">
-                        <FontIcon x:Name="SplitIcon" Glyph="&#xE8C6;" FontSize="15" FontFamily="{StaticResource NsIconFont}" />
-                    </Button>
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <Button x:Name="SplitButton" Style="{StaticResource NsIconButton}" Click="ToggleSplit" ToolTipService.ToolTip="Split clip (Alt)">
+                            <FontIcon x:Name="SplitIcon" Glyph="&#xE8C6;" FontSize="15" FontFamily="{StaticResource NsIconFont}" />
+                        </Button>
+                        <Button x:Name="SnapButton" Style="{StaticResource NsIconButton}" Click="ToggleSnap" ToolTipService.ToolTip="Snapping on">
+                            <Path x:Name="SnapIcon" Width="16" Height="14" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  Data="M8,1 L8,13 M1,7 L5.6,7 M3.6,4.8 L5.8,7 L3.6,9.2 M15,7 L10.4,7 M12.4,4.8 L10.2,7 L12.4,9.2" />
+                        </Button>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock x:Name="CurrentTime" Width="64" TextAlignment="Right" FontSize="12.5" VerticalAlignment="Center" Foreground="{ThemeResource Ink60}" />
                         <Button Style="{StaticResource NsIconButton}" Click="JumpStart" ToolTipService.ToolTip="Jump to start">

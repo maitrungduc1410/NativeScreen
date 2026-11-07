@@ -22,6 +22,10 @@ public sealed class AppSettings
     public bool HighlightRecordedArea { get; set; } = true;
     public bool ShowAudioWaveform { get; set; } = true;
     public bool SmoothWaveform { get; set; } = true;
+    public bool SnapToSegments { get; set; } = true;
+
+    /// <summary>A catalog language id, or empty for the system language. Applies on the next launch.</summary>
+    public string Language { get; set; } = "";
 
     public string ProjectsDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Native Screen Projects");

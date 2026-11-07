@@ -67,6 +67,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
 
     public async Task<string?> PickSave(string suggestedName, string title, string extension)
     {
+        title = Loc.T(title);
         var picker = new FileSavePicker { SuggestedFileName = suggestedName };
         picker.FileTypeChoices.Add(title, new List<string> { extension });
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
@@ -458,9 +459,9 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     /// <summary>Name and four sliders; the new preset goes on the project and is selected.</summary>
     public async Task CreateColorPreset()
     {
-        var name = new TextBox { Text = "My preset" };
+        var name = new TextBox { Text = Loc.T("My preset") };
         var panel = new StackPanel { Spacing = 10, Width = 340 };
-        panel.Children.Add(new TextBlock { Text = "Preset name" });
+        panel.Children.Add(new TextBlock { Text = Loc.T("Preset name") });
         panel.Children.Add(name);
         Slider Row(string title, double minimum, double maximum, double value)
         {
@@ -475,7 +476,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         var pop = Row("Background pop", 0, 1, 0.2);
         var contrast = Row("Contrast", -1, 1, 0.25);
         var intensity = Row("Color intensity", -1, 1, 0.2);
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = AppTheme.Current, Title = "Color preset studio", Content = panel, PrimaryButtonText = "Create preset", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = AppTheme.Current, Title = Loc.T("Color preset studio"), Content = panel, PrimaryButtonText = Loc.T("Create preset"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             var preset = new CustomCameraColorPreset
@@ -643,10 +644,10 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                 {
                     XamlRoot = XamlRoot,
                     RequestedTheme = AppTheme.Current,
-                    Title = "Download the speech model?",
+                    Title = Loc.T("Download the speech model?"),
                     Content = $"Transcripts run on this device with the Whisper {model.Tier} model. It downloads {model.SizeText} from huggingface.co once. Your audio is never uploaded.",
-                    PrimaryButtonText = "Download",
-                    CloseButtonText = "Not now"
+                    PrimaryButtonText = Loc.T("Download"),
+                    CloseButtonText = Loc.T("Not now")
                 }.ShowAsync();
                 if (answer != ContentDialogResult.Primary)
                 {

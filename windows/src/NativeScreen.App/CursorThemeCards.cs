@@ -45,6 +45,7 @@ internal static class CursorThemeCards
     /// <param name="hoverFiles">Other variants a card cycles through while hovered, to show the style has more than one.</param>
     public static Button Card(string file, string name, bool selected, Action click, double size = 50, double spriteSize = 31, IReadOnlyList<string>? hoverFiles = null)
     {
+        name = Loc.T(name);
         var image = Sprite(file, spriteSize);
         image.Loaded += (_, _) => _ = Center(image, file);
         image.ImageOpened += (_, _) => _ = Center(image, file);
@@ -59,7 +60,7 @@ internal static class CursorThemeCards
         }
 
         var button = new Button { Style = Ui.StyleOf("NsIconButton"), Content = fill, Width = double.NaN, Height = double.NaN, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        ToolTipService.SetToolTip(button, name);
+        Ui.Tip(button, name);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, name);
         button.Click += (_, _) => click();
         if (!selected)

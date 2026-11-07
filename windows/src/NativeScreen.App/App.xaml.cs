@@ -29,6 +29,18 @@ public partial class App : Application
         }
     }
 
+    /// <summary>Starts a new copy and ends this one, for a change that applies on launch.</summary>
+    public static void Restart()
+    {
+        SingleInstance.Release();
+        if (Environment.ProcessPath is { } executable)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(executable) { UseShellExecute = false });
+        }
+
+        Quit();
+    }
+
     public static void Quit()
     {
         RecordingHudWindow.Shutdown();
@@ -45,6 +57,9 @@ public partial class App : Application
         {
             Environment.Exit(0);
         }
+
+        // NS_LANGUAGE overrides the setting for one run, for checking a layout in another language.
+        Loc.Start(Environment.GetEnvironmentVariable("NS_LANGUAGE") ?? AppSettings.Shared.Language);
 
         // Nothing may end the process when a window closes: the recording bar can be hidden with no editor open.
         DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;

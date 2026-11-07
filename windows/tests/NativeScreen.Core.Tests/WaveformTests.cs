@@ -84,34 +84,11 @@ public sealed class WaveformTests
         Assert.Equal(11, envelope.SamplesPerBin(0, 1, 1000), 6);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void TheOutlineStaysInsideTheRoundedBlock(bool smooth)
-    {
-        const double width = 200, height = 50, radius = 9;
-        foreach (var (x, y) in WaveformOutline.Points(width, height, radius, smooth, _ => 41))
-        {
-            Assert.InRange(x, 0, width);
-            Assert.InRange(y, 0, height);
-            var cornerX = x < radius ? radius - x : x > width - radius ? x - (width - radius) : 0;
-            var cornerY = y > height - radius ? y - (height - radius) : 0;
-            Assert.True(cornerX * cornerX + cornerY * cornerY <= radius * radius + 0.5, $"({x}, {y}) is outside the corner");
-        }
-    }
-
     [Fact]
-    public void QuietBarsAreLeftOut()
+    public void WaveHeightsFollowTheRow()
     {
-        Assert.Empty(WaveformOutline.Points(200, 50, 9, smooth: false, _ => 0.2));
-        Assert.Equal(6 + 2, WaveformOutline.Points(3, 50, 0, smooth: false, _ => 10).Count);
-    }
-
-    [Fact]
-    public void WaveHeightsFollowTheBlock()
-    {
-        Assert.Equal(32, WaveformOutline.MaximumHeight(52));
-        Assert.Equal(20.4, WaveformOutline.MaximumHeight(30), 6);
+        Assert.Equal(32, WaveformRaster.MaximumHeight(52));
+        Assert.Equal(20.4, WaveformRaster.MaximumHeight(30), 6);
     }
 
     [Fact]
