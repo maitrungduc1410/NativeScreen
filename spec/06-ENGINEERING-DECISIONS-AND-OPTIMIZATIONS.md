@@ -690,6 +690,7 @@ images from other apps or wallpaper packs to this bundle.
   A favorite thumbnail shows a white outlined star in its middle, both under `★` and in its own category.
 - **`Pick random wallpaper` draws from every category** (mesh, system and built-in), not just the one on screen, then switches to
   the pick's category and scrolls its pill into view.
+- **Windows.** The favorites are `FavoriteBackgrounds` in `settings.json`, a list in add order with the same ids. The filtering is in `Core/Rendering/BackgroundFavorites.cs`. Each thumbnail gets a `ContextFlyout` to add or remove it, and a favorite shows a white outlined `\uE734` star over a faint shadow copy. The random pick sets the category first, and the pill strip centers a newly selected pill on its own.
 
 ### Baked layers stay upright
 `materializeToGPUTexture` flipped every baked layer vertically, so the background was upside down in preview and export, shadows
@@ -1027,4 +1028,9 @@ Tracks had no delete of their own: a track went away only when its last item did
 - **Layouts** removes every camera layout segment, so the row goes away. **Voiceovers** drops that track's segments, then `normalizeVoiceoverTracks` renumbers the tracks after it and keeps their hidden state. It is not offered while a voiceover is recording. Audio files stay in `assets/` for undo.
 - **Shortcuts.** Recorded keystrokes always belong to the first shortcut track, and the first track is recreated on load when the recording has keystrokes. Deleting that track therefore also adds its recorded keystrokes to `hiddenShortcutStartMs`; otherwise they would come back on reopen, or move to the next track. Custom shortcuts on the track are removed and the remaining tracks are renamed `Shortcuts`, `Shortcuts 2`, ...
 - **Captions** uses `deleteCaptionTrack`, which removes the track's captions with it.
+- **Windows.** `EditorSession.DeleteTimelineTrack(DeletableTimelineTrack)` (`Session/EditorSession.Tracks.cs`) follows the same rules.
+  - **Shortcuts:** a recorded keystroke cluster is one whose id starts with `telemetry_`.
+  - **Menu:** the label row spans the label column, so a right-click anywhere on it opens the `MenuFlyout` (`Hide Track` / `Show Track`, then a red `Delete Track`).
+  - **Toast:** it is its own key, `Deleted %@. Press Ctrl+Z to undo.`, with the macOS translations and `Strg+Z` in German.
+  - **Checked in the running app:** deleting a shortcut track removed the row and its items and showed the toast.
 

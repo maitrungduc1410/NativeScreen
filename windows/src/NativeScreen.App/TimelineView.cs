@@ -180,6 +180,9 @@ internal sealed class TimelineView
     /// <summary>A touchpad pinch reaches the window as Ctrl and the wheel; the value multiplies the timeline zoom.</summary>
     public event Action<double>? ZoomNudged;
 
+    /// <summary>A message for the editor's toast, already translated.</summary>
+    public event Action<string>? Toast;
+
     /// <summary>The hovered time changed while paused, so the preview should redraw.</summary>
     public event Action? Skimmed;
 
@@ -979,7 +982,8 @@ internal sealed class TimelineView
         {
             var row = track;
             var hidden = VoiceoverTrackLayout.IsTrackHidden(timeline, row);
-            AddLabel(row == 0 ? "Voiceovers" : $"Voiceovers {row + 1}", y, MaskRowHeight, eye: true, hidden, () => session.ToggleVoiceoverTrackHidden(row));
+            AddLabel(row == 0 ? "Voiceovers" : $"Voiceovers {row + 1}", y, MaskRowHeight, eye: true, hidden, () => session.ToggleVoiceoverTrackHidden(row),
+                session.IsRecordingVoiceover ? null : new DeletableTimelineTrack(DeletableTrackKind.Voiceover, Index: row));
             if (session.IsRecordingVoiceover && session.VoiceoverRecordingTrackIndex == row)
             {
                 AddRecordingVoiceoverBlock(y);
@@ -1144,7 +1148,8 @@ internal sealed class TimelineView
             350,
             (start, end) => session.AddCameraLayoutInRange(CameraTimelineLayoutType.CameraOverlay, start, end));
         AddLabel("Layouts", y, MaskRowHeight, eye: true, timeline.IsCameraLayoutsTrackHidden, () =>
-            session.Mutate(document => document.Timeline.IsCameraLayoutsTrackHidden = !document.Timeline.IsCameraLayoutsTrackHidden));
+            session.Mutate(document => document.Timeline.IsCameraLayoutsTrackHidden = !document.Timeline.IsCameraLayoutsTrackHidden),
+            new DeletableTimelineTrack(DeletableTrackKind.CameraLayouts));
         foreach (var layout in timeline.CameraLayouts)
         {
             var (left, width) = Place(layout.SourceStartMs, layout.SourceEndMs);
@@ -1197,7 +1202,8 @@ internal sealed class TimelineView
                 {
                     var target = document.Timeline.MaskTracks.First(other => other.Id == trackId);
                     target.IsHidden = !target.IsHidden;
-                }));
+                }),
+                new DeletableTimelineTrack(DeletableTrackKind.Mask, trackId));
             foreach (var mask in track.Items)
             {
                 var (left, width) = Place(mask.SourceStartMs, mask.SourceEndMs);
@@ -1272,7 +1278,7 @@ internal sealed class TimelineView
                 300,
                 (start, end) => session.AddCustomShortcut(trackId, start, end));
             var trackHidden = track.IsHidden || !captions.ShowKeystrokes;
-            AddLabel(track.Name, y, MaskRowHeight, eye: true, trackHidden, () => session.ToggleShortcutTrackHidden(trackId));
+            AddLabel(track.Name, y, MaskRowHeight, eye: true, trackHidden, () => session.ToggleShortcutTrackHidden(trackId), new DeletableTimelineTrack(DeletableTrackKind.Shortcut, trackId));
             var clusters = session.Shortcuts().Where(item => item.TrackId == track.Id).OrderBy(item => item.DisplayStartMs).ToList();
             foreach (var shortcut in clusters)
             {
@@ -1328,7 +1334,7 @@ internal sealed class TimelineView
                 300,
                 (start, end) => session.AddCaption(trackId, start, end),
                 marginPoints: 6);
-            AddLabel(track.Name, y, MaskRowHeight, eye: true, hidden, () => session.ToggleCaptionTrackHidden(trackId));
+            AddLabel(track.Name, y, MaskRowHeight, eye: true, hidden, () => session.ToggleCaptionTrackHidden(trackId), new DeletableTimelineTrack(DeletableTrackKind.Caption, trackId));
             foreach (var item in captions.CaptionBlocks.Where(item => item.TrackId == trackId))
             {
                 var (left, width) = Place(item.SourceStartMs, item.SourceEndMs);
@@ -1512,7 +1518,10 @@ internal sealed class TimelineView
         canvas.Children.Add(ghost);
     }
 
-    private void AddLabel(string title, double y, double height, bool eye, bool hidden = false, Action? toggle = null)
+    /// <summary>
+    /// A track's label. Right-click shows Hide Track / Show Track and, for tracks that can go, Delete Track (spec/06 ADR-50).
+    /// </summary>
+    private void AddLabel(string title, double y, double height, bool eye, bool hidden = false, Action? toggle = null, DeletableTimelineTrack? delete = null)
     {
         title = Loc.TrackName(title);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, Height = height, Padding = new Thickness(12, 0, 0, 0) };
@@ -1526,6 +1535,45 @@ internal sealed class TimelineView
         var label = Ui.Text(title, 12.5, hidden ? "Ink28" : "Ink60");
         label.TextWrapping = TextWrapping.NoWrap;
         row.Children.Add(label);
+        if (eye && toggle is not null || delete is not null)
+        {
+            // Covers the whole label column, so a right-click anywhere on the row opens the menu.
+            row.Width = LabelColumnWidth;
+            row.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+            var name = title;
+            row.RightTapped += (_, args) =>
+            {
+                args.Handled = true;
+                var menu = new MenuFlyout();
+                if (eye && toggle is not null)
+                {
+                    var visibility = new MenuFlyoutItem { Text = Loc.T(hidden ? "Show Track" : "Hide Track") };
+                    visibility.Click += (_, _) => toggle();
+                    menu.Items.Add(visibility);
+                }
+
+                if (delete is { } track)
+                {
+                    if (menu.Items.Count > 0)
+                    {
+                        menu.Items.Add(new MenuFlyoutSeparator());
+                    }
+
+                    var remove = new MenuFlyoutItem { Text = Loc.T("Delete Track"), Foreground = Ui.Rgb(1, 0.35, 0.35) };
+                    remove.Click += (_, _) =>
+                    {
+                        if (session.DeleteTimelineTrack(track))
+                        {
+                            Toast?.Invoke(Loc.F("Deleted %@. Press Ctrl+Z to undo.", name));
+                        }
+                    };
+                    menu.Items.Add(remove);
+                }
+
+                menu.ShowAt(row, args.GetPosition(row));
+            };
+        }
+
         Canvas.SetTop(row, y);
         labels.Children.Add(row);
     }

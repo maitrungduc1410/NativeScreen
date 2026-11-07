@@ -35,6 +35,7 @@ internal sealed class InspectorPanel
     private readonly EditorTools tools;
     private readonly HashSet<string> expanded = [];
     private const string WindowsWallpapers = "Windows";
+    private const string FavoritesCategory = "Favorites";
     private const double StripBleed = 20;
 
     private static readonly Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> WallpaperThumbnails = [];
@@ -146,10 +147,10 @@ internal sealed class InspectorPanel
             wallpaperCategory ??= background.Type == BackgroundType.Mesh ? "Mesh" : BundledWallpaperCatalog.CategoryOf(background.SystemWallpaperName) ?? WindowsWallpapers;
             var row = StripRow(7);
             FrameworkElement? selectedPill = null;
-            foreach (var category in new[] { "All", WindowsWallpapers, "Mesh" }.Concat(BundledWallpaperCatalog.Categories))
+            foreach (var category in new[] { FavoritesCategory, WindowsWallpapers, "Mesh" }.Concat(BundledWallpaperCatalog.Categories))
             {
                 var name = category;
-                var pill = Ui.Option(name == "All" ? "★" : name, name == wallpaperCategory, () =>
+                var pill = Ui.Option(name == FavoritesCategory ? "★" : name, name == wallpaperCategory, () =>
                 {
                     wallpaperCategory = name;
                     Rebuild();
@@ -160,12 +161,18 @@ internal sealed class InspectorPanel
 
             var strip = Strip("wallpaper-category", row, wallpaperCategory, selectedPill);
 
-            // The items of the current pill. The random button draws from the same lists.
+            // The items of the current pill. The star pill is the favorites, app-wide and in add order.
             systemWallpapers ??= EditorTools.SystemWallpapers();
-            IReadOnlyList<MeshPreset> meshes = wallpaperCategory is "All" or "Mesh" ? MeshPreset.BuiltIn : [];
+            var favorites = AppSettings.Shared.FavoriteBackgrounds;
+            IReadOnlyList<MeshPreset> meshes = wallpaperCategory switch
+            {
+                "Mesh" => MeshPreset.BuiltIn,
+                FavoritesCategory => BackgroundFavorites.Meshes(favorites, MeshPreset.BuiltIn),
+                _ => []
+            };
             IReadOnlyList<WallpaperItem> wallpapers = wallpaperCategory switch
             {
-                "All" => [.. BundledWallpaperCatalog.AllItems, .. systemWallpapers],
+                FavoritesCategory => BackgroundFavorites.Wallpapers(favorites, [.. BundledWallpaperCatalog.AllItems, .. systemWallpapers]),
                 WindowsWallpapers => systemWallpapers,
                 _ => BundledWallpaperCatalog.Items(wallpaperCategory)
             };
@@ -173,7 +180,7 @@ internal sealed class InspectorPanel
             foreach (var preset in meshes)
             {
                 var id = preset.Id;
-                swatches.Children.Add(Swatch(
+                swatches.Children.Add(Favorite(Swatch(
                     Ui.Gradient(Ui.Hex(preset.ColorsHex[0]), Ui.Hex(preset.ColorsHex[2]), vertical: false),
                     preset.Name,
                     background.Type == BackgroundType.Mesh && background.MeshPresetId == id,
@@ -181,34 +188,27 @@ internal sealed class InspectorPanel
                     {
                         d.Background.Type = BackgroundType.Mesh;
                         d.Background.MeshPresetId = id;
-                    })));
+                    })), BackgroundFavorites.MeshId(id)));
             }
 
             foreach (var item in wallpapers)
             {
                 var target = item;
                 var selected = background.Type == BackgroundType.Wallpaper && background.SystemWallpaperName == item.Id;
-                swatches.Children.Add(Swatch(WallpaperThumbnail(item), item.Id, selected, () => tools.SelectWallpaper(target)));
+                swatches.Children.Add(Favorite(Swatch(WallpaperThumbnail(item), item.Id, selected, () => tools.SelectWallpaper(target)), BackgroundFavorites.WallpaperId(item.Id)));
             }
 
-            Add(Action("Pick random wallpaper", () =>
+            Add(Action("Pick random wallpaper", PickRandomBackground));
+            if (wallpaperCategory == FavoritesCategory && meshes.Count == 0 && wallpapers.Count == 0)
             {
-                var pick = Random.Shared.Next(Math.Max(meshes.Count + wallpapers.Count, 1));
-                if (pick < meshes.Count)
-                {
-                    var picked = meshes[pick];
-                    Edit(d =>
-                    {
-                        d.Background.Type = BackgroundType.Mesh;
-                        d.Background.MeshPresetId = picked.Id;
-                    });
-                }
-                else if (pick - meshes.Count < wallpapers.Count)
-                {
-                    tools.SelectWallpaper(wallpapers[pick - meshes.Count]);
-                }
-            }));
-            Add(Labeled("Wallpaper", 10, strip, swatches));
+                var hint = Note("No favorites yet. Right-click a background and choose “Add to Favorites”.");
+                hint.TextWrapping = TextWrapping.Wrap;
+                Add(Labeled("Wallpaper", 10, strip, hint));
+            }
+            else
+            {
+                Add(Labeled("Wallpaper", 10, strip, swatches));
+            }
         }
         else if (background.Type == BackgroundType.Gradient)
         {
@@ -1436,6 +1436,81 @@ internal sealed class InspectorPanel
         new() { Orientation = Orientation.Horizontal, ItemWidth = 44, ItemHeight = 44 };
 
     // The inspector rebuilds on every edit, and the image is decoded once for all of those rebuilds.
+    /// <summary>Picks from every category, not just the one on screen, then shows the pick's category (spec/06 ADR-32).</summary>
+    private void PickRandomBackground()
+    {
+        systemWallpapers ??= EditorTools.SystemWallpapers();
+        var choices = systemWallpapers.Select(item => (Item: item, Category: WindowsWallpapers))
+            .Concat(BundledWallpaperCatalog.Categories.SelectMany(category => BundledWallpaperCatalog.Items(category).Select(item => (Item: item, Category: category))))
+            .ToList();
+        var meshes = MeshPreset.BuiltIn;
+        var total = meshes.Count + choices.Count;
+        if (total == 0)
+        {
+            return;
+        }
+
+        var pick = Random.Shared.Next(total);
+        if (pick < meshes.Count)
+        {
+            var picked = meshes[pick];
+            wallpaperCategory = "Mesh";
+            Edit(d =>
+            {
+                d.Background.Type = BackgroundType.Mesh;
+                d.Background.MeshPresetId = picked.Id;
+            });
+        }
+        else
+        {
+            var (item, category) = choices[pick - meshes.Count];
+            wallpaperCategory = category;
+            tools.SelectWallpaper(item);
+        }
+
+        Rebuild();
+    }
+
+    /// <summary>
+    /// A thumbnail's right-click menu adds or removes it from the favorites; a favorite shows a white outlined star in its
+    /// middle, under the star pill and in its own category.
+    /// </summary>
+    private Button Favorite(Button swatch, string id)
+    {
+        var favorites = AppSettings.Shared.FavoriteBackgrounds;
+        var isFavorite = favorites.Contains(id);
+        if (isFavorite)
+        {
+            var star = Ui.Icon("\uE734", 15, Ui.Rgb(1, 1, 1));
+            star.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            star.IsHitTestVisible = false;
+            var shadow = Ui.Icon("\uE734", 15, Ui.Rgb(0, 0, 0, 0.45));
+            shadow.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            shadow.IsHitTestVisible = false;
+            shadow.Translation = new System.Numerics.Vector3(0, 0.5f, 0);
+            var badge = new Grid { IsHitTestVisible = false };
+            badge.Children.Add(shadow);
+            badge.Children.Add(star);
+            swatch.Content = badge;
+        }
+
+        var menu = new MenuFlyout();
+        var toggle = new MenuFlyoutItem
+        {
+            Text = Loc.T(isFavorite ? "Remove from Favorites" : "Add to Favorites"),
+            Icon = new FontIcon { Glyph = isFavorite ? "\uE8D9" : "\uE734" }
+        };
+        toggle.Click += (_, _) =>
+        {
+            BackgroundFavorites.Toggle(AppSettings.Shared.FavoriteBackgrounds, id);
+            AppSettings.Shared.Save();
+            Rebuild();
+        };
+        menu.Items.Add(toggle);
+        swatch.ContextFlyout = menu;
+        return swatch;
+    }
+
     /// <summary>Drops the decoded thumbnails once no editor shows them.</summary>
     public static void PurgeCaches() => WallpaperThumbnails.Clear();
 

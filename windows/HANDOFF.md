@@ -27,6 +27,20 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-07, Windows port: delete a track from its label, wallpaper favorites, random pick across categories
+
+### Verifier
+- **Result:** PASS for what was clicked through. Undo of a delete and the restart persistence of favorites are covered by tests and the settings file, not by clicking.
+- **Build and tests:** the solution builds in Release (x64) with 0 warnings. Core 260 tests pass, including 7 new ones: each track kind's delete, voiceover renumbering, recorded keystrokes hidden only for the first shortcut track, and favorites order.
+- **Checked in the running app** (a copy of a project in a scratch folder):
+  - **Track menu:** right-clicking the Shortcuts label showed `Hide Track` and a red `Delete Track`. Delete Track removed the row and its two shortcuts and showed `Deleted Shortcuts. Press Ctrl+Z to undo.`
+  - **Favorites:** right-clicking a mesh thumbnail showed `Add to Favorites`. After adding it, `★` showed only that thumbnail with the white star, and `settings.json` held `mesh:spring-aurora`.
+- **Changes made:**
+  - **Track delete:** `Core/Session/EditorSession.Tracks.cs`. The label menu is in `TimelineView.AddLabel`. Clip has no menu, Zoom only hides, and a voiceover track is not offered while one is recording.
+  - **Favorites:** `Core/Rendering/BackgroundFavorites.cs`, `AppSettings.FavoriteBackgrounds`, and the inspector's `Favorite` and `PickRandomBackground`.
+  - **Catalog:** one Windows key, `Deleted %@. Press Ctrl+Z to undo.`, inserted after the macOS key without reordering the file, since Xcode now sorts keys its own way. The file still ends with a newline, as Xcode writes it.
+- **Next / open:** none.
+
 ## 2026-11-07, Delete a track from its label's right-click menu (macOS done, Windows port pending)
 
 ### Writer

@@ -24,6 +24,9 @@ public sealed class AppSettings
     public bool SmoothWaveform { get; set; } = true;
     public bool SnapToSegments { get; set; } = true;
 
+    /// <summary>Favorite backgrounds in add order: mesh:&lt;id&gt; or wallpaper:&lt;id&gt; (spec/06 ADR-32).</summary>
+    public List<string> FavoriteBackgrounds { get; set; } = [];
+
     /// <summary>A catalog language id, or empty for the system language. Applies on the next launch.</summary>
     public string Language { get; set; } = "";
 

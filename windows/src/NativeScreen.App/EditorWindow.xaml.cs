@@ -115,6 +115,7 @@ public sealed partial class EditorWindow : Window
         timeline = new TimelineView(session, TimelineHost) { Tools = tools };
         session.ToastRequested += ShowToast;
         timeline.Skimmed += DrawPreview;
+        timeline.Toast += ShowToast;
         timeline.ZoomNudged += ZoomTimeline;
         overlay = new PreviewOverlay(session, PreviewCanvas, () => (source.SourceWidth, source.SourceHeight, source.HasCamera));
         PreviewCanvas.SizeChanged += (_, _) => overlay.Refresh();

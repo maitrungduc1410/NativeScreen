@@ -10128,6 +10128,53 @@
         }
       }
     },
+    "Deleted %@. Press Ctrl+Z to undo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ gelöscht. Mit Strg+Z widerrufen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se eliminó %@. Pulsa Ctrl+Z para deshacer."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ supprimé. Appuyez sur Ctrl+Z pour annuler."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ を削除しました。Ctrl+Z で取り消せます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ excluído. Pressione Ctrl+Z para desfazer."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã xoá %@. Nhấn Ctrl+Z để hoàn tác."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删除 %@。按 Ctrl+Z 撤销。"
+          }
+        }
+      }
+    },
     "Detect" : {
       "extractionState" : "manual",
       "localizations" : {
