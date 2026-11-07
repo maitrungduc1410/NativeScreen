@@ -141,21 +141,8 @@ public sealed partial class EditorWindow : Window
         inspector.Rebuild();
 
         session.DocumentChanged += DocumentChanged;
-        Closed += (_, _) =>
-        {
-            tools.FinishVoiceoverRecordingForClose();
-            tools.CancelTranscript();
-            clickSounds.Dispose();
-        };
         session.SelectionChanged += SelectionChanged;
-        // Alt+Tab takes the key's release to another window.
-        Activated += (_, args) =>
-        {
-            if (args.WindowActivationState == WindowActivationState.Deactivated)
-            {
-                EndHeldSplit();
-            }
-        };
+        Activated += WindowActivated;
         AppTheme.Changed += ThemeChanged;
         Root.PreviewKeyDown += RootKeyDown;
         Root.PreviewKeyUp += RootKeyUp;
@@ -163,15 +150,11 @@ public sealed partial class EditorWindow : Window
         Preview.CompositionScaleChanged += (_, _) => DrawPreview();
         Preview.Loaded += AttachPreview;
         clockTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        clockTimer.Tick += (_, _) => Sample();
+        clockTimer.Tick += ClockTick;
         toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        toastTimer.Tick += (_, _) =>
-        {
-            toastTimer.Stop();
-            Toast.Visibility = Visibility.Collapsed;
-        };
+        toastTimer.Tick += ToastTick;
         saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
-        saveTimer.Tick += (_, _) => SaveNow();
+        saveTimer.Tick += SaveTick;
         timeline.PlayheadScrubbed += () =>
         {
             playRequest++;
@@ -180,8 +163,8 @@ public sealed partial class EditorWindow : Window
             RefreshTransport();
             DrawPreview();
         };
-        Closed += ReleasePreview;
-        Closed += (_, _) => App.EditorClosed();
+        Closed += WindowClosed;
+        MemoryStats.Track(this, session, timeline, inspector, tools, overlay);
         App.EditorOpened();
     }
 
@@ -673,6 +656,7 @@ public sealed partial class EditorWindow : Window
         swapChain = compositor.CreateSwapChain(width, height);
         SwapChainPanelInterop.SetSwapChain(Preview, swapChain.SwapChain.NativePointer);
         renderer = new PreviewRenderer(compositor, swapChain, width, height);
+        MemoryStats.Track(compositor, swapChain, renderer);
         overlay.ShortcutHits = () => compositor.ShortcutHitRects01;
         overlay.CaptionHits = () => compositor.CaptionHitRects01;
         screenPlayback = OpenPlayback(source.Project?.Metadata.Tracks.DisplayVideo);
@@ -761,7 +745,45 @@ public sealed partial class EditorWindow : Window
         renderer.Submit(request, width, height, Preview.CompositionScaleX, session.LiveSourceClock());
     }
 
-    private void ReleasePreview(object sender, WindowEventArgs args)
+    private void ClockTick(object? sender, object args) => Sample();
+
+    private void SaveTick(object? sender, object args) => SaveNow();
+
+    private void ToastTick(object? sender, object args)
+    {
+        toastTimer.Stop();
+        Toast.Visibility = Visibility.Collapsed;
+    }
+
+    // Alt+Tab takes the key's release to another window.
+    private void WindowActivated(object sender, Microsoft.UI.Xaml.WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState == WindowActivationState.Deactivated)
+        {
+            EndHeldSplit();
+        }
+    }
+
+    /// <summary>
+    /// A Window is not part of XAML's reference tracking: a handler on it that reaches this window is a cycle the collector never
+    /// breaks, and every closed editor stayed in memory with its project. So the window's own handlers are named and removed
+    /// here, along with everything else that outlives it (spec/06 ADR-48).
+    /// </summary>
+    private void WindowClosed(object sender, WindowEventArgs args)
+    {
+        Closed -= WindowClosed;
+        Activated -= WindowActivated;
+        tools.FinishVoiceoverRecordingForClose();
+        tools.CancelTranscript();
+        tools.StopMusicPreview();
+        tools.Dispose();
+        clickSounds.Dispose();
+        ReleasePreview();
+        App.EditorClosed();
+        MemoryStats.AfterClose("closed");
+    }
+
+    private void ReleasePreview()
     {
         closed = true;
         exportCancel?.Cancel();
@@ -785,6 +807,18 @@ public sealed partial class EditorWindow : Window
         }
 
         compositor?.Dispose();
+        saveTimer.Stop();
+        // A timer's handler is held natively, and the timer by this window: a cycle the collector cannot see through.
+        clockTimer.Tick -= ClockTick;
+        toastTimer.Tick -= ToastTick;
+        saveTimer.Tick -= SaveTick;
+        timeline.Detach();
+        session.DocumentChanged -= DocumentChanged;
+        session.SelectionChanged -= SelectionChanged;
+        tools.Changed -= inspector.Rebuild;
+        Root.PreviewKeyDown -= RootKeyDown;
+        Root.PreviewKeyUp -= RootKeyUp;
+        Content = null;
     }
 
     // MARK: Transport

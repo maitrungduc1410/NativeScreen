@@ -50,6 +50,31 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 ## 2026-11-07, Performance pass: closing frees the project, no work for unused features (macOS done, Windows pass pending)
 
+### Verifier
+- **Result:** PASS. Closing an editor now frees it, and memory after close stays flat.
+- **Build and tests:** the solution builds in Release (x64) with 0 warnings. Core 253 and Rendering 21 tests pass. The wallpaper fixtures still score SSIM 0.9955 to 0.9978.
+- **Measurements** (Release, i9-9880H with Radeon Pro 5500M, 10 s 3072 x 1840 project, opened and closed through the running app):
+  - **Before:** every closed editor stayed alive, with its window, session, timeline, inspector, compositor, swap chain and renderer. Memory after close was 147, 222, 291, 350, 417 and 466 MB over 6 cycles.
+  - **After:** 97 to 115 MB after close over 8 cycles. At 2, 6 and 15 s after each close, no editor object is alive and the managed heap is 3.3 MB.
+  - **Idle CPU:** 0.00% at launch, and 0.00% with a project open and paused.
+  - **Open-time memory:** about 580 MB private and 300 MB working set with a project open. It does not settle like macOS, but it is all returned on close. Opening the Media Foundation source reader with hardware decode takes about 265 MB, and the first decoded frames about 210 MB, including the 50 MB NV12 ring. Software decode was larger (490 MB working set), so hardware decode stays.
+- **Cause of the leak:** `Window` is outside XAML reference tracking. A lambda on the window's own `Closed` or `Activated` event that captures the window forms a native cycle that is never collected. A heap dump showed no managed root. An empty probe window was collected, and the same window passed through `AppTheme.Register` (whose `Closed` lambda captured it) was not. The fix and the rule are in `spec/06` ADR-48 and the platform guide's pitfalls table.
+- **Changes made:**
+  - **Window handlers:** the editor's handlers are named and removed in `WindowClosed`, and `AppTheme` uses a static `Closed` handler.
+  - **What a close now tears down:** the timers are stopped and unhooked, the music preview stops, both click sound sets are disposed, the session events are detached, and the content is dropped.
+  - **Wallpaper thumbnails:** purged when the last editor closes.
+  - **Camera LUT:** a LUT file is checked on disk at most once a second, and a custom preset is serialized once per snapshot instead of every frame.
+  - **Preview wallpaper:** decoded at the canvas size, in 512 px steps up to 2560 px.
+  - **Waveform p95:** taken from a 1024-bin histogram, the same as macOS. One test expectation moved to the bin edge.
+  - **Diagnostics:** `NS_MEMORY_STATS=<file>` reports what is alive after a close (`windows/AGENTS.md`).
+- **Leads checked and left as they are:**
+  - **Window picker:** it does not poll; it lists windows once when opened and once on a click.
+  - **Sliders and undo:** they already coalesce into one undo step (700 ms).
+  - **Delete:** it already clears unsaved changes before the close.
+- **Next / open:**
+  - **Native drift after close:** about 2 MB a cycle, still rising slowly by cycle 8.
+  - **Decoder memory:** lowering it while paused would need a smaller frame ring or a lazily opened reader, which costs seek latency.
+
 ### Writer
 - **Scope:** macOS only. What changed and why is in `spec/06` ADR-48 (closing an editor releases its project) and ADR-49 (pay only for what is used). Windows: run the same pass. Measure first and change only what the numbers show, since the Windows code is laid out differently.
 - **macOS result** (Debug, 15 MB recording): memory after closing every project stays at 95 to 113 MB over repeated open and close cycles. It used to grow by about 5 MB per cycle. CPU is 0% with a project open and paused.

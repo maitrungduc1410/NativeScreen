@@ -57,6 +57,7 @@ internal sealed class InspectorPanel
 
     public void Rebuild()
     {
+
         var offset = scroller.VerticalOffset;
         body.Children.Clear();
         if (session.SelectedZoom is { } zoom)
@@ -1435,6 +1436,9 @@ internal sealed class InspectorPanel
         new() { Orientation = Orientation.Horizontal, ItemWidth = 44, ItemHeight = 44 };
 
     // The inspector rebuilds on every edit, and the image is decoded once for all of those rebuilds.
+    /// <summary>Drops the decoded thumbnails once no editor shows them.</summary>
+    public static void PurgeCaches() => WallpaperThumbnails.Clear();
+
     private static Microsoft.UI.Xaml.Media.ImageBrush WallpaperThumbnail(WallpaperItem item)
     {
         if (!WallpaperThumbnails.TryGetValue(item.ThumbnailPath, out var image))

@@ -389,6 +389,7 @@ internal sealed class TimelineView
 
     public void Rebuild()
     {
+
         canvas.Children.Clear();
         ruler.Children.Clear();
         wigglingBlocks.Clear();
@@ -854,6 +855,19 @@ internal sealed class TimelineView
         return bitmap;
     }
 
+    /// <summary>The editor closed: drops the timer, whose native handler would otherwise keep this view alive.</summary>
+    public void Detach()
+    {
+        if (sharpenTimer is { } timer)
+        {
+            timer.Stop();
+            timer.Tick -= SharpenTick;
+            sharpenTimer = null;
+        }
+    }
+
+    private void SharpenTick(DispatcherQueueTimer sender, object args) => Sharpen();
+
     /// <summary>90 ms after the width last changed, waves shown stretched are drawn again at their real width on a worker thread.</summary>
     private void ScheduleSharpen()
     {
@@ -862,7 +876,7 @@ internal sealed class TimelineView
             sharpenTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
             sharpenTimer.Interval = TimeSpan.FromMilliseconds(90);
             sharpenTimer.IsRepeating = false;
-            sharpenTimer.Tick += (_, _) => Sharpen();
+            sharpenTimer.Tick += SharpenTick;
         }
 
         sharpenTimer.Stop();

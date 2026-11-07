@@ -386,6 +386,13 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         Changed?.Invoke();
     }
 
+    /// <summary>The editor closed: nothing may keep playing after the window is gone.</summary>
+    public void Dispose()
+    {
+        StopMusicPreview();
+        previewSounds.Dispose();
+    }
+
     public void StopMusicPreview()
     {
         musicPreview?.Dispose();

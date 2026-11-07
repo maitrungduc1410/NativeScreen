@@ -25,6 +25,7 @@ public partial class App : Application
         openEditors--;
         if (openEditors == 0)
         {
+            InspectorPanel.PurgeCaches();
             RecordingHudWindow.Show();
         }
     }

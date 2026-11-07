@@ -200,6 +200,11 @@ public sealed partial class FrameCompositor
 
     private readonly Dictionary<ID3D11ShaderResourceView, int> lutSizes = [];
     private readonly HashSet<string> brokenLuts = [];
+    private string? lutFilePath;
+    private string? lutFileKey;
+    private long lutFileCheckedAt;
+    private CustomCameraColorPreset? lutCustomPreset;
+    private string? lutCustomKey;
 
     /// <summary>A LUT file in the package, or null when it is missing or broken, so the built-in look shows instead.</summary>
     private ID3D11ShaderResourceView? FileLookTable(CameraConfig config, string? packageDirectory)
@@ -209,13 +214,20 @@ public sealed partial class FrameCompositor
             return null;
         }
 
+        // The file is looked at on disk at most once a second, not on every frame at up to 120 Hz (spec/06 ADR-49).
         var path = Path.Combine(packageDirectory, relative);
-        if (!File.Exists(path))
+        var now = Environment.TickCount64;
+        if (path != lutFilePath || now - lutFileCheckedAt > 1000)
+        {
+            lutFilePath = path;
+            lutFileCheckedAt = now;
+            lutFileKey = File.Exists(path) ? $"file|{path}|{File.GetLastWriteTimeUtc(path).Ticks}" : null;
+        }
+
+        if (lutFileKey is not { } key)
         {
             return null;
         }
-
-        var key = $"file|{path}|{File.GetLastWriteTimeUtc(path).Ticks}";
         if (lutViews.TryGetValue(key, out var known))
         {
             return known;
@@ -252,7 +264,14 @@ public sealed partial class FrameCompositor
             return null;
         }
 
-        var key = custom is null ? config.ColorGradePreset.ToString() : JsonSerializer.Serialize(custom, ProjectJson.Compact);
+        // A frame's document is a snapshot, so the same preset object means the same values: serialized once, not per frame.
+        if (custom is not null && !ReferenceEquals(custom, lutCustomPreset))
+        {
+            lutCustomPreset = custom;
+            lutCustomKey = JsonSerializer.Serialize(custom, ProjectJson.Compact);
+        }
+
+        var key = custom is null ? config.ColorGradePreset.ToString() : lutCustomKey!;
         if (lutViews.TryGetValue(key, out var view))
         {
             return view;
@@ -860,6 +879,8 @@ public sealed partial class FrameCompositor
 
     // MARK: Wallpaper
 
+    private int wallpaperDecodePixels;
+
     private bool DrawWallpaper(BackgroundConfig settings, string? packageDirectory, int width, int height)
     {
         if (settings.WallpaperRelativePath is not { } relative || packageDirectory is null)
@@ -868,7 +889,10 @@ public sealed partial class FrameCompositor
         }
 
         var path = Path.Combine(packageDirectory, relative);
-        if (wallpaperInfo?.Path != path)
+        // Only as large as the canvas needs, in 512 px steps up to 2560 px: the preview canvas is far smaller than an export,
+        // and a larger canvas later decodes again, larger (spec/06 ADR-49).
+        var decodePixels = Math.Min(2560, Math.Max(1024, (Math.Max(width, height) + 511) / 512 * 512));
+        if (wallpaperInfo?.Path != path || decodePixels > wallpaperDecodePixels)
         {
             wallpaperView?.Dispose();
             wallpaperView = null;
@@ -878,9 +902,10 @@ public sealed partial class FrameCompositor
                 return false;
             }
 
-            var image = ImageTexture.Load(path, 2560);
+            var image = ImageTexture.Load(path, decodePixels);
             wallpaperView = image.CreateView(_graphics.Device);
             wallpaperInfo = (path, image.Width, image.Height);
+            wallpaperDecodePixels = decodePixels;
         }
 
         if (wallpaperView is null || wallpaperInfo is not { } info)

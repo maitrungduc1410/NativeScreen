@@ -110,8 +110,16 @@ public static class AppTheme
     public static void Register(Window window)    {
         Windows.Add(new WeakReference<Window>(window));
         window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));
-        window.Closed += (_, _) => Windows.RemoveAll(item => !item.TryGetTarget(out var target) || target == window);
+        // Static and removed on close: a handler on a Window that captures it keeps the window alive for good (spec/06 ADR-48).
+        window.Closed += Unregister;
         Apply(window);
+    }
+
+    private static void Unregister(object sender, WindowEventArgs args)
+    {
+        var window = (Window)sender;
+        window.Closed -= Unregister;
+        Windows.RemoveAll(item => !item.TryGetTarget(out var target) || target == window);
     }
 
     private static void Apply(Window window)

@@ -34,7 +34,8 @@ public sealed class WaveformTests
         peaks[600] = 0.1f;
         var bins = Waveform.BinsFromPeaks(peaks, 1000)!;
         Assert.Equal(0.015f, bins[0], 4);
-        Assert.Equal(MathF.Pow(0.2f, 0.62f), bins[600], 4);
+        // The 95th percentile is the upper edge of its histogram bin, as on macOS: 0.5 is in bin 512 of 1024.
+        Assert.Equal(MathF.Pow(0.1f / (513f / 1024f), 0.62f), bins[600], 4);
     }
 
     [Fact]

@@ -14,6 +14,8 @@ public static class Waveform
     /// Levels from raw peaks. The 95th percentile is the reference so one loud click cannot flatten the rest, and the power
     /// curve lifts quiet speech. Null for silence, so no fake flat bar is drawn.
     /// </summary>
+    private const int HistogramBins = 1024;
+
     public static float[]? BinsFromPeaks(IReadOnlyList<float> rawPeaks, int targetBinCount)
     {
         if (rawPeaks.Count < 8)
@@ -21,13 +23,36 @@ public static class Waveform
             return null;
         }
 
-        var sorted = rawPeaks.ToArray();
-        Array.Sort(sorted);
-        var reference = Math.Max(0.025f, sorted[Math.Min(sorted.Length - 1, (int)(sorted.Length * 0.95))]);
-        if (sorted[^1] < 0.002f)
+        // A 1024-bin histogram gives the 95th percentile without a sorted copy of every peak (spec/06 ADR-49).
+        Span<int> histogram = stackalloc int[HistogramBins];
+        histogram.Clear();
+        var loudestPeak = 0f;
+        for (var index = 0; index < rawPeaks.Count; index++)
+        {
+            var peak = Math.Min(1f, rawPeaks[index]);
+            histogram[Math.Min(HistogramBins - 1, (int)(peak * HistogramBins))]++;
+            loudestPeak = Math.Max(loudestPeak, peak);
+        }
+
+        if (loudestPeak < 0.002f)
         {
             return null;
         }
+
+        var target = (int)(rawPeaks.Count * 0.95);
+        var cumulative = 0;
+        var p95Bin = HistogramBins - 1;
+        for (var bin = 0; bin < HistogramBins; bin++)
+        {
+            cumulative += histogram[bin];
+            if (cumulative > target)
+            {
+                p95Bin = bin;
+                break;
+            }
+        }
+
+        var reference = Math.Max(0.025f, (p95Bin + 1) / (float)HistogramBins);
 
         var bins = new float[Math.Min(targetBinCount, rawPeaks.Count)];
         for (var bin = 0; bin < bins.Length; bin++)

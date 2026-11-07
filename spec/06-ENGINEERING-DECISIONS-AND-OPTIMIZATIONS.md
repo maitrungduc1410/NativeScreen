@@ -986,6 +986,14 @@ Closing a project used to keep almost all of it in memory. Measured on a 15 MB r
 
 After the fix, closing leaves no preview objects, and memory after close stays at about 100 to 135 MB over repeated open and close cycles of two projects. What remains above launch is one-time framework setup (Metal, AVFoundation, CoreImage, SwiftUI), malloc fragmentation and image caches. The app menu's observation tracking can still hold the last closed session or two until the menu bar next re-evaluates; that is bounded and does not grow.
 
+- **Windows.** Every closed editor stayed in memory with its project, about 65 MB a cycle: 147 MB after the first close and 466 MB after the sixth (Release build, 10 s project). `NS_MEMORY_STATS=<file>` tracks the editor's objects through weak references, then forces collections 2, 6 and 15 s after each close and writes which are still alive. Every one of them was.
+  - **Cause.** A WinUI `Window` is not part of XAML's reference tracking. A handler on the window's own events (`Closed`, `Activated`) whose closure reaches the window makes a cycle through native code that the collector never breaks. A heap dump showed no managed root, because the root is the native event source.
+  - **Probe.** An empty window was collected after closing, but one registered through `AppTheme.Register` was not, because its `Closed` lambda captured the window.
+  - **Fix.** The editor's window handlers are named methods that remove themselves in `WindowClosed`, and `AppTheme` uses a static handler. The close also stops and unhooks the editor's timers, stops the music preview, disposes click sounds and detaches the session's events.
+  - **Rule.** Never subscribe to a `Window`'s events with a lambda that captures the window (or anything holding it), unless you remove it on close.
+  - **Result:** 97 to 115 MB after close over 8 open and close cycles, flat, with no editor object alive and 3.3 MB managed.
+  - **Open-time memory.** With a project open, private bytes are about 580 MB, and the working set is 300 MB. Opening the Media Foundation source reader with hardware decode takes about 265 MB, and decoding the first frames about 210 MB, 50 MB of which is the 6-frame NV12 ring. Software decode was no smaller (working set 490 MB). This is per open editor and is returned on close.
+
 Deleting a project used to trash the package, then close the window, and the close-time autosave recreated the folder with only `project.json`. `ProjectWorkspaceStore.trashProject` now marks the session deleted (`saveNow` does nothing after that, and a pending autosave is cancelled) and removes it from Recent Projects. `Don't Save` also clears the undo and redo stacks, so `⌘Z` cannot bring back discarded edits.
 
 ---
@@ -1004,6 +1012,10 @@ A pass over CPU and memory for work done when nothing needs it.
 - **Waveform extraction.** The peak scan reads samples in place from the decoder's buffer (it copies only when the buffer is not contiguous) and takes the 95th percentile from a 1024-bin histogram instead of sorting every peak.
 
 Measured after these changes (Debug build, 15 MB recording): memory after closing all projects is 95 to 113 MB over repeated open and close cycles of two projects, down from 117 to 137 MB. CPU is 0% with a project open and idle.
+
+- **Windows.** The same pass, measured first:
+  - **Changed.** The camera's LUT file is checked on disk at most once a second instead of every frame. A custom color preset is serialized once per document snapshot instead of every frame. The preview wallpaper is decoded at the canvas size, in the same 512 px steps. The waveform p95 comes from the same 1024-bin histogram, so both apps produce the same levels. Wallpaper thumbnails are dropped when the last editor closes.
+  - **Already fine.** The window picker lists windows once when it opens and once on a click, with no polling. Inspector and menu sliders already coalesce into one undo step (700 ms). Idle CPU is 0.00% at launch and with a project open and paused.
 
 ---
 

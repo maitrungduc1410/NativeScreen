@@ -198,6 +198,8 @@ Rules:
 | :--- | :--- |
 | Mixed-DPI multi-monitor setups, negative coordinates | Per-monitor DPI v2; use physical pixels end to end; test on a secondary monitor left of the primary. |
 | Hybrid GPU laptops | Create the D3D11 device on the adapter that drives the captured monitor; WGC frames from another adapter need a copy. |
+| A handler on a `Window` event that captures the window leaks the window and everything it holds | `Window` is outside XAML reference tracking. Use a named handler and remove it in `Closed`, or a static one (`spec/06` ADR-48). Check with `NS_MEMORY_STATS`. |
+| A `DispatcherQueueTimer` nothing references is collected and never fires | Keep a reference to it until it has fired. |
 | A source reader seek can land well before the keyframe asked for | Never decide to seek again from the landed frame alone; compare with the last seek's target (`spec/06` ADR-34). |
 | Encoder differences (NVENC / QSV / AMF) | Never assume an `ICodecAPI` property is supported; check `IsSupported` and log the fallback. |
 | Sink writer silently falls back to software | Verify the active transform is hardware (`MFT_ENUM_HARDWARE_URL_Attribute`) and log it. |
