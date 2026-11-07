@@ -528,7 +528,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 let isMutedByVO = session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: sourceMs)
                 let sliceVol = (activeSlice?.muted == true || session.document.audio.muteSystemAudio) ? 0.0 : (activeSlice?.systemAudioVolume ?? 1.0)
                 let effectiveVolume = Float(min(2.0, max(0.0, sliceVol * session.document.audio.systemAudioVolume * masterVol)))
-                let micVol = (activeSlice?.muted == true || session.document.audio.muteMicrophone || isMutedByVO) ? 0.0 : (session.document.audio.microphoneVolume * masterVol)
+                let micVol = (activeSlice?.muted == true || session.document.audio.muteMicrophone || isMutedByVO) ? 0.0 : ((activeSlice?.microphoneVolume ?? 1.0) * session.document.audio.microphoneVolume * masterVol)
                 let effectiveMicVolume = Float(min(2.0, max(0.0, micVol)))
                 let desiredRate = Float(session.previewPlaybackRate * sliceSpeed)
                 if session.isPlaying, let player = player {

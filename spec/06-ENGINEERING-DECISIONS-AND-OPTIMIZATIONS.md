@@ -207,7 +207,7 @@ During 60/120Hz video preview playback, two UI interactions previously caused fr
 ### Solution
 1. **Multi-Level Mip-Pyramid + Catmull-Rom Cubic Spline Waveform**:
    - Precompute a power-of-two min/max envelope pyramid from the audio track once on load.
-   - At render time, select the pyramid level matching `pxPerBin = 5.0 pt` and interpolate the envelope peaks with a **Catmull-Rom cubic spline** filled with a vertical gradient (`#4D2FF5`, top `0.50` $\to$ bottom `0.25` opacity).
+   - At render time, select the pyramid level matching `pxPerBin = 5.0 pt` and interpolate the envelope peaks with a **Catmull-Rom cubic spline** filled per ADR-42 (colors, fade and the full-volume copy below 100%).
 2. **Fixed-Step Time Ruler**:
    - Select the first human-friendly time step from `[100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, 15s, 30s, 1m, 2.5m, 5m, 10m, 15m, 30m, 1h]` whose spacing is $\ge 200\text{ px}$ at the current timeline zoom, with 3 minor sub-ticks between major labels.
 
@@ -282,7 +282,7 @@ Users need studio-grade webcam layouts (`Camera overlay`, `Split screen`, `Camer
    - **Real-Time Device Discovery, Dual-Bar Microphone Metering (`WarmMicrophoneCaptureController`), Dual-Color Clip Waveforms & Multi-Monitor HUD Stability**:
      - Exclude `.deskViewCamera` from camera discovery and observe `AVCaptureDeviceWasConnected` / `AVCaptureDeviceWasDisconnected` to update `connectedCameras` and `connectedMicrophones` live.
      - Compute real-time PCM RMS/peak audio levels in `WarmMicrophoneCaptureController.shared` to drive a 2-bar meter in the HUD (`liveMicrophoneLevel01` bright instantaneous bar + `liveMicrophonePeakHold01` dimmer slow-decay trailing bar).
-     - Extract and render two distinct waveforms on timeline Clip segments: purple (`#4D2FF5`) for system/app audio (`audioWaveformSamples` from `display.mp4`) and translucent white (`Color.white.opacity(0.44 -> 0.20)`) for recorded microphone audio (`microphoneWaveformSamples` from `microphone.m4a`), while synchronizing `micPlayer` (`AVPlayer`) with `player` in `MetalPreviewView`.
+     - Extract and render two distinct waveforms on timeline Clip segments: purple (`#4D2FF5`) for system/app audio (`audioWaveformSamples` from `display.mp4`) and translucent white for recorded microphone audio (colors and opacities in ADR-42) (`microphoneWaveformSamples` from `microphone.m4a`), while synchronizing `micPlayer` (`AVPlayer`) with `player` in `MetalPreviewView`.
      - Keep `hudPanel.sharingType = .readOnly` when idle (so system screenshots can capture the HUD) and switch `hudPanel.sharingType = .none` during active recording; round `hudPanel` widths to even integers (`ceil(w / 2.0) * 2.0`) with `floor(midX - width * 0.5 + 0.5)` and avoid 1Hz resize calls during recording so negative-coordinate secondary monitors (`x < 0`) never drift left.
    - Open every project Editor `NSWindow` maximized to `screen.visibleFrame` by default with `window.collectionBehavior = [.fullScreenNone]` (so the green traffic light button displays `+` Zoom / `Move & Resize` instead of entering a separate full-screen space), and strictly enforce a minimum window size of `1280 × 780 pt` via `.frame(minWidth: 1280, minHeight: 780)`, `hostingController.sizingOptions = [.minSize]`, `window.minSize`, and `windowWillResize(_:to:)`.
    - Never call `hosting.layoutSubtreeIfNeeded()` inside `RecordingCoordinator.currentDesiredPanelSize` (`fittingSize` queries layout automatically without triggering `_NSDetectedLayoutRecursion`).
@@ -866,3 +866,79 @@ A package is a folder and Windows applies file type associations only to files, 
 - **One process per copy of the app.** Explorer starts a new process each time, which would add a second tray icon and recording bar. The later process hands its path to the running one over a named pipe and exits. The names include the executable's path, so two builds can run side by side. If the running process does not answer within 3 s, the new one carries on by itself.
 - **One editor per package.** Opening a package that is already open brings its window forward, since two editors would overwrite each other's saves.
 
+---
+
+## 42. ADR-42: Clip Waveforms Show the Full-Volume Wave Below 100%
+
+A lowered clip used to draw only a shorter wave, so it was hard to tell how much quieter it was. Each source now also draws its full-volume wave faintly behind the volume-scaled one.
+
+- **Two sources, drawn bottom-up:** microphone first (white, opacity 0.35), system audio over it (`#4D2FF5`, opacity 0.5).
+- **Per source:** the volume-scaled wave is composited over a copy of the full wave in the same color at opacity 0.10. The copy shows only while the volume is below 0.999, so at 100% nothing changes, and at 0% (muted) only the copy is left.
+- **Fade is per column.** In every column, opacity is half at the bottom and full at that column's crest: `mix(0.5, 1, clamp(y / max(h, 1)))`, with `y` measured from the bottom and `h` that column's height. One gradient across the row cannot do this, so the waves are rasterized per device pixel into one premultiplied bitmap (`ClipSegmentDecoration.rasterizeWaveforms`). The crest edge is antialiased as `clamp((h - y) * scale + 0.5)`.
+- **Heights:** `env * min(rowHeight * 0.68, 32)` for the full wave, times the volume for the scaled one, both capped at the row height. Envelope reading is unchanged (ADR-10, `pxPerBin = 11`).
+- **Cost.** The bitmap is rebuilt only when the decoration's inputs change (`Equatable`), and only rows under the tallest wave are visited. Not yet timed on a long clip at high zoom.
+- **`View > Smooth waveform` off** keeps the 2 pt bars on a 3 pt pitch, each sampled at its center; the fade and the full-wave copy apply to bars too.
+
+---
+
+## 43. ADR-43: Timeline Snapping
+
+With several tracks, lining items up by eye was slow. While an item is dragged or trimmed, its edges stick to nearby edges.
+
+- **Targets** are collected once when the drag passes the click slop (`snapTargetsTimelineMs`): the start and end of the timeline, the playhead, every clip boundary, and both edges of every zoom, mask, camera layout, voiceover, caption and shortcut segment, in timeline time. The dragged item is left out by id, not by time, so a neighbor that touches it still counts.
+- **Threshold:** 8 points on screen, converted to milliseconds with the current zoom, so it feels the same at every zoom level.
+- **Moves** test both edges and keep the one closer to its target. **Trims** snap only the moving edge. The result then goes through the usual clamps (no overlap inside a track, minimum length), so snapping never breaks the layout rules.
+- **Guide line.** A 1 pt line in the theme purple marks the edge it snapped to, until the drag ends. It is its own view that observes only the guide, so the tracks are not re-evaluated while it moves.
+- **Not snapped:** clip slices, since trimming a clip moves everything after it and its edges are source times.
+- **Toggle:** a button next to the split button, lit purple while on, plus `View > Snap timeline items`. On by default, remembered app-wide in `NativeScreen.View.SnapToSegments`.
+
+---
+
+## 44. ADR-44: Localization
+
+The UI is available in English, Vietnamese, Simplified Chinese, Japanese, German, French, Spanish and Brazilian Portuguese. Strings live in `Localizable.xcstrings`, keyed by the English text. Privacy prompts are in `InfoPlist.xcstrings`.
+
+- **Three ways a string reaches the catalog.** SwiftUI literals (`Text`, `Button`, `Toggle`, `.help`) are extracted by the compiler. Display names and AppKit strings (enum `label`/`title`/`descriptionText`, `NSAlert`, `NSMenuItem`, panels) use `String(localized:)`. Components that take a plain `String` (tooltips, segment titles, inspector rows, context menu helpers) translate when they draw with `String.localizedUI`; their keys are marked `manual` in the catalog, since the compiler cannot see them.
+- **Values stay English, labels translate.** State such as a selected preset name or a default track name (`Captions`, `Shortcuts`) is stored and compared in English and only translated when shown, so projects and comparisons do not depend on the UI language. A name the user typed has no catalog entry and is shown as is.
+- **Whole sentences.** Plurals and choices are separate keys (`Remove 1 filler word` / `Remove %lld filler words`) rather than words spliced into a sentence, which most languages cannot follow.
+- **Menus.** Top-level menus are matched by title to reorder them, so the match accepts the English title, our translation and SwiftUI's own (`MainMenu` table of SwiftUI), since `File`, `Edit`, `View`, `Window` and `Help` are translated by the system.
+- **Standard terms** (Undo, Copy, Save, Cancel, File, Window...) use the system's own translations, read from SwiftUI's tables, so they match the system menus.
+- **Language choice** is in `Settings > General > Language` and is stored where macOS keeps the per-app choice from System Settings (`AppleLanguages` in the app's domain), so the two stay in sync. It applies on relaunch; the row offers `Restart Now`.
+- **Not translated:** the exported video (keycap names, caption text), file names, product and format names, and the Reel mode mock content's handle.
+- **Layout.** German and French run up to 40% longer. Fixed-width labels shrink (`minimumScaleFactor`) or size to their text instead of wrapping: the recording bar's mode labels and the slider `Reset` button were the ones that broke.
+
+---
+
+## 45. ADR-45: Cmd + Scroll Zooms the Timeline at the Cursor
+
+Holding `⌘` (`Ctrl` on Windows) and scrolling anywhere over the timeline (ruler, track labels or lanes) zooms it. The zoom buttons, `⌘+` / `⌘-` and pinch keep the playhead in place; scroll zoom keeps the time under the cursor in place instead, since that is where the user is looking.
+
+- **Anchor.** Before the zoom, the cursor's time is `(scrollX + cursorX - inset) / contentWidth` of the timeline. After it, the scroll offset is set so that time sits at the same `cursorX`, clamped to the scroll range. Over the label column there is no time under the cursor, so it falls back to the playhead.
+- **Step.** A mouse wheel notch multiplies the zoom by 1.15 (at most 4 notches per event, as wheels accelerate); a trackpad or other precise device multiplies it by `exp(0.01 * points)`. Wheel away from you or two fingers up zooms in, whatever the natural scrolling setting. The zoom range stays 1x to 6x.
+- **Event path.** The lanes' horizontal scroll view gets wheel events first, so a local event monitor catches them, checks that the cursor is over the timeline's frame in this window, and consumes the event so the timeline does not also scroll. Scrolling without `⌘` is left alone.
+
+---
+
+## 46. ADR-46: Timeline Zoom Stays Within a Frame
+
+Zooming re-lays out every segment, since every x and width scales with the zoom. Measured on a 12 s project with 27 captions (Release build, 40 zoom steps from 1x to 5.8x, layout plus display per step): 16.8 ms median and 35.7 ms worst before, 11.3 ms median and 22.6 ms worst after. The fixes, by what they saved:
+
+- **Waveform bitmap off the zoom path.** The waveform (ADR-42) was rasterized per device pixel over the whole slice width on every step, tens of thousands of pixels wide at 6x. Now the last bitmap is kept and drawn stretched while only the width changes; a sharp one is rasterized on a background thread 90 ms after the width stops changing. Trims, volume and sample changes still rasterize at once, so edits never show a stale wave.
+- **BGRA bitmap.** The bitmap was RGBA, and the compositor converted every pixel to BGRA each time it was drawn (`vImage` permute, about 15% of the main thread during a zoom). It is now written as premultiplied BGRA, little endian.
+- **Editor body not invalidated.** The toolbar zoom slider read `timelineZoom` inside the editor body, so every step re-evaluated the whole editor. It is its own view now.
+- **No preview skim while zooming.** The cursor stays still while the content moves under it, and the hover handler re-skimmed the preview on every step (a seek per frame). Hover skim pauses for 150 ms after each scroll or pinch zoom step.
+
+The anchor (playhead or cursor) lands in the same layout pass as the zoom: measured drift after each frame is under 0.1 pt. What is left is SwiftUI layout of the segment views and AppKit recomputing the window's drag regions.
+
+---
+
+## 47. ADR-47: Per-Slice Microphone and System Audio Volume
+
+A clip slice's context menu has one volume slider per recorded source: `Microphone volume` when the recording has a microphone track and `System audio volume` when it has system audio. Each applies only to that slice, in preview and export, multiplied by the project-wide volume of that source and the master volume.
+
+- **Range 0 to 100%.** `AVPlayer.volume` and `AVMutableAudioMixInputParameters` cannot boost, so the old 150% end of the slider did nothing past 100%.
+- **Sliders never set `muted`.** The system audio slider used to set `muted` at 0, and `muted` silences every source of the slice. A recording whose audible sound is all microphone then went silent at 0 and sounded unchanged anywhere above it. Moving either slider now clears `muted`, so slices muted that way by older builds recover.
+- **File format.** `microphoneVolume` on each slice, default 1, read as 1 when missing (`spec/02`).
+- **Voiceover ducking.** After a voiceover that hides the recording, the microphone returns to the volume of the slice playing at that time, not the project-wide one.
+
+The recording HUD sizes its window from the bar's reported width (`onGeometryChange`) instead of reading `fittingSize` right after a state change, which could still return the old layout: a longer microphone name made the bar wider than its window and cut off both rounded ends. The window grows at once and only animates when shrinking.

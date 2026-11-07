@@ -189,7 +189,7 @@ public struct InteractiveMaskCanvasOverlayView: View {
                                 Spacer()
                                 HStack {
                                     Spacer()
-                                    Text("Drag to select the area for the new \(pendingMaskType == .blur ? "sensitive data" : "highlight") mask")
+                                    Text(pendingMaskType == .blur ? "Drag to select the area for the new sensitive data mask" : "Drag to select the area for the new highlight mask")
                                         .font(.system(size: 12.5, weight: .regular))
                                         .foregroundStyle(.white.opacity(0.92))
                                         .padding(.horizontal, 14)

@@ -326,6 +326,7 @@
               "sourceEndMs": { "type": "number", "minimum": 0 },
               "speed": { "type": "number", "minimum": 0.1, "maximum": 16.0 },
               "systemAudioVolume": { "type": "number", "minimum": 0, "maximum": 2.0 },
+              "microphoneVolume": { "type": "number", "minimum": 0, "maximum": 2.0 },
               "muted": { "type": "boolean" },
               "hideCursor": { "type": "boolean" },
               "disableSmoothCursor": { "type": "boolean" }

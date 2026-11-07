@@ -196,7 +196,7 @@ struct ContentView: View {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
         panel.treatsFilePackagesAsDirectories = false
-        panel.prompt = "Open Project"
+        panel.prompt = String(localized: "Open Project")
 
         if panel.runModal() == .OK {
             for url in panel.urls where url.pathExtension.lowercased() == "nativescreen" {

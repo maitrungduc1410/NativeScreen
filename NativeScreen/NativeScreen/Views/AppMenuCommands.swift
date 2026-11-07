@@ -148,7 +148,7 @@ struct AppMenuCommands: Commands {
 
             Picker("After Recording", selection: $recorder.afterRecordingAction) {
                 ForEach(RecordingCoordinator.AfterRecordingAction.allCases) { action in
-                    Text(action.title).tag(action)
+                    Text(action.title.localizedUI).tag(action)
                 }
             }
             .pickerStyle(.inline)
@@ -209,6 +209,7 @@ struct AppMenuCommands: Commands {
 
             Divider()
 
+            Toggle(isOn: $preferences.snapToSegments) { Label("Snap timeline items", systemImage: "arrow.right.and.line.vertical.and.arrow.left") }
             Toggle(isOn: $preferences.loopPlayback) { Label("Loop playback", systemImage: "repeat") }
             Toggle(isOn: $preferences.alwaysShowTimelineScrollbar) { Label("Always show timeline scrollbar", systemImage: "chevron.up.chevron.down") }
             Toggle(isOn: $preferences.showEditorSidebar) { Label("Show editor sidebar", systemImage: "sidebar.right") }
@@ -251,6 +252,14 @@ enum MainMenuOrder {
 
     private static var trackingObserver: NSObjectProtocol?
 
+    /// Top-level menus are matched by title, which is translated: SwiftUI's own menus (`File`, `Edit`, `View`,
+    /// `Window`, `Help`) use SwiftUI's `MainMenu` table, the app's own menus use `Localizable.xcstrings`.
+    private static func isMenu(_ item: NSMenuItem, named english: String) -> Bool {
+        if item.title == english || item.title == english.localizedUI { return true }
+        let system = Bundle(identifier: "com.apple.SwiftUI")?.localizedString(forKey: english, value: english, table: "MainMenu")
+        return item.title == system
+    }
+
     static func install() {
         apply()
         observer = NotificationCenter.default.addObserver(forName: NSMenu.didAddItemNotification, object: nil, queue: .main) { note in
@@ -268,9 +277,10 @@ enum MainMenuOrder {
     /// Only the app's own menus: the application menu, `Help` and the system `Window` items keep AppKit's default.
     private static func showAppItemImages(in mainMenu: NSMenu) {
         for top in mainMenu.items.dropFirst() {
-            guard let submenu = top.submenu, top.title != "Help" else { continue }
-            if top.title == "Window" {
-                showItemImages(in: submenu) { $0.title == "Reset windows positions" }
+            guard let submenu = top.submenu, !isMenu(top, named: "Help") else { continue }
+            if isMenu(top, named: "Window") {
+                let resetTitle = "Reset windows positions".localizedUI
+                showItemImages(in: submenu) { $0.title == resetTitle }
             } else {
                 showItemImages(in: submenu) { _ in true }
             }
@@ -293,11 +303,11 @@ enum MainMenuOrder {
         guard !isApplying, let mainMenu = NSApp.mainMenu, mainMenu.items.count > 1 else { return }
         showAppItemImages(in: mainMenu)
         // The editor has no split-view sidebar, but AppKit still adds a dead `Toggle Sidebar` item to `Help`.
-        if let help = mainMenu.items.first(where: { $0.title == "Help" })?.submenu,
+        if let help = mainMenu.items.first(where: { isMenu($0, named: "Help") })?.submenu,
            let toggleSidebar = help.items.first(where: { $0.action == #selector(NSSplitViewController.toggleSidebar(_:)) }) {
             help.removeItem(toggleSidebar)
         }
-        let ordered = order.compactMap { title in mainMenu.items.first(where: { $0.title == title }) }
+        let ordered = order.compactMap { title in mainMenu.items.first(where: { isMenu($0, named: title) }) }
         // Index 0 is the application menu; everything we know about follows it in `order`.
         let current = Array(mainMenu.items.dropFirst().filter { ordered.contains($0) })
         guard current != ordered else { return }

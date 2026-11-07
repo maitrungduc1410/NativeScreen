@@ -12,10 +12,10 @@ public enum CaptureTargetMode: String, Codable, CaseIterable, Identifiable, Send
 
     public var title: String {
         switch self {
-        case .display: return "Display"
-        case .window: return "Window"
-        case .area: return "Area"
-        case .device: return "Device"
+        case .display: return String(localized: "Display")
+        case .window: return String(localized: "Window")
+        case .area: return String(localized: "Area")
+        case .device: return String(localized: "Device")
         }
     }
 

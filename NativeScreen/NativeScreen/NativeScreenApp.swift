@@ -10,8 +10,8 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
         MainMenuOrder.install()
         AppSettings.shared.applyAppearance()
         if let appMenuItem = NSApp.mainMenu?.items.first {
-            appMenuItem.title = "Native Screen"
-            appMenuItem.submenu?.title = "Native Screen"
+            appMenuItem.title = String(localized: "Native Screen")
+            appMenuItem.submenu?.title = String(localized: "Native Screen")
         }
         if !ProjectWorkspaceStore.shared.hasOpenEditorWindows {
             RecordingCoordinator.shared.showRecordingHUD()
@@ -43,6 +43,8 @@ struct NativeScreenApp: App {
     @Bindable private var recorder = RecordingCoordinator.shared
 
     init() {
+        // Pinned now, before anything can change it, so Settings knows when a restart is due.
+        _ = AppLanguage.atLaunch
         let args = CommandLine.arguments
         if let idx = args.firstIndex(of: "--generate-conformance"), idx + 1 < args.count {
             let outputPath = args[idx + 1]

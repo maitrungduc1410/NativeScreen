@@ -1,0 +1,261 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Bundle display name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Native Screen"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Native Screen"
+          }
+        }
+      }
+    },
+    "Native Screen Project" : {
+
+    },
+    "NSCameraUsageDescription" : {
+      "comment" : "Privacy prompt shown by macOS",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen verwendet deine Kamera, um ein Sprecher-Overlay aufzunehmen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Native Screen uses your camera to record a presenter overlay."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen usa tu cámara para grabar una superposición del presentador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen utilise votre caméra pour enregistrer une incrustation du présentateur."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen はプレゼンターのオーバーレイを収録するためにカメラを使用します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Native Screen usa sua câmera para gravar uma sobreposição do apresentador."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen dùng camera của bạn để quay khung người trình bày."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 使用你的摄像头录制演讲者画中画。"
+          }
+        }
+      }
+    },
+    "NSHumanReadableCopyright" : {
+      "comment" : "Copyright (human-readable)",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : ""
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription" : {
+      "comment" : "Privacy prompt shown by macOS",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen verwendet dein Mikrofon, um Voiceovers aufzunehmen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Native Screen uses your microphone to record voiceovers."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen usa tu micrófono para grabar voces en off."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen utilise votre micro pour enregistrer des voix off."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen はナレーションを収録するためにマイクを使用します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Native Screen usa seu microfone para gravar narrações."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen dùng micro của bạn để ghi thuyết minh."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 使用你的麦克风录制旁白。"
+          }
+        }
+      }
+    },
+    "NSScreenCaptureUsageDescription" : {
+      "comment" : "Privacy prompt shown by macOS",
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen nimmt deinen Bildschirm oder ein ausgewähltes Fenster auf, um Produktdemos zu erstellen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Native Screen records your screen or selected window to create product demos."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen graba tu pantalla o la ventana seleccionada para crear demostraciones de producto."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen enregistre votre écran ou la fenêtre choisie pour créer des démos de produit."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen は製品デモを作成するために画面または選択したウインドウを収録します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Native Screen grava sua tela ou a janela selecionada para criar demonstrações de produto."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen quay màn hình hoặc cửa sổ bạn chọn để tạo video demo sản phẩm."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 录制你的屏幕或所选窗口来制作产品演示。"
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription" : {
+      "comment" : "Privacy prompt shown by macOS",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen verwendet Spracherkennung auf dem Gerät, um Untertitel lokal zu erstellen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Native Screen uses on-device speech recognition to generate captions locally."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen usa el reconocimiento de voz en el dispositivo para generar subtítulos en local."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen utilise la reconnaissance vocale sur l’appareil pour générer les sous-titres localement."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen はデバイス上の音声認識を使って字幕をローカルで生成します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Native Screen usa o reconhecimento de fala no dispositivo para gerar legendas localmente."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen dùng nhận dạng giọng nói ngay trên máy để tạo phụ đề."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 使用设备端语音识别在本机生成字幕。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

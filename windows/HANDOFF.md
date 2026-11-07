@@ -27,6 +27,79 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-07, Smooth timeline zoom, per-slice microphone volume, HUD width (macOS side done, Windows port pending)
+
+### Writer
+- **Scope:** macOS only. Rules: `spec/06` ADR-46 (zoom cost), ADR-47 (per-slice volumes and the HUD width). File format: `microphoneVolume` on each clip slice (`spec/02`, `spec/schemas/project.schema.json`), default 1, optional. Swift: `MultiTrackTimelineView.swift` (`ClipWaveformImageView`, `TimelineZoomClock`), `ProjectEditorWindowView.swift` (`TimelineZoomSlider`), `ProjectDocument.swift` (`ClipSlice.microphoneVolume`), `ProjectSession.swift` (`setSliceMicrophoneVolume`, `setSliceSystemAudioVolume`), `TimelineSegmentContextPopovers.swift`, `MetalPreviewView.swift`, `HardwareVideoExporter.swift`, `RecordingCoordinator.swift`.
+- **Built on macOS:** Debug and Release builds pass.
+  - **Zoom:** in a Release build on a copy of a 12 s project with 27 captions, 40 zoom steps from 1x to 5.8x with layout and display each step went from 16.8 ms median (35.7 ms worst) to 11.3 ms median (22.6 ms worst). The playhead moved less than 0.1 pt after any frame. A CPU sample no longer shows waveform rasterizing or the RGBA to BGRA conversion on the main thread.
+  - **Volume:** the user's recent recordings have silent system audio (-91 dB) and all their sound in `microphone.m4a`. That is why the old system audio slider seemed to do nothing above 0 and muted everything at 0. Build passes with the new sliders; I did not listen to playback or export.
+  - **HUD:** showed the HUD, then set a long microphone name, a short one and none. Both rounded ends stayed visible every time, and the window followed the bar width (930, 950, 876, 929 pt).
+- **To port on Windows:**
+  - **Per-slice volume.**
+    - Add `MicrophoneVolume` (default 1, clamp 0 to 2 on read) to the Core `ClipSlice`.
+    - In `SegmentEdits`, stop setting `Muted` from the volume. Setting either volume clamps to 0 to 1 and clears `Muted`.
+    - In `SegmentMenu`, show `Microphone volume` when the recording has a microphone file and `System audio volume` when `metadata.tracks.systemAudio` is set, both 0 to 100%.
+    - Apply the slice's microphone volume in preview (`TimelineView` mic gain), in the timeline mic waveform scale, and in export (`ExportJob`/`AudioMixer` mic gain per slice). After a hiding voiceover ends, restore the volume of the slice playing then.
+    - The Windows-only inspector row `Clip audio volume` should follow the same rule (no `Muted`).
+    - Add Core tests for the setters and for reading a slice without `microphoneVolume`.
+  - **Zoom smoothness.**
+    - Cache the waveform bitmap per slice, keyed by samples, volumes, source range, height and DPI. When only the width changes, draw the cached bitmap stretched, and re-rasterize on a worker thread about 90 ms after the width settles. Any other change rasterizes at once.
+    - Keep the bitmap in the swap chain's native format (BGRA premultiplied), so drawing it needs no conversion.
+    - Suspend hover skim of the preview for 150 ms after each `Ctrl` + wheel or pinch zoom step.
+    - Make sure only the timeline re-renders on a zoom change, not the whole editor.
+    - Measure per-step cost the same way: 40 steps from 1x to 5.8x, report median and worst.
+  - **HUD width.** If the Windows recording bar sizes its window from a measure taken right after a state change, switch to the bar's own reported size (`SizeChanged`), grow the window at once and animate only when shrinking.
+  - **Strings.** `Microphone volume` is a new catalog key with all 8 languages. Destructive context menu items (`Remove`, `Reset trims and cuts for all slices`) now show translated text on macOS; check that Windows uses the catalog for them too.
+- **How to verify:**
+  - Record with a microphone and system audio playing. Split the clip, then set the first slice's microphone volume to 20% and the second slice's system audio to 0. In preview and in the exported file, only those slices change, and the microphone keeps playing when system audio is 0.
+  - Open an old project: slices without `microphoneVolume` play at full volume.
+  - Hold `Ctrl` and roll the wheel quickly over a long project with captions. The waveform stays drawn, though slightly soft while zooming, and is sharp shortly after you stop.
+  - Pick a microphone with a long name in the recording bar; both rounded ends stay visible.
+- **Open VERIFY items:** none in Swift.
+- **Risks / unsure:**
+  - **Remaining cost:** about 11 ms per step is still SwiftUI layout of the segments, over the 8.3 ms a 120 Hz display allows, so a fast zoom can still drop the odd frame on macOS.
+  - **Audio not heard:** the per-slice volumes were built and reasoned through, not listened to in preview or export.
+  - **Fixtures:** `project.json` now writes `microphoneVolume` on every slice, so regenerated conformance fixtures gain that field. Readers that reject unknown fields need it added first.
+
+## 2026-11-07, Cmd + scroll zooms the timeline at the cursor (macOS side done, Windows port pending)
+
+### Writer
+- **Scope:** macOS only. Rule: `spec/06` ADR-45; UI in `spec/04` "Timeline zoom". Swift: `MultiTrackTimelineView.swift` (`TimelineCommandScrollZoomCatcher`, `zoomAnchorViewportX`, `anchorScrollOffsetAroundPlayhead(... anchorViewportX:)`). No project format change.
+- **Built on macOS:** Debug build passes. In the running app on a copy of a project, synthesized `⌘` + wheel events over the lanes at a fixed x: zoom went 1.0, 1.52, 2.31, then back to 1.75 and up to 2.61 with a trackpad-style event, while the time under the cursor stayed at 6841 to 6842 ms the whole way. A wheel event without `⌘` left zoom and scroll unchanged. `⌘` + wheel over the label column zoomed around the playhead. The ruler and all lanes stayed in step.
+- **To port on Windows:**
+  - Use `Ctrl` instead of `⌘`. Handle `PointerWheelChanged` on the whole timeline (ruler, label column and lanes) with `handledEventsToo` or in the tunneling phase, before the lanes' `ScrollViewer` scrolls horizontally, and mark it handled when `Ctrl` is down. Without `Ctrl`, leave it alone.
+  - Step: a mouse wheel notch (`MouseWheelDelta` = 120 per notch) multiplies zoom by 1.15, at most 4 notches per event. A precision touchpad (`PointerDeviceType.Touchpad`, or deltas that are not multiples of 120) multiplies by `exp(delta / 1200)`, close to the macOS feel; tune by hand. Positive delta (wheel away from you) zooms in. Clamp to 1x to 6x.
+  - Anchor: before the change, `frac = (scrollX + cursorX - 20) / contentWidth`, where `cursorX` is relative to the lanes' viewport and 20 is the lanes' side inset. After the change, scroll to `20 + frac * newContentWidth - cursorX`, clamped to the scroll range. Over the label column, keep today's playhead anchor. Apply the zoom and the scroll in the same layout pass so the lanes do not jump for a frame.
+- **How to verify:** hover a caption edge in the middle of the timeline, hold `Ctrl` and roll the wheel both ways; that edge should stay under the pointer. Try a precision touchpad with `Ctrl`. Scroll without `Ctrl` and check the timeline scrolls as before and zoom does not change. `Ctrl` + wheel over the track labels zooms around the playhead.
+- **Open VERIFY items:** none in Swift.
+- **Risks / unsure:** the trackpad step was only tested with a synthesized event, not with real fingers; it may feel fast or slow and is a single constant (`0.01`) to tune.
+
+## 2026-11-07, Waveform at lowered volume, timeline snapping, localization (macOS side done, Windows port pending)
+
+### Writer
+- **Scope:** macOS only. Rules: `spec/06` ADR-42 (waveforms), ADR-43 (snapping), ADR-44 (localization); UI in `spec/04` "Timeline snapping" and "Language". Swift: `MultiTrackTimelineView.swift` (`rasterizeWaveforms`, snap guide), `Document/TimelineSnapping.swift`, `Document/AppLanguage.swift`, `EditorViewPreferences.snapToSegments`, `Localizable.xcstrings`, `InfoPlist.xcstrings`. No project format change and no fixture change.
+- **Built on macOS:** Debug build passes. Checked in the running app on a copy of a project with a microphone track:
+  - Waveform at 100%, 35% and 0% microphone volume: solid wave, then a lower wave over the faint full wave, then the faint wave alone.
+  - Snapping: a synthesized drag of the second zoom toward the first moved its start to exactly 4610 ms, the first zoom's end, with its length kept and the purple guide line shown. With snapping off, the same move was left alone.
+  - Editor, settings and recording bar in Vietnamese, German and Japanese.
+- **To port on Windows:**
+  - **Waveforms (ADR-39 changes).** Colors and opacities: microphone white at 0.35, system audio `#4D2FF5` at 0.5, drawn in that order. Behind each, the full-volume wave in the same color at 0.10, only while the volume is below 0.999, and also when muted. Opacity in each column goes from half at the bottom to full at that column's crest, which one polygon gradient cannot do. Rasterize per device pixel into a bitmap, or draw it in a pixel shader. The formulas are in ADR-42.
+  - **Snapping.** Port `snapTargetsTimelineMs` and `TimelineSnapController` to Core with tests. Hook it in every segment drag and trim except clip slices: collect targets when the click slop is passed, use an 8-point threshold, and clamp afterwards as today. Add a 1 px guide line in `#704DFF` at 90% (`0.44, 0.30, 1.0`) over the tracks. Add the toggle next to the split button, lit like it, plus `View > Snap timeline items`, on by default, stored in settings.
+  - **Localization.** Use `NativeScreen/NativeScreen/Localizable.xcstrings` as the source of truth, so both apps share one set of translations: ship it as content and look strings up by their English key, falling back to the key. A Windows-only string becomes a new key with `"extractionState": "manual"`, so Xcode keeps it.
+    - Convert the specifiers in order: `%lld`, `%d` and `%@` become `{0}`, `{1}` and so on, and `%%` becomes `%`.
+    - Same 8 languages. Add `Settings > General > Language` with the same list and `Restart Now`. Store the choice in `settings.json` and also set `ApplicationLanguages.PrimaryLanguageOverride`, so system-drawn text follows.
+    - Keys mention macOS keys (`⌘`, `⌥`) and Finder. Where Windows shows different text, give it its own key; do not edit a shared value.
+- **How to verify:**
+  - **Waveform:** set a clip's volume to 35% and to 0%; compare with the macOS look described above.
+  - **Snapping:** drag a zoom toward another zoom's end, a caption edge and the playhead, and check that `project.json` lands on that exact ms. Turn snapping off and check that nothing sticks.
+  - **Languages:** switch to German and Japanese, restart, then go through the editor, inspector tabs, context menus, the recording bar and the export sheet, looking for English text and clipped labels.
+- **Open VERIFY items:** none in Swift.
+- **Risks / unsure:**
+  - **Translations:** written by the writer agent, not reviewed by native speakers.
+  - **Waveform speed:** the macOS waveform bitmap was not timed on a long clip at high zoom.
+  - **Untranslated corners:** the Whisper download prompt and the start window strings are in the catalog, but those screens were not looked at in another language.
+
 ## 2026-11-03, Recording bar rectangle, sideways rows, disabled inspector tabs
 
 ### Verifier

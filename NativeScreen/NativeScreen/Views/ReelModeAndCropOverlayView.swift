@@ -277,7 +277,7 @@ public struct ReelModeSafeZoneOverlayView: View {
                 .font(.system(size: 20 * scale, weight: .semibold))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.35), radius: 3)
-            Text(label)
+            Text(label.localizedUI)
                 .font(.system(size: 10 * scale, weight: .semibold))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.35), radius: 2)
@@ -574,7 +574,7 @@ public struct StandaloneCropWindowView: View {
 
     @ViewBuilder
     private func cropDimensionBadge(_ text: String) -> some View {
-        Text(text)
+        Text(text.localizedUI)
             .font(.system(size: 12, weight: .semibold).monospacedDigit())
             .foregroundStyle(.white)
             .frame(minWidth: 46)
@@ -941,7 +941,7 @@ public struct ExportStillFrameModalView: View {
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.directoryURL = exportDirectoryURL
-        panel.prompt = "Select Folder"
+        panel.prompt = String(localized: "Select Folder")
 
         if panel.runModal() == .OK, let url = panel.url {
             exportDirectoryURL = url
@@ -964,14 +964,14 @@ public struct ExportStillFrameModalView: View {
             if let cautionIcon = NSImage(named: NSImage.cautionName) {
                 alert.icon = cautionIcon
             }
-            alert.messageText = "“\(outURL.lastPathComponent)” already exists. Do you want to replace it?"
+            alert.messageText = String(localized: "“\(outURL.lastPathComponent)” already exists. Do you want to replace it?")
             let folderName = exportDirectoryURL.lastPathComponent
             alert.informativeText = folderName == "Desktop"
                 ? "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents."
                 : "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents."
-            let replaceBtn = alert.addButton(withTitle: "Replace")
+            let replaceBtn = alert.addButton(withTitle: String(localized: "Replace"))
             replaceBtn.hasDestructiveAction = true
-            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: String(localized: "Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
 

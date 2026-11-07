@@ -10,8 +10,8 @@ import UniformTypeIdentifiers
 enum VideoProjectImporter {
     static func promptAndCreateProject() {
         let panel = NSOpenPanel()
-        panel.message = "Choose a video to create a project from"
-        panel.prompt = "Create Project"
+        panel.message = String(localized: "Choose a video to create a project from")
+        panel.prompt = String(localized: "Create Project")
         panel.allowedContentTypes = [.movie]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -27,7 +27,7 @@ enum VideoProjectImporter {
         } catch {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Could not create a project from “\(videoURL.lastPathComponent)”"
+            alert.messageText = String(localized: "Could not create a project from “\(videoURL.lastPathComponent)”")
             alert.informativeText = error.localizedDescription
             alert.runModal()
         }

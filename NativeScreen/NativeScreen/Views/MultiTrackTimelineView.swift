@@ -7,7 +7,7 @@ import AppKit
 /// - **Ruler Dots & Clip Vertical Tick Lines** (major labels + minor dots, with matching vertical tick lines inside the Clip bar).
 /// - **Audio Waveform Inside Clip** (smooth purple-tinted waveform rendered along the bottom of the Clip segment).
 /// - **Edge-to-Edge Touching Segments** (zero artificial gap when segments touch).
-/// - **Playhead-Anchored Timeline Zoom** (zooming keeps the playhead stationary at its current screen position).
+/// - **Anchored Timeline Zoom** (buttons and pinch keep the playhead in place; Cmd + scroll keeps the point under the cursor).
 /// - **Native Liquid Glass Right-Click Context Popovers**.
 public struct MultiTrackTimelineView: View {
     @Bindable var session: ProjectSession
@@ -19,6 +19,10 @@ public struct MultiTrackTimelineView: View {
     @State private var verticalContentHeight: CGFloat = 180.0
     @State private var horizontalScrollView: NSScrollView?
     @State private var lastZoomForAnchor: Double = 1.0
+    /// Set by Cmd + scroll: the x inside the track viewport that should stay put on the next zoom change.
+    @State private var zoomAnchorViewportX: CGFloat?
+    /// When the last scroll or pinch zoom step happened. A class so writing it does not re-render the timeline.
+    @State private var zoomClock = TimelineZoomClock()
     @State private var zoomTrackHoverX: CGFloat? = nil
     @State private var cameraLayoutTrackHoverX: CGFloat? = nil
     @State private var maskTrackHoverX: [String: CGFloat] = [:]
@@ -32,6 +36,8 @@ public struct MultiTrackTimelineView: View {
     private let zoomRowHeight: CGFloat = 48
     private let maskRowHeight: CGFloat = 34
     private let rowSpacing: CGFloat = 12
+
+    @State private var snapController = TimelineSnapController()
 
     public init(session: ProjectSession) {
         self.session = session
@@ -214,7 +220,7 @@ public struct MultiTrackTimelineView: View {
                                                 }
                                                 .buttonStyle(.plain)
 
-                                                Text(track.name)
+                                                Text(track.name.localizedUI)
                                                     .font(.system(size: 11, weight: .medium))
                                                     .foregroundStyle(Color.ink.opacity(maskHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
@@ -272,7 +278,7 @@ public struct MultiTrackTimelineView: View {
                                                         session.selectedShortcutId = nil
                                                         session.selectedInspectorTab = .shortcuts
                                                     } label: {
-                                                        Text(session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts")
+                                                        Text((session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts").localizedUI)
                                                             .font(.system(size: 11, weight: .medium))
                                                             .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.30 : 0.65))
                                                             .lineLimit(1)
@@ -307,7 +313,7 @@ public struct MultiTrackTimelineView: View {
                                                     session.selectCaption(nil)
                                                     session.selectedInspectorTab = .captions
                                                 } label: {
-                                                    Text(track.name)
+                                                    Text(track.name.localizedUI)
                                                         .font(.system(size: 11, weight: .medium))
                                                         .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.30 : 0.65))
                                                         .lineLimit(1)
@@ -440,6 +446,9 @@ public struct MultiTrackTimelineView: View {
                                             switch phase {
                                             case .active(let pt):
                                                 guard !session.isDraggingTimelineSegment && NSEvent.pressedMouseButtons == 0 else { return }
+                                                // The content moves under a still cursor while zooming. Re-skimming the
+                                                // preview on every step costs a seek per frame for no visible change.
+                                                guard !zoomClock.isZooming else { return }
                                                 if session.isSplitModeActive {
                                                     NSCursor.crosshair.set()
                                                 }
@@ -508,6 +517,21 @@ public struct MultiTrackTimelineView: View {
                     .allowsHitTesting(false)
                     .zIndex(25)
 
+                    TimelineSnapGuideOverlayView(
+                        snap: snapController,
+                        trackHorizontalInset: trackHorizontalInset,
+                        contentWidth: contentWidth,
+                        totalTimelineMs: totalTimelineMs,
+                        horizontalScrollOffset: horizontalScrollOffset,
+                        viewportWidth: viewportWidth,
+                        topInset: rulerHeight
+                    )
+                    .frame(width: viewportWidth, height: outerGeo.size.height, alignment: .topLeading)
+                    .clipped()
+                    .offset(x: labelColumnWidth)
+                    .allowsHitTesting(false)
+                    .zIndex(24)
+
                     // D. SLIM 4pt HORIZONTAL SCROLLBAR PILL
                     if totalDocumentWidth > viewportWidth + 4 {
                         let ratio = viewportWidth / totalDocumentWidth
@@ -559,9 +583,25 @@ public struct MultiTrackTimelineView: View {
                         newZoom: newZoom,
                         baseTrackWidth: baseTrackWidth,
                         viewportWidth: viewportWidth,
-                        totalTimelineMs: totalTimelineMs
+                        totalTimelineMs: totalTimelineMs,
+                        anchorViewportX: zoomAnchorViewportX
                     )
+                    zoomAnchorViewportX = nil
                 }
+                // Cmd + scroll wheel anywhere over the timeline (ruler, labels, tracks) zooms around the cursor.
+                .background(
+                    TimelineCommandScrollZoomCatcher { locationX, factor in
+                        zoomClock.mark()
+                        let viewportX = locationX - labelColumnWidth
+                        zoomAnchorViewportX = viewportX >= 0 ? viewportX : nil
+                        let newZoom = max(1.0, min(6.0, session.timelineZoom * factor))
+                        if newZoom != session.timelineZoom {
+                            session.timelineZoom = newZoom
+                        } else {
+                            zoomAnchorViewportX = nil
+                        }
+                    }
+                )
                 // Trackpad 2-Finger Pinch-to-Zoom Gesture
                 .gesture(
                     MagnifyGesture()
@@ -569,6 +609,7 @@ public struct MultiTrackTimelineView: View {
                             if pinchBaseZoom == nil {
                                 pinchBaseZoom = session.timelineZoom
                             }
+                            zoomClock.mark()
                             if let base = pinchBaseZoom {
                                 session.timelineZoom = max(1.0, min(6.0, base * Double(value.magnification)))
                             }
@@ -580,6 +621,8 @@ public struct MultiTrackTimelineView: View {
             }
         }
         .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
+        .environment(snapController)
+        .onAppear { snapController.attach(session) }
     }
 
     /// Neighboring tracks move in opposite directions.
@@ -592,25 +635,33 @@ public struct MultiTrackTimelineView: View {
         let contentHeight: CGFloat
     }
 
-    /// Adjusts the horizontal `NSScrollView` content offset whenever `timelineZoom` changes so the Playhead stays
-    /// at the exact same pixel coordinate on screen!
+    /// Adjusts the horizontal `NSScrollView` content offset whenever `timelineZoom` changes so the anchor stays
+    /// at the same pixel on screen. The anchor is the playhead, or the cursor (`anchorViewportX`) for Cmd + scroll.
     private func anchorScrollOffsetAroundPlayhead(
         oldZoom: Double,
         newZoom: Double,
         baseTrackWidth: CGFloat,
         viewportWidth: CGFloat,
-        totalTimelineMs: Double
+        totalTimelineMs: Double,
+        anchorViewportX: CGFloat? = nil
     ) {
         guard let sv = horizontalScrollView else { return }
-        let playheadFrac = CGFloat(session.playheadTimelineMs / max(1.0, totalTimelineMs))
         let oldContentW = baseTrackWidth * CGFloat(oldZoom)
         let newContentW = baseTrackWidth * CGFloat(newZoom)
         let newTotalDocW = newContentW + trackHorizontalInset * 2
 
         let currentScrollX = sv.contentView.bounds.origin.x
-        let playheadViewportX = trackHorizontalInset + playheadFrac * oldContentW - currentScrollX
+        let anchorFrac: CGFloat
+        let anchorX: CGFloat
+        if let anchorViewportX {
+            anchorX = anchorViewportX
+            anchorFrac = max(0, min(1, (currentScrollX + anchorViewportX - trackHorizontalInset) / max(1, oldContentW)))
+        } else {
+            anchorFrac = CGFloat(session.playheadTimelineMs / max(1.0, totalTimelineMs))
+            anchorX = trackHorizontalInset + anchorFrac * oldContentW - currentScrollX
+        }
 
-        let desiredNewScrollX = (trackHorizontalInset + playheadFrac * newContentW) - playheadViewportX
+        let desiredNewScrollX = (trackHorizontalInset + anchorFrac * newContentW) - anchorX
         let maxScrollX = max(0.0, newTotalDocW - viewportWidth)
         let clampedScrollX = max(0.0, min(maxScrollX, desiredNewScrollX))
 
@@ -672,7 +723,7 @@ public struct MultiTrackTimelineView: View {
                         waveformSamples: session.audioWaveformSamples,
                         microphoneVolumeScale: (mapped.slice.muted || session.document.audio.muteMicrophone)
                             ? 0.0
-                            : session.document.audio.microphoneVolume,
+                            : (mapped.slice.microphoneVolume * session.document.audio.microphoneVolume),
                         microphoneWaveformSamples: session.microphoneWaveformSamples
                     ),
                     onClickAtLocalX: { localX in
@@ -805,6 +856,7 @@ public struct MultiTrackTimelineView: View {
                         endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: false,
+                        snapItemId: zoom.id,
                         clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
@@ -976,7 +1028,7 @@ public struct MultiTrackTimelineView: View {
                         subtitleContent: .mask(
                             text: item.type == .blur
                                 ? "Sensitive data"
-                                : String(format: "Highlight %d%%", Int(round(item.intensity)))
+                                : String(format: String(localized: "Highlight %d%%"), Int(round(item.intensity)))
                         ),
                         palette: .mask,
                         isSelected: isSelected,
@@ -993,6 +1045,7 @@ public struct MultiTrackTimelineView: View {
                         endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: true,
+                        snapItemId: item.id,
                         clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
@@ -1340,6 +1393,7 @@ public struct MultiTrackTimelineView: View {
                         endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: true,
+                        snapItemId: block.id,
                         clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
@@ -1513,6 +1567,7 @@ public struct MultiTrackTimelineView: View {
                         endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: false,
+                        snapItemId: seg.id,
                         clipDecoration: nil,
                         onClickAtLocalX: { localX in
                             let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
@@ -1679,6 +1734,7 @@ public struct MultiTrackTimelineView: View {
                         endMs: tEndMs,
                         allowDragMove: true,
                         allowVerticalTrackDrag: true,
+                        snapItemId: vo.id,
                         clipDecoration: ClipSegmentDecoration(
                             timelineStartMs: tStartMs,
                             timelineEndMs: tEndMs,
@@ -1740,24 +1796,7 @@ public struct MultiTrackTimelineView: View {
     }
 
     private func timelineSpan(forSourceStartMs sourceStartMs: Double, sourceEndMs: Double) -> (Double, Double)? {
-        var earliestTimelineMs: Double?
-        var latestTimelineMs: Double?
-
-        for mapped in session.timeMapper.mappedSlices {
-            let overlapStart = max(sourceStartMs, mapped.slice.sourceStartMs)
-            let overlapEnd = min(sourceEndMs, mapped.slice.sourceEndMs)
-            if overlapEnd > overlapStart {
-                let t0 = mapped.timelineStartMs + (overlapStart - mapped.slice.sourceStartMs) / max(0.1, mapped.slice.speed)
-                let t1 = mapped.timelineStartMs + (overlapEnd - mapped.slice.sourceStartMs) / max(0.1, mapped.slice.speed)
-                earliestTimelineMs = min(earliestTimelineMs ?? t0, t0)
-                latestTimelineMs = max(latestTimelineMs ?? t1, t1)
-            }
-        }
-
-        if let t0 = earliestTimelineMs, let t1 = latestTimelineMs, t1 > t0 {
-            return (t0, t1)
-        }
-        return nil
+        session.timelineSpan(forSourceStartMs: sourceStartMs, sourceEndMs: sourceEndMs)
     }
 
     private func formatClipDurationOnly(durationMs: Double) -> String {
@@ -1916,7 +1955,7 @@ private struct CutBoundaryTeardropBadgeView: View {
 
                 if let label = trimmedDurationLabel {
                     VStack(spacing: 1.0) {
-                        Text(label)
+                        Text(label.localizedUI)
                             .font(.system(size: 7.0, weight: .heavy).monospacedDigit())
                             .foregroundStyle(.black.opacity(0.90))
                             .lineLimit(1)
@@ -1939,7 +1978,7 @@ private struct CutBoundaryTeardropBadgeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(tooltipText)
+        .help(tooltipText.localizedUI)
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
@@ -2184,7 +2223,7 @@ private struct SmoothTimeRulerView: View {
                     let secs = totalWholeSec % 60
                     let labelStr = String(format: "%d:%02d", mins, secs)
 
-                    let text = Text(labelStr)
+                    let text = Text(labelStr.localizedUI)
                         .font(.system(size: 11, weight: .semibold, design: .default).monospacedDigit())
                         .foregroundColor(.ink.opacity(0.34))
                     context.draw(text, at: CGPoint(x: x, y: dotY - 10))
@@ -2215,98 +2254,32 @@ private struct ClipSegmentDecoration: Equatable, View {
     var body: some View {
         let showWaveform = EditorViewPreferences.shared.showAudioWaveform
         let smooth = EditorViewPreferences.shared.smoothWaveform
+        ZStack {
+            // A. Audio waveforms, drawn bottom-up: microphone first, system audio over it.
+            if showWaveform && totalSourceMs > 1.0 && (!microphoneWaveformSamples.isEmpty || !waveformSamples.isEmpty) {
+                ClipWaveformImageView(input: waveformInput(smooth: smooth))
+            }
+            tickLines
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .allowsHitTesting(false)
+    }
+
+    private func waveformInput(smooth: Bool) -> WaveformRasterInput {
+        var layers: [WaveformLayer] = []
+        if !microphoneWaveformSamples.isEmpty {
+            layers.append(WaveformLayer(samples: microphoneWaveformSamples, volume: microphoneVolumeScale, rgb: (1, 1, 1), opacity: 0.35))
+        }
+        if !waveformSamples.isEmpty {
+            layers.append(WaveformLayer(samples: waveformSamples, volume: volumeScale, rgb: (77.0 / 255, 47.0 / 255, 245.0 / 255), opacity: 0.5))
+        }
+        let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
+        let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
+        return WaveformRasterInput(layers: layers, sourceFracRange: startFrac...endFrac, smooth: smooth)
+    }
+
+    private var tickLines: some View {
         Canvas { context, size in
-            // A1. System / App Audio Waveform (`#4D2FF5` Purple)
-            if showWaveform && !waveformSamples.isEmpty && totalSourceMs > 1.0 && volumeScale > 0.005 {
-                let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
-                let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
-                let clampedVol = CGFloat(min(1.5, max(0.0, volumeScale)))
-
-                // Build multi-resolution max-reduction mipmap pyramid (plus slight neighbor smoothing so bins have organic continuity)
-                let pyramid = Self.buildWaveformPyramid(from: waveformSamples)
-                let baseCount = Double(waveformSamples.count)
-                let sliceSampleSpan = max(1.0, (endFrac - startFrac) * baseCount)
-
-                // `pxPerBin = 5.0` (when `enableSmoothWaveform` is enabled):
-                // Each control bin spans ~11px on screen, and Catmull-Rom cubic spline (`readPyramidLevel`)
-                // evaluates every 1.5px between bins to form rolling mountain-dune peaks & valleys!
-                let pxPerBin: Double = 11.0
-                let samplesPerBin = max(1.0, (sliceSampleSpan / Double(max(1.0, size.width))) * pxPerBin)
-                let maxWaveHeightPx: CGFloat = min(size.height * 0.68, 32.0)
-
-                let stepPx: CGFloat = 1.5
-                let pointCount = max(4, Int(ceil(size.width / stepPx)))
-
-                let wavePath = Self.waveformEnvelopePath(size: size, pointCount: pointCount, smooth: smooth) { localFrac in
-                    let samplePos = (startFrac + localFrac * (endFrac - startFrac)) * baseCount
-                    let env01 = Self.readWaveformEnvelope(pyramid: pyramid, samplePosition: samplePos, samplesPerBin: samplesPerBin)
-                    return min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedVol)
-                }
-
-                // `fillUnder` + `system-audio` color (`#4D2FF5`, top opacity `0.50` -> bottom opacity `0.25`)
-                // Blended over the golden Clip gradient, this produces the exact rich purple-to-warm-lavender gradient in
-                context.fill(
-                    wavePath,
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.52),
-                            Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.25)
-                        ]),
-                        startPoint: CGPoint(x: 0, y: size.height - maxWaveHeightPx),
-                        endPoint: CGPoint(x: 0, y: size.height)
-                    )
-                )
-
-                // When slice volume < 100%, also draws a subtle ghost outline of the 100% waveform (`outlineColor` with `opacity: 0.10`)
-                if clampedVol < 0.99 {
-                    let unscaledPath = Self.waveformEnvelopePath(size: size, pointCount: pointCount, smooth: smooth) { localFrac in
-                        let samplePos = (startFrac + localFrac * (endFrac - startFrac)) * baseCount
-                        let env01 = Self.readWaveformEnvelope(pyramid: pyramid, samplePosition: samplePos, samplesPerBin: samplesPerBin)
-                        return min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx)
-                    }
-                    context.fill(
-                        unscaledPath,
-                        with: .color(Color(red: 0.302, green: 0.184, blue: 0.961).opacity(0.12))
-                    )
-                }
-            }
-
-            // A2. Recorded Microphone Audio Waveform (Translucent White)
-            if showWaveform && !microphoneWaveformSamples.isEmpty && totalSourceMs > 1.0 && microphoneVolumeScale > 0.005 {
-                let startFrac = max(0.0, min(1.0, sourceStartMs / totalSourceMs))
-                let endFrac = max(startFrac + 0.001, min(1.0, sourceEndMs / totalSourceMs))
-                let clampedMicVol = CGFloat(min(1.5, max(0.0, microphoneVolumeScale)))
-
-                let micPyramid = Self.buildWaveformPyramid(from: microphoneWaveformSamples)
-                let baseCount = Double(microphoneWaveformSamples.count)
-                let sliceSampleSpan = max(1.0, (endFrac - startFrac) * baseCount)
-
-                let pxPerBin: Double = 11.0
-                let samplesPerBin = max(1.0, (sliceSampleSpan / Double(max(1.0, size.width))) * pxPerBin)
-                let maxWaveHeightPx: CGFloat = min(size.height * 0.68, 32.0)
-
-                let stepPx: CGFloat = 1.5
-                let pointCount = max(4, Int(ceil(size.width / stepPx)))
-
-                let micWavePath = Self.waveformEnvelopePath(size: size, pointCount: pointCount, smooth: smooth) { localFrac in
-                    let samplePos = (startFrac + localFrac * (endFrac - startFrac)) * baseCount
-                    let env01 = Self.readWaveformEnvelope(pyramid: micPyramid, samplePosition: samplePos, samplesPerBin: samplesPerBin)
-                    return min(size.height * 0.82, CGFloat(env01) * maxWaveHeightPx * clampedMicVol)
-                }
-
-                context.fill(
-                    micWavePath,
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color.white.opacity(0.44),
-                            Color.white.opacity(0.20)
-                        ]),
-                        startPoint: CGPoint(x: 0, y: size.height - maxWaveHeightPx),
-                        endPoint: CGPoint(x: 0, y: size.height)
-                    )
-                )
-            }
-
             // B. Vertical Ruler Tick Lines at every minor/major ruler dot
             if minorTickStepSec > 0.01 {
                 let stepMs = minorTickStepSec * 1000.0
@@ -2332,47 +2305,128 @@ private struct ClipSegmentDecoration: Equatable, View {
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .allowsHitTesting(false)
     }
 
-    /// Filled waveform outline from the bottom edge. `smooth` traces the spline envelope; otherwise one rounded bar
-    /// per 3pt column (`View > Smooth waveform` off). `height(localFrac)` returns the wave height at `0...1` across the slice.
-    private static func waveformEnvelopePath(
+    struct WaveformLayer: Equatable, Sendable {
+        let samples: [Float]
+        let volume: Double
+        let rgb: (Double, Double, Double)
+        let opacity: Double
+
+        static func == (a: Self, b: Self) -> Bool {
+            a.volume == b.volume && a.opacity == b.opacity && a.rgb == b.rgb && a.samples == b.samples
+        }
+    }
+
+    /// Rasterizes the slice waveforms into one premultiplied bitmap, per device pixel, so the look does not depend on
+    /// path antialiasing. Each layer draws its volume-scaled wave over a `0.10` opacity copy of the full wave in the same
+    /// color; the full wave only shows while the volume is below `0.999`, so a lowered clip shows how much quieter it is.
+    /// Inside a column, opacity rises from half at the bottom to full at the crest of that column.
+    /// See ADR-42 in `spec/06`.
+    nonisolated static func rasterizeWaveforms(
+        layers: [WaveformLayer],
+        sourceFracRange: ClosedRange<Double>,
         size: CGSize,
-        pointCount: Int,
-        smooth: Bool,
-        height: (Double) -> CGFloat
-    ) -> Path {
-        var path = Path()
-        if smooth {
-            path.move(to: CGPoint(x: 0, y: size.height))
-            for i in 0...pointCount {
-                let localFrac = Double(i) / Double(pointCount)
-                path.addLine(to: CGPoint(x: CGFloat(localFrac) * size.width, y: size.height - height(localFrac)))
+        scale: CGFloat,
+        smooth: Bool
+    ) -> CGImage? {
+        guard !layers.isEmpty, size.width >= 1, size.height >= 1 else { return nil }
+        let widthPx = Int(ceil(size.width * scale))
+        let heightPx = Int(ceil(size.height * scale))
+        guard widthPx > 0, heightPx > 0, widthPx * heightPx <= 40_000_000 else { return nil }
+
+        let maxWaveHeight = Double(min(size.height * 0.68, 32.0))
+        let rowLimit = Double(size.height)
+        let pxScale = Double(scale)
+        let width = Double(size.width)
+        let startFrac = sourceFracRange.lowerBound
+        let spanFrac = sourceFracRange.upperBound - sourceFracRange.lowerBound
+        let pyramids = layers.map { buildWaveformPyramid(from: $0.samples) }
+
+        var pixels = [UInt8](repeating: 0, count: widthPx * heightPx * 4)
+        var shapeHeights = [Double](repeating: 0, count: layers.count)
+        var fullHeights = [Double](repeating: 0, count: layers.count)
+
+        @inline(__always) func coverage(_ h: Double, _ fromBottom: Double) -> Double {
+            min(1, max(0, (h - fromBottom) * pxScale + 0.5))
+        }
+        @inline(__always) func fade(_ h: Double, _ fromBottom: Double) -> Double {
+            0.5 + 0.5 * min(1, max(0, fromBottom / max(h, 1)))
+        }
+
+        for x in 0..<widthPx {
+            let xPt = (Double(x) + 0.5) / pxScale
+            let localFrac: Double
+            if smooth {
+                localFrac = xPt / width
+            } else {
+                // `View > Smooth waveform` off: 2pt bars on a 3pt pitch, each sampled at its center.
+                let column = floor(xPt / 3.0)
+                if xPt - column * 3.0 >= 2.0 { continue }
+                localFrac = (column * 3.0 + 1.0) / width
             }
-            path.addLine(to: CGPoint(x: size.width, y: size.height))
-            path.closeSubpath()
-        } else {
-            let pitch: CGFloat = 3.0
-            let barWidth: CGFloat = 2.0
-            let columns = max(1, Int(size.width / pitch))
-            for c in 0..<columns {
-                let x = CGFloat(c) * pitch
-                let h = height(Double((x + barWidth * 0.5) / max(1, size.width)))
-                guard h > 0.5 else { continue }
-                path.addRoundedRect(
-                    in: CGRect(x: x, y: size.height - h, width: barWidth, height: h),
-                    cornerSize: CGSize(width: 1, height: 1)
+
+            var topHeight = 0.0
+            for (i, layer) in layers.enumerated() {
+                // `pxPerBin = 11`: one envelope bin per ~11pt, splined in between (see `readWaveformEnvelope`).
+                let baseCount = Double(layer.samples.count)
+                let env = readWaveformEnvelope(
+                    pyramid: pyramids[i],
+                    samplePosition: (startFrac + localFrac * spanFrac) * baseCount,
+                    samplesPerBin: max(1.0, (max(1.0, spanFrac * baseCount) / max(1.0, width)) * 11.0)
                 )
+                fullHeights[i] = min(rowLimit, env * maxWaveHeight)
+                shapeHeights[i] = min(rowLimit, env * maxWaveHeight * max(0, layer.volume))
+                topHeight = max(topHeight, fullHeights[i], shapeHeights[i])
+            }
+            guard topHeight > 0 else { continue }
+
+            let rows = min(heightPx, Int(ceil(topHeight * pxScale)) + 1)
+            for row in 0..<rows {
+                let fromBottom = (Double(row) + 0.5) / pxScale
+                var r = 0.0, g = 0.0, b = 0.0, a = 0.0
+                for (i, layer) in layers.enumerated() {
+                    let hs = shapeHeights[i]
+                    let shapeA = hs > 0 ? layer.opacity * coverage(hs, fromBottom) * fade(hs, fromBottom) : 0
+                    let hf = fullHeights[i]
+                    let fullA = (layer.volume < 0.999 && hf > 0) ? 0.1 * coverage(hf, fromBottom) * fade(hf, fromBottom) : 0
+                    let layerA = shapeA + fullA * (1 - shapeA)
+                    guard layerA > 0 else { continue }
+                    let keep = 1 - layerA
+                    r = layer.rgb.0 * layerA + r * keep
+                    g = layer.rgb.1 * layerA + g * keep
+                    b = layer.rgb.2 * layerA + b * keep
+                    a = layerA + a * keep
+                }
+                guard a > 0 else { continue }
+                // BGRA (premultiplied first, little endian): the layout the compositor uses, so drawing needs no conversion.
+                let index = ((heightPx - 1 - row) * widthPx + x) * 4
+                pixels[index] = UInt8(min(255, b * 255 + 0.5))
+                pixels[index + 1] = UInt8(min(255, g * 255 + 0.5))
+                pixels[index + 2] = UInt8(min(255, r * 255 + 0.5))
+                pixels[index + 3] = UInt8(min(255, a * 255 + 0.5))
             }
         }
-        return path
+
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(
+            width: widthPx,
+            height: heightPx,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: widthPx * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
     }
 
     // MARK: - Mip-Pyramid + Catmull-Rom Cubic Spline
 
-    private static func buildWaveformPyramid(from baseSamples: [Float]) -> [[Float]] {
+    nonisolated private static func buildWaveformPyramid(from baseSamples: [Float]) -> [[Float]] {
         guard !baseSamples.isEmpty else { return [] }
         var levels: [[Float]] = [baseSamples]
         while let last = levels.last, last.count > 2 {
@@ -2421,7 +2475,7 @@ private struct ClipSegmentDecoration: Equatable, View {
     }
 
     /// Trilinearly blends between `lowerLevel` and `upperLevel` of the Catmull-Rom pyramid based on `log2(samplesPerBin)`.
-    private static func readWaveformEnvelope(pyramid: [[Float]], samplePosition: Double, samplesPerBin: Double) -> Double {
+    nonisolated private static func readWaveformEnvelope(pyramid: [[Float]], samplePosition: Double, samplesPerBin: Double) -> Double {
         guard !pyramid.isEmpty else { return 0.0 }
         let maxLevel = Double(pyramid.count - 1)
         let level = min(maxLevel, max(0.0, log2(max(1.0, samplesPerBin))))
@@ -2663,6 +2717,8 @@ private struct TimelineInteractiveSegmentView: View {
     let endMs: Double
     let allowDragMove: Bool
     let allowVerticalTrackDrag: Bool
+    /// Item id used to leave the item out of its own snap targets; `nil` turns snapping off (clips).
+    var snapItemId: String? = nil
     let clipDecoration: ClipSegmentDecoration?
     let onClickAtLocalX: (CGFloat) -> Void
     let onRightClick: (NSPoint, NSView) -> Void
@@ -2681,6 +2737,7 @@ private struct TimelineInteractiveSegmentView: View {
     @State private var dragInitialEndMs: Double?
     @State private var dragInitialSegWidth: CGFloat = 60.0
     @State private var verticalDragOffset: CGFloat = 0.0
+    @Environment(TimelineSnapController.self) private var snap
 
     private let edgeHandleHitWidth: CGFloat = 13.0
 
@@ -2728,7 +2785,7 @@ private struct TimelineInteractiveSegmentView: View {
             // 4. Centered Title (`w600`, `12px`, `opacity: 0.55`) & Icon Subtitle (`449` weight, `13px`)
             if segWidth > 42 {
                 VStack(spacing: 1.5) {
-                    Text(topTitle)
+                    Text(topTitle.localizedUI)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(1)
@@ -2841,6 +2898,9 @@ private struct TimelineInteractiveSegmentView: View {
                     if !hasExceededClickSlop {
                         guard dragDist >= 2.5, !isSplitMode else { return }
                         hasExceededClickSlop = true
+                        if let snapItemId {
+                            snap.begin(excludingItemId: snapItemId, pointsPerMs: Double(totalWidth) / max(1.0, trackTotalDurationMs))
+                        }
                         onBeginInteractive()
                     }
 
@@ -2852,17 +2912,21 @@ private struct TimelineInteractiveSegmentView: View {
 
                     switch mode {
                     case .resizeLeft:
-                        let newStart = max(0.0, min(e0 - 250.0, s0 + deltaMs))
+                        let rawStart = s0 + deltaMs
+                        let newStart = max(0.0, min(e0 - 250.0, snapItemId == nil ? rawStart : snap.snapEdge(rawStart)))
                         onResizeRange(newStart, e0)
 
                     case .resizeRight:
-                        let newEnd = max(s0 + 250.0, e0 + deltaMs)
+                        let rawEnd = e0 + deltaMs
+                        let newEnd = max(s0 + 250.0, snapItemId == nil ? rawEnd : snap.snapEdge(rawEnd))
                         onResizeRange(s0, newEnd)
 
                     case .moveBody:
                         guard allowDragMove else { return }
                         let constantDurationMs = e0 - s0
-                        onMoveBody(s0 + deltaMs, constantDurationMs)
+                        let rawStart = s0 + deltaMs
+                        let start = snapItemId == nil ? rawStart : snap.snapMove(startMs: rawStart, durationMs: constantDurationMs)
+                        onMoveBody(start, constantDurationMs)
 
                         if allowVerticalTrackDrag {
                             verticalDragOffset = value.translation.height
@@ -2881,6 +2945,7 @@ private struct TimelineInteractiveSegmentView: View {
                                 onMoveVerticalTracks(rowDelta)
                             }
                         }
+                        snap.end()
                         onEndInteractive()
                     } else {
                         onClickAtLocalX(localX)
@@ -2942,7 +3007,7 @@ private struct TimelineInteractiveSegmentView: View {
                 RoundedRectangle(cornerRadius: 2.2, style: .continuous)
                     .fill(Color.white.opacity(0.96))
                     .frame(width: 11.0, height: 8.0)
-                Text(text)
+                Text(text.localizedUI)
                     .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(.white.opacity(0.96))
             }
@@ -3070,6 +3135,162 @@ private struct HorizontalScrollViewIntrospector: NSViewRepresentable {
                 }
                 onFound(sv)
             }
+        }
+    }
+}
+
+// MARK: - Waveform Bitmap (cached, re-rasterized off the main thread after a zoom)
+
+private struct WaveformRasterInput: Equatable, Sendable {
+    let layers: [ClipSegmentDecoration.WaveformLayer]
+    let sourceFracRange: ClosedRange<Double>
+    let smooth: Bool
+}
+
+private struct WaveformRasterKey: Equatable, Sendable {
+    let input: WaveformRasterInput
+    let widthPx: Int
+    let heightPx: Int
+    let scale: CGFloat
+}
+
+/// Holds the last waveform bitmap. A reference type so the `Canvas` renderer can fill it without a state change.
+@MainActor
+private final class WaveformRasterCache {
+    var key: WaveformRasterKey?
+    var image: CGImage?
+}
+
+/// Draws the slice waveform bitmap from `ClipSegmentDecoration.rasterizeWaveforms`.
+///
+/// Rasterizing is per device pixel over the whole slice width, which at 6x zoom is tens of thousands of pixels: far
+/// too slow to redo on every zoom step. When only the width changed (zoom, window resize), the last bitmap is drawn
+/// stretched to the new width, which the GPU does for free, and a sharp one is rasterized on a background thread
+/// once the width has held still for 90 ms. Any other change (trim, volume, samples, height) rasterizes right away,
+/// as before, so edits never show a stale wave. See ADR-46 in `spec/06`.
+private struct ClipWaveformImageView: View {
+    let input: WaveformRasterInput
+
+    @Environment(\.displayScale) private var displayScale
+    @State private var cache = WaveformRasterCache()
+    @State private var size: CGSize = .zero
+    @State private var redraw = 0
+
+    var body: some View {
+        let scale = max(1.0, displayScale)
+        Canvas { context, canvasSize in
+            _ = redraw
+            guard let key = Self.key(input: input, size: canvasSize, scale: scale) else { return }
+            if cache.key != key {
+                let onlyWidthChanged = cache.key.map {
+                    $0.input == key.input && $0.heightPx == key.heightPx && $0.scale == key.scale
+                } ?? false
+                if !onlyWidthChanged || cache.image == nil {
+                    cache.image = ClipSegmentDecoration.rasterizeWaveforms(
+                        layers: input.layers, sourceFracRange: input.sourceFracRange,
+                        size: canvasSize, scale: scale, smooth: input.smooth
+                    )
+                    cache.key = key
+                }
+            }
+            guard let image = cache.image else { return }
+            let drawHeight = CGFloat(image.height) / scale
+            context.draw(
+                Image(decorative: image, scale: scale),
+                in: CGRect(x: 0, y: canvasSize.height - drawHeight, width: canvasSize.width, height: drawHeight)
+            )
+        }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .task(id: Self.key(input: input, size: size, scale: scale)) {
+            guard let key = Self.key(input: input, size: size, scale: scale), cache.key != key else { return }
+            try? await Task.sleep(for: .milliseconds(90))
+            guard !Task.isCancelled else { return }
+            let input = self.input, rasterSize = size
+            let image = await Task.detached(priority: .userInitiated) {
+                ClipSegmentDecoration.rasterizeWaveforms(
+                    layers: input.layers, sourceFracRange: input.sourceFracRange,
+                    size: rasterSize, scale: scale, smooth: input.smooth
+                )
+            }.value
+            guard !Task.isCancelled else { return }
+            cache.image = image
+            cache.key = key
+            redraw &+= 1
+        }
+    }
+
+    private static func key(input: WaveformRasterInput, size: CGSize, scale: CGFloat) -> WaveformRasterKey? {
+        guard size.width >= 1, size.height >= 1 else { return nil }
+        return WaveformRasterKey(
+            input: input,
+            widthPx: Int(ceil(size.width * scale)),
+            heightPx: Int(ceil(size.height * scale)),
+            scale: scale
+        )
+    }
+}
+
+// MARK: - Cmd + Scroll Zoom
+
+@MainActor
+private final class TimelineZoomClock {
+    private var lastStep: CFTimeInterval = 0
+    func mark() { lastStep = CACurrentMediaTime() }
+    var isZooming: Bool { CACurrentMediaTime() - lastStep < 0.15 }
+}
+
+/// Catches Cmd + scroll wheel over its own frame and reports the cursor x (in its coordinates, left to right) with a
+/// zoom factor. A local monitor rather than `scrollWheel(with:)` because the track lanes' `NSScrollView` gets the
+/// event first; the monitor consumes it so the timeline does not also scroll. Plain scrolling is left alone.
+private struct TimelineCommandScrollZoomCatcher: NSViewRepresentable {
+    let onZoom: (CGFloat, Double) -> Void
+
+    func makeNSView(context: Context) -> CatcherView {
+        let view = CatcherView()
+        view.onZoom = onZoom
+        return view
+    }
+
+    func updateNSView(_ nsView: CatcherView, context: Context) {
+        nsView.onZoom = onZoom
+    }
+
+    static func dismantleNSView(_ nsView: CatcherView, coordinator: ()) {
+        nsView.removeMonitor()
+    }
+
+    final class CatcherView: NSView {
+        var onZoom: ((CGFloat, Double) -> Void)?
+        private var monitor: Any?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            removeMonitor()
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self, let window = self.window, event.modifierFlags.contains(.command) else { return event }
+                // Go by the window under the cursor: a window-less event carries a screen location.
+                let screenPoint = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
+                guard NSWindow.windowNumber(at: screenPoint, belowWindowWithWindowNumber: 0) == window.windowNumber else { return event }
+                let point = self.convert(window.convertPoint(fromScreen: screenPoint), from: nil)
+                guard self.bounds.contains(point) else { return event }
+                // Wheel away from you (or two fingers up) zooms in, whatever the natural scrolling setting is.
+                var delta = event.scrollingDeltaY
+                if event.isDirectionInvertedFromDevice { delta = -delta }
+                if delta == 0 { return nil }
+                let factor = event.hasPreciseScrollingDeltas
+                    ? exp(Double(delta) * 0.01)
+                    : pow(1.15, Double(max(-4, min(4, delta))))
+                self.onZoom?(point.x, factor)
+                return nil
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
         }
     }
 }
@@ -3317,6 +3538,7 @@ private struct ShortcutTimelineSegmentView: View {
     let endMs: Double
     let isSelected: Bool
     let isHidden: Bool
+    @Environment(TimelineSnapController.self) private var snap
 
     private enum DragMode {
         case moveBody
@@ -3498,6 +3720,7 @@ private struct ShortcutTimelineSegmentView: View {
                         guard dragDist >= 2.5 else { return }
                         hasExceededClickSlop = true
                         session.selectShortcut(cluster.id)
+                        snap.begin(excludingItemId: cluster.id, pointsPerMs: Double(totalWidth) / max(1.0, trackTotalDurationMs))
                         session.beginInteractiveEdit()
                     }
 
@@ -3509,20 +3732,21 @@ private struct ShortcutTimelineSegmentView: View {
 
                     switch mode {
                     case .resizeLeft:
-                        let newTimelineStart = max(0.0, min(e0 - 220.0, s0 + deltaMs))
+                        let newTimelineStart = max(0.0, min(e0 - 220.0, snap.snapEdge(s0 + deltaMs)))
                         let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
                         let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: e0).sourceMs
                         session.resizeShortcut(cluster, newStartMs: newSrcStart, newEndMs: newSrcEnd)
 
                     case .resizeRight:
-                        let newTimelineEnd = max(s0 + 220.0, min(trackTotalDurationMs, e0 + deltaMs))
+                        let newTimelineEnd = max(s0 + 220.0, min(trackTotalDurationMs, snap.snapEdge(e0 + deltaMs)))
                         let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: s0).sourceMs
                         let newSrcEnd = session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs
                         session.resizeShortcut(cluster, newStartMs: newSrcStart, newEndMs: newSrcEnd)
 
                     case .moveBody:
                         let dur = max(220.0, e0 - s0)
-                        let clampedTimelineStart = max(0.0, min(trackTotalDurationMs - dur, s0 + deltaMs))
+                        let snappedStart = snap.snapMove(startMs: s0 + deltaMs, durationMs: dur)
+                        let clampedTimelineStart = max(0.0, min(trackTotalDurationMs - dur, snappedStart))
                         let clampedTimelineEnd = clampedTimelineStart + dur
                         let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedTimelineStart).sourceMs
                         let newSrcEnd = max(newSrcStart + 220.0, session.timeMapper.sourceTime(forTimelineMs: clampedTimelineEnd).sourceMs)
@@ -3545,6 +3769,7 @@ private struct ShortcutTimelineSegmentView: View {
                                 session.moveShortcutToTrack(cluster, targetTrackIndex: trackIndex + rowDelta)
                             }
                         }
+                        snap.end()
                         session.endInteractiveEdit()
                     } else {
                         // Single Left-Click selects the Shortcut Segment and opens the Shortcut Editor in the Inspector!
@@ -3563,5 +3788,32 @@ private struct ShortcutTimelineSegmentView: View {
                     NSCursor.arrow.set()
                 }
         )
+    }
+}
+
+// MARK: - Snap Guide
+
+/// Vertical theme-colored line at the edge a dragged item snapped to. Its own view, so guide changes never
+/// re-evaluate the tracks.
+private struct TimelineSnapGuideOverlayView: View {
+    let snap: TimelineSnapController
+    let trackHorizontalInset: CGFloat
+    let contentWidth: CGFloat
+    let totalTimelineMs: Double
+    let horizontalScrollOffset: CGFloat
+    let viewportWidth: CGFloat
+    let topInset: CGFloat
+
+    var body: some View {
+        if let guideMs = snap.guideTimelineMs {
+            let x = trackHorizontalInset + CGFloat(guideMs / max(1.0, totalTimelineMs)) * contentWidth - horizontalScrollOffset
+            if x >= -2 && x <= viewportWidth + 2 {
+                Rectangle()
+                    .fill(Color(red: 0.44, green: 0.30, blue: 1.0).opacity(0.9))
+                    .frame(width: 1)
+                    .padding(.top, topInset)
+                    .offset(x: x - 0.5)
+            }
+        }
     }
 }

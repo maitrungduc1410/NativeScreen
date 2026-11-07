@@ -224,7 +224,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         cropWin.isReleasedWhenClosed = false
         cropWin.contentViewController = hostingController
         cropWin.minSize = NSSize(width: 640, height: 480)
-        cropWin.title = "Crop — \(session.document.name)"
+        cropWin.title = String(localized: "Crop — \(session.document.name)")
         cropWin.titleVisibility = .hidden
         cropWin.titlebarAppearsTransparent = true
         cropWin.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
@@ -288,7 +288,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         win.isReleasedWhenClosed = false
         win.contentViewController = hostingController
         win.minSize = NSSize(width: 720, height: 520)
-        win.title = "Crop camera — \(session.document.name)"
+        win.title = String(localized: "Crop camera — \(session.document.name)")
         win.titleVisibility = .hidden
         win.titlebarAppearsTransparent = true
         win.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
@@ -351,7 +351,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         win.isReleasedWhenClosed = false
         win.contentViewController = hostingController
         win.minSize = NSSize(width: 780, height: 540)
-        win.title = "Color preset studio"
+        win.title = String(localized: "Color preset studio")
         win.titleVisibility = .hidden
         win.titlebarAppearsTransparent = true
         win.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
@@ -396,11 +396,11 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
               let session = sessionsByID[sessionID],
               session.hasUnsavedChanges else { return true }
         let alert = NSAlert()
-        alert.messageText = "Do you want to save the changes made to “\(session.document.name)”?"
-        alert.informativeText = "Your changes will be lost if you don’t save them."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        let dontSave = alert.addButton(withTitle: "Don’t Save")
+        alert.messageText = String(localized: "Do you want to save the changes made to “\(session.document.name)”?")
+        alert.informativeText = String(localized: "Your changes will be lost if you don’t save them.")
+        alert.addButton(withTitle: String(localized: "Save"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        let dontSave = alert.addButton(withTitle: String(localized: "Don’t Save"))
         dontSave.hasDestructiveAction = true
         switch alert.runModal() {
         case .alertFirstButtonReturn:
@@ -471,7 +471,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
         panel.treatsFilePackagesAsDirectories = false
-        panel.prompt = "Open Project"
+        panel.prompt = String(localized: "Open Project")
 
         if panel.runModal() == .OK {
             for url in panel.urls where url.pathExtension.lowercased() == "nativescreen" {
@@ -505,7 +505,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         try? session.saveNow()
 
         let panel = NSSavePanel()
-        panel.message = "Save a copy of this project"
+        panel.message = String(localized: "Save a copy of this project")
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.allowedContentTypes = [UTType(filenameExtension: "nativescreen") ?? .package]
@@ -578,8 +578,8 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
     public func extractRawRecordingFiles() {
         guard let session = activeSession else { return }
         let panel = NSOpenPanel()
-        panel.message = "Choose where to save the raw recording files"
-        panel.prompt = "Extract"
+        panel.message = String(localized: "Choose where to save the raw recording files")
+        panel.prompt = String(localized: "Extract")
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
@@ -825,8 +825,8 @@ public final class ProjectPresetsStore {
     /// An imported preset gets a fresh id so it never overwrites an existing one.
     public func promptImportPresets() {
         let panel = NSOpenPanel()
-        panel.message = "Choose preset files to import"
-        panel.prompt = "Import"
+        panel.message = String(localized: "Choose preset files to import")
+        panel.prompt = String(localized: "Import")
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK else { return }
@@ -846,7 +846,7 @@ public final class ProjectPresetsStore {
 
         if !failed.isEmpty {
             let alert = NSAlert()
-            alert.messageText = "Some files are not NativeScreen presets"
+            alert.messageText = String(localized: "Some files are not NativeScreen presets")
             alert.informativeText = failed.joined(separator: "\n")
             alert.runModal()
         }

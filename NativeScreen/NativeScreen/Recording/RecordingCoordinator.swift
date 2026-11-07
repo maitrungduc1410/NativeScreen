@@ -90,7 +90,7 @@ public enum RecordingCountdownOption: Int, CaseIterable, Identifiable, Sendable 
 
     public var label: String {
         switch self {
-        case .off: return "Off"
+        case .off: return String(localized: "Off")
         case .threeSeconds: return "3s"
         case .fiveSeconds: return "5s"
         case .tenSeconds: return "10s"
@@ -209,14 +209,14 @@ public final class RecordingCoordinator {
 
     public var cameraButtonTitle: String {
         guard let name = selectedCameraName, selectedCameraDeviceID != nil else {
-            return "No camera"
+            return String(localized: "No camera")
         }
         return name
     }
 
     public var microphoneButtonTitle: String {
         guard captureMicrophone, let name = selectedMicrophoneName, selectedMicrophoneDeviceID != nil else {
-            return "No microphone"
+            return String(localized: "No microphone")
         }
         return name
     }
@@ -228,17 +228,17 @@ public final class RecordingCoordinator {
     }
 
     public var systemAudioButtonTitle: String {
-        guard captureSystemAudio else { return "No system audio" }
+        guard captureSystemAudio else { return String(localized: "No system audio") }
         if systemAudioFromAllApps {
-            return "System audio"
+            return String(localized: "System audio")
         }
         let count = selectedSystemAudioAppBundleIDs.count
         if count == 0 {
-            return "No system audio"
+            return String(localized: "No system audio")
         } else if count == 1 {
-            return "Sound from 1 app"
+            return String(localized: "Sound from 1 app")
         } else {
-            return "Sound from \(count) apps"
+            return String(localized: "Sound from \(count) apps")
         }
     }
 
@@ -374,9 +374,9 @@ public final class RecordingCoordinator {
 
         public var title: String {
             switch self {
-            case .createProject: return "Create project"
-            case .exportToClipboard: return "Export and copy to clipboard"
-            case .exportToFile: return "Export and save to file"
+            case .createProject: return String(localized: "Create project")
+            case .exportToClipboard: return String(localized: "Export and copy to clipboard")
+            case .exportToFile: return String(localized: "Export and save to file")
             }
         }
     }
@@ -497,7 +497,21 @@ public final class RecordingCoordinator {
 
     // MARK: - Show / Hide Floating Recording HUD Bar (`NSPanel`)
 
+    /// The bar's own width as laid out by SwiftUI, reported by `RecordingHUDBarView` whenever it changes. Measuring
+    /// `fittingSize` right after a state change could still return the old layout (a longer microphone name not yet
+    /// applied), leaving the window narrower than the bar so both rounded ends were cut off.
+    @ObservationIgnored fileprivate var measuredHUDBarWidth: CGFloat = 0
+
+    fileprivate func hudBarWidthDidChange(_ width: CGFloat) {
+        guard width >= 1, abs(width - measuredHUDBarWidth) >= 0.5 else { return }
+        measuredHUDBarWidth = width
+        updateHUDPanelFrameForCurrentState(animated: true)
+    }
+
     private var currentDesiredPanelSize: NSSize {
+        if measuredHUDBarWidth >= 248 {
+            return NSSize(width: ceil(measuredHUDBarWidth / 2.0) * 2.0, height: Self.barHeight)
+        }
         if let hosting = hudPanel?.contentView {
             let fittingW = ceil(hosting.fittingSize.width)
             if fittingW >= 248 {
@@ -594,7 +608,9 @@ public final class RecordingCoordinator {
             }
 
             let targetFrame = NSRect(origin: targetOrigin, size: newSize)
-            panel.setFrame(targetFrame, display: true, animate: animated)
+            // Grow at once: an animated grow shows the bar wider than its window, ends clipped, for the whole animation.
+            // Shrinking can animate, since the bar is then narrower than the window and the extra edge is transparent.
+            panel.setFrame(targetFrame, display: true, animate: animated && newSize.width < currentFrame.width)
         }
     }
 
@@ -1231,10 +1247,10 @@ public final class RecordingCoordinator {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Discard this recording?"
-        alert.informativeText = "Everything recorded so far will be deleted."
-        alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Continue Recording")
+        alert.messageText = String(localized: "Discard this recording?")
+        alert.informativeText = String(localized: "Everything recorded so far will be deleted.")
+        alert.addButton(withTitle: String(localized: "Discard"))
+        alert.addButton(withTitle: String(localized: "Continue Recording"))
 
         NSApp.activate(ignoringOtherApps: true)
         let response = alert.runModal()
@@ -1618,7 +1634,7 @@ public final class HUDNativeMenuPresenter: NSObject {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
         coordinator.refreshConnectedMediaDevices()
 
-        let menu = NSMenu(title: "Camera")
+        let menu = NSMenu(title: String(localized: "Camera"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -1658,7 +1674,7 @@ public final class HUDNativeMenuPresenter: NSObject {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
         coordinator.refreshConnectedMediaDevices()
 
-        let menu = NSMenu(title: "Microphone")
+        let menu = NSMenu(title: String(localized: "Microphone"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -1697,7 +1713,7 @@ public final class HUDNativeMenuPresenter: NSObject {
     ) {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
 
-        let menu = NSMenu(title: "System Audio")
+        let menu = NSMenu(title: String(localized: "System Audio"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -1731,7 +1747,7 @@ public final class HUDNativeMenuPresenter: NSObject {
     public func presentRecordingOptionsMenu(coordinator: RecordingCoordinator, anchorButtonScreenRect: NSRect, from panel: NSWindow?) {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
 
-        let menu = NSMenu(title: "Recording Options")
+        let menu = NSMenu(title: String(localized: "Recording Options"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -1835,7 +1851,7 @@ public final class HUDNativeMenuPresenter: NSObject {
     ) {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
 
-        let menu = NSMenu(title: "Projects")
+        let menu = NSMenu(title: String(localized: "Projects"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -1913,7 +1929,7 @@ public final class HUDNativeMenuPresenter: NSObject {
     private func makeCommandItem(title: String, symbol: String, action: @escaping @MainActor () -> Void) -> NSMenuItem {
         let target = HUDMenuClosureTarget(action: action)
         retainedTargets.append(target)
-        let item = NSMenuItem(title: title, action: #selector(HUDMenuClosureTarget.invoke(_:)), keyEquivalent: "")
+        let item = NSMenuItem(title: title.localizedUI, action: #selector(HUDMenuClosureTarget.invoke(_:)), keyEquivalent: "")
         item.target = target
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         return item
@@ -2341,7 +2357,7 @@ private struct HUDMenuSectionHeaderView: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(title.localizedUI)
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.45))
                 .lineLimit(1)
@@ -2417,7 +2433,7 @@ private struct HUDSwitchMenuRowView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(title)
+            Text(title.localizedUI)
                 .font(.system(size: 13.5, weight: .regular))
                 .foregroundStyle(.white.opacity(0.95))
                 .lineLimit(1)
@@ -2504,6 +2520,12 @@ public struct RecordingHUDBarView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(.white.opacity(0.22), lineWidth: 1)
         )
+        // The bar takes its own width and the window follows it, never the other way round.
+        .fixedSize(horizontal: true, vertical: false)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            coordinator.hudBarWidthDidChange(width)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(.dark)
     }
 
@@ -2552,6 +2574,7 @@ public struct RecordingHUDBarView: View {
                                 .font(.system(size: 11, weight: .regular))
                                 .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.72))
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                         }
                     }
                 }
@@ -3047,7 +3070,7 @@ public struct WindowAndAreaPickerOverlayView: View {
 
                             Menu {
                                 ForEach(WindowSizePreset.presets) { preset in
-                                    Button(preset.label) {
+                                    Button(preset.label.localizedUI) {
                                         WindowDiscoveryService.resizeWindow(
                                             win,
                                             toWidth: Double(preset.width),

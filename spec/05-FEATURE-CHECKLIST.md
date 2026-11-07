@@ -64,7 +64,7 @@
 - [x] **Zoom Track:** Hover `+` preview block on empty areas to insert zoom, move, resize, disable, or delete zoom blocks; click block to open dedicated Zoom Editor (`Classic` / `Glass Loupe`, `Instant animation`, `Auto` / `Manual`, `Zoom level`).
 - [x] **Multi-Row Mask Tracks:** Add multiple overlapping blur/spotlight blocks across independent rows so multiple screen areas can be blurred at the same time.
 - [x] **Multi-Track Keyboard Shortcuts Lanes:** Select, move, resize, duplicate, or permanently delete (`Remove shortcut`) shortcut segments; add custom shortcuts on empty track hover or via `+`; create multiple shortcut tracks with independent positions and colors.
-- [x] Dynamic time ruler (`Bf` / `Jp` whole-second label algorithm), playhead scrubbing, timecode display, and playhead-anchored timeline zoom in/out (`⌘+` / `⌘-`).
+- [x] Dynamic time ruler (`Bf` / `Jp` whole-second label algorithm), playhead scrubbing, timecode display, and playhead-anchored timeline zoom in/out (`⌘+` / `⌘-`), and `⌘` + scroll zoom anchored at the cursor (`spec/06` ADR-45).
 
 ### 1.6. Native Hardware Export Pipeline (Zero FFmpeg)
 - [x] Hardware-accelerated exporter using `AVAssetImageGenerator` -> `MetalFrameCompositor` (all 6 passes including 3D Shortcut Keycaps) -> `AVAssetWriter` (`VideoToolbox` H.264, HEVC, Both, and Apple ProRes `422 LT`, `422`, `422 HQ`, `4444`) & `ImageIO` animated `GIF`.
@@ -88,6 +88,7 @@
   - [x] Capture and render actual macOS cursor shapes (`arrow`, `pointer`, `ibeam`, `crosshair`, `openhand`, `closedhand`).
 - [x] **Audio Enhancements:**
   - [x] Catmull-Rom cubic spline + max-reduction mipmap pyramid audio waveform visualization on the timeline.
+  - [x] Below 100% volume, a faint copy of the full-volume wave behind the scaled one, per source (`spec/06` ADR-42).
   - [x] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
   - [x] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
   - [x] Post-recording Voiceover recording & audio file upload directly onto the timeline (multiple `Voiceovers` tracks with no overlap inside a track + `Close Voiceover editor` with `Independent` / `Synchronized` attach modes and `Hide & Mute original recording`).
@@ -136,6 +137,9 @@
 - [x] **AI Auto-Detect Sensitive Data (OCR) & Hide Faces:**
   - [x] Scan video frames using macOS native `Vision` (`VNRecognizeTextRequest` and `VNDetectFaceRectanglesRequest`) to automatically detect emails, phone numbers, card numbers, API keys/tokens, custom user phrases (`Custom phrases`), and faces on screen.
   - [x] One-click generation of tracked Blur Masks on the timeline (`Hide sensitive data` & `Hide faces` in Background Inspector).
+- [x] **Timeline snapping:** dragged and trimmed items stick to edges on every track, the playhead and clip boundaries, with a purple guide line; toggle next to the split button and in `View`, on by default (`spec/06` ADR-43).
+- [x] **Per-slice audio volume:** `Microphone volume` and `System audio volume` sliders in the clip context menu, each applied only to that slice (`spec/06` ADR-47).
+- [x] **Localization:** English, Vietnamese, Simplified Chinese, Japanese, German, French, Spanish and Brazilian Portuguese, with a language picker in `Settings > General` (`spec/06` ADR-44).
 - [x] **Caption tracks:** multiple tracks on the timeline; move, trim, split and add captions, drag them between tracks, per-caption style with `Apply to all captions in this track`, 2D `Caption position` pad.
 - [x] **AI Auto-Captions & Edit by Transcript (100% Local On-Device Speech-to-Text):**
   - [x] On-device transcription using Apple `Speech` framework (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`) with language selector, custom `Keyterms` prompt, and `.srt` export.

@@ -627,7 +627,7 @@ public struct InstantTooltipBubble: View {
 
     public var body: some View {
         HStack(spacing: 8) {
-            Text(text)
+            Text(text.localizedUI)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.96))
                 .lineLimit(1)
@@ -934,7 +934,7 @@ public final class HoverMagnetTrackingNSView: NSView {
         let rectInWin = convert(bounds, to: nil)
         let screenRect = win.convertToScreen(rectInWin)
         SharedFloatingTooltipWindowController.shared.showTooltip(
-            text: tooltip,
+            text: tooltip.localizedUI,
             shortcutBadge: isButtonDisabled ? nil : shortcutBadge,
             edge: edge,
             forButtonScreenRect: screenRect,

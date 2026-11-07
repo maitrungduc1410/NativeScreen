@@ -37,7 +37,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         let sliceIdx = session.document.timeline.slices.firstIndex(where: { $0.id == sliceId }) ?? 0
         let canMergeWithNext = (sliceIdx + 1 < session.document.timeline.slices.count)
 
-        let menu = NSMenu(title: "Clip Context Menu")
+        let menu = NSMenu(title: String(localized: "Clip Context Menu"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -61,7 +61,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         menu.addItem(.separator())
 
         // 4. Set speed submenu
-        let speedSubmenu = NSMenu(title: "Set speed")
+        let speedSubmenu = NSMenu(title: String(localized: "Set speed"))
         for spd in [0.5, 1.0, 1.25, 1.5, 2.0, 4.0] {
             let subItem = makeCommandItem(title: String(format: "%gx", spd), keyEquivalent: "", modifiers: []) {
                 session.setSliceSpeed(id: sliceId, speed: spd)
@@ -69,35 +69,48 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
             subItem.state = abs(slice.speed - spd) < 0.03 ? .on : .off
             speedSubmenu.addItem(subItem)
         }
-        let speedParentItem = NSMenuItem(title: "Set speed", action: nil, keyEquivalent: "")
+        let speedParentItem = NSMenuItem(title: String(localized: "Set speed"), action: nil, keyEquivalent: "")
         speedParentItem.submenu = speedSubmenu
         menu.addItem(speedParentItem)
 
         menu.addItem(.separator())
 
-        // 5. Per-Segment System audio volume SliderRow inside NSMenuItem.view (Applies ONLY to this `sliceId`!)
-        let volumeItem = NSMenuItem()
-        let volumeView = NSHostingView(
-            rootView: MenuEmbeddedSliderRowView(
-                title: "System audio volume",
-                initialValue: slice.muted ? 0.0 : slice.systemAudioVolume,
-                range: 0.0...1.5,
-                formatValue: { "\(Int(round($0 * 100)))%" },
-                onEditingChanged: { editing in
-                    if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
-                },
-                onValueChanged: { newVal in
-                    session.setSliceSystemAudioVolume(id: sliceId, volume: newVal)
-                }
+        // 5. Per-segment volume sliders, one per recorded audio source. They apply ONLY to this `sliceId`.
+        func addVolumeSlider(title: String, value: Double, onChange: @escaping @MainActor (Double) -> Void) {
+            let volumeItem = NSMenuItem()
+            let volumeView = NSHostingView(
+                rootView: MenuEmbeddedSliderRowView(
+                    title: title,
+                    initialValue: value,
+                    range: 0.0...1.0,
+                    formatValue: { "\(Int(round($0 * 100)))%" },
+                    onEditingChanged: { editing in
+                        if editing { session.beginInteractiveEdit() } else { session.endInteractiveEdit() }
+                    },
+                    onValueChanged: onChange
+                )
             )
-        )
-        volumeView.sizingOptions = []
-        volumeView.autoresizingMask = [.width]
-        volumeView.frame = NSRect(x: 0, y: 0, width: 276, height: 54)
-        volumeItem.view = volumeView
-        menu.addItem(volumeItem)
-
-        menu.addItem(.separator())
+            volumeView.sizingOptions = []
+            volumeView.autoresizingMask = [.width]
+            volumeView.frame = NSRect(x: 0, y: 0, width: 276, height: 54)
+            volumeItem.view = volumeView
+            menu.addItem(volumeItem)
+        }
+        let hasMicrophone = session.microphoneAudioFileURL != nil
+        let hasSystemAudio = session.metadata.tracks.systemAudio != nil
+        if hasMicrophone {
+            addVolumeSlider(title: "Microphone volume", value: slice.muted ? 0.0 : slice.microphoneVolume) { newVal in
+                session.setSliceMicrophoneVolume(id: sliceId, volume: newVal)
+            }
+        }
+        if hasSystemAudio {
+            addVolumeSlider(title: "System audio volume", value: slice.muted ? 0.0 : slice.systemAudioVolume) { newVal in
+                session.setSliceSystemAudioVolume(id: sliceId, volume: newVal)
+            }
+        }
+        if hasMicrophone || hasSystemAudio {
+            menu.addItem(.separator())
+        }
 
         // 6. Hide mouse cursor & Disable smooth mouse movement
         let hideCursorItem = makeCommandItem(
@@ -156,7 +169,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
     ) {
         guard let zoom = session.document.timeline.zooms.first(where: { $0.id == zoomId }) else { return }
 
-        let menu = NSMenu(title: "Zoom Context Menu")
+        let menu = NSMenu(title: String(localized: "Zoom Context Menu"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -260,7 +273,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         }
         guard let mask = foundMask else { return }
 
-        let menu = NSMenu(title: "Mask Context Menu")
+        let menu = NSMenu(title: String(localized: "Mask Context Menu"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -383,7 +396,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         at pointInView: NSPoint,
         in parentView: NSView
     ) {
-        let menu = NSMenu(title: "Caption Context Menu")
+        let menu = NSMenu(title: String(localized: "Caption Context Menu"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -413,7 +426,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         at pointInView: NSPoint,
         in parentView: NSView
     ) {
-        let menu = NSMenu(title: "Shortcut Context Menu")
+        let menu = NSMenu(title: String(localized: "Shortcut Context Menu"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -428,7 +441,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         let sameLabelClusters = allClusters.filter { $0.compactTimelineLabel == cluster.compactTimelineLabel }
         if sameLabelClusters.count >= 2 {
             let allSameVisible = sameLabelClusters.allSatisfy { !session.isShortcutHidden($0) }
-            let showEveryItem = makeCommandItem(title: "Show every \(cluster.compactTimelineLabel)", keyEquivalent: "", modifiers: []) {
+            let showEveryItem = makeCommandItem(title: String(localized: "Show every \(cluster.compactTimelineLabel)"), keyEquivalent: "", modifiers: []) {
                 session.setEveryShortcutWithSameLabelHidden(cluster, hidden: allSameVisible)
             }
             showEveryItem.state = allSameVisible ? .on : .off
@@ -475,7 +488,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
     ) {
         guard let seg = session.document.timeline.cameraLayouts.first(where: { $0.id == layoutId }) else { return }
 
-        let menu = NSMenu(title: "Camera Layout Context Menu")
+        let menu = NSMenu(title: String(localized: "Camera Layout Context Menu"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -529,7 +542,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
     ) {
         guard let vo = session.document.timeline.voiceovers.first(where: { $0.id == voiceoverId }) else { return }
 
-        let menu = NSMenu(title: "Voiceover Context Menu")
+        let menu = NSMenu(title: String(localized: "Voiceover Context Menu"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -676,7 +689,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
     ) -> NSMenuItem {
         let handler = ClosureMenuTarget(action: action)
         retainedTargets.append(handler)
-        let item = NSMenuItem(title: title, action: #selector(ClosureMenuTarget.invoke(_:)), keyEquivalent: keyEquivalent)
+        let item = NSMenuItem(title: title.localizedUI, action: #selector(ClosureMenuTarget.invoke(_:)), keyEquivalent: keyEquivalent)
         item.keyEquivalentModifierMask = modifiers
         item.target = handler
         return item
@@ -689,11 +702,11 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
     ) -> NSMenuItem {
         let handler = ClosureMenuTarget(action: action)
         retainedTargets.append(handler)
-        let item = NSMenuItem(title: title, action: #selector(ClosureMenuTarget.invoke(_:)), keyEquivalent: "")
+        let item = NSMenuItem(title: title.localizedUI, action: #selector(ClosureMenuTarget.invoke(_:)), keyEquivalent: "")
         item.target = handler
         let redColor = NSColor(red: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
         item.attributedTitle = NSAttributedString(
-            string: title,
+            string: title.localizedUI,
             attributes: [
                 .foregroundColor: redColor,
                 .font: NSFont.menuFont(ofSize: 13)
@@ -764,7 +777,7 @@ private struct ZoomPaletteHeaderRowView: View {
         VStack(spacing: 5) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-            Text(title)
+            Text(title.localizedUI)
                 .font(.system(size: 12, weight: .medium))
         }
         .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .ink.opacity(0.88))
@@ -831,7 +844,7 @@ private struct MaskPaletteHeaderRowView: View {
         VStack(spacing: 5) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-            Text(title)
+            Text(title.localizedUI)
                 .font(.system(size: 12, weight: .medium))
         }
         .foregroundStyle(isSelected ? kNativeScreenPurpleHighlight : .ink.opacity(0.88))
@@ -911,7 +924,7 @@ private struct MenuEmbeddedSliderRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(title)
+                Text(title.localizedUI)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.ink.opacity(0.95))
                 Spacer()
@@ -1008,7 +1021,7 @@ private struct NativeMenuAppKitSlider: NSViewRepresentable {
 
 extension NativeSegmentContextMenuPresenter {
     public func presentAspectRatioMenu(session: ProjectSession, below buttonView: NSView?) {
-        let menu = NSMenu(title: "Output Aspect Ratio")
+        let menu = NSMenu(title: String(localized: "Output Aspect Ratio"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -1057,7 +1070,7 @@ extension NativeSegmentContextMenuPresenter {
     }
 
     public func presentReelModeMenu(session: ProjectSession, below buttonView: NSView? = nil) {
-        let menu = NSMenu(title: "Reel Mode")
+        let menu = NSMenu(title: String(localized: "Reel Mode"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
@@ -1097,7 +1110,7 @@ extension NativeSegmentContextMenuPresenter {
     }
 
     public func presentPlaybackSpeedMenu(session: ProjectSession) {
-        let menu = NSMenu(title: "Playback Speed")
+        let menu = NSMenu(title: String(localized: "Playback Speed"))
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 

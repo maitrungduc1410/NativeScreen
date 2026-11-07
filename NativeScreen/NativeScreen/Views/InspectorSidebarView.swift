@@ -1631,7 +1631,7 @@ public struct InspectorSidebarView: View {
 
                 if let desc = screenDescriptionText, let spring = hoveredScreenSpring {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(desc)
+                        Text(desc.localizedUI)
                             .font(.system(size: 12.5, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.48))
                             .fixedSize(horizontal: false, vertical: true)
@@ -1782,7 +1782,7 @@ public struct InspectorSidebarView: View {
                     .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.88))
 
-                Text(title)
+                Text(title.localizedUI)
                     .font(.system(size: 12.5, weight: .regular))
                     .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.88))
                     .lineLimit(1)
@@ -1915,7 +1915,7 @@ public struct InspectorSidebarView: View {
                     )
                 } else {
                     coalescedSlider(
-                        title: String(format: "Highlight intensity (%d%%)", Int(round(mask.intensity))),
+                        title: String(format: String(localized: "Highlight intensity (%d%%)"), Int(round(mask.intensity))),
                         value: Binding(
                             get: { mask.intensity },
                             set: { v in updateMask(id: maskId) { $0.intensity = v } }
@@ -2170,7 +2170,7 @@ public struct InspectorSidebarView: View {
                             .frame(width: 15, height: 15)
                             .animation(.easeInOut(duration: 0.18), value: isPreparingSelectedTrack)
 
-                            Text("\(session.isPreviewingBackgroundAudio ? "Stop" : "Play") \(displayTrackTitle)")
+                            Text(session.isPreviewingBackgroundAudio ? "Stop \(displayTrackTitle)" : "Play \(displayTrackTitle)")
                                 .font(.system(size: 13, weight: .medium))
                                 .lineLimit(1)
                         }
@@ -2740,7 +2740,7 @@ public struct InspectorSidebarView: View {
 
                 if let minSil = cam.hideDuringSilenceMs {
                     coalescedSlider(
-                        title: "Minimum silence duration (\(String(format: "%.1fs", minSil / 1000.0)))",
+                        title: String(localized: "Minimum silence duration (\(String(format: "%.1fs", minSil / 1000.0)))"),
                         value: Binding(
                             get: { minSil },
                             set: { v in session.mutate { $0.camera.hideDuringSilenceMs = v } }
@@ -2843,7 +2843,7 @@ public struct InspectorSidebarView: View {
 
                         Button("Load your LUT file...") {
                             let panel = NSOpenPanel()
-                            panel.title = "Choose a 3D LUT (.cube) file"
+                            panel.title = String(localized: "Choose a 3D LUT (.cube) file")
                             panel.allowsMultipleSelection = false
                             if panel.runModal() == .OK, let url = panel.url {
                                 loadLUTFile(from: url)
@@ -3442,7 +3442,7 @@ public struct InspectorSidebarView: View {
             }
 
             if let message = session.transcriptErrorMessage {
-                Text(message)
+                Text(message.localizedUI)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(Color(red: 1.0, green: 0.48, blue: 0.42))
                     .fixedSize(horizontal: false, vertical: true)
@@ -3531,7 +3531,7 @@ public struct InspectorSidebarView: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: "waveform.badge.minus")
                                         .font(.system(size: 12, weight: .medium))
-                                    Text("Remove \(fillerCount) filler \(fillerCount == 1 ? "word" : "words")")
+                                    Text(fillerCount == 1 ? "Remove 1 filler word" : "Remove \(fillerCount) filler words")
                                         .font(.system(size: 12, weight: .medium))
                                 }
                                 .foregroundStyle(.ink.opacity(0.92))
@@ -3558,7 +3558,7 @@ public struct InspectorSidebarView: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: "timeline.selection")
                                         .font(.system(size: 12, weight: .medium))
-                                    Text("Tighten \(pauseCount) \(pauseCount == 1 ? "pause" : "pauses")")
+                                    Text(pauseCount == 1 ? "Tighten 1 pause" : "Tighten \(pauseCount) pauses")
                                         .font(.system(size: 12, weight: .medium))
                                 }
                                 .foregroundStyle(.ink.opacity(0.92))
@@ -3900,7 +3900,7 @@ public struct InspectorSidebarView: View {
     private func loadLUTFile(from url: URL) {
         guard let text = try? String(contentsOf: url, encoding: .utf8), CubeLUTFile.parse(text) != nil else {
             let alert = NSAlert()
-            alert.messageText = "This file is not a 3D LUT"
+            alert.messageText = String(localized: "This file is not a 3D LUT")
             alert.informativeText = url.lastPathComponent
             alert.runModal()
             return
@@ -4167,7 +4167,7 @@ public struct InspectorSidebarView: View {
                             )
                     )
 
-                Text(label)
+                Text(label.localizedUI)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.ink.opacity(isSelected ? 0.96 : 0.72))
             }
@@ -5830,7 +5830,7 @@ public struct InspectorSidebarView: View {
             HStack(spacing: 7) {
                 Image(systemName: icon)
                     .font(.system(size: 13.5, weight: .regular))
-                Text(title)
+                Text(title.localizedUI)
                     .font(.system(size: 13.5, weight: .regular))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -5904,12 +5904,12 @@ public struct InspectorSidebarView: View {
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.88))
                     }
-                    Text(title)
+                    Text(title.localizedUI)
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.ink.opacity(0.92))
                 }
                 if let desc = description {
-                    Text(desc)
+                    Text(desc.localizedUI)
                         .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(.ink.opacity(0.45))
                         .fixedSize(horizontal: false, vertical: true)
@@ -5933,7 +5933,7 @@ public struct InspectorSidebarView: View {
     ) -> some View {
         Button(action: action) {
             ZStack {
-                Text(title)
+                Text(title.localizedUI)
                     .font(.system(size: 13.0, weight: .regular))
                     .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.82))
                     .lineLimit(1)
@@ -5992,7 +5992,7 @@ public struct InspectorSidebarView: View {
                             .font(.system(size: 13.5, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.85))
                     }
-                    Text(title)
+                    Text(title.localizedUI)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.ink.opacity(0.92))
                     Spacer()
@@ -6037,7 +6037,7 @@ public struct InspectorSidebarView: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.ink.opacity(0.88))
                 }
-                Text(title)
+                Text(title.localizedUI)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.ink.opacity(0.92))
             }
@@ -6079,8 +6079,13 @@ public struct InspectorSidebarView: View {
                 } label: {
                     Text("Reset")
                         .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .foregroundStyle(isModified ? .ink.opacity(0.95) : .ink.opacity(0.28))
-                        .frame(width: 66, height: 32)
+                        .padding(.horizontal, 6)
+                        .frame(minWidth: 66)
+                        .frame(height: 32)
+                        .fixedSize(horizontal: true, vertical: false)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(Color.ink.opacity(isModified ? 0.07 : 0.03))

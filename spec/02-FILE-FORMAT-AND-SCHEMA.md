@@ -331,6 +331,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
         "sourceEndMs": 64754.38,
         "speed": 1.0,
         "systemAudioVolume": 1.0,
+        "microphoneVolume": 1.0,
         "muted": false,
         "hideCursor": false,
         "disableSmoothCursor": false

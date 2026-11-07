@@ -18,9 +18,9 @@ public enum WhisperModelTier: String, Codable, CaseIterable, Identifiable, Senda
 
     public var label: String {
         switch self {
-        case .base: return "Base"
-        case .small: return "Small"
-        case .medium: return "Medium"
+        case .base: return String(localized: "Base")
+        case .small: return String(localized: "Small")
+        case .medium: return String(localized: "Medium")
         }
     }
 
@@ -128,7 +128,7 @@ public final class WhisperModelDownloadManager: NSObject, URLSessionDownloadDele
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.icon = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download Whisper Model")
-        alert.messageText = "Download OpenAI Whisper (\(tier.label)) Model?"
+        alert.messageText = String(localized: "Download OpenAI Whisper (\(tier.label)) Model?")
         alert.informativeText = """
         Native Screen will download the open-source OpenAI Whisper "\(tier.label)" (\(tier.fileName), ~\(tier.sizeDescription)) speech recognition model to your Mac:
 
@@ -136,8 +136,8 @@ public final class WhisperModelDownloadManager: NSObject, URLSessionDownloadDele
 
         Once downloaded, all transcription runs 100% locally on your Mac with zero cloud uploads. You can cancel the download at any time.
         """
-        alert.addButton(withTitle: "Download (\(tier.sizeDescription))")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Download (\(tier.sizeDescription))"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
 
         NSApp.activate(ignoringOtherApps: true)
         let response = alert.runModal()
@@ -318,11 +318,11 @@ public enum LocalOnDeviceMediaIntelligence {
         public var errorDescription: String? {
             switch self {
             case .permissionDenied:
-                return "Speech recognition is not allowed. Enable it for Native Screen in System Settings > Privacy & Security > Speech Recognition."
+                return String(localized: "Speech recognition is not allowed. Enable it for Native Screen in System Settings > Privacy & Security > Speech Recognition.")
             case .unsupportedLanguage:
-                return "On-device speech recognition does not support this language."
+                return String(localized: "On-device speech recognition does not support this language.")
             case .noSpeechFound:
-                return "No speech was found in this recording."
+                return String(localized: "No speech was found in this recording.")
             }
         }
     }

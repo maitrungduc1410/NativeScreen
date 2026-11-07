@@ -26,6 +26,8 @@ Where the Swift code and a spec disagree, the Swift code wins.
 | `Document/ProjectSession.swift` | split | Logic → Core services: undo stack (snapshot based), selection/split/move/resize rules, mask keyframe math, typing-suggestion detection, shortcut clustering and normalization, camera layout track, voiceover track, transcript edits. UI state (hover, selection, playhead, popovers) → `App/ViewModels/ProjectSessionViewModel`. |
 | `Document/ProjectWorkspaceStore.swift` | `App/Workspace/*` | Recent projects, window management, save prompts, presets store, directories. |
 | `Document/AppSettings.swift`, `EditorViewPreferences.swift` | `App/Settings/*` | Stored in `%LOCALAPPDATA%\NativeScreen\settings.json`. |
+| `Document/TimelineSnapping.swift` | `Core/Timeline/TimelineSnapping.cs` | Targets and nearest-edge rules exact (ADR-43); the guide line is App. |
+| `Document/AppLanguage.swift`, `Localizable.xcstrings` | `App/Localization/*` | Same languages and the same catalog file as the source of truth (ADR-44). |
 | `Document/VideoProjectImporter.swift` | `Media/Import/VideoProjectImporter.cs` | Same package layout. |
 | `Engine/MetalFrameCompositor.swift`, `Engine/EffectKernels.swift`, `Engine/CursorSpriteProvider.swift` | `Rendering/*` | Per `spec/07`. |
 | `Engine/MetalPreviewView.swift` | `App/Preview/*` + `Media/Playback/*` | Playback engine and preview loop per the platform guide §3–§5. |

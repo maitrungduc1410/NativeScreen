@@ -89,13 +89,13 @@ public enum AspectRatioPreset: String, Codable, CaseIterable, Identifiable, Send
 
     public var titleName: String {
         switch self {
-        case .widescreen16x9: return "Wide"
-        case .square1x1: return "Square"
-        case .classic4x3: return "Classic"
-        case .vertical9x16: return "Vertical"
-        case .tall3x4: return "Tall"
-        case .portrait4x5: return "Portrait"
-        case .mac16x10: return "Display"
+        case .widescreen16x9: return String(localized: "Wide")
+        case .square1x1: return String(localized: "Square")
+        case .classic4x3: return String(localized: "Classic")
+        case .vertical9x16: return String(localized: "Vertical")
+        case .tall3x4: return String(localized: "Tall")
+        case .portrait4x5: return String(localized: "Portrait")
+        case .mac16x10: return String(localized: "Display")
         }
     }
 
@@ -192,11 +192,11 @@ public enum BackgroundType: String, Codable, CaseIterable, Identifiable, Sendabl
 
     public var label: String {
         switch self {
-        case .mesh: return "Mesh"
-        case .wallpaper: return "macOS"
-        case .gradient: return "Gradient"
-        case .solid: return "Color"
-        case .image: return "Custom"
+        case .mesh: return String(localized: "Mesh")
+        case .wallpaper: return String(localized: "macOS")
+        case .gradient: return String(localized: "Gradient")
+        case .solid: return String(localized: "Color")
+        case .image: return String(localized: "Custom")
         }
     }
 }
@@ -453,17 +453,17 @@ public enum CursorRotationMode: String, Codable, CaseIterable, Identifiable, Sen
 
     public var label: String {
         switch self {
-        case .tilt: return "Tilt"
-        case .follow: return "Follow"
+        case .tilt: return String(localized: "Tilt")
+        case .follow: return String(localized: "Follow")
         }
     }
 
     public var descriptionText: String {
         switch self {
         case .tilt:
-            return "Leans with fast horizontal movement, settling back upright at rest."
+            return String(localized: "Leans with fast horizontal movement, settling back upright at rest.")
         case .follow:
-            return "Points along the direction of travel, like pulled on a leash - and keeps its bearing at rest."
+            return String(localized: "Points along the direction of travel, like pulled on a leash - and keeps its bearing at rest.")
         }
     }
 }
@@ -652,19 +652,19 @@ public enum CameraColorGradePreset: String, Codable, CaseIterable, Identifiable,
 
     public var descriptionText: String {
         switch self {
-        case .original: return "Original ungraded camera feed"
-        case .studio: return "Evened-out skin, gentle filmic contrast, warm-vs-cool separation"
-        case .cinema: return "Shadows dive into teal while skin stays warm and full"
-        case .film: return "35mm print emulation with creamy shoulder and warm mids"
-        case .golden: return "Golden-hour amber warmth with honeyed highlights"
-        case .cream: return "Soft pastel portrait film with open shadows and milky highlights"
-        case .terra: return "Earthy terracotta warmth and muted sage greens"
-        case .moody: return "Deep atmospheric tonality with warm skin in cool shadows"
-        case .arctic: return "Bright crisp winter daylight with clean icy highlights"
-        case .neon: return "Late-night electric violet shadows with true warm skin"
-        case .punch: return "Vivid commercial contrast and disciplined color pop"
-        case .fade: return "Sun-bleached nostalgia with lifted blacks and softened highlights"
-        case .mono: return "Warm classic black & white with orange-filter skin luminance"
+        case .original: return String(localized: "Original ungraded camera feed")
+        case .studio: return String(localized: "Evened-out skin, gentle filmic contrast, warm-vs-cool separation")
+        case .cinema: return String(localized: "Shadows dive into teal while skin stays warm and full")
+        case .film: return String(localized: "35mm print emulation with creamy shoulder and warm mids")
+        case .golden: return String(localized: "Golden-hour amber warmth with honeyed highlights")
+        case .cream: return String(localized: "Soft pastel portrait film with open shadows and milky highlights")
+        case .terra: return String(localized: "Earthy terracotta warmth and muted sage greens")
+        case .moody: return String(localized: "Deep atmospheric tonality with warm skin in cool shadows")
+        case .arctic: return String(localized: "Bright crisp winter daylight with clean icy highlights")
+        case .neon: return String(localized: "Late-night electric violet shadows with true warm skin")
+        case .punch: return String(localized: "Vivid commercial contrast and disciplined color pop")
+        case .fade: return String(localized: "Sun-bleached nostalgia with lifted blacks and softened highlights")
+        case .mono: return String(localized: "Warm classic black & white with orange-filter skin luminance")
         }
     }
 }
@@ -896,26 +896,26 @@ public enum MicrophoneAudioPreset: String, Codable, CaseIterable, Identifiable, 
 
     public var label: String {
         switch self {
-        case .off: return "Off"
-        case .standard: return "Standard"
-        case .loud: return "Loud"
-        case .noiseReduction: return "Noise reduction"
-        case .podcast: return "Podcast"
+        case .off: return String(localized: "Off")
+        case .standard: return String(localized: "Standard")
+        case .loud: return String(localized: "Loud")
+        case .noiseReduction: return String(localized: "Noise reduction")
+        case .podcast: return String(localized: "Podcast")
         }
     }
 
     public var descriptionText: String {
         switch self {
         case .off:
-            return "Plays your microphone as recorded."
+            return String(localized: "Plays your microphone as recorded.")
         case .standard:
-            return "Adjusts your voice to a consistent volume. Its character stays the same."
+            return String(localized: "Adjusts your voice to a consistent volume. Its character stays the same.")
         case .loud:
-            return "Boosts your voice to a consistent, loud volume."
+            return String(localized: "Boosts your voice to a consistent, loud volume.")
         case .noiseReduction:
-            return "Boosts your voice and reduces background noise and room echo."
+            return String(localized: "Boosts your voice and reduces background noise and room echo.")
         case .podcast:
-            return "Gives your voice the depth and clarity of a studio recording. Done locally on device."
+            return String(localized: "Gives your voice the depth and clarity of a studio recording. Done locally on device.")
         }
     }
 }
@@ -977,9 +977,9 @@ public enum CaptionFontStyle: String, Codable, CaseIterable, Identifiable, Senda
 
     public var label: String {
         switch self {
-        case .sansSerif: return "Sans-serif"
-        case .serif: return "Serif"
-        case .mono: return "Mono"
+        case .sansSerif: return String(localized: "Sans-serif")
+        case .serif: return String(localized: "Serif")
+        case .mono: return String(localized: "Mono")
         }
     }
 }
@@ -992,17 +992,17 @@ public enum CaptionWordsReveal: String, Codable, CaseIterable, Identifiable, Sen
 
     public var label: String {
         switch self {
-        case .lineByLine: return "Line by line"
-        case .wordByWord: return "Word by word"
+        case .lineByLine: return String(localized: "Line by line")
+        case .wordByWord: return String(localized: "Word by word")
         }
     }
 
     public var descriptionText: String {
         switch self {
         case .lineByLine:
-            return "Show whole caption lines as their words are spoken."
+            return String(localized: "Show whole caption lines as their words are spoken.")
         case .wordByWord:
-            return "Show one word at a time. Each spoken word pushes the previous one out."
+            return String(localized: "Show one word at a time. Each spoken word pushes the previous one out.")
         }
     }
 }
@@ -1016,20 +1016,20 @@ public enum CaptionLineGrowth: String, Codable, CaseIterable, Identifiable, Send
 
     public var label: String {
         switch self {
-        case .fullLine: return "Full line"
-        case .expanding: return "Expanding"
-        case .centered: return "Centered"
+        case .fullLine: return String(localized: "Full line")
+        case .expanding: return String(localized: "Expanding")
+        case .centered: return String(localized: "Centered")
         }
     }
 
     public var descriptionText: String {
         switch self {
         case .fullLine:
-            return "The line box appears at its full size right away."
+            return String(localized: "The line box appears at its full size right away.")
         case .expanding:
-            return "The line box grows from its left edge as words are spoken."
+            return String(localized: "The line box grows from its left edge as words are spoken.")
         case .centered:
-            return "The line box grows while staying centered as words are spoken."
+            return String(localized: "The line box grows while staying centered as words are spoken.")
         }
     }
 }
@@ -1043,20 +1043,20 @@ public enum CaptionWordAnimation: String, Codable, CaseIterable, Identifiable, S
 
     public var label: String {
         switch self {
-        case .appear: return "Appear"
-        case .fadeIn: return "Fade in"
-        case .slideIn: return "Slide in"
+        case .appear: return String(localized: "Appear")
+        case .fadeIn: return String(localized: "Fade in")
+        case .slideIn: return String(localized: "Slide in")
         }
     }
 
     public var descriptionText: String {
         switch self {
         case .appear:
-            return "Words pop in as they are spoken."
+            return String(localized: "Words pop in as they are spoken.")
         case .fadeIn:
-            return "Upcoming words are shown dimmed and light up when spoken."
+            return String(localized: "Upcoming words are shown dimmed and light up when spoken.")
         case .slideIn:
-            return "Words slide into place as they are spoken."
+            return String(localized: "Words slide into place as they are spoken.")
         }
     }
 }
@@ -1069,8 +1069,8 @@ public enum CaptionColorTheme: String, Codable, CaseIterable, Identifiable, Send
 
     public var label: String {
         switch self {
-        case .dark: return "Dark"
-        case .light: return "Light"
+        case .dark: return String(localized: "Dark")
+        case .light: return String(localized: "Light")
         }
     }
 }
@@ -1120,10 +1120,10 @@ public enum ShortcutDockPosition: String, Codable, CaseIterable, Identifiable, S
 
     public var label: String {
         switch self {
-        case .bottom: return "Bottom"
-        case .top: return "Top"
-        case .left: return "Left"
-        case .right: return "Right"
+        case .bottom: return String(localized: "Bottom")
+        case .top: return String(localized: "Top")
+        case .left: return String(localized: "Left")
+        case .right: return String(localized: "Right")
         }
     }
 
@@ -1150,9 +1150,9 @@ public enum ShortcutColorMode: String, Codable, CaseIterable, Identifiable, Send
 
     public var label: String {
         switch self {
-        case .defaultDark: return "Default"
-        case .solid: return "Solid"
-        case .gradient: return "Gradient"
+        case .defaultDark: return String(localized: "Default")
+        case .solid: return String(localized: "Solid")
+        case .gradient: return String(localized: "Gradient")
         }
     }
 }
@@ -1552,6 +1552,8 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var sourceEndMs: Double
     public var speed: Double
     public var systemAudioVolume: Double
+    /// Multiplies `audio.microphoneVolume` while this slice plays. Missing in files from older builds, read as 1.
+    public var microphoneVolume: Double
     public var muted: Bool
     public var hideCursor: Bool
     public var disableSmoothCursor: Bool
@@ -1562,6 +1564,7 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
         sourceEndMs: Double,
         speed: Double = 1.0,
         systemAudioVolume: Double = 1.0,
+        microphoneVolume: Double = 1.0,
         muted: Bool = false,
         hideCursor: Bool = false,
         disableSmoothCursor: Bool = false
@@ -1571,6 +1574,7 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.sourceEndMs = sourceEndMs
         self.speed = max(0.1, speed)
         self.systemAudioVolume = max(0.0, min(2.0, systemAudioVolume))
+        self.microphoneVolume = max(0.0, min(2.0, microphoneVolume))
         self.muted = muted
         self.hideCursor = hideCursor
         self.disableSmoothCursor = disableSmoothCursor
@@ -1582,6 +1586,7 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
         case sourceEndMs
         case speed
         case systemAudioVolume
+        case microphoneVolume
         case muted
         case hideCursor
         case disableSmoothCursor
@@ -1594,6 +1599,7 @@ public struct ClipSlice: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.sourceEndMs = try container.decode(Double.self, forKey: .sourceEndMs)
         self.speed = max(0.1, try container.decodeIfPresent(Double.self, forKey: .speed) ?? 1.0)
         self.systemAudioVolume = max(0.0, min(2.0, try container.decodeIfPresent(Double.self, forKey: .systemAudioVolume) ?? 1.0))
+        self.microphoneVolume = max(0.0, min(2.0, try container.decodeIfPresent(Double.self, forKey: .microphoneVolume) ?? 1.0))
         self.muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         self.hideCursor = try container.decodeIfPresent(Bool.self, forKey: .hideCursor) ?? false
         self.disableSmoothCursor = try container.decodeIfPresent(Bool.self, forKey: .disableSmoothCursor) ?? false
@@ -1857,21 +1863,21 @@ public enum CameraTimelineLayoutType: String, Codable, CaseIterable, Identifiabl
 
     public var label: String {
         switch self {
-        case .cameraOverlay: return "Camera overlay"
-        case .splitScreen: return "Split screen"
-        case .cutoutCamera: return "Camera cutout"
-        case .fullscreenCamera: return "Fullscreen camera"
-        case .screenOnly: return "Only screen"
+        case .cameraOverlay: return String(localized: "Camera overlay")
+        case .splitScreen: return String(localized: "Split screen")
+        case .cutoutCamera: return String(localized: "Camera cutout")
+        case .fullscreenCamera: return String(localized: "Fullscreen camera")
+        case .screenOnly: return String(localized: "Only screen")
         }
     }
 
     public var timelineSubtitle: String {
         switch self {
-        case .cameraOverlay: return "Camera overlay"
-        case .splitScreen: return "Split screen"
-        case .cutoutCamera: return "Camera cutout"
-        case .fullscreenCamera: return "Fullscreen"
-        case .screenOnly: return "Screen only"
+        case .cameraOverlay: return String(localized: "Camera overlay")
+        case .splitScreen: return String(localized: "Split screen")
+        case .cutoutCamera: return String(localized: "Camera cutout")
+        case .fullscreenCamera: return String(localized: "Fullscreen")
+        case .screenOnly: return String(localized: "Screen only")
         }
     }
 
@@ -1937,17 +1943,17 @@ public enum VoiceoverAttachMode: String, Codable, CaseIterable, Identifiable, Se
 
     public var label: String {
         switch self {
-        case .independent: return "Independent"
-        case .synchronized: return "Synchronized"
+        case .independent: return String(localized: "Independent")
+        case .synchronized: return String(localized: "Synchronized")
         }
     }
 
     public var descriptionText: String {
         switch self {
         case .independent:
-            return "Voiceover plays independently of the recording, even if the recording speed is changed or parts of the recording are cut out."
+            return String(localized: "Voiceover plays independently of the recording, even if the recording speed is changed or parts of the recording are cut out.")
         case .synchronized:
-            return "Voiceover plays along with the recording. Voiceover automatically adjusts to the recording speed and is cut out if parts of the recording are cut out."
+            return String(localized: "Voiceover plays along with the recording. Voiceover automatically adjusts to the recording speed and is cut out if parts of the recording are cut out.")
         }
     }
 }

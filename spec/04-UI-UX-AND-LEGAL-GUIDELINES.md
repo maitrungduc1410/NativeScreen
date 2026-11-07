@@ -61,7 +61,7 @@ Each `.nativescreen` project opens in its own Editor Window with 4 zones:
 │                  00:12.40  ⏮  ▶️  ⏭  01:04.45        │ [🔒] Masks / Blur   │
 │                                                      │ [🔊] Audio          │
 ├──────────────────────────────────────────────────────┴─────────────────────┤
-│ ✂️ Split | + Zoom | + Blur Mask                           🔍 Timeline Zoom │
+│ ✂️ Split | 🧲 Snap | + Zoom | + Blur Mask                 🔍 Timeline Zoom │
 │ 0:00          0:05          0:10          0:15          0:20          0:25 │
 │ ██████████████████████████████████████████████████████████████████████████ │ <- Clip Slice Track (Orange)
 │       ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒               ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ │ <- Auto-Zoom Track (Purple)
@@ -95,6 +95,18 @@ To keep **NativeScreen** distributable under its open-source license (MIT) on Gi
    - Capture the active system cursor image directly from macOS (`NSCursor` / CoreGraphics cursor APIs) during recording, or render clean vector cursor SVGs/PDFs designed specifically for NativeScreen.
 4. **Synthesized / Royalty-Free Click Sounds:**
    - Generate crisp mechanical & capacitive mouse click audio (`down.wav`, `up.wav`) procedurally via DSP synthesis (or CC0 Public Domain recordings).
+
+### Timeline snapping
+
+The snap button sits right after the split button and uses the same lit style: purple icon on a highlighted fill while on, plain icon while off. Its tooltip says `Snapping on` or `Snapping off`. While an edge is snapped, a 1 pt purple line runs down the tracks at that time.
+
+### Timeline zoom
+
+Hold `⌘` (`Ctrl` on Windows) and scroll over the ruler, the track labels or the lanes to zoom the timeline. The time under the cursor stays where it is (`spec/06` ADR-45). The zoom buttons and `⌘+` / `⌘-` keep the playhead in place.
+
+### Language
+
+`Settings > General > Language` lists `System`, then each language in its own name (`Tiếng Việt`, `日本語`, ...). Changing it shows `Restart Native Screen to use the new language.` with `Restart Now`. Every new UI string must go through the catalog (`spec/06` ADR-44): a literal in a SwiftUI control, `String(localized:)` for AppKit and display names, or `.localizedUI` inside a component that takes a `String`. Leave room for text 40% longer than English.
 
 ### Caption tracks in the inspector
 

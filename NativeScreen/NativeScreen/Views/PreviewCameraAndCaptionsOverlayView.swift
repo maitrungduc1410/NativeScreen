@@ -579,7 +579,7 @@ public struct StandaloneCameraCropWindowView: View {
 
     @ViewBuilder
     private func cropDimensionBadge(_ text: String) -> some View {
-        Text(text)
+        Text(text.localizedUI)
             .font(.system(size: 12, weight: .regular).monospacedDigit())
             .foregroundStyle(.white.opacity(0.94))
             .frame(minWidth: 46)
@@ -867,7 +867,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
     ) -> some View {
         let isAtDefault = abs(value.wrappedValue - defaultValue) < 0.005
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(title.localizedUI)
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(.white.opacity(0.92))
 

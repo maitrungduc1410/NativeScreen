@@ -31,10 +31,10 @@ private struct SettingsRow<Control: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 24) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                Text(title.localizedUI)
                     .font(.system(size: 13, weight: .medium))
                 if let description {
-                    Text(description)
+                    Text(description.localizedUI)
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -76,7 +76,7 @@ private struct DirectoryRow: View {
                     panel.canChooseFiles = false
                     panel.canCreateDirectories = true
                     panel.directoryURL = URL(fileURLWithPath: path)
-                    panel.prompt = "Choose"
+                    panel.prompt = String(localized: "Choose")
                     if panel.runModal() == .OK, let url = panel.url {
                         onChoose(url)
                     }
@@ -91,6 +91,7 @@ private struct DirectoryRow: View {
 private struct GeneralSettingsTab: View {
     @Bindable private var settings = AppSettings.shared
     @State private var isConfirmingReset = false
+    @State private var language = AppLanguage.current
 
     var body: some View {
         SettingsPage {
@@ -113,6 +114,31 @@ private struct GeneralSettingsTab: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+            }
+
+            SettingsRow(
+                title: "Language",
+                description: "Language for Native Screen only. System follows the language order in System Settings."
+            ) {
+                Picker("", selection: Binding(
+                    get: { language },
+                    set: { newValue in
+                        language = newValue
+                        AppLanguage.choose(newValue)
+                    }
+                )) {
+                    Text(AppLanguage.system.title).tag(AppLanguage.system)
+                    Divider()
+                    ForEach(AppLanguage.allCases.filter { $0 != .system }) { Text(verbatim: $0.title).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+
+            if language != AppLanguage.atLaunch {
+                SettingsRow(title: "Restart Native Screen to use the new language.") {
+                    Button("Restart Now") { AppLanguage.relaunch() }
+                }
             }
 
             Divider().padding(.vertical, 8)
@@ -375,7 +401,7 @@ private struct ShortcutsSettingsTab: View {
     var body: some View {
         SettingsPage {
             Picker("", selection: $section) {
-                ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(Section.allCases) { Text($0.rawValue.localizedUI).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -388,7 +414,7 @@ private struct ShortcutsSettingsTab: View {
                     Image(systemName: shortcut.icon)
                         .frame(width: 20)
                         .foregroundStyle(.secondary)
-                    Text(shortcut.title)
+                    Text(shortcut.title.localizedUI)
                         .font(.system(size: 13))
                     Spacer()
                     Text(shortcut.keys)

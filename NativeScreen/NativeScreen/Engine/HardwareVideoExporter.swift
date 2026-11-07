@@ -28,9 +28,9 @@ public final class HardwareVideoExporter {
 
         public var label: String {
             switch self {
-            case .mp4: return "MP4"
-            case .prores: return "ProRes"
-            case .gif: return "GIF"
+            case .mp4: return String(localized: "MP4")
+            case .prores: return String(localized: "ProRes")
+            case .gif: return String(localized: "GIF")
             }
         }
 
@@ -71,23 +71,23 @@ public final class HardwareVideoExporter {
 
         public var label: String {
             switch self {
-            case .studio: return "Studio"
-            case .socialMedia: return "Social Media"
-            case .web: return "Web"
-            case .webLow: return "Web (Low)"
+            case .studio: return String(localized: "Studio")
+            case .socialMedia: return String(localized: "Social Media")
+            case .web: return String(localized: "Web")
+            case .webLow: return String(localized: "Web (Low)")
             }
         }
 
         public var descriptionText: String {
             switch self {
             case .studio:
-                return "Highest quality, best for further editing. Compression is almost impossible to notice."
+                return String(localized: "Highest quality, best for further editing. Compression is almost impossible to notice.")
             case .socialMedia:
-                return "Good for sharing on social media, etc. Compression is noticeable when taking a good look. Keep in mind that social media server might further compress the video."
+                return String(localized: "Good for sharing on social media, etc. Compression is noticeable when taking a good look. Keep in mind that social media server might further compress the video.")
             case .web:
-                return "Good for directly playing on websites. Compression is slightly visible, but not distracting."
+                return String(localized: "Good for directly playing on websites. Compression is slightly visible, but not distracting.")
             case .webLow:
-                return "Good for sharing on the web, where quality is less important, increasing loading speed. Compression is clearly visible."
+                return String(localized: "Good for sharing on the web, where quality is less important, increasing loading speed. Compression is clearly visible.")
             }
         }
 
@@ -124,19 +124,19 @@ public final class HardwareVideoExporter {
         public var label: String {
             switch self {
             case .h264: return "H.264"
-            case .h265: return "HEVC"
-            case .both: return "Both"
+            case .h265: return String(localized: "HEVC")
+            case .both: return String(localized: "Both")
             }
         }
 
         public var descriptionText: String {
             switch self {
             case .h264:
-                return "Great compatibility. Can play literally everywhere. Worse quality to file size ratio than HEVC."
+                return String(localized: "Great compatibility. Can play literally everywhere. Worse quality to file size ratio than HEVC.")
             case .h265:
-                return "Better quality to file size ratio than H.264. Not every player can open it."
+                return String(localized: "Better quality to file size ratio than H.264. Not every player can open it.")
             case .both:
-                return "Saves both an H.264 and an HEVC file next to each other. Export may be slower, since it has to encode two files at once."
+                return String(localized: "Saves both an H.264 and an HEVC file next to each other. Export may be slower, since it has to encode two files at once.")
             }
         }
     }
@@ -151,9 +151,9 @@ public final class HardwareVideoExporter {
 
         public var label: String {
             switch self {
-            case .lt422: return "422 LT"
+            case .lt422: return String(localized: "422 LT")
             case .standard422: return "422"
-            case .hq422: return "422 HQ"
+            case .hq422: return String(localized: "422 HQ")
             case .p4444: return "4444"
             }
         }
@@ -161,13 +161,13 @@ public final class HardwareVideoExporter {
         public var descriptionText: String {
             switch self {
             case .lt422:
-                return "Smaller files for editing. Some detail is lost in fine gradients."
+                return String(localized: "Smaller files for editing. Some detail is lost in fine gradients.")
             case .standard422:
-                return "The standard for editing. Visually lossless for most recordings."
+                return String(localized: "The standard for editing. Visually lossless for most recordings.")
             case .hq422:
-                return "Visually lossless, even for detailed screens and gradients. The usual choice for editing and archiving."
+                return String(localized: "Visually lossless, even for detailed screens and gradients. The usual choice for editing and archiving.")
             case .p4444:
-                return "Full color resolution, for color grading and compositing. The largest files."
+                return String(localized: "Full color resolution, for color grading and compositing. The largest files.")
             }
         }
 
@@ -199,8 +199,8 @@ public final class HardwareVideoExporter {
 
         public var label: String {
             switch self {
-            case .file: return "File"
-            case .clipboard: return "Clipboard"
+            case .file: return String(localized: "File")
+            case .clipboard: return String(localized: "Clipboard")
             }
         }
 
@@ -213,8 +213,8 @@ public final class HardwareVideoExporter {
 
         public var primaryButtonTitle: String {
             switch self {
-            case .file: return "Export to file..."
-            case .clipboard: return "Export to clipboard"
+            case .file: return String(localized: "Export to file...")
+            case .clipboard: return String(localized: "Export to clipboard")
             }
         }
     }
@@ -1535,7 +1535,7 @@ public final class HardwareVideoExporter {
                         if abs(slice.speed - 1.0) > 0.01 {
                             compMicTrack.scaleTimeRange(CMTimeRange(start: destStartCM, duration: sliceDurCM), toDuration: destDurCM)
                         }
-                        let baseVol = slice.muted ? Float(0.0) : Float(min(1.0, max(0.0, doc.audio.microphoneVolume * Double(masterVol))))
+                        let baseVol = slice.muted ? Float(0.0) : Float(min(1.0, max(0.0, slice.microphoneVolume * doc.audio.microphoneVolume * Double(masterVol))))
                         params.setVolume(baseVol, at: destStartCM)
                         hasInsertedAny = true
                     }
@@ -1546,7 +1546,10 @@ public final class HardwareVideoExporter {
                        let tEnd = session.timeMapper.timelineTime(forSourceMs: vo.sourceEndMs),
                        tEnd > tStart {
                         params.setVolume(0.0, at: CMTime(seconds: tStart / 1000.0, preferredTimescale: 600))
-                        let baseVol = Float(min(1.0, max(0.0, doc.audio.microphoneVolume * Double(masterVol))))
+                        // Back to the volume of the slice playing at `tEnd`, not the project-wide one.
+                        let sliceAtEnd = mappedSlices.first { tEnd >= $0.timelineStartMs && tEnd < $0.timelineEndMs }?.slice
+                        let baseVol = (sliceAtEnd?.muted ?? false) ? Float(0.0)
+                            : Float(min(1.0, max(0.0, (sliceAtEnd?.microphoneVolume ?? 1.0) * doc.audio.microphoneVolume * Double(masterVol))))
                         params.setVolume(baseVol, at: CMTime(seconds: tEnd / 1000.0, preferredTimescale: 600))
                     }
                 }

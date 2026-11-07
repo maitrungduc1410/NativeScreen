@@ -464,7 +464,7 @@ public struct ProjectEditorWindowView: View {
                                             ForEach(CameraTimelineLayoutType.allCases) { layoutType in
                                                 quickDockIconButton(
                                                     icon: layoutType.quickDockIcon,
-                                                    tooltip: "\(layoutType.label) layout"
+                                                    tooltip: String(localized: "\(layoutType.label) layout")
                                                 ) {
                                                     session.addCameraLayoutAtPlayhead(type: layoutType)
                                                 }
@@ -562,6 +562,26 @@ public struct ProjectEditorWindowView: View {
                                     )
                             }
 
+                            // Segment snapping, on by default and remembered across launches.
+                            let isSnapping = EditorViewPreferences.shared.snapToSegments
+                            InstantTooltipButton(
+                                tooltip: isSnapping ? "Snapping on" : "Snapping off",
+                                edge: .top,
+                                isActive: isSnapping,
+                                size: 36,
+                                cornerRadius: 6
+                            ) {
+                                EditorViewPreferences.shared.snapToSegments.toggle()
+                            } label: {
+                                Image(systemName: "arrow.right.and.line.vertical.and.arrow.left")
+                                    .font(.system(size: 14.0, weight: .medium))
+                                    .foregroundStyle(
+                                        isSnapping
+                                            ? Color(red: 0.65, green: 0.58, blue: 1.0)
+                                            : .ink.opacity(0.88)
+                                    )
+                            }
+
                             Spacer()
                         }
                         .padding(.leading, 14)
@@ -647,10 +667,7 @@ public struct ProjectEditorWindowView: View {
                                     .foregroundStyle(.ink.opacity(0.92))
                             }
 
-                            Slider(value: $session.timelineZoom, in: 1.0...6.0)
-                                .tint(kNativeScreenPurpleAccent)
-                                .frame(width: 96)
-                                .controlSize(.small)
+                            TimelineZoomSlider(session: session)
                         }
                         .padding(.trailing, 14)
                     }
@@ -842,10 +859,10 @@ public struct ProjectEditorWindowView: View {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Delete this project?"
-        alert.informativeText = "This action cannot be undone."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = String(localized: "Delete this project?")
+        alert.informativeText = String(localized: "This action cannot be undone.")
+        alert.addButton(withTitle: String(localized: "Delete"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
 
         if let window = NSApp.keyWindow {
             alert.beginSheetModal(for: window) { response in
@@ -1272,7 +1289,7 @@ public struct ProjectEditorWindowView: View {
             UserDefaults.standard.set(true, forKey: "NSNavPanelExpandedStateForSaveMode")
 
             let savePanel = NSSavePanel()
-            savePanel.message = "Where to save new recording export?"
+            savePanel.message = String(localized: "Where to save new recording export?")
             savePanel.canCreateDirectories = true
             savePanel.showsTagField = false
             savePanel.isExtensionHidden = false
@@ -1299,14 +1316,14 @@ public struct ProjectEditorWindowView: View {
                     if let cautionIcon = NSImage(named: NSImage.cautionName) {
                         alert.icon = cautionIcon
                     }
-                    alert.messageText = "“\(hevcURL.lastPathComponent)” already exists. Do you want to replace it?"
+                    alert.messageText = String(localized: "“\(hevcURL.lastPathComponent)” already exists. Do you want to replace it?")
                     let folderName = hevcURL.deletingLastPathComponent().lastPathComponent
                     alert.informativeText = folderName == "Desktop"
                         ? "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents."
                         : "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents."
-                    let replaceBtn = alert.addButton(withTitle: "Replace")
+                    let replaceBtn = alert.addButton(withTitle: String(localized: "Replace"))
                     replaceBtn.hasDestructiveAction = true
-                    alert.addButton(withTitle: "Cancel")
+                    alert.addButton(withTitle: String(localized: "Cancel"))
                     guard alert.runModal() == .alertFirstButtonReturn else { return }
                 }
             }
@@ -1459,7 +1476,7 @@ private struct BottomToastBannerView: View {
     let message: String
 
     var body: some View {
-        Text(message)
+        Text(message.localizedUI)
             .font(.system(size: 13.5, weight: .medium))
             .foregroundStyle(.white.opacity(0.96))
             .padding(.horizontal, 18)
@@ -2202,7 +2219,7 @@ private struct CommandMenuOverlayView: View {
         items.append(EditorCommandItem(
             id: "importVoiceoverAudio",
             group: "Voiceover",
-            title: "Upload voiceover audio file...",
+            title: "Upload voiceover audio file…",
             icon: "waveform.badge.plus"
         ) {
             session.promptImportVoiceoverAudioFile()
@@ -2374,7 +2391,7 @@ private struct CommandMenuOverlayView: View {
                                             .padding(.vertical, 4)
                                     }
 
-                                    Text(section.group)
+                                    Text(section.group.localizedUI)
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(.ink.opacity(0.45))
                                         .padding(.horizontal, 20)
@@ -2462,7 +2479,7 @@ private struct CommandMenuRowView: View {
                     )
                     .frame(width: 20, alignment: .center)
 
-                Text(item.title)
+                Text(item.title.localizedUI)
                     .font(.system(size: 13.5, weight: .regular))
                     .foregroundStyle(
                         item.isDestructive
@@ -2970,7 +2987,7 @@ private struct ExportSettingsModalView: View {
                     .foregroundStyle(.ink.opacity(0.92))
             }
 
-            Text(title)
+            Text(title.localizedUI)
                 .font(.system(size: 13.5, weight: .regular))
                 .foregroundStyle(.ink.opacity(0.92))
         }
@@ -2991,7 +3008,7 @@ private struct ExportSettingsModalView: View {
                     Image(systemName: icon)
                         .font(.system(size: 12.5, weight: .regular))
                 }
-                Text(label)
+                Text(label.localizedUI)
                     .font(.system(size: 13.5, weight: .regular))
             }
             .foregroundStyle(
@@ -3370,7 +3387,7 @@ private struct PresetsPopoverView: View {
 
     @ViewBuilder
     private func presetBadge(_ text: String) -> some View {
-        Text(text)
+        Text(text.localizedUI)
             .font(.system(size: 11.0, weight: .medium))
             .foregroundStyle(.ink.opacity(0.58))
             .padding(.horizontal, 7)
@@ -3382,3 +3399,14 @@ private struct PresetsPopoverView: View {
     }
 }
 
+/// Its own view so a zoom change re-evaluates only the slider, not the whole editor body.
+private struct TimelineZoomSlider: View {
+    @Bindable var session: ProjectSession
+
+    var body: some View {
+        Slider(value: $session.timelineZoom, in: 1.0...6.0)
+            .tint(kNativeScreenPurpleAccent)
+            .frame(width: 96)
+            .controlSize(.small)
+    }
+}

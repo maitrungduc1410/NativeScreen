@@ -29,6 +29,11 @@ public final class EditorViewPreferences {
         didSet { save(showEditorTimeline, Keys.showEditorTimeline) }
     }
 
+    /// Dragged and trimmed timeline items stick to nearby edges (toggle next to the split button).
+    public var snapToSegments: Bool {
+        didSet { save(snapToSegments, Keys.snapToSegments) }
+    }
+
     private enum Keys {
         static let showAudioWaveform = "NativeScreen.View.ShowAudioWaveform"
         static let smoothWaveform = "NativeScreen.View.SmoothWaveform"
@@ -36,6 +41,7 @@ public final class EditorViewPreferences {
         static let alwaysShowTimelineScrollbar = "NativeScreen.View.AlwaysShowTimelineScrollbar"
         static let showEditorSidebar = "NativeScreen.View.ShowEditorSidebar"
         static let showEditorTimeline = "NativeScreen.View.ShowEditorTimeline"
+        static let snapToSegments = "NativeScreen.View.SnapToSegments"
     }
 
     private init() {
@@ -49,6 +55,7 @@ public final class EditorViewPreferences {
         alwaysShowTimelineScrollbar = load(Keys.alwaysShowTimelineScrollbar, false)
         showEditorSidebar = load(Keys.showEditorSidebar, true)
         showEditorTimeline = load(Keys.showEditorTimeline, true)
+        snapToSegments = load(Keys.snapToSegments, true)
     }
 
     private func save(_ value: Bool, _ key: String) {

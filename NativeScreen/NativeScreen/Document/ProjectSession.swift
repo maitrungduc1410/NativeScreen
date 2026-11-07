@@ -159,17 +159,17 @@ public final class ProjectSession: Identifiable {
 
         public var tooltipTitle: String {
             switch self {
-            case .background: return "General"
-            case .cursor: return "Cursor"
-            case .cameraLayout: return "Camera Layout"
-            case .cameraStyle: return "Camera Style"
-            case .captions: return "Captions"
-            case .transcript: return "Edit by transcript"
-            case .audio: return "Audio"
-            case .shortcuts: return "Keyboard Shortcuts"
-            case .zoom: return "Animations"
-            case .deviceFrame: return "Device Frame"
-            case .masks: return "Masks"
+            case .background: return String(localized: "General")
+            case .cursor: return String(localized: "Cursor")
+            case .cameraLayout: return String(localized: "Camera Layout")
+            case .cameraStyle: return String(localized: "Camera Style")
+            case .captions: return String(localized: "Captions")
+            case .transcript: return String(localized: "Edit by transcript")
+            case .audio: return String(localized: "Audio")
+            case .shortcuts: return String(localized: "Keyboard Shortcuts")
+            case .zoom: return String(localized: "Animations")
+            case .deviceFrame: return String(localized: "Device Frame")
+            case .masks: return String(localized: "Masks")
             }
         }
 
@@ -1932,12 +1932,22 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    /// Volume sliders never set `muted`: that flag silences every source of the slice, so tying it to one slider
+    /// made the system audio slider at 0 also mute the microphone. Moving a slider clears a mute left by older builds.
     public func setSliceSystemAudioVolume(id: String, volume: Double) {
         mutate { doc in
             if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {
-                let clamped = max(0.0, min(2.0, volume))
-                doc.timeline.slices[idx].systemAudioVolume = clamped
-                doc.timeline.slices[idx].muted = (clamped <= 0.001)
+                doc.timeline.slices[idx].systemAudioVolume = max(0.0, min(1.0, volume))
+                doc.timeline.slices[idx].muted = false
+            }
+        }
+    }
+
+    public func setSliceMicrophoneVolume(id: String, volume: Double) {
+        mutate { doc in
+            if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {
+                doc.timeline.slices[idx].microphoneVolume = max(0.0, min(1.0, volume))
+                doc.timeline.slices[idx].muted = false
             }
         }
     }
@@ -3560,8 +3570,8 @@ public final class ProjectSession: Identifiable {
         guard !srtContent.isEmpty else { return }
 
         let panel = NSSavePanel()
-        panel.title = "Export Transcript (.srt)"
-        panel.message = "Where to save the transcript?"
+        panel.title = String(localized: "Export Transcript (.srt)")
+        panel.message = String(localized: "Where to save the transcript?")
         panel.nameFieldStringValue = "\(document.name).srt"
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let outURL = panel.url {
@@ -4068,7 +4078,7 @@ public final class ProjectSession: Identifiable {
 
     public func promptImportVoiceoverAudioFile() {
         let panel = NSOpenPanel()
-        panel.title = "Select Voiceover Audio File"
+        panel.title = String(localized: "Select Voiceover Audio File")
         panel.allowedContentTypes = [.audio]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let sourceURL = panel.url else { return }
