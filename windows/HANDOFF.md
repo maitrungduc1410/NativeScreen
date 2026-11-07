@@ -27,6 +27,27 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-07, Delete a track from its label's right-click menu (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** `ProjectSession.deleteTimelineTrack(_:displayName:)` and `MultiTrackTimelineView.trackLabelMenu`. Rules are in `spec/06` ADR-50.
+  - **Menu:** right-click on a track label shows `Hide Track` / `Show Track`. For Layouts, Mask, Voiceovers, Shortcuts and Captions tracks it adds `Delete Track` (destructive) below a divider. Clip has no menu, and Zoom only hides.
+  - **Delete:** one undo step, then the toast `Deleted %@. Press ⌘Z to undo.`. Watch the shortcut case: deleting the first shortcut track also hides its recorded keystrokes.
+  - **Strings:** `Show Track`, `Hide Track`, `Delete Track` and the toast are in the catalog with all 7 translations.
+- **Built on macOS:** the app builds. Not clicked through in the running app yet.
+- **How to verify on Windows:** delete one track of each kind, check that the row and its items are gone from the timeline and the preview, then `Ctrl+Z` and check that they come back. Delete the only shortcut track, save, reopen, and check that the recorded keystrokes stay hidden.
+
+## 2026-11-07, Wallpaper favorites and a random pick across categories (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** `Views/InspectorSidebarView.swift` (`favoriteMenuButton`, `meshPresets(in:)`, `wallpaperItems(in:)`, `pickRandomBackground`). Rules are in `spec/06` ADR-32.
+  - **`★` pill:** now Favorites, not "All". Every mesh and wallpaper thumbnail has a right-click menu with `Add to Favorites` or `Remove from Favorites`. Favorites are app-wide, in add order, one id per line (`mesh:<id>` or `wallpaper:<id>`). On Windows, store them in `settings.json`. With no favorites, the grid shows the hint text. A favorite thumbnail has a white outlined star in its middle (15 pt semibold, light shadow), under `★` and in its own category.
+  - **`Pick random wallpaper`:** draws from mesh, system and built-in wallpapers together, then switches to the pick's category and scrolls its pill into view.
+  - **Strings:** `Add to Favorites`, `Remove from Favorites` and the empty hint are in the catalog with all 7 translations.
+- **Built on macOS:** the app builds. Not clicked through in the running app yet.
+- **Also in this change:** `STRING_CATALOG_GENERATE_SYMBOLS = NO` on macOS. The Windows-only keys that differ from macOS keys only by case or by `...` versus `…` produced duplicate Swift symbols and failed the build (ADR-44). No catalog key changed.
+- **How to verify on Windows:** right-click a wallpaper, add it, and check that it shows under `★` and survives a restart. Remove it from the `★` grid. Press the random button several times from `★` and check that it lands in different categories and the pill row follows.
+
 ## 2026-11-07, Performance pass: closing frees the project, no work for unused features (macOS done, Windows pass pending)
 
 ### Writer

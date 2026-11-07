@@ -43,6 +43,16 @@ public struct MultiTrackTimelineView: View {
         self.session = session
     }
 
+    /// Right-click menu of a track label: hide or show, and delete for every track except the clip and zoom tracks.
+    @ViewBuilder
+    private func trackLabelMenu(isHidden: Bool, toggle: @escaping () -> Void, delete: (() -> Void)? = nil) -> some View {
+        Button(isHidden ? "Show Track" : "Hide Track", systemImage: isHidden ? "eye" : "eye.slash", action: toggle)
+        if let delete {
+            Divider()
+            Button("Delete Track", systemImage: "trash", role: .destructive, action: delete)
+        }
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             GeometryReader { outerGeo in
@@ -180,6 +190,8 @@ public struct MultiTrackTimelineView: View {
                                         }
                                         .padding(.leading, 10)
                                         .frame(width: labelColumnWidth, height: zoomRowHeight, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                        .contextMenu { trackLabelMenu(isHidden: zoomHidden, toggle: { session.toggleZoomTrackVisibility() }) }
                                         .id("track_zoom")
 
                                         if hasCameraLayoutsTrack {
@@ -203,6 +215,12 @@ public struct MultiTrackTimelineView: View {
                                             }
                                             .padding(.leading, 10)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .contentShape(Rectangle())
+                                            .contextMenu {
+                                                trackLabelMenu(isHidden: layoutsHidden, toggle: { session.toggleCameraLayoutsTrackVisibility() }) {
+                                                    session.deleteTimelineTrack(.cameraLayouts, displayName: "Layouts")
+                                                }
+                                            }
                                             .id("track_camera_layouts")
                                         }
 
@@ -227,6 +245,12 @@ public struct MultiTrackTimelineView: View {
                                             }
                                             .padding(.leading, 10)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .contentShape(Rectangle())
+                                            .contextMenu {
+                                                trackLabelMenu(isHidden: maskHidden, toggle: { session.toggleMaskTrackVisibility(trackId: track.id) }) {
+                                                    session.deleteTimelineTrack(.mask(id: track.id), displayName: track.name)
+                                                }
+                                            }
                                             .id("track_mask_\(track.id)")
                                         }
 
@@ -252,6 +276,19 @@ public struct MultiTrackTimelineView: View {
                                                 }
                                                 .padding(.leading, 10)
                                                 .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                                .contentShape(Rectangle())
+                                                .contextMenu {
+                                                    trackLabelMenu(
+                                                        isHidden: voHidden,
+                                                        toggle: { session.toggleVoiceoverTrackVisibility(trackIndex: voTrack) },
+                                                        delete: session.isRecordingVoiceover ? nil : {
+                                                            let name = voTrack == 0
+                                                                ? "Voiceovers".localizedUI
+                                                                : String(format: "Voiceovers %lld".localizedUI, voTrack + 1)
+                                                            session.deleteTimelineTrack(.voiceover(index: voTrack), displayName: name)
+                                                        }
+                                                    )
+                                                }
                                                 .id(voTrack == 0 ? "track_voiceovers" : "track_voiceovers_\(voTrack)")
                                             }
                                         }
@@ -290,6 +327,13 @@ public struct MultiTrackTimelineView: View {
                                                 }
                                                 .padding(.leading, 10)
                                                 .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                                .contentShape(Rectangle())
+                                                .contextMenu {
+                                                    trackLabelMenu(isHidden: isTrackHidden, toggle: { session.toggleShortcutsTrackVisibility(trackId: sTrack.id) }) {
+                                                        let name = session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts"
+                                                        session.deleteTimelineTrack(.shortcut(id: sTrack.id), displayName: name)
+                                                    }
+                                                }
                                                 .id("track_shortcut_\(sTrack.id)")
                                             }
                                         }
@@ -325,6 +369,12 @@ public struct MultiTrackTimelineView: View {
                                             }
                                             .padding(.leading, 10)
                                             .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .contentShape(Rectangle())
+                                            .contextMenu {
+                                                trackLabelMenu(isHidden: isTrackHidden, toggle: { session.toggleCaptionTrackVisibility(id: track.id) }) {
+                                                    session.deleteTimelineTrack(.caption(id: track.id), displayName: track.name)
+                                                }
+                                            }
                                             .id("track_caption_\(track.id)")
                                         }
                                     }

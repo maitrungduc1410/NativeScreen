@@ -682,7 +682,14 @@ images from other apps or wallpaper packs to this bundle.
 - **Picking one copies the file byte for byte** to `assets/background-<id>.jpg` and sets `systemWallpaperName` to the id (for
   example `spring-01`). No re-encode, so a project stores the same file whichever platform picked the wallpaper.
 - **Category pills only browse.** They no longer change `background.type`; picking an item does. The `Wallpaper` mode pill returns
-  to the last picked wallpaper, or to the mesh when there is none. Mesh presets stay for existing projects, under `Mesh` and `★`.
+  to the last picked wallpaper, or to the mesh when there is none. Mesh presets stay for existing projects, under `Mesh`.
+- **`★` is Favorites.** Right-clicking any thumbnail (mesh or wallpaper) offers `Add to Favorites` or `Remove from Favorites`.
+  The list is app-wide, in add order, stored in `NativeScreen.Wallpaper.Favorites` as one id per line (`mesh:<id>` or
+  `wallpaper:<id>`). A favorite whose wallpaper is missing on this machine (a system wallpaper from another macOS version) is
+  skipped. With no favorites, the grid shows a hint about the right-click menu. Favorites never touch the project file.
+  A favorite thumbnail shows a white outlined star in its middle, both under `★` and in its own category.
+- **`Pick random wallpaper` draws from every category** (mesh, system and built-in), not just the one on screen, then switches to
+  the pick's category and scrolls its pill into view.
 
 ### Baked layers stay upright
 `materializeToGPUTexture` flipped every baked layer vertically, so the background was upside down in preview and export, shadows
@@ -915,6 +922,7 @@ The UI is available in English, Vietnamese, Simplified Chinese, Japanese, German
   - **Where text is translated.** Text is translated where it is shown, not at each call site. That covers the shared helpers (`Ui.Text`, `Ui.Option`, `Ui.IconButton`, `Ui.Tip` for every tooltip, the inspector rows, segment menu rows, command menu items, timeline block titles and track labels), literal `Text`, `Title` and dialog button initializers, and `Loc.Apply`, which walks a window's XAML once after `InitializeComponent`. Ids, tab keys and stored names stay English.
   - **Track names.** `Loc.TrackName` translates a default track name and its number (`Captions 2`, `Voiceovers 2` through `Voiceovers %lld`).
   - **Windows-only strings** (File Explorer, `Ctrl` key hints, Windows menus such as `Edit` and `View` that macOS takes from the system) are their own keys in the same catalog with `extractionState: manual`. The file is rewritten with Xcode's layout (` : `, two-space indent, sorted keys), so the diff only adds keys.
+  - **No generated symbols.** Xcode generates a Swift symbol for every `manual` key, and keys that differ only in case or in `...` versus `…` (for example `Export video...` on Windows and `Export video` on macOS) get the same symbol, which fails the macOS build. The app looks strings up by their English text, so `STRING_CATALOG_GENERATE_SYMBOLS` is `NO`.
   - **Choosing the language.** `Settings > General > Language` stores `Language` in `settings.json` (empty means the system language). It also sets `PrimaryLanguageOverride` when the app is packaged, and `Restart Now` releases the single-instance claim before it starts the new process. `NS_LANGUAGE=<id>` overrides the setting for one run, to check a layout.
 
 ---
@@ -996,3 +1004,15 @@ A pass over CPU and memory for work done when nothing needs it.
 - **Waveform extraction.** The peak scan reads samples in place from the decoder's buffer (it copies only when the buffer is not contiguous) and takes the 95th percentile from a 1024-bin histogram instead of sorting every peak.
 
 Measured after these changes (Debug build, 15 MB recording): memory after closing all projects is 95 to 113 MB over repeated open and close cycles of two projects, down from 117 to 137 MB. CPU is 0% with a project open and idle.
+
+---
+
+## 50. ADR-50: Deleting a Track from Its Label
+
+Tracks had no delete of their own: a track went away only when its last item did, and some kinds never did. Right-clicking a track label now opens a menu with `Hide Track` / `Show Track` and, for every track except Clip and Zoom, `Delete Track`.
+
+- **No confirmation.** The delete is one `mutate`, so `⌘Z` brings back the track and everything on it. A toast names the track and points at `⌘Z`. A selection on the deleted track is cleared first.
+- **Layouts** removes every camera layout segment, so the row goes away. **Voiceovers** drops that track's segments, then `normalizeVoiceoverTracks` renumbers the tracks after it and keeps their hidden state. It is not offered while a voiceover is recording. Audio files stay in `assets/` for undo.
+- **Shortcuts.** Recorded keystrokes always belong to the first shortcut track, and the first track is recreated on load when the recording has keystrokes. Deleting that track therefore also adds its recorded keystrokes to `hiddenShortcutStartMs`; otherwise they would come back on reopen, or move to the next track. Custom shortcuts on the track are removed and the remaining tracks are renamed `Shortcuts`, `Shortcuts 2`, ...
+- **Captions** uses `deleteCaptionTrack`, which removes the track's captions with it.
+

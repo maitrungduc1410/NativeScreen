@@ -3061,6 +3061,64 @@ public final class ProjectSession: Identifiable {
         return newTrack.id
     }
 
+    /// A timeline track that can be deleted from its label's menu. The clip and zoom tracks cannot.
+    public enum DeletableTimelineTrack: Equatable {
+        case cameraLayouts
+        case mask(id: String)
+        case voiceover(index: Int)
+        case shortcut(id: String)
+        case caption(id: String)
+    }
+
+    /// Deletes a track and everything on it as one undo step, then says so in a toast.
+    public func deleteTimelineTrack(_ track: DeletableTimelineTrack, displayName: String) {
+        switch track {
+        case .cameraLayouts:
+            selectedCameraLayoutId = nil
+            mutate { doc in
+                doc.timeline.cameraLayouts.removeAll()
+                doc.timeline.isCameraLayoutsTrackHidden = false
+            }
+        case .mask(let id):
+            deleteMaskTrack(trackId: id)
+        case .voiceover(let index):
+            guard !isRecordingVoiceover else { return }
+            if let selected = selectedVoiceoverId,
+               document.timeline.voiceovers.contains(where: { $0.id == selected && $0.trackIndex == index }) {
+                selectedVoiceoverId = nil
+            }
+            mutate { doc in
+                doc.timeline.voiceovers.removeAll { $0.trackIndex == index }
+                doc.timeline.hiddenVoiceoverTracks.removeAll { $0 == index }
+                doc.timeline.normalizeVoiceoverTracks()
+            }
+        case .shortcut(let id):
+            // Recorded keystrokes always belong to the first track and come back with it when the project reopens,
+            // so deleting that track hides them instead.
+            let isPrimary = document.captions.shortcutTracks.first?.id == id
+            let recordedStarts = isPrimary
+                ? shortcutClusters(forTrackId: id).filter { !$0.isCustomSegment }.map(\.firstKeyDownMsInt)
+                : []
+            if let selected = selectedShortcutId,
+               shortcutClusters(forTrackId: id).contains(where: { $0.id == selected }) {
+                selectedShortcutId = nil
+            }
+            mutate { doc in
+                for start in recordedStarts where !doc.captions.hiddenShortcutStartMs.contains(start) {
+                    doc.captions.hiddenShortcutStartMs.append(start)
+                }
+                doc.captions.shortcutTracks.removeAll { $0.id == id }
+                doc.captions.customShortcuts.removeAll { $0.trackId == id }
+                for idx in doc.captions.shortcutTracks.indices {
+                    doc.captions.shortcutTracks[idx].name = idx == 0 ? "Shortcuts" : "Shortcuts \(idx + 1)"
+                }
+            }
+        case .caption(let id):
+            deleteCaptionTrack(id: id)
+        }
+        showToast(String(format: "Deleted %@. Press ⌘Z to undo.".localizedUI, displayName.localizedUI))
+    }
+
     public func removeShortcutTrack(id: String) {
         mutate { doc in
             doc.captions.shortcutTracks.removeAll { $0.id == id }

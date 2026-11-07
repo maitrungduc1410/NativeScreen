@@ -42,7 +42,8 @@
 - [x] Playback controller (`AVAssetReader` / `AVPlayerItemVideoOutput` synchronized with telemetry clock at 60/120fps).
 - [x] **Background Pass:**
   - [x] Load macOS system wallpapers directly from `/System/Library/Desktop Pictures/` (and copy chosen image to `.nativescreen/assets/`).
-  - [x] 108 self-drawn built-in wallpapers in 7 categories, with `Pick random wallpaper` per category (`spec/06` ADR-32).
+  - [x] 108 self-drawn built-in wallpapers in 7 categories, with `Pick random wallpaper` across every category (`spec/06` ADR-32).
+  - [x] `★` Favorites category for wallpapers and mesh presets, added and removed from each thumbnail's right-click menu (`spec/06` ADR-32).
   - [x] Built-in procedural Mesh Gradients, Linear Gradients (with interactive 2D HSB Color Picker, Eyedropper, Hue rotation slider, and 30 curated gradient presets), Solid Colors, and custom image drop/paste (`⌘V`).
   - [x] Background blur slider, padding slider, and subtle anti-banding noise.
 - [x] **Screen Frame Pass:**
@@ -138,6 +139,7 @@
   - [x] Scan video frames using macOS native `Vision` (`VNRecognizeTextRequest` and `VNDetectFaceRectanglesRequest`) to automatically detect emails, phone numbers, card numbers, API keys/tokens, custom user phrases (`Custom phrases`), and faces on screen.
   - [x] One-click generation of tracked Blur Masks on the timeline (`Hide sensitive data` & `Hide faces` in Background Inspector).
 - [x] **Timeline snapping:** dragged and trimmed items stick to edges on every track, the playhead and clip boundaries, with a purple guide line; toggle next to the split button and in `View`, on by default (`spec/06` ADR-43).
+- [x] **Track label menu:** right-click a track's label to hide or show it, or delete it with everything on it (one undo step, with a toast). Every track except Clip and Zoom can be deleted (`spec/06` ADR-50).
 - [x] **Per-slice audio volume:** `Microphone volume` and `System audio volume` sliders in the clip context menu, each applied only to that slice (`spec/06` ADR-47).
 - [x] **Localization:** English, Vietnamese, Simplified Chinese, Japanese, German, French, Spanish and Brazilian Portuguese, with a language picker in `Settings > General` (`spec/06` ADR-44).
 - [x] **Caption tracks:** multiple tracks on the timeline; move, trim, split and add captions, drag them between tracks, per-caption style with `Apply to all captions in this track`, 2D `Caption position` pad.

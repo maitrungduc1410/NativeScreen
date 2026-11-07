@@ -24,6 +24,8 @@ public struct InspectorSidebarView: View {
     @State private var editingTranscriptDraftText: String = ""
     @State private var selectedTranscriptWordId: String? = nil
     @State private var wallpaperCategory: String = "macOS"
+    /// Favorite backgrounds, app-wide, newest last: `mesh:<id>` or `wallpaper:<id>`, one per line.
+    @AppStorage("NativeScreen.Wallpaper.Favorites") private var favoriteBackgroundIDsStorage: String = ""
     @State private var gradientHueShift: Double = 0.5
     @State private var isHoveringImageDropZone: Bool = false
     @State private var selectedShortcutTrackId: String = "default-shortcuts-track"
@@ -264,13 +266,10 @@ public struct InspectorSidebarView: View {
                     ScrollViewReader { catProxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 7) {
-                                ForEach(["All", "macOS", "Mesh"] + BundledWallpaperCatalog.categories, id: \.self) { cat in
-                                    let displayTitle = (cat == "All") ? "★" : cat
+                                ForEach([Self.favoritesCategory, "macOS", "Mesh"] + BundledWallpaperCatalog.categories, id: \.self) { cat in
+                                    let displayTitle = (cat == Self.favoritesCategory) ? "★" : cat
                                     inspectorPillOptionButton(title: displayTitle, isSelected: wallpaperCategory == cat) {
                                         wallpaperCategory = cat
-                                        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                                            catProxy.scrollTo(cat, anchor: .center)
-                                        }
                                     }
                                     .id(cat)
                                 }
@@ -279,23 +278,18 @@ public struct InspectorSidebarView: View {
                             .padding(.trailing, 18)
                         }
                         .padding(.trailing, -18)
+                        .onChange(of: wallpaperCategory) { _, cat in
+                            withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                                catProxy.scrollTo(cat, anchor: .center)
+                            }
+                        }
                     }
 
-                    // Items shown for the current category, the random button draws from the same list.
-                    let filteredMeshPresets: [MeshPreset] = (wallpaperCategory == "All" || wallpaperCategory == "Mesh") ? MeshPreset.builtIn : []
+                    let filteredMeshPresets = meshPresets(in: wallpaperCategory)
                     let filteredWallpapers = wallpaperItems(in: wallpaperCategory)
 
                     Button {
-                        let pick = Int.random(in: 0..<max(filteredMeshPresets.count + filteredWallpapers.count, 1))
-                        if pick < filteredMeshPresets.count {
-                            let presetId = filteredMeshPresets[pick].id
-                            session.mutate {
-                                $0.background.type = .mesh
-                                $0.background.meshPresetId = presetId
-                            }
-                        } else if pick - filteredMeshPresets.count < filteredWallpapers.count {
-                            session.selectSystemWallpaper(filteredWallpapers[pick - filteredMeshPresets.count])
-                        }
+                        pickRandomBackground()
                     } label: {
                         HStack(spacing: 7) {
                             Image(systemName: "wand.and.stars")
@@ -320,6 +314,7 @@ public struct InspectorSidebarView: View {
 
                     // 8-Column Square Thumbnail Grid
                     let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 8)
+                    let favoriteIDs = Set(favoriteBackgroundIDs)
                     LazyVGrid(columns: columns, spacing: 6) {
                         ForEach(filteredMeshPresets) { preset in
                             let isSelected = (session.document.background.type == .mesh && session.document.background.meshPresetId == preset.id)
@@ -342,9 +337,11 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                                             .strokeBorder(isSelected ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                     )
+                                    .overlay { if favoriteIDs.contains("mesh:\(preset.id)") { favoriteThumbnailBadge } }
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .contextMenu { favoriteMenuButton(for: "mesh:\(preset.id)") }
                         }
 
                         let _ = wallpaperThumbnailRevision
@@ -369,10 +366,19 @@ public struct InspectorSidebarView: View {
                                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                                             .strokeBorder(isSelected ? Color.ink : Color.ink.opacity(0.12), lineWidth: isSelected ? 1.5 : 0.8)
                                     )
+                                    .overlay { if favoriteIDs.contains("wallpaper:\(item.id)") { favoriteThumbnailBadge } }
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .contextMenu { favoriteMenuButton(for: "wallpaper:\(item.id)") }
                         }
+                    }
+
+                    if wallpaperCategory == Self.favoritesCategory && filteredMeshPresets.isEmpty && filteredWallpapers.isEmpty {
+                        Text("No favorites yet. Right-click a background and choose “Add to Favorites”.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.ink.opacity(0.5))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -4733,11 +4739,78 @@ public struct InspectorSidebarView: View {
         }
     }
 
+    private static let favoritesCategory = "Favorites"
+
+    private var favoriteBackgroundIDs: [String] {
+        favoriteBackgroundIDsStorage.split(separator: "\n").map(String.init)
+    }
+
+    private func toggleFavoriteBackground(_ id: String) {
+        var ids = favoriteBackgroundIDs
+        if let index = ids.firstIndex(of: id) {
+            ids.remove(at: index)
+        } else {
+            ids.append(id)
+        }
+        favoriteBackgroundIDsStorage = ids.joined(separator: "\n")
+    }
+
+    /// A white outlined star in the middle of a favorite thumbnail, under the star pill and in the thumbnail's own category.
+    private var favoriteThumbnailBadge: some View {
+        Image(systemName: "star")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.45), radius: 2, y: 0.5)
+            .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func favoriteMenuButton(for id: String) -> some View {
+        if favoriteBackgroundIDs.contains(id) {
+            Button("Remove from Favorites", systemImage: "star.slash") { toggleFavoriteBackground(id) }
+        } else {
+            Button("Add to Favorites", systemImage: "star") { toggleFavoriteBackground(id) }
+        }
+    }
+
+    private func meshPresets(in category: String) -> [MeshPreset] {
+        switch category {
+        case "Mesh": return MeshPreset.builtIn
+        case Self.favoritesCategory:
+            let favorites = Set(favoriteBackgroundIDs)
+            return MeshPreset.builtIn.filter { favorites.contains("mesh:\($0.id)") }
+        default: return []
+        }
+    }
+
     private func wallpaperItems(in category: String) -> [SystemWallpaperItem] {
         switch category {
-        case "All": return BundledWallpaperCatalog.allItems + systemWallpapers
+        case Self.favoritesCategory:
+            let byID = Dictionary((BundledWallpaperCatalog.allItems + systemWallpapers).map { ("wallpaper:\($0.id)", $0) }, uniquingKeysWith: { first, _ in first })
+            return favoriteBackgroundIDs.compactMap { byID[$0] }
         case "macOS": return systemWallpapers
         default: return BundledWallpaperCatalog.items(in: category)
+        }
+    }
+
+    /// Picks from every category, not just the one on screen, then shows the pick's category.
+    private func pickRandomBackground() {
+        let wallpapers = systemWallpapers.map { ($0, "macOS") }
+            + BundledWallpaperCatalog.categories.flatMap { category in BundledWallpaperCatalog.items(in: category).map { ($0, category) } }
+        let total = MeshPreset.builtIn.count + wallpapers.count
+        guard total > 0 else { return }
+        let pick = Int.random(in: 0..<total)
+        if pick < MeshPreset.builtIn.count {
+            let presetId = MeshPreset.builtIn[pick].id
+            session.mutate {
+                $0.background.type = .mesh
+                $0.background.meshPresetId = presetId
+            }
+            wallpaperCategory = "Mesh"
+        } else {
+            let (item, category) = wallpapers[pick - MeshPreset.builtIn.count]
+            session.selectSystemWallpaper(item)
+            wallpaperCategory = category
         }
     }
 
