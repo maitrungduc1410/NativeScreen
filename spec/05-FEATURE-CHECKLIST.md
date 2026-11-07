@@ -108,6 +108,8 @@
 - [x] **Quick Export & GIF Export:**
   - [x] High-quality animated GIF export (`High quality` & `Disable loop` options).
   - [x] Instant `Export to clipboard` directly from the Export modal.
+- [x] **Accessibility:** every control has a name in the UI language (VoiceOver, Voice Control, Switch Control), timeline segments read their kind, content and time range and can be selected, the ruler moves the playhead, toasts are read out, and Reduce Motion turns off the hover, tooltip, toast and split mode motion (`spec/06` ADR-51).
+  - [ ] Moving and resizing segments, drawing masks and picking a window or area without a pointer.
 
 ---
 

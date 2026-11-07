@@ -36,6 +36,7 @@ public struct InteractiveMaskCanvasOverlayView: View {
                         session.selectedInspectorTab = .background
                     }
                 }
+                .accessibilityHidden(true)
 
             if !session.isPlaying {
                 // Only read while paused: during playback the handles are hidden, and reading the playhead here
@@ -81,6 +82,9 @@ public struct InteractiveMaskCanvasOverlayView: View {
                                 }
                             }
                             .onTapGesture {
+                                session.selectMask(mask.id)
+                            }
+                            .accessibleButton(mask.type == .blur ? "Sensitive data mask" : "Highlight mask", isSelected: isSelected) {
                                 session.selectMask(mask.id)
                             }
                             .gesture(

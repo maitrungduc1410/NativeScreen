@@ -795,6 +795,7 @@ private struct ZoomPaletteHeaderRowView: View {
         .overlay(
             MenuImmediateClickOverlay(onClick: action)
         )
+        .accessibleButton(isSelected: isSelected, action: action)
     }
 }
 
@@ -862,6 +863,7 @@ private struct MaskPaletteHeaderRowView: View {
         .overlay(
             MenuImmediateClickOverlay(onClick: action)
         )
+        .accessibleButton(isSelected: isSelected, action: action)
     }
 }
 
@@ -936,11 +938,14 @@ private struct MenuEmbeddedSliderRowView: View {
                     .font(.system(size: 13, weight: .regular).monospacedDigit())
                     .foregroundStyle(.ink.opacity(0.50))
             }
+            .accessibilityHidden(true) // the slider reads the title and value
 
             NativeMenuAppKitSlider(
                 value: $currentValue,
                 range: range,
                 step: step,
+                accessibilityTitle: title.localizedUI,
+                accessibilityValueText: formatValue(currentValue),
                 onEditingChanged: onEditingChanged,
                 onValueChanged: onValueChanged
             )
@@ -956,6 +961,8 @@ private struct NativeMenuAppKitSlider: NSViewRepresentable {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double?
+    let accessibilityTitle: String
+    let accessibilityValueText: String
     let onEditingChanged: (Bool) -> Void
     let onValueChanged: (Double) -> Void
 
@@ -974,6 +981,8 @@ private struct NativeMenuAppKitSlider: NSViewRepresentable {
         slider.isContinuous = true
         slider.controlSize = .regular
         slider.trackFillColor = NSColor(red: 0.44, green: 0.34, blue: 0.98, alpha: 1.0)
+        slider.setAccessibilityLabel(accessibilityTitle)
+        slider.setAccessibilityValueDescription(accessibilityValueText)
         return slider
     }
 
@@ -984,6 +993,8 @@ private struct NativeMenuAppKitSlider: NSViewRepresentable {
         if abs(nsView.doubleValue - value) > 0.0005 {
             nsView.doubleValue = value
         }
+        nsView.setAccessibilityLabel(accessibilityTitle)
+        nsView.setAccessibilityValueDescription(accessibilityValueText)
     }
 
     final class Coordinator: NSObject {

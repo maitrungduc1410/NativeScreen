@@ -26,6 +26,9 @@ struct SettingsView: View {
 private struct SettingsRow<Control: View>: View {
     let title: String
     var description: String?
+    /// The row's title names its single control (a switch or picker with a hidden label) for VoiceOver.
+    /// Off for rows with several buttons, which have their own titles.
+    var titleLabelsControl = true
     @ViewBuilder let control: Control
 
     var body: some View {
@@ -41,7 +44,13 @@ private struct SettingsRow<Control: View>: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            control
+            .accessibilityElement(children: .combine)
+            if titleLabelsControl {
+                control
+                    .accessibilityLabel(Text(title.localizedUI))
+            } else {
+                control
+            }
         }
         .padding(.vertical, 10)
     }
@@ -65,7 +74,7 @@ private struct DirectoryRow: View {
     let onChoose: (URL) -> Void
 
     var body: some View {
-        SettingsRow(title: title, description: (path as NSString).abbreviatingWithTildeInPath) {
+        SettingsRow(title: title, description: (path as NSString).abbreviatingWithTildeInPath, titleLabelsControl: false) {
             HStack(spacing: 8) {
                 Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
@@ -404,6 +413,7 @@ private struct ShortcutsSettingsTab: View {
                 ForEach(Section.allCases) { Text($0.rawValue.localizedUI).tag($0) }
             }
             .pickerStyle(.segmented)
+            .accessibilityLabel(Text("Shortcuts"))
             .labelsHidden()
             .fixedSize()
             .frame(maxWidth: .infinity)
@@ -414,6 +424,7 @@ private struct ShortcutsSettingsTab: View {
                     Image(systemName: shortcut.icon)
                         .frame(width: 20)
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text(shortcut.title.localizedUI)
                         .font(.system(size: 13))
                     Spacer()
@@ -425,6 +436,7 @@ private struct ShortcutsSettingsTab: View {
                         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.10)))
                 }
                 .padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
 
             Text(section == .recording

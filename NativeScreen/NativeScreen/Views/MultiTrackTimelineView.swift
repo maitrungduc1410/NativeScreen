@@ -96,6 +96,16 @@ public struct MultiTrackTimelineView: View {
                                         minorStepSec: stepInfo.minor
                                     )
                                     .offset(x: trackHorizontalInset)
+                                    // VoiceOver: the ruler moves the playhead by a second (VO-Up / VO-Down). No value on
+                                    // purpose: reading the playhead here would re-evaluate the timeline every frame; the
+                                    // transport timecode carries it.
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(Text("Playhead"))
+                                    .accessibilityAdjustableAction { direction in
+                                        let step: Double = direction == .increment ? 1000 : -1000
+                                        session.isPlaying = false
+                                        session.seek(toTimelineMs: max(0, min(totalTimelineMs, session.playheadTimelineMs + step)))
+                                    }
 
                                     // Golden Teardrop Badges (`✂️` or `0.6s ✂️`) for Start Trim, Inter-Slice Cuts/Trims, and End Trim
                                     let badges = computeClipTrimAndCutBadges()
@@ -135,6 +145,7 @@ public struct MultiTrackTimelineView: View {
                                         session.seek(toTimelineMs: frac * totalTimelineMs)
                                     }
                             )
+
                         }
                         .frame(height: rulerHeight)
                         .background(Color.surface(red: 0.04, green: 0.04, blue: 0.06))
@@ -177,6 +188,7 @@ public struct MultiTrackTimelineView: View {
                                                 session.toggleZoomTrackVisibility()
                                             } label: {
                                                 Image(systemName: zoomHidden ? "eye.slash" : "eye")
+                                                    .accessibilityLabel(Text((zoomHidden ? "Show Track" : "Hide Track").localizedUI))
                                                     .font(.system(size: 10, weight: .medium))
                                                     .foregroundStyle(Color.ink.opacity(zoomHidden ? 0.28 : 0.65))
                                                     .frame(width: 22, height: 22)
@@ -201,6 +213,7 @@ public struct MultiTrackTimelineView: View {
                                                     session.toggleCameraLayoutsTrackVisibility()
                                                 } label: {
                                                     Image(systemName: layoutsHidden ? "eye.slash" : "eye")
+                                                        .accessibilityLabel(Text((layoutsHidden ? "Show Track" : "Hide Track").localizedUI))
                                                         .font(.system(size: 10, weight: .medium))
                                                         .foregroundStyle(Color.ink.opacity(layoutsHidden ? 0.28 : 0.65))
                                                         .frame(width: 22, height: 22)
@@ -231,6 +244,7 @@ public struct MultiTrackTimelineView: View {
                                                     session.toggleMaskTrackVisibility(trackId: track.id)
                                                 } label: {
                                                     Image(systemName: maskHidden ? "eye.slash" : "eye")
+                                                        .accessibilityLabel(Text((maskHidden ? "Show Track" : "Hide Track").localizedUI))
                                                         .font(.system(size: 10, weight: .medium))
                                                         .foregroundStyle(Color.ink.opacity(maskHidden ? 0.28 : 0.65))
                                                         .frame(width: 22, height: 22)
@@ -262,6 +276,7 @@ public struct MultiTrackTimelineView: View {
                                                         session.toggleVoiceoverTrackVisibility(trackIndex: voTrack)
                                                     } label: {
                                                         Image(systemName: voHidden ? "eye.slash" : "eye")
+                                                            .accessibilityLabel(Text((voHidden ? "Show Track" : "Hide Track").localizedUI))
                                                             .font(.system(size: 10, weight: .medium))
                                                             .foregroundStyle(Color.ink.opacity(voHidden ? 0.28 : 0.65))
                                                             .frame(width: 22, height: 22)
@@ -304,6 +319,7 @@ public struct MultiTrackTimelineView: View {
                                                         session.toggleShortcutsTrackVisibility(trackId: sTrack.id)
                                                     } label: {
                                                         Image(systemName: isTrackHidden ? "eye.slash" : "eye")
+                                                            .accessibilityLabel(Text((isTrackHidden ? "Show Track" : "Hide Track").localizedUI))
                                                             .font(.system(size: 10, weight: .medium))
                                                             .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.28 : 0.65))
                                                             .frame(width: 22, height: 22)
@@ -346,6 +362,7 @@ public struct MultiTrackTimelineView: View {
                                                     session.toggleCaptionTrackVisibility(id: track.id)
                                                 } label: {
                                                     Image(systemName: isTrackHidden ? "eye.slash" : "eye")
+                                                        .accessibilityLabel(Text((isTrackHidden ? "Show Track" : "Hide Track").localizedUI))
                                                         .font(.system(size: 10, weight: .medium))
                                                         .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.28 : 0.65))
                                                         .frame(width: 22, height: 22)
@@ -565,6 +582,7 @@ public struct MultiTrackTimelineView: View {
                     .clipped()
                     .offset(x: labelColumnWidth)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                     .zIndex(25)
 
                     TimelineSnapGuideOverlayView(
@@ -580,6 +598,7 @@ public struct MultiTrackTimelineView: View {
                     .clipped()
                     .offset(x: labelColumnWidth)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                     .zIndex(24)
 
                     // D. SLIM 4pt HORIZONTAL SCROLLBAR PILL
@@ -864,6 +883,8 @@ public struct MultiTrackTimelineView: View {
                         )
 
                         Image(systemName: "plus")
+
+                            .accessibilityLabel(Text("Add"))
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.ink.opacity(0.96))
                     }
@@ -1051,6 +1072,8 @@ public struct MultiTrackTimelineView: View {
                         )
 
                         Image(systemName: "plus")
+
+                            .accessibilityLabel(Text("Add"))
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.ink.opacity(0.96))
                     }
@@ -1282,6 +1305,8 @@ public struct MultiTrackTimelineView: View {
                             .strokeBorder(primaryPurple.opacity(0.62), lineWidth: 1.0)
 
                         Image(systemName: "plus")
+
+                            .accessibilityLabel(Text("Add"))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.ink.opacity(0.88))
                     }
@@ -1404,6 +1429,8 @@ public struct MultiTrackTimelineView: View {
                         SegmentBodyCanvas(palette: .caption, isSelected: false, isPlayed: false)
 
                         Image(systemName: "plus")
+
+                            .accessibilityLabel(Text("Add"))
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.ink.opacity(0.96))
                     }
@@ -1578,6 +1605,8 @@ public struct MultiTrackTimelineView: View {
                         )
 
                         Image(systemName: "plus")
+
+                            .accessibilityLabel(Text("Add"))
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.ink.opacity(0.96))
                     }
@@ -2029,6 +2058,7 @@ private struct CutBoundaryTeardropBadgeView: View {
         }
         .buttonStyle(.plain)
         .help(tooltipText.localizedUI)
+        .accessibilityLabel(Text(tooltipText.localizedUI))
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
@@ -2137,11 +2167,14 @@ private struct SplitModeWiggle: ViewModifier {
     @State private var cycle: CGFloat = 0.0
     @State private var strength: CGFloat = 0.0
     @State private var isRunning = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .modifier(SplitWiggleStrength(cycle: cycle, strength: strength, direction: direction))
             .onChange(of: isActive, initial: true) { _, active in
+                // Reduce Motion: split mode is shown by the cursor and the button state only, the tracks stay still.
+                if active && reduceMotion { return }
                 if active {
                     isRunning = true
                     withAnimation(.easeOut(duration: 0.16)) {
@@ -2917,6 +2950,12 @@ private struct TimelineInteractiveSegmentView: View {
                 }
             }
         }
+        // VoiceOver: one button per segment. Pressing it does what a click in its middle does (select, or split in split mode).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: accessibilityName))
+        .accessibilityValue(Text(verbatim: AccessibilityText.range(startMs: startMs, endMs: endMs)))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default) { onClickAtLocalX(segWidth * 0.5) }
         .offset(x: xOffset, y: verticalDragOffset)
         .zIndex(activeDragMode != nil ? 60 : (isHovered ? 30 : 1))
         .highPriorityGesture(
@@ -3013,6 +3052,23 @@ private struct TimelineInteractiveSegmentView: View {
                     }
                 }
         )
+    }
+
+    /// Title plus what the subtitle row shows, translated, e.g. "Zoom, 1.6×, Auto".
+    private var accessibilityName: String {
+        var parts = [topTitle.localizedUI]
+        switch subtitleContent {
+        case .clip(let durationText, let speedText):
+            parts += [durationText, speedText]
+        case .zoom(let scaleText, let modeText):
+            parts += [scaleText, modeText.localizedUI]
+        case .mask(let text):
+            parts.append(text.localizedUI)
+        case .voiceover(let volumeText, _):
+            parts += ["Microphone".localizedUI, volumeText]
+        }
+        if isDimmed { parts.append("Disabled".localizedUI) }
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     @ViewBuilder
@@ -3403,6 +3459,7 @@ private struct SpeedUpTypingSuggestionChipView: View {
             .contentShape(RoundedRectangle(cornerRadius: 5.5, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text("Speed up typing"))
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
@@ -3479,6 +3536,8 @@ private struct SpeedUpTypingPopoverView: View {
                     ),
                     in: 1.5...8.0
                 )
+                .accessibilityLabel(Text("Speed"))
+                .accessibilityValue(Text(verbatim: String(format: "%g×", preferredSpeed)))
                 .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
                 .controlSize(.regular)
 
@@ -3744,6 +3803,15 @@ private struct ShortcutTimelineSegmentView: View {
                     NSCursor.arrow.set()
                 }
             }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: "Shortcut".localizedUI + ", " + cluster.compactTimelineLabel))
+        .accessibilityValue(Text(verbatim: AccessibilityText.range(startMs: startMs, endMs: endMs)))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default) {
+            session.isPlaying = false
+            session.seek(toTimelineMs: (startMs + endMs) * 0.5)
+            session.selectShortcut(cluster.id)
         }
         .offset(x: xOffset, y: verticalDragOffset)
         .zIndex(activeDragMode != nil ? 60 : (isSelected ? 40 : (isHovered ? 30 : 1)))

@@ -892,6 +892,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
             HStack(spacing: 12) {
                 Slider(value: value, in: range)
                     .tint(Color(red: 0.44, green: 0.32, blue: 0.98))
+                    .accessibilityLabel(Text(title.localizedUI))
 
                 Button {
                     withAnimation(.easeOut(duration: 0.14)) {

@@ -501,7 +501,8 @@ public final class SharedFloatingTooltipWindowController {
                 panel.animator().alphaValue = 1.0
             }
         } else {
-            let slideOffset: CGPoint = {
+            // Reduce Motion: fade in place, no slide.
+            let slideOffset: CGPoint = AccessibilityText.reduceMotion ? .zero : {
                 switch effectiveEdge {
                 case .top:      return CGPoint(x: 0.0, y: -4.0)
                 case .bottom:   return CGPoint(x: 0.0, y: 4.0)
@@ -943,6 +944,15 @@ public final class HoverMagnetTrackingNSView: NSView {
     }
 
     private func startSpringTimerIfNeeded() {
+        // Reduce Motion: the highlight appears and leaves in place, without flying in or following the cursor.
+        if AccessibilityText.reduceMotion {
+            stopSpringTimer()
+            isHoveredSpring.snap(to: isHoveredSpring.target)
+            offsetXSpring.snap(to: 0.0)
+            offsetYSpring.snap(to: 0.0)
+            applyMagnetTransform()
+            return
+        }
         guard springTimer == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -1155,6 +1165,8 @@ public struct InstantTooltipButton<LabelContent: View>: View {
     let activeColor: Color
     let size: CGFloat
     let cornerRadius: CGFloat
+    /// Read after the name when the icon shows a state, e.g. the playback speed (already translated).
+    let accessibilityValue: String?
     let action: () -> Void
     @ViewBuilder let label: () -> LabelContent
 
@@ -1171,9 +1183,11 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         activeColor: Color = Color(red: 0.45, green: 0.36, blue: 0.96),
         size: CGFloat = 38,
         cornerRadius: CGFloat = 6,
+        accessibilityValue: String? = nil,
         action: @escaping () -> Void,
         @ViewBuilder label: @escaping () -> LabelContent
     ) {
+        self.accessibilityValue = accessibilityValue
         self.tooltip = tooltip
         self.shortcutBadge = shortcutBadge
         self.edge = edge
@@ -1230,6 +1244,10 @@ public struct InstantTooltipButton<LabelContent: View>: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled && !allowHoverWhenDisabled)
+        // Icon-only: the tooltip is the name VoiceOver reads; the shortcut stays in the tooltip.
+        .accessibilityLabel(Text(AccessibilityText.label(fromTooltip: tooltip)))
+        .accessibilityValue(Text(accessibilityValue ?? ""))
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
 
@@ -1243,6 +1261,9 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
     let cornerRadius: CGFloat
     let action: () -> Void
     let onActionWithAnchorView: ((NSView?) -> Void)?
+    /// What VoiceOver reads when the visible text alone does not say what the pill does (catalog keys).
+    let accessibilityLabel: String?
+    let accessibilityValue: String?
     @ViewBuilder let label: () -> LabelContent
 
     @Environment(\.isTooltipAndHoverBlocked) private var isTooltipAndHoverBlocked
@@ -1257,8 +1278,12 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
         cornerRadius: CGFloat = 6,
         action: @escaping () -> Void = {},
         onActionWithAnchorView: ((NSView?) -> Void)? = nil,
+        accessibilityLabel: String? = nil,
+        accessibilityValue: String? = nil,
         @ViewBuilder label: @escaping () -> LabelContent
     ) {
+        self.accessibilityLabel = accessibilityLabel
+        self.accessibilityValue = accessibilityValue
         self.tooltip = tooltip
         self.edge = edge
         self.isActive = isActive
@@ -1302,6 +1327,10 @@ public struct SubToolbarPillButton<LabelContent: View>: View {
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabelIfAny(accessibilityLabel)
+        .accessibilityValue(Text(accessibilityValue ?? ""))
+        .accessibilityHint(Text(accessibilityLabel == nil ? (tooltip ?? "").localizedUI : ""))
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
 

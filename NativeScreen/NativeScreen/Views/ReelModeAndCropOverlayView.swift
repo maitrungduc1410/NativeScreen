@@ -770,6 +770,7 @@ public struct ExportStillFrameModalView: View {
                                 chooseExportDirectory()
                             } label: {
                                 Image(systemName: "folder")
+                                    .accessibilityLabel(Text("Change directory…"))
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(.white.opacity(0.9))
                                     .frame(width: 34, height: 32)

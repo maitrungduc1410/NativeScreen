@@ -352,6 +352,7 @@ public final class ProjectSession: Identifiable {
         withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
             activeToastMessage = message
         }
+        AccessibilityText.announce(message.localizedUI)
         toastDismissTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(durationMs))
             guard !Task.isCancelled, let self = self else { return }

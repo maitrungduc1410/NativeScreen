@@ -148,6 +148,9 @@ public struct ProjectEditorWindowView: View {
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
+                            .accessibilityLabel(Text("Project name"))
+                            .accessibilityValue(Text(verbatim: session.document.name))
+                            .accessibilityHint(Text("Rename project"))
                             .buttonStyle(.plain)
                             .onHover { hovering in
                                 withAnimation(.easeOut(duration: 0.12)) {
@@ -646,6 +649,9 @@ public struct ProjectEditorWindowView: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(Text("Duration"))
+                            .accessibilityValue(Text(AccessibilityText.duration(ms: session.timeMapper.totalTimelineDurationMs)))
+                            .accessibilityHint(Text("Copy to clipboard"))
                         }
 
                         // Right: Playback Speed (`1x`) + Timeline Zoom Slider
@@ -658,7 +664,8 @@ public struct ProjectEditorWindowView: View {
                                 edge: .top,
                                 isActive: abs(session.previewPlaybackRate - 1.0) > 0.01,
                                 size: 36,
-                                cornerRadius: 6
+                                cornerRadius: 6,
+                                accessibilityValue: String(format: "%gx", session.previewPlaybackRate)
                             ) {
                                 NativeSegmentContextMenuPresenter.shared.presentPlaybackSpeedMenu(session: session)
                             } label: {
@@ -774,7 +781,7 @@ public struct ProjectEditorWindowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
                 .zIndex(750)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(AccessibilityText.reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
         .background(
@@ -1472,6 +1479,10 @@ private struct LivePlayheadTimecodeTextView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // The visible timecode is the value; it changes every frame, so nothing extra is formatted here.
+        .accessibilityLabel(Text("Playhead"))
+        .accessibilityValue(Text(verbatim: timeString))
+        .accessibilityHint(Text("Copy to clipboard"))
     }
 }
 
@@ -1533,8 +1544,11 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.ink.opacity(isHoveringPreviewCanvas ? 0.035 : 0.0))
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
         .frame(width: fittedSize.width, height: fittedSize.height)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Preview"))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -1593,6 +1607,9 @@ private struct ShortcutKeycapHitTargetsView: View {
                             session.selectShortcut(entry.key)
                         }
                     }
+                    .accessibleButton("Edit shortcut") {
+                        session.selectShortcut(entry.key)
+                    }
             }
         }
         .frame(width: canvasSize.width, height: canvasSize.height)
@@ -1617,6 +1634,9 @@ private struct CaptionHitTargetsView: View {
                         withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
                             session.selectCaption(entry.key)
                         }
+                    }
+                    .accessibleButton("Edit caption") {
+                        session.selectCaption(entry.key)
                     }
             }
         }
@@ -2324,6 +2344,7 @@ private struct CommandMenuOverlayView: View {
                 .onTapGesture {
                     onClose()
                 }
+                .accessibilityHidden(true)
 
             // Command Menu Modal Card (`max-width: 640px, max-height: 420px, background: #1E1E1EEE, border: 1px solid #FFFFFF2E`)
             VStack(spacing: 0) {
@@ -2371,6 +2392,7 @@ private struct CommandMenuOverlayView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Clear search"))
                     }
                 }
                 .padding(.horizontal, 20)
@@ -2524,6 +2546,7 @@ private struct CommandMenuRowView: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isHighlighted ? .isSelected : [])
         .onHover { hovering in
             if hovering {
                 onHover()
@@ -2588,6 +2611,7 @@ private struct ExportSettingsModalView: View {
                 .onTapGesture {
                     onCancel()
                 }
+                .accessibilityHidden(true)
 
             // Main Export Settings Card
             VStack(alignment: .leading, spacing: 28) {
@@ -2658,6 +2682,8 @@ private struct ExportSettingsModalView: View {
                             }
                             .buttonStyle(.plain)
                             .fixedSize()
+                            .accessibilityLabel(Text("Frame rate"))
+                            .accessibilityValue(Text("\(config.fps) FPS"))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -2762,6 +2788,8 @@ private struct ExportSettingsModalView: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel(Text("Advanced"))
+                                    .accessibilityValue(Text((isAdvancedExpanded ? "Expanded" : "Collapsed").localizedUI))
                                     .onHover { isHoveringAdvancedToggle = $0 }
 
                                     if isAdvancedExpanded {
@@ -2912,6 +2940,7 @@ private struct ExportSettingsModalView: View {
                                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(Text(verbatim: config.target.primaryButtonTitle))
                             .onHover { isHoveringPrimaryExport = $0 }
 
                             Button(action: onCancel) {
@@ -3047,6 +3076,7 @@ private struct ExportSettingsModalView: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -3162,6 +3192,9 @@ private struct ExportingFullOverlayView: View {
                         }
                     }
                     .frame(width: 320, height: 6)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("Export progress"))
+                    .accessibilityValue(Text(verbatim: percentageText))
 
                     // Time Elapsed & Remaining ETA (`00:04 • 00:06 left`)
                     Group {
@@ -3382,6 +3415,7 @@ private struct PresetsPopoverView: View {
             .fixedSize()
             .padding(.trailing, 4)
             .help("Preset options...")
+            .accessibilityLabel(Text("Preset options..."))
         }
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -3413,6 +3447,7 @@ private struct TimelineZoomSlider: View {
 
     var body: some View {
         Slider(value: $session.timelineZoom, in: 1.0...6.0)
+            .accessibilityLabel(Text("Timeline zoom"))
             .tint(kNativeScreenPurpleAccent)
             .frame(width: 96)
             .controlSize(.small)

@@ -2016,6 +2016,7 @@ private struct HUDCameraMenuContentView: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .tint(Color(red: 0.04, green: 0.52, blue: 1.0))
+                    .accessibilityLabel(Text("Show camera preview"))
             }
             .padding(.horizontal, 14)
             .frame(height: 32)
@@ -2053,6 +2054,7 @@ private struct HUDCameraMenuContentView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
 
                         if index < options.count - 1 {
                             let nextOption = options[index + 1]
@@ -2069,6 +2071,8 @@ private struct HUDCameraMenuContentView: View {
                     RoundedRectangle(cornerRadius: 7.5, style: .continuous)
                         .fill(Color.white.opacity(0.11))
                 )
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text("Max resolution"))
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
@@ -2135,6 +2139,7 @@ private struct HUDMicrophoneMenuContentView: View {
                             }
                         }
                         .frame(height: 4)
+                        .accessibilityDecorative()
                     }
                 }
             }
@@ -2245,6 +2250,7 @@ private struct HUDSystemAudioMenuContentView: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .tint(Color(red: 0.04, green: 0.52, blue: 1.0))
+                    .accessibilityLabel(Text(app.name))
                 }
                 .padding(.horizontal, 14)
                 .frame(height: 32)
@@ -2304,6 +2310,7 @@ private struct HUDSelectableMenuRowButton<RowContent: View>: View {
                 onClick: action
             )
         )
+        .accessibleButton(isSelected: isSelected, action: action)
     }
 }
 
@@ -2414,6 +2421,9 @@ private struct HUDCountdownSegmentedRowView: View {
                                 }
                             }
                         )
+                        .accessibleButton(isSelected: isSelected) {
+                            coordinator.countdownOption = option
+                        }
 
                     // Subtle vertical divider between unselected adjacent options
                     if index < options.count - 1 {
@@ -2422,6 +2432,7 @@ private struct HUDCountdownSegmentedRowView: View {
                         Rectangle()
                             .fill(Color.white.opacity(showDivider ? 0.18 : 0.0))
                             .frame(width: 1, height: 13)
+                            .accessibilityDecorative()
                     }
                 }
             }
@@ -2431,6 +2442,8 @@ private struct HUDCountdownSegmentedRowView: View {
                 RoundedRectangle(cornerRadius: 7.5, style: .continuous)
                     .fill(Color.white.opacity(0.11))
             )
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text("Countdown"))
         }
         .padding(.horizontal, 14)
     }
@@ -2455,6 +2468,7 @@ private struct HUDSwitchMenuRowView: View {
                 .labelsHidden()
                 .controlSize(.small)
                 .tint(Color(red: 0.04, green: 0.52, blue: 1.0))
+                .accessibilityLabel(Text(title.localizedUI))
         }
         .padding(.horizontal, 14)
     }
@@ -2556,6 +2570,7 @@ public struct RecordingHUDBarView: View {
                     .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(.white.opacity(0.94))
             }
+            .accessibilityLabel(Text("Close"))
 
             Rectangle()
                 .fill(Color.white.opacity(0.18))
@@ -2686,6 +2701,7 @@ public struct RecordingHUDBarView: View {
                             .frame(height: 3.0)
                             .padding(.horizontal, 8)
                             .padding(.bottom, 3.0)
+                            .accessibilityDecorative()
                         }
                     }
                 }
@@ -2844,9 +2860,11 @@ public struct RecordingHUDBarView: View {
                             .foregroundStyle(coralColor)
                     }
                     .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 10)
             }
+            .accessibilityValue(Text(AccessibilityText.duration(ms: Double(secondsInt) * 1000)))
         }
         .padding(.horizontal, 16)
         .fixedSize(horizontal: true, vertical: false)
@@ -2890,6 +2908,7 @@ public struct RecordingHUDBarView: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 10)
             }
+            .accessibilityValue(Text(AccessibilityText.duration(ms: coordinator.recordingElapsedSeconds * 1000)))
 
             Rectangle()
                 .fill(Color.white.opacity(0.20))
@@ -3015,6 +3034,9 @@ private struct HUDInteractiveItemButton<LabelContent: View>: View {
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
+        // Buttons with a tooltip are icon-only, so the tooltip is their name; the others read their text.
+        .accessibilityLabelIfAny(translated: tooltip.map { AccessibilityText.label(fromTooltip: $0) })
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func currentScreenRect() -> NSRect {

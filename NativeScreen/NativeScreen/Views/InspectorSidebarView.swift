@@ -293,6 +293,7 @@ public struct InspectorSidebarView: View {
                     } label: {
                         HStack(spacing: 7) {
                             Image(systemName: "wand.and.stars")
+                                .accessibilityLabel(Text("Random color"))
                                 .font(.system(size: 13, weight: .regular))
                             Text("Pick random wallpaper")
                                 .font(.system(size: 13, weight: .regular))
@@ -341,6 +342,9 @@ public struct InspectorSidebarView: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(Text(preset.name.localizedUI))
+                            .accessibilityValue(Text(favoriteIDs.contains("mesh:\(preset.id)") ? "Favorite".localizedUI : ""))
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                             .contextMenu { favoriteMenuButton(for: "mesh:\(preset.id)") }
                         }
 
@@ -370,6 +374,9 @@ public struct InspectorSidebarView: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(Text(verbatim: Self.wallpaperAccessibilityName(item)))
+                            .accessibilityValue(Text(favoriteIDs.contains("wallpaper:\(item.id)") ? "Favorite".localizedUI : ""))
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                             .contextMenu { favoriteMenuButton(for: "wallpaper:\(item.id)") }
                         }
                     }
@@ -484,6 +491,7 @@ public struct InspectorSidebarView: View {
                                 }
                             } label: {
                                 Image(systemName: "wand.and.stars")
+                                .accessibilityLabel(Text("Random color"))
                                     .font(.system(size: 13.0, weight: .regular))
                                     .foregroundStyle(.ink.opacity(0.90))
                                     .frame(width: 32, height: 32)
@@ -531,6 +539,7 @@ public struct InspectorSidebarView: View {
                             ),
                             in: 0.0...1.0
                         )
+                        .accessibilityLabel(Text("Hue"))
                         .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
                         .controlSize(.regular)
                     }
@@ -538,7 +547,7 @@ public struct InspectorSidebarView: View {
                     // 8-Column Grid of 30 Curated Gradient Swatches
                     let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 8)
                     LazyVGrid(columns: columns, spacing: 6) {
-                        ForEach(Array(Self.curatedGradientPairs.enumerated()), id: \.offset) { _, pair in
+                        ForEach(Array(Self.curatedGradientPairs.enumerated()), id: \.offset) { index, pair in
                             let isSelected = (stop0Hex.caseInsensitiveCompare(pair.0) == .orderedSame && stop1Hex.caseInsensitiveCompare(pair.1) == .orderedSame)
                             Button {
                                 session.mutate { doc in
@@ -564,6 +573,8 @@ public struct InspectorSidebarView: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(Text(String(format: "Gradient %lld".localizedUI, index + 1)))
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
                 }
@@ -597,6 +608,7 @@ public struct InspectorSidebarView: View {
                             }
                         } label: {
                             Image(systemName: "wand.and.stars")
+                                .accessibilityLabel(Text("Random color"))
                                 .font(.system(size: 13.5, weight: .regular))
                                 .foregroundStyle(.ink.opacity(0.90))
                                 .frame(width: 36, height: 36)
@@ -1763,6 +1775,7 @@ public struct InspectorSidebarView: View {
                         session.endInteractiveEdit()
                     }
                 }
+                .accessibilityLabel(Text("Motion blur"))
                 .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
                 .controlSize(.regular)
                 .padding(.top, 4)
@@ -1813,6 +1826,7 @@ public struct InspectorSidebarView: View {
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .onHover { hovering in
             onHoverChanged(hovering)
         }
@@ -1889,6 +1903,7 @@ public struct InspectorSidebarView: View {
                         Text("Highlight").tag(MaskType.spotlight)
                     }
                     .pickerStyle(.segmented)
+                    .accessibilityLabel(Text("Mask Mode"))
                     .labelsHidden()
                 }
 
@@ -1907,6 +1922,7 @@ public struct InspectorSidebarView: View {
                             Text("Solid").tag(MaskStyle.solid)
                         }
                         .pickerStyle(.segmented)
+                        .accessibilityLabel(Text("Blur Filter Style"))
                         .labelsHidden()
                     }
 
@@ -2809,6 +2825,8 @@ public struct InspectorSidebarView: View {
                         }
                         .buttonStyle(.plain)
                         .help(preset.rawValue)
+                        .accessibilityLabel(Text(preset.rawValue.localizedUI))
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
                     }
 
                     ForEach(cam.customColorPresets) { custom in
@@ -3304,6 +3322,7 @@ public struct InspectorSidebarView: View {
                         captionInspectorTrackId = session.addCaptionTrack()
                     } label: {
                         Image(systemName: "plus")
+                            .accessibilityLabel(Text("Add caption track"))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.ink.opacity(0.85))
                             .frame(width: 34, height: 34)
@@ -3900,6 +3919,7 @@ public struct InspectorSidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     /// Copies a `.cube` file into the package so the project stays portable, then grades the camera with it.
@@ -4764,6 +4784,17 @@ public struct InspectorSidebarView: View {
             .allowsHitTesting(false)
     }
 
+    /// VoiceOver name for a wallpaper: bundled files are named `spring-01`, read as "Spring 1" in the UI language.
+    private static func wallpaperAccessibilityName(_ item: SystemWallpaperItem) -> String {
+        guard item.isBundled,
+              let dash = item.id.lastIndex(of: "-"),
+              let number = Int(item.id[item.id.index(after: dash)...])
+        else { return item.name.localizedUI }
+        let prefix = item.id[..<dash].lowercased()
+        let category = BundledWallpaperCatalog.categories.first { $0.lowercased() == prefix } ?? prefix.capitalized
+        return "\(category.localizedUI) \(number)"
+    }
+
     @ViewBuilder
     private func favoriteMenuButton(for id: String) -> some View {
         if favoriteBackgroundIDs.contains(id) {
@@ -5128,6 +5159,7 @@ public struct InspectorSidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - 7C. Dedicated Voiceover Segment Editor
@@ -5736,6 +5768,7 @@ public struct InspectorSidebarView: View {
                                 }
                             } label: {
                                 Image(systemName: "wand.and.stars")
+                                .accessibilityLabel(Text("Random color"))
                                     .font(.system(size: 13.5, weight: .regular))
                                     .foregroundStyle(.ink.opacity(0.90))
                                     .frame(width: 36, height: 36)
@@ -5829,6 +5862,7 @@ public struct InspectorSidebarView: View {
                                 }
                             } label: {
                                 Image(systemName: "wand.and.stars")
+                                .accessibilityLabel(Text("Random color"))
                                     .font(.system(size: 13.0, weight: .regular))
                                     .foregroundStyle(.ink.opacity(0.90))
                                     .frame(width: 32, height: 32)
@@ -5848,7 +5882,7 @@ public struct InspectorSidebarView: View {
                         // Mini 8-column preset gradient picker for keycaps
                         let columns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 8)
                         LazyVGrid(columns: columns, spacing: 5) {
-                            ForEach(Array(Self.curatedGradientPairs.prefix(16).enumerated()), id: \.offset) { _, pair in
+                            ForEach(Array(Self.curatedGradientPairs.prefix(16).enumerated()), id: \.offset) { index, pair in
                                 let isSel = (current.gradientStartHex.caseInsensitiveCompare(pair.0) == .orderedSame && current.gradientEndHex.caseInsensitiveCompare(pair.1) == .orderedSame)
                                 Button {
                                     style.wrappedValue.gradientStartHex = pair.0
@@ -5870,6 +5904,8 @@ public struct InspectorSidebarView: View {
                                         .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(Text(String(format: "Gradient %lld".localizedUI, index + 1)))
+                                .accessibilityAddTraits(isSel ? .isSelected : [])
                             }
                         }
 
@@ -5947,6 +5983,7 @@ public struct InspectorSidebarView: View {
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Helpers
@@ -6009,6 +6046,7 @@ public struct InspectorSidebarView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
+                .accessibilityLabel(Text(title.localizedUI))
         }
     }
 
@@ -6060,6 +6098,7 @@ public struct InspectorSidebarView: View {
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -6097,6 +6136,9 @@ public struct InspectorSidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text(title.localizedUI))
+            .accessibilityValue(Text((isExpanded.wrappedValue ? "Expanded" : "Collapsed").localizedUI))
+            .accessibilityAddTraits(.isHeader)
 
             if isExpanded.wrappedValue {
                 content()
@@ -6131,7 +6173,9 @@ public struct InspectorSidebarView: View {
                     .foregroundStyle(.ink.opacity(0.92))
             }
 
+            .accessibilityHidden(true) // the slider below carries the title
             coalescedSliderRowOnly(
+                title: title,
                 value: value,
                 range: range,
                 defaultValue: defaultValue,
@@ -6142,6 +6186,7 @@ public struct InspectorSidebarView: View {
 
     @ViewBuilder
     private func coalescedSliderRowOnly(
+        title: String? = nil,
         value: Binding<Double>,
         range: ClosedRange<Double>,
         defaultValue: Double,
@@ -6159,6 +6204,7 @@ public struct InspectorSidebarView: View {
             }
             .tint(Color(red: 0.44, green: 0.34, blue: 0.98))
             .controlSize(.regular)
+            .accessibilityLabelIfAny(title)
 
             if showResetButton {
                 Button {
@@ -6187,6 +6233,7 @@ public struct InspectorSidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!isModified)
+                .accessibilityLabel(Text(title.map { String(format: "Reset %@".localizedUI, $0.localizedUI) } ?? "Reset".localizedUI))
             }
         }
     }
@@ -6204,6 +6251,7 @@ private struct SpringPhysicsDemoDotView: View {
     @State private var holdCounter: Int = 0
 
     private let dotSize: CGFloat = 10.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
@@ -6215,13 +6263,20 @@ private struct SpringPhysicsDemoDotView: View {
                 .offset(x: CGFloat(position01) * travelW)
         }
         .frame(height: dotSize)
+        .accessibilityHidden(true)
         .onAppear {
             position01 = 0.0
             velocity01 = 0.0
             target01 = 1.0
             holdCounter = 0
         }
-        .task(id: spring) {
+        .task(id: [spring.stiffness, spring.damping, spring.mass, reduceMotion ? 1 : 0]) {
+            // Reduce Motion: the dot rests at the start instead of bouncing forever.
+            if reduceMotion {
+                position01 = 0.0
+                velocity01 = 0.0
+                return
+            }
             let dt = 1.0 / 60.0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(16))
@@ -6304,6 +6359,8 @@ private struct CursorStyleHorizontalCardView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(theme.name.localizedUI))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .onHover { hovering in
             isHovered = hovering
             hoverCycleTask?.cancel()
@@ -6348,6 +6405,9 @@ private struct ColorSwatchPickerButton: View {
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text("Color"))
+        .accessibilityValue(Text(verbatim: hexColor))
+        .accessibilityHint(Text("Opens the color picker"))
         .popover(isPresented: $isShowingPopover, arrowEdge: .leading) {
             ColorPickerPopoverView(hexColor: $hexColor)
         }
@@ -6508,6 +6568,9 @@ private struct ColorPickerPopoverView: View {
                             .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Color"))
+                    .accessibilityValue(Text(verbatim: swatchHex))
+                    .accessibilityAddTraits(isSel ? .isSelected : [])
                 }
             }
 
@@ -6552,6 +6615,7 @@ private struct ColorPickerPopoverView: View {
                     }
                 } label: {
                     Image(systemName: "eyedropper")
+                        .accessibilityLabel(Text("Pick a color from the screen"))
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(.ink.opacity(0.90))
                         .frame(width: 28, height: 28)
@@ -6773,6 +6837,9 @@ private struct ZoomPositionPadView: View {
             )
         }
         .aspectRatio(sourceAspect, contentMode: .fit)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Zoom position"))
+        .accessibilityValue(Text("Left \(Int((zoom.manualCenter01.x * 100).rounded()))% · Top \(Int((zoom.manualCenter01.y * 100).rounded()))%"))
         .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -6860,5 +6927,8 @@ private struct CaptionPositionPad: View {
             )
         }
         .frame(height: 170)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Caption position"))
+        .accessibilityValue(Text("Left \(Int((position01.x * 100).rounded()))% · Top \(Int((position01.y * 100).rounded()))%"))
     }
 }
