@@ -85,6 +85,24 @@ public struct GradedWebcamPortraitView: View {
     fileprivate static let sharedCIContext = CIContext(options: [.useSoftwareRenderer: false])
     private static var basePortraitCIImage: CIImage = buildBasePortraitCIImage()
 
+    /// Each slider tick of intensity, sharpen or a custom preset makes a new key; past this many entries the cache
+    /// starts over instead of keeping every 240 px variant until quit.
+    private static let imageCacheLimit = 48
+
+    private static func storeInImageCache(_ image: NSImage, forKey key: String) {
+        if imageCache.count >= imageCacheLimit {
+            imageCache.removeAll(keepingCapacity: true)
+        }
+        imageCache[key] = image
+    }
+
+    /// Drops the graded previews and the project's camera frame (called when the last editor closes).
+    public static func purgeCaches() {
+        imageCache.removeAll()
+        preloadedVideoURL = nil
+        basePortraitCIImage = buildBasePortraitCIImage()
+    }
+
     public static func preloadFirstFrameIfNeeded(from url: URL, onLoaded: (@MainActor () -> Void)? = nil) {
         if preloadedVideoURL == url {
             onLoaded?()
@@ -139,7 +157,7 @@ public struct GradedWebcamPortraitView: View {
         let extent = CGRect(x: 0, y: 0, width: 240, height: 240)
         if let cgImg = sharedCIContext.createCGImage(graded, from: extent) {
             let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: 240, height: 240))
-            imageCache[cacheKey] = nsImg
+            storeInImageCache(nsImg, forKey: cacheKey)
             return nsImg
         }
         return NSImage(size: NSSize(width: 240, height: 240))
@@ -169,7 +187,7 @@ public struct GradedWebcamPortraitView: View {
         let extent = CGRect(x: 0, y: 0, width: 240, height: 240)
         if let cgImg = sharedCIContext.createCGImage(graded, from: extent) {
             let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: 240, height: 240))
-            imageCache[cacheKey] = nsImg
+            storeInImageCache(nsImg, forKey: cacheKey)
             return nsImg
         }
         return NSImage(size: NSSize(width: 240, height: 240))

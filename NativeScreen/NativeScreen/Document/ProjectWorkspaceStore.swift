@@ -14,6 +14,10 @@ import UniformTypeIdentifiers
 public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
     public static let shared = ProjectWorkspaceStore()
 
+    /// Posted with the `ProjectSession` as object right before its editor window is torn down, so views can remove
+    /// `NSEvent` monitors (SwiftUI does not run `onDisappear` when the hosting view is simply released).
+    public static let editorWillCloseNotification = Notification.Name("NativeScreen.EditorWillClose")
+
     public var sessionsByID: [UUID: ProjectSession] = [:]
     public var recentProjectURLs: [URL] = []
     /// Session of the editor window that is (or was last) key. App menu commands act on it.
@@ -50,7 +54,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
     /// The active project's editor window as a capture target, or `nil` if it is not on screen (minimized, for example).
     public var activeEditorCaptureWindow: CapturableWindowInfo? {
         guard let id = activeSessionID, let window = editorWindowsBySessionID[id] else { return nil }
-        return WindowDiscoveryService.listFrontToBackWindows().first { $0.id == UInt32(window.windowNumber) }
+        return WindowDiscoveryService.listFrontToBackWindows(resolveCornerRadius: false).first { $0.id == UInt32(window.windowNumber) }
     }
 
     public func registerSession(_ session: ProjectSession) {
@@ -446,13 +450,31 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
             closeCropWindow(for: sessionID)
             closeCameraCropWindow(for: sessionID)
             closeColorPresetStudioWindow(for: sessionID)
-            if let session = sessionsByID[sessionID] {
-                session.isPlaying = false
-                if AppSettings.shared.autosaveEnabled {
-                    try? session.saveNow()
+            if let session = sessionsByID.removeValue(forKey: sessionID) {
+                NotificationCenter.default.post(name: Self.editorWillCloseNotification, object: session)
+                session.prepareForClose()
+                if !session.isDeletedFromDisk {
+                    if AppSettings.shared.autosaveEnabled {
+                        try? session.saveNow()
+                    }
+                    AppSettings.shared.rememberLastProjectStyle(session.document)
                 }
-                AppSettings.shared.rememberLastProjectStyle(session.document)
             }
+            // AppKit and SwiftUI's focus tracking can keep a closed window alive until another one becomes key.
+            // Dropping the hosting controller frees the preview (MTKView, players, compositor) right away. The local
+            // pool matters: otherwise the controller sits in the event loop's pool until the next event arrives.
+            closingWindow.delegate = nil
+            DispatchQueue.main.async {
+                autoreleasepool {
+                    closingWindow.contentViewController = nil
+                }
+            }
+        }
+
+        // With no editor left, nothing shows these images; they are rebuilt on demand when a project opens.
+        if editorWindowsBySessionID.isEmpty {
+            SystemWallpaperCatalog.purgeThumbnailCache()
+            GradedWebcamPortraitView.purgeCaches()
         }
 
         // When all project editor windows are closed, automatically show the small Recording HUD panel!
@@ -606,6 +628,15 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting([destination])
+    }
+
+    /// Moves a project's package to the Trash and forgets it, so closing its window cannot save it back.
+    public func trashProject(_ session: ProjectSession) {
+        let url = session.packageURL.standardizedFileURL
+        guard (try? FileManager.default.trashItem(at: url, resultingItemURL: nil)) != nil else { return }
+        session.markDeletedFromDisk()
+        recentProjectURLs.removeAll { $0.standardizedFileURL == url }
+        UserDefaults.standard.set(recentProjectURLs.map(\.path), forKey: recentsDefaultsKey)
     }
 
     public func addRecentProject(_ url: URL) {

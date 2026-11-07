@@ -963,3 +963,36 @@ A clip slice's context menu has one volume slider per recorded source: `Micropho
 The recording HUD sizes its window from the bar's reported width (`onGeometryChange`) instead of reading `fittingSize` right after a state change, which could still return the old layout: a longer microphone name made the bar wider than its window and cut off both rounded ends. The window grows at once and only animates when shrinking.
 
 - **Windows.** `ClipSlice.MicrophoneVolume` (clamped 0 to 2 on read), `SegmentEdits.SetSliceMicrophoneVolume` / `SetSliceSystemAudioVolume` (0 to 1, clear `Muted`), and `AudioMix.MicrophoneGain` multiplies by it. The mixer computes gain per sample frame from the slice under it, in preview and export, so the volume after a hiding voiceover is that slice's without extra code. The clip menu shows each slider only when the metadata names that track (`microphoneAudio`, `systemAudio`). The conformance fixtures gained `"microphoneVolume" : 1` on each slice, which is what the macOS writer now produces. The recording bar also refits when its own size changes, not only after a rebuild, so a label that changes in place cannot overflow the window. Not listened to on Windows yet.
+
+---
+
+## 48. ADR-48: Closing an Editor Releases Its Project
+
+Closing a project used to keep almost all of it in memory. Measured on a 15 MB recording (Debug build): 38 MB at launch, 181 MB with the project open, 117 MB after closing, and about 5 MB more after every open and close of the same project. Each closed session stayed in memory until quit. What kept it alive, and the fix for each:
+
+- **Registry.** `ProjectWorkspaceStore.sessionsByID` never removed a session, so reopening a project reused the old in-memory document (and its undo history) instead of reading `project.json`. `windowWillClose` now removes it after the autosave.
+- **Window teardown.** AppKit and SwiftUI's focus tracking keep a closed `NSWindow` alive until another window becomes key. The close handler now sets `contentViewController = nil` inside its own `autoreleasepool`, so the whole editor view tree goes at once. Without the pool, the controller waits in the event loop's pool until the next event.
+- **Preview.** `MetalPreviewView.dismantleNSView` pauses and drops every player (video, camera, microphone, voiceovers, background music) and the decoded frames.
+- **Event monitors.** The editor's `NSEvent` local monitors capture the view, and with it the session. SwiftUI does not run `onDisappear` when a hosting view is released, so the store posts `editorWillCloseNotification` (object: the session) first, and the editor and inspector remove their monitors on it.
+- **AppKit-held NSViews.** AppKit can keep a detached NSView alive for a while, so representables that store closures (right-click catcher, `⌘`-scroll zoom catcher, menu click overlay, title bar metrics) clear them in `dismantleNSView`.
+
+After the fix, closing leaves no preview objects, and memory after close stays at about 100 to 135 MB over repeated open and close cycles of two projects. What remains above launch is one-time framework setup (Metal, AVFoundation, CoreImage, SwiftUI), malloc fragmentation and image caches. The app menu's observation tracking can still hold the last closed session or two until the menu bar next re-evaluates; that is bounded and does not grow.
+
+Deleting a project used to trash the package, then close the window, and the close-time autosave recreated the folder with only `project.json`. `ProjectWorkspaceStore.trashProject` now marks the session deleted (`saveNow` does nothing after that, and a pending autosave is cancelled) and removes it from Recent Projects. `Don't Save` also clears the undo and redo stacks, so `⌘Z` cannot bring back discarded edits.
+
+---
+
+## 49. ADR-49: Pay Only for What Is Used
+
+A pass over CPU and memory for work done when nothing needs it.
+
+- **Window picker.** While hovering windows to record, a 60 Hz timer listed every window, and for each one asked Accessibility (several IPC round trips into that window's app) for its corner radius. Now the list skips the radius, only the window under the cursor gets it, and the result is cached per window and size. With the mouse still, the list is refreshed every 0.25 s instead of every tick.
+- **Disk checks on the frame path.** `hasRecordedCamera` and the camera and microphone URLs checked the disk on every call, and the compositor asks several times per frame at up to 120 Hz. `recording/` never changes after capture, so the lookup is done once per package location. The background music file is resolved once per `relativePath` (hits only, so a built-in track that is still being generated is picked up). Voiceover files are checked only when their player is created.
+- **Mask overlay.** It read the playhead in `body`, so during playback it re-evaluated every frame to draw nothing (handles are hidden while playing). The time-dependent work now runs only while paused.
+- **Background music.** The preview created and prepared its `AVAudioPlayer` as soon as a project with music opened. It is now created the first time playback needs the music. The inspector's music preview stops when the editor closes; before, it kept playing after the window was gone.
+- **Image caches.** Wallpaper thumbnails were decoded for all built-in and system wallpapers (about 250) when the inspector appeared, and kept until quit. They are now decoded for the category on screen. The graded camera previews (one per preset, intensity and sharpen step, and per custom preset value) and the keycap sprites are capped. Wallpaper thumbnails and camera previews are dropped when the last editor closes.
+- **Preview wallpaper.** The background image was decoded at 2560 px for the preview too. It is now decoded to the canvas size in 512 px steps, up to 2560 px, and decoded again only if the canvas grows past that.
+- **Undo.** Each slider tick went through `mutate` and pushed a full document copy, so one drag filled the undo stack with one step per tick. Edits less than 0.4 s apart now extend the same undo step.
+- **Waveform extraction.** The peak scan reads samples in place from the decoder's buffer (it copies only when the buffer is not contiguous) and takes the 95th percentile from a 1024-bin histogram instead of sorting every peak.
+
+Measured after these changes (Debug build, 15 MB recording): memory after closing all projects is 95 to 113 MB over repeated open and close cycles of two projects, down from 117 to 137 MB. CPU is 0% with a project open and idle.

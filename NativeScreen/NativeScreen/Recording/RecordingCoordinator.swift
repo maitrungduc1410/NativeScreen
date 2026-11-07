@@ -422,6 +422,8 @@ public final class RecordingCoordinator {
     private var pickerOverlayWindows: [NSWindow] = []
     private var recordedAreaHighlightWindow: NSWindow?
     private var hoverTimer: Timer?
+    @ObservationIgnored private var lastPickerMouseLocation: NSPoint?
+    @ObservationIgnored private var pickerTicksSinceWindowQuery = 0
     private var countdownTimer: Timer?
     private var recordingTimer: Timer?
     private var recordingStartUptime: TimeInterval = 0
@@ -921,6 +923,13 @@ public final class RecordingCoordinator {
                     }
                 }
                 if self.selectedMode == .window {
+                    // Listing every window costs a WindowServer round trip; with the mouse still, a refresh every
+                    // 0.25 s is enough to follow windows that move or close under it.
+                    let mouse = NSEvent.mouseLocation
+                    self.pickerTicksSinceWindowQuery += 1
+                    guard mouse != self.lastPickerMouseLocation || self.pickerTicksSinceWindowQuery >= 15 else { return }
+                    self.lastPickerMouseLocation = mouse
+                    self.pickerTicksSinceWindowQuery = 0
                     if let win = WindowDiscoveryService.topmostWindowUnderMouse() {
                         if self.hoveredWindow != win {
                             withAnimation(.spring(response: 0.20, dampingFraction: 0.86)) {
@@ -1031,7 +1040,7 @@ public final class RecordingCoordinator {
 
             switch selectedMode {
             case .window:
-                if let chosen = hoveredWindow ?? WindowDiscoveryService.listFrontToBackWindows().first,
+                if let chosen = hoveredWindow ?? WindowDiscoveryService.listFrontToBackWindows(resolveCornerRadius: false).first.map(WindowDiscoveryService.withCornerRadius),
                    let scWindow = shareable.windows.first(where: { $0.windowID == chosen.id }) {
                     WindowDiscoveryService.bringWindowToFront(chosen)
                     logicalBounds = chosen.bounds

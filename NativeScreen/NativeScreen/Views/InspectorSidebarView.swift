@@ -142,11 +142,7 @@ public struct InspectorSidebarView: View {
         }
         .onAppear {
             if systemWallpapers.isEmpty {
-                let items = SystemWallpaperCatalog.discoverSystemWallpapers()
-                systemWallpapers = items
-                SystemWallpaperCatalog.preloadThumbnailsInBackground(for: items + BundledWallpaperCatalog.allItems) {
-                    wallpaperThumbnailRevision &+= 1
-                }
+                systemWallpapers = SystemWallpaperCatalog.discoverSystemWallpapers()
             }
             let background = session.document.background
             if background.type == .mesh {
@@ -154,6 +150,16 @@ public struct InspectorSidebarView: View {
             } else if let category = BundledWallpaperCatalog.category(ofWallpaperNamed: background.systemWallpaperName) {
                 wallpaperCategory = category
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ProjectWorkspaceStore.editorWillCloseNotification, object: session)) { _ in
+            stopShortcutKeyRecording()
+        }
+        // Thumbnails are decoded for the category on screen only, not for every wallpaper up front.
+        .onChange(of: wallpaperCategory, initial: true) { _, category in
+            preloadWallpaperThumbnails(in: category)
+        }
+        .onChange(of: systemWallpapers.count) { _, _ in
+            preloadWallpaperThumbnails(in: wallpaperCategory)
         }
     }
 
@@ -277,13 +283,7 @@ public struct InspectorSidebarView: View {
 
                     // Items shown for the current category, the random button draws from the same list.
                     let filteredMeshPresets: [MeshPreset] = (wallpaperCategory == "All" || wallpaperCategory == "Mesh") ? MeshPreset.builtIn : []
-                    let filteredWallpapers: [SystemWallpaperItem] = {
-                        switch wallpaperCategory {
-                        case "All": return BundledWallpaperCatalog.allItems + systemWallpapers
-                        case "macOS": return systemWallpapers
-                        default: return BundledWallpaperCatalog.items(in: wallpaperCategory)
-                        }
-                    }()
+                    let filteredWallpapers = wallpaperItems(in: wallpaperCategory)
 
                     Button {
                         let pick = Int.random(in: 0..<max(filteredMeshPresets.count + filteredWallpapers.count, 1))
@@ -4730,6 +4730,22 @@ public struct InspectorSidebarView: View {
             session.updateShortcutKeys(for: cluster, modifiers: mods, primaryKey: keyName)
             stopShortcutKeyRecording()
             return nil
+        }
+    }
+
+    private func wallpaperItems(in category: String) -> [SystemWallpaperItem] {
+        switch category {
+        case "All": return BundledWallpaperCatalog.allItems + systemWallpapers
+        case "macOS": return systemWallpapers
+        default: return BundledWallpaperCatalog.items(in: category)
+        }
+    }
+
+    private func preloadWallpaperThumbnails(in category: String) {
+        let items = wallpaperItems(in: category)
+        guard !items.isEmpty else { return }
+        SystemWallpaperCatalog.preloadThumbnailsInBackground(for: items) {
+            wallpaperThumbnailRevision &+= 1
         }
     }
 

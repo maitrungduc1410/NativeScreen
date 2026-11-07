@@ -809,6 +809,10 @@ public struct ProjectEditorWindowView: View {
         .onDisappear {
             removeEditorKeyMonitor()
         }
+        .onReceive(NotificationCenter.default.publisher(for: ProjectWorkspaceStore.editorWillCloseNotification, object: session)) { _ in
+            // The monitors capture this view (and the session); AppKit would keep them alive after the window closes.
+            removeEditorKeyMonitor()
+        }
         .onChange(of: session.pendingEditorCommand) { _, _ in
             performPendingEditorCommand()
         }
@@ -867,14 +871,14 @@ public struct ProjectEditorWindowView: View {
         if let window = NSApp.keyWindow {
             alert.beginSheetModal(for: window) { response in
                 if response == .alertFirstButtonReturn {
-                    try? FileManager.default.trashItem(at: session.packageURL, resultingItemURL: nil)
+                    ProjectWorkspaceStore.shared.trashProject(session)
                     window.close()
                 }
             }
         } else {
             let response = alert.runModal()
             if response == .alertFirstButtonReturn {
-                try? FileManager.default.trashItem(at: session.packageURL, resultingItemURL: nil)
+                ProjectWorkspaceStore.shared.trashProject(session)
                 NSApp.keyWindow?.close()
             }
         }
@@ -1657,6 +1661,10 @@ private struct WindowTitlebarCleaner: NSViewRepresentable {
             view.onMetricsChanged = onMetricsChanged
             view.configureWindowAndMeasure()
         }
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
+        (nsView as? TrafficLightMeasuringView)?.onMetricsChanged = nil
     }
 
     private final class TrafficLightMeasuringView: NSView {

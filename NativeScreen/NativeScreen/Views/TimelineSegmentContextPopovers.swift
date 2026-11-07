@@ -879,6 +879,10 @@ private struct MenuImmediateClickOverlay: NSViewRepresentable {
         nsView.onClick = onClick
     }
 
+    static func dismantleNSView(_ nsView: ImmediateClickNSView, coordinator: ()) {
+        nsView.onClick = nil
+    }
+
     final class ImmediateClickNSView: NSView {
         var onClick: (() -> Void)?
 

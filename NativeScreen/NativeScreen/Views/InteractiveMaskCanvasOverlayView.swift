@@ -23,24 +23,6 @@ public struct InteractiveMaskCanvasOverlayView: View {
     }
 
     public var body: some View {
-        let srcMs = session.currentSourceTimeMs
-        let activeMasks = session.activeMasks(atSourceMs: srcMs)
-        let eval = session.trajectorySolver.evaluate(atSourceMs: srcMs)
-        let suppressZoomForMaskEditing = !session.isPlaying
-            && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
-
-        let transform = CanvasCoordinateTransform(
-            canvasSize: canvasSize,
-            sourcePixelSize: CGSize(
-                width: max(640, session.metadata.captureTarget.pixelSize.width),
-                height: max(400, session.metadata.captureTarget.pixelSize.height)
-            ),
-            paddingRatio: session.document.canvas.paddingRatio,
-            cropRect01: session.document.canvas.cropRect01,
-            cameraCenter01: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? .center : eval.camera.center01,
-            cameraScale: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? 1.0 : eval.camera.scale
-        )
-        let videoRect = transform.baseScreenRect
 
         ZStack(alignment: .topLeading) {
             // Clicking empty preview canvas deselects any active mask (or cancels add-mask mode)
@@ -56,6 +38,26 @@ public struct InteractiveMaskCanvasOverlayView: View {
                 }
 
             if !session.isPlaying {
+                // Only read while paused: during playback the handles are hidden, and reading the playhead here
+                // would re-evaluate this overlay on every frame.
+                let srcMs = session.currentSourceTimeMs
+                let activeMasks = session.activeMasks(atSourceMs: srcMs)
+                let eval = session.trajectorySolver.evaluate(atSourceMs: srcMs)
+                let suppressZoomForMaskEditing = !session.isPlaying
+                    && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
+
+                let transform = CanvasCoordinateTransform(
+                    canvasSize: canvasSize,
+                    sourcePixelSize: CGSize(
+                        width: max(640, session.metadata.captureTarget.pixelSize.width),
+                        height: max(400, session.metadata.captureTarget.pixelSize.height)
+                    ),
+                    paddingRatio: session.document.canvas.paddingRatio,
+                    cropRect01: session.document.canvas.cropRect01,
+                    cameraCenter01: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? .center : eval.camera.center01,
+                    cameraScale: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? 1.0 : eval.camera.scale
+                )
+                let videoRect = transform.baseScreenRect
                 // 1. Existing Mask Interactive Handles
                 ForEach(activeMasks) { mask in
                     let rect01 = mask.interpolatedRect(at: srcMs)

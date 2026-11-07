@@ -11,7 +11,7 @@ public struct CapturableWindowInfo: Identifiable, Equatable {
     public let appName: String
     public let bundleId: String?
     public let bounds: CGRect // Quartz global screen coordinates (origin top-left of primary screen)
-    public let borderRadius: Double
+    public var borderRadius: Double
 
     public var appIcon: NSImage? {
         NSRunningApplication(processIdentifier: pid)?.icon
@@ -74,7 +74,9 @@ public enum WindowDiscoveryService {
 
     /// Lists all normal on-screen windows across ALL connected monitors in front-to-back Z-order using `CGWindowListCopyWindowInfo`.
     /// This app's editor windows are included; its HUD and overlays sit above layer 0 and are filtered out by level.
-    public static func listFrontToBackWindows(excludingPIDs: Set<pid_t> = []) -> [CapturableWindowInfo] {
+    /// `resolveCornerRadius: false` skips the Accessibility lookups (several IPC round trips into each window's app)
+    /// and fills in a placeholder radius; callers that need the real one for a single window use `withCornerRadius`.
+    public static func listFrontToBackWindows(excludingPIDs: Set<pid_t> = [], resolveCornerRadius: Bool = true) -> [CapturableWindowInfo] {
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
@@ -114,7 +116,7 @@ public enum WindowDiscoveryService {
                     bundleId: bundleId,
                     bounds: bounds,
                     // Accessibility calls into our own process would block the main thread waiting on itself.
-                    borderRadius: ownerPID == ownPID ? 26.0 : detectWindowCornerRadius(pid: ownerPID, windowBounds: bounds)
+                    borderRadius: ownerPID == ownPID ? 26.0 : (resolveCornerRadius ? cachedCornerRadius(pid: ownerPID, windowID: windowID, bounds: bounds) : 16.0)
                 )
             )
         }
@@ -174,11 +176,39 @@ public enum WindowDiscoveryService {
         return 16.0
     }
 
+    private static let cornerRadiusLock = NSLock()
+    nonisolated(unsafe) private static var cornerRadiusCache: [String: Double] = [:]
+
+    /// Corner radius for one window, remembered per window and size (it only changes with toolbar or full screen,
+    /// which change the size too), so the window picker's hover polling does not repeat the Accessibility calls.
+    private static func cachedCornerRadius(pid: pid_t, windowID: UInt32, bounds: CGRect) -> Double {
+        let key = "\(windowID)_\(Int(bounds.width))x\(Int(bounds.height))"
+        cornerRadiusLock.lock()
+        let hit = cornerRadiusCache[key]
+        cornerRadiusLock.unlock()
+        if let hit { return hit }
+        let radius = detectWindowCornerRadius(pid: pid, windowBounds: bounds)
+        cornerRadiusLock.lock()
+        if cornerRadiusCache.count > 256 { cornerRadiusCache.removeAll() }
+        cornerRadiusCache[key] = radius
+        cornerRadiusLock.unlock()
+        return radius
+    }
+
+    /// The same window with its real corner radius.
+    public static func withCornerRadius(_ window: CapturableWindowInfo) -> CapturableWindowInfo {
+        guard window.pid != ProcessInfo.processInfo.processIdentifier else { return window }
+        var resolved = window
+        resolved.borderRadius = cachedCornerRadius(pid: window.pid, windowID: window.id, bounds: window.bounds)
+        return resolved
+    }
+
     /// Hit-tests the topmost window under the current mouse location across all connected monitors.
+    /// Only the hit window's corner radius is looked up.
     public static func topmostWindowUnderMouse() -> CapturableWindowInfo? {
         let quartzPoint = currentMouseQuartzPoint()
-        let windows = listFrontToBackWindows()
-        return windows.first { $0.bounds.contains(quartzPoint) }
+        let windows = listFrontToBackWindows(resolveCornerRadius: false)
+        return windows.first { $0.bounds.contains(quartzPoint) }.map(withCornerRadius)
     }
 
     /// Brings the target application & window to the front before starting window capture.

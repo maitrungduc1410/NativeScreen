@@ -3060,6 +3060,11 @@ private struct RightClickDetectorView: NSViewRepresentable {
         }
     }
 
+    // AppKit can keep a detached NSView alive after its window closes; drop the closure so it stops holding the session.
+    static func dismantleNSView(_ nsView: RightClickCatcherNSView, coordinator: ()) {
+        nsView.onRightClick = nil
+    }
+
     final class RightClickCatcherNSView: NSView {
         var isSplitMode: Bool = false
         var isEdgeHovered: Bool = false
@@ -3257,6 +3262,7 @@ private struct TimelineCommandScrollZoomCatcher: NSViewRepresentable {
 
     static func dismantleNSView(_ nsView: CatcherView, coordinator: ()) {
         nsView.removeMonitor()
+        nsView.onZoom = nil
     }
 
     final class CatcherView: NSView {

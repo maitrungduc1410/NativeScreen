@@ -51,6 +51,12 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         context.coordinator.updateSession(session, canvasAspect: canvasAspect, mtkView: mtkView)
     }
 
+    public static func dismantleNSView(_ mtkView: MTKView, coordinator: Coordinator) {
+        mtkView.isPaused = true
+        mtkView.delegate = nil
+        coordinator.tearDown()
+    }
+
     @MainActor
     public final class Coordinator: NSObject, MTKViewDelegate {
         var session: ProjectSession
@@ -67,6 +73,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
         private var loadedMicURL: URL?
         private var bgMusicPlayer: AVAudioPlayer?
         private var loadedBgMusicURL: URL?
+        private var bgMusicUnavailable = false
         private var voiceoverPlayersByID: [String: AVPlayer] = [:]
         private var videoOutput: AVPlayerItemVideoOutput?
         private var playerItemStatusObserver: NSKeyValueObservation?
@@ -124,6 +131,34 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             compositor?.realtimePersonSegmenter.onMaskUpdated = { [weak self] in
                 self?.mtkView?.needsDisplay = true
             }
+        }
+
+        /// Stops and releases every player when the preview leaves the view tree (editor window closed).
+        func tearDown() {
+            playerItemStatusObserver?.invalidate()
+            playerItemStatusObserver = nil
+            webcamStatusObserver?.invalidate()
+            webcamStatusObserver = nil
+            for p in [player, micPlayer, webcamPlayer].compactMap({ $0 }) + Array(voiceoverPlayersByID.values) {
+                p.pause()
+                p.replaceCurrentItem(with: nil)
+            }
+            bgMusicPlayer?.stop()
+            player = nil
+            micPlayer = nil
+            webcamPlayer = nil
+            bgMusicPlayer = nil
+            voiceoverPlayersByID.removeAll()
+            videoOutput = nil
+            webcamOutput = nil
+            lastDecodedFrame = nil
+            lastWebcamFrame = nil
+            playerAnchors.removeAll()
+            loadedVideoURL = nil
+            loadedMicURL = nil
+            loadedBgMusicURL = nil
+            loadedWebcamURL = nil
+            compositor?.realtimePersonSegmenter.onMaskUpdated = nil
         }
 
         func attach(mtkView: MTKView) {
@@ -351,18 +386,27 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             self.micPlayer = mPlayer
         }
 
+        /// Only remembers the file. The player (and its audio buffers) is created the first time playback needs
+        /// background music, so a project that has music but is never played pays nothing for it.
         private func setupBackgroundMusicPlayerIfNeeded(for url: URL?) {
             guard loadedBgMusicURL != url else { return }
             loadedBgMusicURL = url
+            bgMusicUnavailable = false
             bgMusicPlayer?.stop()
             bgMusicPlayer = nil
-            guard let bgURL = url, FileManager.default.fileExists(atPath: bgURL.path),
+        }
+
+        private func backgroundMusicPlayerForPlayback() -> AVAudioPlayer? {
+            if let bgMusicPlayer { return bgMusicPlayer }
+            guard !bgMusicUnavailable, let bgURL = loadedBgMusicURL, FileManager.default.fileExists(atPath: bgURL.path),
                   let audioPlayer = try? AVAudioPlayer(contentsOf: bgURL) else {
-                return
+                bgMusicUnavailable = true
+                return nil
             }
             audioPlayer.numberOfLoops = -1
             audioPlayer.prepareToPlay()
-            self.bgMusicPlayer = audioPlayer
+            bgMusicPlayer = audioPlayer
+            return audioPlayer
         }
 
         private func seekDecoderCoalesced(toSourceMs sourceMs: Double, fastSkim: Bool) {
@@ -564,9 +608,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                     }
 
                     // Synchronize looping `bgMusicPlayer` (`BackgroundMusicConfig`)!
-                    if let bgMusicPlayer = bgMusicPlayer {
-                        let bgCfg = session.document.audio.backgroundMusic
-                        let bgVol = bgCfg.muted ? Float(0.0) : Float(min(1.0, max(0.0, bgCfg.volume * masterVol * 2.5)))
+                    let bgCfg = session.document.audio.backgroundMusic
+                    let bgVol = bgCfg.muted ? Float(0.0) : Float(min(1.0, max(0.0, bgCfg.volume * masterVol * 2.5)))
+                    if let bgMusicPlayer = (bgVol > 0.001 ? backgroundMusicPlayerForPlayback() : bgMusicPlayer) {
                         bgMusicPlayer.volume = bgVol
                         if bgVol > 0.001 {
                             let dur = max(1.0, bgMusicPlayer.duration)
@@ -592,16 +636,16 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                         }
                     }
                     for vo in activeVOs {
-                        let voURL = session.packageURL.appendingPathComponent(vo.relativePath)
-                        guard FileManager.default.fileExists(atPath: voURL.path) else { continue }
-                        let voPlayer: AVPlayer = {
-                            if let existing = voiceoverPlayersByID[vo.id] {
-                                return existing
-                            }
-                            let p = AVPlayer(url: voURL)
-                            voiceoverPlayersByID[vo.id] = p
-                            return p
-                        }()
+                        // The disk is only checked when a player has to be created, not on every frame.
+                        let voPlayer: AVPlayer
+                        if let existing = voiceoverPlayersByID[vo.id] {
+                            voPlayer = existing
+                        } else {
+                            let voURL = session.packageURL.appendingPathComponent(vo.relativePath)
+                            guard FileManager.default.fileExists(atPath: voURL.path) else { continue }
+                            voPlayer = AVPlayer(url: voURL)
+                            voiceoverPlayersByID[vo.id] = voPlayer
+                        }
                         let voOffsetSec = max(0.0, (sourceMs - vo.sourceStartMs) / 1000.0)
                         let voRate = Float(session.previewPlaybackRate * (vo.attachMode == .synchronized ? sliceSpeed : 1.0))
                         let voVol = Float(min(1.0, max(0.0, vo.volume * masterVol)))

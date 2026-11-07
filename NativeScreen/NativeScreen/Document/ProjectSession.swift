@@ -137,6 +137,8 @@ public final class ProjectSession: Identifiable {
     private var redoStack: [ProjectDocument] = []
     @ObservationIgnored private var interactiveEditSnapshot: ProjectDocument?
     private let maxUndoDepth = 150
+    private static let undoCoalesceWindow: TimeInterval = 0.4
+    @ObservationIgnored private var lastMutateUptime: TimeInterval = 0
     @ObservationIgnored private var saveTask: Task<Void, Never>?
 
     // Incrementing token used to notify the Metal preview view (`MTKView.needsDisplay = true`) on any state/scrub/skim change
@@ -323,6 +325,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func saveNow() throws {
+        guard !isDeletedFromDisk else { return }
         hasUnsavedChanges = false
         var updatedDoc = document
         updatedDoc.updatedAt = ISO8601DateFormatter().string(from: Date())
@@ -361,10 +364,34 @@ public final class ProjectSession: Identifiable {
     /// Edits made while autosave is off and not yet saved.
     public private(set) var hasUnsavedChanges = false
 
+    /// Set once the package has been moved to the Trash, so nothing writes it back to disk.
+    @ObservationIgnored public private(set) var isDeletedFromDisk = false
+
+    /// Called right after the package goes to the Trash: cancels a pending autosave so it cannot recreate the folder.
+    public func markDeletedFromDisk() {
+        isDeletedFromDisk = true
+        hasUnsavedChanges = false
+        saveTask?.cancel()
+        saveTask = nil
+    }
+
+    /// Stops background work when the editor window closes, so the session can be released.
+    public func prepareForClose() {
+        isPlaying = false
+        stopBackgroundAudioPreview()
+        saveTask?.cancel()
+        saveTask = nil
+        toastDismissTask?.cancel()
+        toastDismissTask = nil
+    }
+
     /// Reloads the project from disk, dropping edits that were never saved (autosave off, `Don’t Save`).
     public func discardUnsavedChanges() {
         hasUnsavedChanges = false
         saveTask?.cancel()
+        undoStack.removeAll()
+        redoStack.removeAll()
+        interactiveEditSnapshot = nil
         let projectURL = packageURL.appendingPathComponent("project.json")
         if let data = try? Data(contentsOf: projectURL),
            let saved = try? JSONDecoder().decode(ProjectDocument.self, from: data) {
@@ -403,6 +430,7 @@ public final class ProjectSession: Identifiable {
         frozenPlaybackDurationMs = nil
         if let snapshot = interactiveEditSnapshot {
             interactiveEditSnapshot = nil
+            lastMutateUptime = 0
             if snapshot != document {
                 pushUndoSnapshot(snapshot)
             }
@@ -431,7 +459,14 @@ public final class ProjectSession: Identifiable {
 
         guard next != document else { return }
         if interactiveEditSnapshot == nil {
-            pushUndoSnapshot(before)
+            // Sliders and steppers call `mutate` on every tick. Edits less than `undoCoalesceWindow` apart extend the
+            // same undo step, so one drag is one ⌘Z and does not push a full document copy per tick.
+            let now = ProcessInfo.processInfo.systemUptime
+            let continuesLastEdit = (now - lastMutateUptime) < Self.undoCoalesceWindow && !undoStack.isEmpty && redoStack.isEmpty
+            lastMutateUptime = now
+            if !continuesLastEdit {
+                pushUndoSnapshot(before)
+            }
         }
         document = next
         rebuildDerivedState()
@@ -448,6 +483,7 @@ public final class ProjectSession: Identifiable {
 
     public func undo() {
         guard let previous = undoStack.popLast() else { return }
+        lastMutateUptime = 0
         redoStack.append(document)
         document = previous
         rebuildDerivedState(forceSpringRebuild: true)
@@ -456,6 +492,7 @@ public final class ProjectSession: Identifiable {
 
     public func redo() {
         guard let next = redoStack.popLast() else { return }
+        lastMutateUptime = 0
         undoStack.append(document)
         document = next
         rebuildDerivedState(forceSpringRebuild: true)
@@ -2301,39 +2338,59 @@ public final class ProjectSession: Identifiable {
             var rawPeaks: [Float] = []
             rawPeaks.reserveCapacity(8192)
 
+            // Peak of every 128 samples, read straight from the decoder's buffer (copied only when the buffer is
+            // not contiguous), plus a 1024-bin histogram of those peaks for the 95th percentile, so no sorted copy.
+            let histogramBins = 1024
+            var histogram = [Int](repeating: 0, count: histogramBins)
+            var maxPeak: Float = 0
+            func scan(_ base: UnsafePointer<Int16>, count totalSamples: Int) {
+                let chunkSize = 128
+                var offset = 0
+                while offset < totalSamples {
+                    let end = min(totalSamples, offset + chunkSize)
+                    var maxSample: Int32 = 0
+                    var i = offset
+                    while i < end {
+                        let v = abs(Int32(base[i]))
+                        if v > maxSample { maxSample = v }
+                        i += 1
+                    }
+                    let peak = min(1.0, Float(maxSample) / 32768.0)
+                    rawPeaks.append(peak)
+                    histogram[min(histogramBins - 1, Int(peak * Float(histogramBins)))] += 1
+                    if peak > maxPeak { maxPeak = peak }
+                    offset += chunkSize
+                }
+            }
+
             while reader.status == .reading, let sampleBuffer = output.copyNextSampleBuffer() {
                 guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { continue }
                 let length = CMBlockBufferGetDataLength(blockBuffer)
                 guard length >= 2 else { continue }
-                var data = Data(count: length)
-                data.withUnsafeMutableBytes { rawBuffer in
-                    if let baseAddress = rawBuffer.baseAddress {
-                        CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: baseAddress)
-                        let int16Ptr = baseAddress.assumingMemoryBound(to: Int16.self)
-                        let totalSamples = length / MemoryLayout<Int16>.size
-                        let chunkSize = 128
-                        var offset = 0
-                        while offset < totalSamples {
-                            let end = min(totalSamples, offset + chunkSize)
-                            var maxSample: Float = 0.0
-                            var i = offset
-                            while i < end {
-                                let v = abs(Float(int16Ptr[i])) / 32768.0
-                                if v > maxSample { maxSample = v }
-                                i += 1
-                            }
-                            rawPeaks.append(maxSample)
-                            offset += chunkSize
-                        }
+                let sampleCount = length / MemoryLayout<Int16>.size
+                var lengthAtOffset = 0
+                var dataPointer: UnsafeMutablePointer<CChar>?
+                if CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: &lengthAtOffset, totalLengthOut: nil, dataPointerOut: &dataPointer) == kCMBlockBufferNoErr,
+                   lengthAtOffset == length, let dataPointer {
+                    dataPointer.withMemoryRebound(to: Int16.self, capacity: sampleCount) { scan($0, count: sampleCount) }
+                } else {
+                    var copy = [Int16](repeating: 0, count: sampleCount)
+                    copy.withUnsafeMutableBytes { raw in
+                        _ = CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: sampleCount * 2, destination: raw.baseAddress!)
                     }
+                    copy.withUnsafeBufferPointer { scan($0.baseAddress!, count: sampleCount) }
                 }
             }
 
             guard rawPeaks.count >= 8 else { return nil }
-            let sortedPeaks = rawPeaks.sorted()
-            let p95Idx = min(sortedPeaks.count - 1, Int(Double(sortedPeaks.count) * 0.95))
-            let p95Peak = sortedPeaks[p95Idx]
-            let maxPeak = sortedPeaks.last ?? 0.0
+            let p95Target = Int(Double(rawPeaks.count) * 0.95)
+            var cumulative = 0
+            var p95Bin = histogramBins - 1
+            for (bin, count) in histogram.enumerated() {
+                cumulative += count
+                if cumulative > p95Target { p95Bin = bin; break }
+            }
+            let p95Peak = Float(p95Bin + 1) / Float(histogramBins)
             // If the audio track is completely silent (e.g. silent system audio), return nil so no fake flat bar is drawn!
             guard maxPeak >= 0.002 else { return nil }
             let referencePeak = max(0.025, p95Peak)
@@ -3310,29 +3367,41 @@ public final class ProjectSession: Identifiable {
 
     // MARK: - Camera, Microphone, Local On-Device Captions & Edit-by-Transcript Engine
 
-    public var webcamVideoFileURL: URL? {
-        let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
-        if let rel = metadata.tracks.webcamVideo {
-            let candidate = recordingDir.appendingPathComponent(rel)
-            if FileManager.default.fileExists(atPath: candidate.path) {
-                return candidate
-            }
+    /// Camera and microphone files found in `recording/`. That folder never changes after capture, so the disk is
+    /// checked once per package location instead of on every preview frame (the compositor asks `hasRecordedCamera`
+    /// several times per frame, at up to 120 Hz).
+    private struct RecordingFileLookup {
+        let packageURL: URL
+        let webcam: URL?
+        let microphone: URL?
+    }
+    @ObservationIgnored private var cachedRecordingFiles: RecordingFileLookup?
+
+    private var recordingFiles: RecordingFileLookup {
+        if let cached = cachedRecordingFiles, cached.packageURL == packageURL {
+            return cached
         }
-        let defaultURL = recordingDir.appendingPathComponent("webcam.mp4")
-        return FileManager.default.fileExists(atPath: defaultURL.path) ? defaultURL : nil
+        let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+        func find(_ rel: String?, fallback: String) -> URL? {
+            if let rel {
+                let candidate = recordingDir.appendingPathComponent(rel)
+                if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+            }
+            let defaultURL = recordingDir.appendingPathComponent(fallback)
+            return FileManager.default.fileExists(atPath: defaultURL.path) ? defaultURL : nil
+        }
+        let lookup = RecordingFileLookup(
+            packageURL: packageURL,
+            webcam: find(metadata.tracks.webcamVideo, fallback: "webcam.mp4"),
+            microphone: find(metadata.tracks.microphoneAudio, fallback: "microphone.m4a")
+        )
+        cachedRecordingFiles = lookup
+        return lookup
     }
 
-    public var microphoneAudioFileURL: URL? {
-        let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
-        if let rel = metadata.tracks.microphoneAudio {
-            let candidate = recordingDir.appendingPathComponent(rel)
-            if FileManager.default.fileExists(atPath: candidate.path) {
-                return candidate
-            }
-        }
-        let defaultURL = recordingDir.appendingPathComponent("microphone.m4a")
-        return FileManager.default.fileExists(atPath: defaultURL.path) ? defaultURL : nil
-    }
+    public var webcamVideoFileURL: URL? { recordingFiles.webcam }
+
+    public var microphoneAudioFileURL: URL? { recordingFiles.microphone }
 
     public var hasRecordedCamera: Bool {
         metadata.tracks.webcamVideo != nil || webcamVideoFileURL != nil
@@ -4232,10 +4301,24 @@ public final class ProjectSession: Identifiable {
         return dir.appendingPathComponent("\(slug).wav")
     }
 
+    /// Last resolved background audio file, keyed by package and `relativePath`. The preview asks on every SwiftUI
+    /// update; only a hit is kept, so a built-in track that is still being generated is found once it is written.
+    @ObservationIgnored private var cachedBackgroundAudio: (key: String, url: URL)?
+
     public func resolvedBackgroundAudioFileURL() -> URL? {
         guard let rel = document.audio.backgroundMusic.relativePath, !rel.isEmpty else {
             return nil
         }
+        let key = packageURL.path + "|" + rel
+        if let cached = cachedBackgroundAudio, cached.key == key {
+            return cached.url
+        }
+        guard let url = locateBackgroundAudioFile(relativePath: rel) else { return nil }
+        cachedBackgroundAudio = (key, url)
+        return url
+    }
+
+    private func locateBackgroundAudioFile(relativePath rel: String) -> URL? {
         let inPackage = packageURL.appendingPathComponent(rel)
         if FileManager.default.fileExists(atPath: inPackage.path) {
             return inPackage

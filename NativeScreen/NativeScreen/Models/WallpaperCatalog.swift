@@ -220,6 +220,13 @@ public enum SystemWallpaperCatalog {
         }
     }
 
+    /// Drops every cached thumbnail (called when the last editor closes; they are reloaded per category on demand).
+    public static func purgeThumbnailCache() {
+        lock.lock()
+        thumbnailCache.removeAll()
+        lock.unlock()
+    }
+
     /// Returns a fast in-memory cached `NSImage` thumbnail (200px max dimension) without ever blocking the Main Thread.
     public static func cachedThumbnailImage(for item: SystemWallpaperItem) -> NSImage? {
         lock.lock()

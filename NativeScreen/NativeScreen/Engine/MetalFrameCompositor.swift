@@ -21,6 +21,7 @@ public final class MetalFrameCompositor {
 
     private var cachedWallpaperURL: URL?
     private var cachedWallpaperCIImage: CIImage?
+    private var cachedWallpaperDecodePixels = 0
     private var syntheticScreenTexture: CIImage?
 
     // Smooth GPU Background Crossfade & Texture Cache
@@ -782,11 +783,16 @@ public final class MetalFrameCompositor {
     }
 
     private func loadCachedWallpaper(url: URL, targetRect: CGRect) -> CIImage? {
-        if cachedWallpaperURL != url || cachedWallpaperCIImage == nil {
+        // Decoded only as large as the canvas needs (in 512 px steps, at most 2560 px): the preview canvas is far
+        // smaller than an export, and a 2560 px decode is 25 MB. A larger canvas later decodes again, larger.
+        let neededPixels = Int(max(targetRect.width, targetRect.height).rounded(.up))
+        let decodePixels = min(2560, max(1024, ((neededPixels + 511) / 512) * 512))
+        if cachedWallpaperURL != url || cachedWallpaperCIImage == nil || decodePixels > cachedWallpaperDecodePixels {
             cachedWallpaperURL = url
-            // Decode and downsample once into an immediately-cached `CGImage` (capped at 2560px)
+            cachedWallpaperDecodePixels = decodePixels
+            // Decode and downsample once into an immediately-cached `CGImage`
             // so CoreImage NEVER re-decodes multi-megabyte 6K `.heic`/`.jpg` data on every frame!
-            if let cgImg = SystemWallpaperCatalog.downsampleCGImage(at: url, maxPixelSize: 2560) {
+            if let cgImg = SystemWallpaperCatalog.downsampleCGImage(at: url, maxPixelSize: decodePixels) {
                 cachedWallpaperCIImage = CIImage(cgImage: cgImg)
             } else {
                 cachedWallpaperCIImage = CIImage(contentsOf: url)
@@ -1102,6 +1108,9 @@ public final class MetalFrameCompositor {
                 spacing: spacing,
                 shadowPad: shadowPad
             ) {
+                if keycapSpriteCache.count > 128 {
+                    keycapSpriteCache.removeAll(keepingCapacity: true)
+                }
                 keycapSpriteCache[cacheKey] = rendered
                 groupSprite = rendered
             } else {

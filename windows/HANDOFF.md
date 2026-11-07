@@ -27,6 +27,26 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-07, Performance pass: closing frees the project, no work for unused features (macOS done, Windows pass pending)
+
+### Writer
+- **Scope:** macOS only. What changed and why is in `spec/06` ADR-48 (closing an editor releases its project) and ADR-49 (pay only for what is used). Windows: run the same pass. Measure first and change only what the numbers show, since the Windows code is laid out differently.
+- **macOS result** (Debug, 15 MB recording): memory after closing every project stays at 95 to 113 MB over repeated open and close cycles. It used to grow by about 5 MB per cycle. CPU is 0% with a project open and paused.
+- **How to verify on Windows:**
+  1. **Baseline.** Use a Release build. Note memory at launch, with one project open and idle, and after closing it. Take private working set from Task Manager or `Get-Process`, and dedicated GPU memory from Task Manager. Open and close the same project 5 to 10 times. Memory after close should stay flat, not climb.
+  2. **Find what survives a close.** Take a heap snapshot after closing (`dotnet-gcdump` or Visual Studio Diagnostic Tools) and count `EditorWindow`, `EditorSession`, `MediaPlayer`, renderer and compositor instances. There should be none. On macOS the causes were a registry that never removed sessions, an event monitor capturing the view, and closures kept by framework-held views. On Windows, look for the same pattern: static events, `DispatcherTimer`s still running, and handlers on objects that outlive the window.
+  3. **Idle CPU.** With a project open and paused, CPU must be 0%. The 16 ms `clockTimer` should only run while playing or scrubbing.
+  4. **Open-time peak.** On macOS, opening a project jumps to about 500 MB for about 1 second, then settles to about 190 MB. That is GPU working memory for the first frames (UI and compositor), which the system then marks purgeable. It is not a leak. Expect something similar with D3D11, so check that it settles rather than trying to remove it.
+- **Leads found by reading the Windows code (not run):**
+  - **Music preview keeps playing after close.** `EditorTools.musicPreview` (a `MediaPlayer`, `EditorTools.cs` `ToggleMusicPreview`) is not stopped by the editor's `Closed` handlers (`EditorWindow.xaml.cs`, next to `FinishVoiceoverRecordingForClose`). macOS had exactly this bug. Call `tools.StopMusicPreview()` on close.
+  - **Wallpaper thumbnails are never released.** `InspectorPanel.WallpaperThumbnails` is a static dictionary of `BitmapImage`s. Check how many are decoded when the inspector opens, and at what `DecodePixelWidth`. macOS now loads only the shown category and clears the cache when the last editor closes.
+  - **Undo.** `UndoStack` keeps up to 150 serialized documents, one per `Commit`. Check whether a slider drag commits on every tick. macOS now merges edits less than 0.4 s apart into one step.
+  - **Window picker.** `CaptureTargets` lists windows with `EnumWindows` and `DwmGetWindowAttribute`. Check how often the picker calls it while hovering, and whether it keeps calling it while the mouse is still. On macOS the picker queried every window 60 times a second; now it queries only the window under the mouse, and only when the mouse moves.
+  - **Disk checks per frame.** Look for `File.Exists` or directory scans in the render and clock path. On macOS, the camera and voiceover file checks ran several times per frame. Files in `recording/` never change after capture, so the checks can be cached.
+  - **Preview wallpaper size.** macOS decoded the background at 2560 px even for a small preview. It now decodes at the canvas size, in 512 px steps between 1024 and 2560 px.
+  - **Already fine:** deleting a project closes the window first and clears `hasUnsavedChanges`, so the close-time save cannot recreate the folder (a macOS bug). `ReleasePreview` disposes the renderer, players, swap chain and compositor. `AppTheme.Changed` is unsubscribed on close.
+- **Risks / unsure:** the leads come from reading the code only, with nothing run on Windows. FPS during playback was not measured on macOS in this pass.
+
 ## 2026-11-07, Windows port: slice volumes, waveform look, snapping, Ctrl + scroll zoom, zoom cost, HUD width, localization
 
 ### Verifier
