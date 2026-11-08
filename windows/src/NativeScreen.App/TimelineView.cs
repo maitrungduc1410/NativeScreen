@@ -2,6 +2,9 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml.Hosting;
@@ -56,7 +59,7 @@ internal sealed class TimelineView
     private readonly TrackSurface canvas = new();
     private readonly Canvas labels = new();
     private readonly Grid rulerHost = new();
-    private readonly Canvas ruler = new() { Height = RulerHeight, HorizontalAlignment = HorizontalAlignment.Left, Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)) };
+    private readonly RulerSurface ruler = new() { Height = RulerHeight, HorizontalAlignment = HorizontalAlignment.Left, Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)) };
     private readonly TranslateTransform rulerOffset = new();
     private readonly Canvas marks = new() { IsHitTestVisible = false };
     private readonly TimelineSnapController snap = new();
@@ -119,6 +122,16 @@ internal sealed class TimelineView
         Grid.SetColumn(scroller, 1);
         root.Children.Add(scroller);
 
+        A11y.Decorative(marks);
+        ruler.Seconds = () => session.PlayheadTimelineMs / 1000;
+        ruler.DurationSeconds = () => session.DurationMs / 1000;
+        ruler.MoveTo = seconds =>
+        {
+            EndSkim();
+            session.Scrub(Math.Clamp(seconds * 1000, 0, session.DurationMs));
+            UpdatePlayhead();
+            PlayheadScrubbed?.Invoke();
+        };
         marks.Children.Add(snapGuide);
         marks.Children.Add(ghost);
         marks.Children.Add(playhead);
@@ -246,6 +259,11 @@ internal sealed class TimelineView
     /// </summary>
     private void StartWiggle()
     {
+        if (A11y.ReduceMotion)
+        {
+            return;
+        }
+
         foreach (var (block, row) in wigglingBlocks)
         {
             var visual = ElementCompositionPreview.GetElementVisual(block);
@@ -431,6 +449,8 @@ internal sealed class TimelineView
     }
 
     private double X(double timelineMs) => TrackInset + timelineMs / session.TimelineScaleDurationMs * TrackWidth;
+
+    private double TimeAtUnclamped(double x) => Math.Max(0, (x - TrackInset) / TrackWidth * session.TimelineScaleDurationMs);
 
     private double TimeAt(double x) => Math.Clamp((x - TrackInset) / TrackWidth * session.TimelineScaleDurationMs, 0, session.DurationMs);
 
@@ -1098,7 +1118,7 @@ internal sealed class TimelineView
                 ZoomRowHeight,
                 Palette.Zoom,
                 item.Presentation == ZoomPresentation.Loupe ? "Loupe" : "Zoom",
-                $"{item.Scale:0.#}x  ·  {(item.Mode == ZoomMode.FollowCursor ? "Auto" : "Manual")}",
+                $"{item.Scale:0.#}x  ·  {Loc.T(item.Mode == ZoomMode.FollowCursor ? "Auto" : "Manual")}",
                 item.Id == session.SelectedZoomId,
                 item.Disabled || timeline.IsZoomTrackHidden);
             Follow(block, item.SourceStartMs, item.SourceEndMs);
@@ -1214,7 +1234,7 @@ internal sealed class TimelineView
                     MaskRowHeight,
                     Palette.Mask,
                     "Mask",
-                    mask.Type == MaskType.Spotlight ? "Highlight" : "Sensitive data",
+                    Loc.T(mask.Type == MaskType.Spotlight ? "Highlight" : "Sensitive data"),
                     mask.Id == session.SelectedMaskId,
                     mask.Disabled || track.IsHidden);
                 Follow(block, mask.SourceStartMs, mask.SourceEndMs);
@@ -1284,6 +1304,7 @@ internal sealed class TimelineView
             {
                 var (left, width) = Place(shortcut.DisplayStartMs, shortcut.DisplayEndMs);
                 var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, trackHidden || SegmentEdits.IsShortcutHidden(session.Document, shortcut));
+                block.KindName = Loc.T("Shortcut");
                 Follow(block, shortcut.DisplayStartMs, shortcut.DisplayEndMs);
                 var pressed = shortcut;
                 block.RightTapped += (_, args) =>
@@ -1616,6 +1637,33 @@ internal sealed class TimelineView
         }
 
         block.Children.Add(text);
+        block.IsSelectedBlock = selected;
+        block.AccessibleName = () =>
+        {
+            var parts = new List<string> { block.KindName ?? title };
+            var shown = block.Subtitle?.Text ?? subtitle;
+            if (shown is { Length: > 0 })
+            {
+                parts.AddRange(shown.Split('·', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+
+            if (block.KindName is not null && title.Length > 0)
+            {
+                parts.Insert(1, title);
+            }
+
+            if (dimmed)
+            {
+                parts.Add(Loc.T("Disabled"));
+            }
+
+            return string.Join(", ", parts);
+        };
+        block.AccessibleRange = () =>
+        {
+            var left = Canvas.GetLeft(block);
+            return A11y.Range(TimeAtUnclamped(left), TimeAtUnclamped(left + block.Width));
+        };
         Canvas.SetLeft(block, x);
         Canvas.SetTop(block, y);
         canvas.Children.Add(block);
@@ -1664,6 +1712,17 @@ internal sealed class TimelineView
             };
         }
 
+        block.Invoked = () =>
+        {
+            if (session.IsSplitModeActive && block.SplitAt is { } splitAt)
+            {
+                splitAt(TimeAtUnclamped(Canvas.GetLeft(block) + block.Width / 2));
+            }
+            else
+            {
+                select();
+            }
+        };
         block.PointerEntered += (_, _) => hoveredBlock = block;
         block.PointerExited += (_, _) => hoveredBlock = hoveredBlock == block ? null : hoveredBlock;
 
@@ -2077,7 +2136,102 @@ internal sealed class TimelineView
 
         public TextBlock? Subtitle { get; set; }
 
+        /// <summary>Read before the title when the title alone does not say what the block is ("Shortcut").</summary>
+        public string? KindName { get; set; }
+
+        public Func<string>? AccessibleName { get; set; }
+
+        public Func<string>? AccessibleRange { get; set; }
+
+        /// <summary>What Invoke does for a screen reader: the same as a click in the block's middle.</summary>
+        public Action? Invoked { get; set; }
+
+        public bool IsSelectedBlock { get; set; }
+
         public void SetCursor(InputSystemCursorShape shape) => ProtectedCursor = InputSystemCursor.Create(shape);
+
+        protected override AutomationPeer OnCreateAutomationPeer() => new BlockPeer(this);
+    }
+
+    /// <summary>One element per segment: its kind and content, its time range, selected, and Invoke (spec/06 ADR-51).</summary>
+    private sealed partial class BlockPeer(BlockGrid owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider, ISelectionItemProvider
+    {
+        public bool IsSelected => owner.IsSelectedBlock;
+
+        public IRawElementProviderSimple? SelectionContainer => null;
+
+        public void Invoke() => owner.Invoked?.Invoke();
+
+        public void Select() => owner.Invoked?.Invoke();
+
+        public void AddToSelection() => owner.Invoked?.Invoke();
+
+        public void RemoveFromSelection()
+        {
+        }
+
+        protected override string GetNameCore() => owner.AccessibleName?.Invoke() ?? base.GetNameCore();
+
+        protected override string GetHelpTextCore() => owner.AccessibleRange?.Invoke() ?? base.GetHelpTextCore();
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+
+        protected override string GetClassNameCore() => "TimelineSegment";
+
+        protected override bool IsControlElementCore() => true;
+
+        protected override bool IsContentElementCore() => true;
+
+        // The block's own texts are in its name, so they are not read again as children.
+        protected override IList<AutomationPeer> GetChildrenCore() => [];
+
+        protected override object GetPatternCore(PatternInterface patternInterface) =>
+            patternInterface is PatternInterface.Invoke or PatternInterface.SelectionItem ? this : base.GetPatternCore(patternInterface);
+    }
+
+    /// <summary>The ruler is the Playhead: a range value in seconds whose small change is one second (spec/06 ADR-51).</summary>
+    private sealed partial class RulerSurface : Canvas
+    {
+        public Func<double>? Seconds { get; set; }
+
+        public Func<double>? DurationSeconds { get; set; }
+
+        public Action<double>? MoveTo { get; set; }
+
+        protected override AutomationPeer OnCreateAutomationPeer() => new RulerPeer(this);
+    }
+
+    private sealed partial class RulerPeer(RulerSurface owner) : FrameworkElementAutomationPeer(owner), IRangeValueProvider
+    {
+        public bool IsReadOnly => false;
+
+        public double LargeChange => 5;
+
+        public double Maximum => owner.DurationSeconds?.Invoke() ?? 0;
+
+        public double Minimum => 0;
+
+        public double SmallChange => 1;
+
+        // Read when a client asks, never pushed from the playback tick.
+        public double Value => owner.Seconds?.Invoke() ?? 0;
+
+        public void SetValue(double value) => owner.MoveTo?.Invoke(value);
+
+        protected override string GetNameCore() => Loc.T("Playhead");
+
+        protected override string GetClassNameCore() => "RulerSurface";
+
+        protected override string GetHelpTextCore() => A11y.Duration(Value * 1000);
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Slider;
+
+        protected override bool IsControlElementCore() => true;
+
+        protected override IList<AutomationPeer> GetChildrenCore() => [];
+
+        protected override object GetPatternCore(PatternInterface patternInterface) =>
+            patternInterface == PatternInterface.RangeValue ? this : base.GetPatternCore(patternInterface);
     }
 
     private sealed partial class TrackSurface : Canvas

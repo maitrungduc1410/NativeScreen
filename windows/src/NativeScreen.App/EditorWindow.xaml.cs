@@ -93,6 +93,7 @@ public sealed partial class EditorWindow : Window
         source = editorSource ?? EditorSource.Empty;
         InitializeComponent();
         Loc.Apply(Content);
+        A11y.Name(TimelineZoom, "Timeline zoom");
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppTheme.Register(this);
@@ -384,7 +385,7 @@ public sealed partial class EditorWindow : Window
         voiceoverDockIcon.Glyph = recording ? "\uE71A" : "\uE720";
         var tooltip = recording ? "Stop voiceover recording" : "Record voiceover";
         Ui.Tip(voiceoverDockButton, tooltip);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(voiceoverDockButton, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(voiceoverDockButton, Loc.T(tooltip));
         if (recording)
         {
             voiceoverDockButton.Background = Ui.Rgb(0.45, 0.36, 0.96, DockActiveFillOpacity);
@@ -467,9 +468,10 @@ public sealed partial class EditorWindow : Window
             var (canApply, disabledTooltip) = session.TabAvailability(tab);
             var selected = session.SelectedTab == tab && canApply;
             var accelerator = InspectorCatalog.Accelerator(tab);
+            var title = Loc.T(InspectorCatalog.Title(tab));
             var tooltip = !canApply
-                ? disabledTooltip ?? InspectorCatalog.Title(tab)
-                : accelerator is null ? InspectorCatalog.Title(tab) : $"{InspectorCatalog.Title(tab)} ({accelerator})";
+                ? Loc.T(disabledTooltip ?? InspectorCatalog.Title(tab))
+                : accelerator is null ? title : $"{title} ({accelerator})";
             var tint = selected ? Ui.Rgb(0.65, 0.58, 0.99) : Ui.Pal("Ink88");
             UIElement icon = glyph.Length == 0 ? Ui.Shape(CursorArrowPath, 16, tint) : Ui.Icon(glyph, 16, tint);
             // Stays enabled, because a disabled button shows no tooltip and the tooltip says why the tab is off.
@@ -487,7 +489,7 @@ public sealed partial class EditorWindow : Window
                 button.Background = Ui.Pal("Ink07");
             }
 
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, InspectorCatalog.Title(tab));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title);
             TabRail.Children.Add(button);
             railAvailability = railAvailability * 2 + (canApply ? 1 : 0);
             if (viewMenuItems.TryGetValue(tab, out var item))
@@ -892,7 +894,9 @@ public sealed partial class EditorWindow : Window
     private void RefreshTransport()
     {
         PlayIcon.Glyph = session.IsPlaying ? "" : "";
-        Ui.Tip(PlayButton, session.IsPlaying ? "Pause (Space)" : "Play (Space)");
+        var playTip = session.IsPlaying ? "Pause (Space)" : "Play (Space)";
+        Ui.Tip(PlayButton, playTip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PlayButton, A11y.FromTooltip(playTip));
         CurrentTime.Text = Ui.Timecode(session.PlayheadTimelineMs);
         timeline.UpdatePlayhead();
     }
@@ -984,6 +988,7 @@ public sealed partial class EditorWindow : Window
     {
         message = Loc.T(message);
         ToastText.Text = message;
+        A11y.Announce(Toast, message);
         Toast.Visibility = Visibility.Visible;
         toastTimer.Stop();
         toastTimer.Start();

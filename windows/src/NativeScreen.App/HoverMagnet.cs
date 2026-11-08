@@ -44,6 +44,12 @@ public static class HoverMagnet
 
     private static void EnabledChanged(DependencyObject element, DependencyPropertyChangedEventArgs args)
     {
+        // Animation effects off: the template's plain hover fill stays, without the fly-in or the pull (spec/06 ADR-51).
+        if (A11y.ReduceMotion)
+        {
+            return;
+        }
+
         if (element is Control control && args.NewValue is true && control.GetValue(StateProperty) is null)
         {
             control.SetValue(StateProperty, new Tracker(control));

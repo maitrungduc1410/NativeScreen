@@ -132,7 +132,7 @@ public sealed partial class EditorWindow
         var section = ExportSection("Frame rate", "");
         var rates = ExportSettings.AllowedFps(exportSettings.Format);
         var picker = new ComboBox { Height = 36, HorizontalAlignment = HorizontalAlignment.Stretch, CornerRadius = new CornerRadius(9) };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(picker, "Frame rate");
+        A11y.Name(picker, "Frame rate");
         foreach (var rate in rates)
         {
             picker.Items.Add($"{rate} FPS");
@@ -197,7 +197,7 @@ public sealed partial class EditorWindow
         label.Children.Add(chevron);
         label.Children.Add(Ui.Text("Advanced", 13, "Ink88"));
         var advanced = new Button { Style = Ui.StyleOf("NsIconButton"), Content = label, Width = double.NaN, Height = 28, Padding = new Thickness(4, 0, 8, 0), HorizontalAlignment = HorizontalAlignment.Left };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(advanced, "Advanced");
+        A11y.Name(advanced, "Advanced");
         advanced.Click += (_, _) =>
         {
             exportAdvancedOpen = !exportAdvancedOpen;
@@ -438,7 +438,7 @@ public sealed partial class EditorWindow
     {
         var sourceMs = session.SourceAtPlayhead;
         var name = new TextBox { Text = $"{session.Document.Name}({sourceMs / 1000:0.##}s)", Height = 32 };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(name, "Name");
+        A11y.Name(name, "Name");
         var folder = AppSettings.Shared.StillExportFolder is { Length: > 0 } remembered && Directory.Exists(remembered)
             ? remembered
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
@@ -484,7 +484,7 @@ public sealed partial class EditorWindow
         folderRow.Children.Add(pick);
         form.Children.Add(StillRow("Export to", folderRow));
         var resolution = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(resolution, "Resolution");
+        A11y.Name(resolution, "Resolution");
         foreach (var (title, _) in StillResolutions)
         {
             resolution.Items.Add(title);

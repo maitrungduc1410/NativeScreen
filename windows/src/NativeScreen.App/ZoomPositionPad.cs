@@ -45,7 +45,7 @@ internal sealed class ZoomPositionPad
         canvas.Children.Add(viewport);
         canvas.Children.Add(dot);
         canvas.Children.Add(readout);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(canvas, "Zoom position");
+        A11y.Name(canvas, "Zoom position");
 
         canvas.SizeChanged += (_, _) => Layout();
         canvas.PointerPressed += (_, args) =>

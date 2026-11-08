@@ -155,6 +155,11 @@ internal sealed class InspectorPanel
                     wallpaperCategory = name;
                     Rebuild();
                 });
+                if (name == FavoritesCategory)
+                {
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pill, Loc.T("Favorite"));
+                }
+
                 selectedPill = name == wallpaperCategory ? pill : selectedPill;
                 row.Children.Add(pill);
             }
@@ -188,14 +193,14 @@ internal sealed class InspectorPanel
                     {
                         d.Background.Type = BackgroundType.Mesh;
                         d.Background.MeshPresetId = id;
-                    })), BackgroundFavorites.MeshId(id)));
+                    })), BackgroundFavorites.MeshId(id), background.Type == BackgroundType.Mesh && background.MeshPresetId == id));
             }
 
             foreach (var item in wallpapers)
             {
                 var target = item;
                 var selected = background.Type == BackgroundType.Wallpaper && background.SystemWallpaperName == item.Id;
-                swatches.Children.Add(Favorite(Swatch(WallpaperThumbnail(item), item.Id, selected, () => tools.SelectWallpaper(target)), BackgroundFavorites.WallpaperId(item.Id)));
+                swatches.Children.Add(Favorite(Swatch(WallpaperThumbnail(item), A11y.WallpaperName(item.Id), selected, () => tools.SelectWallpaper(target)), BackgroundFavorites.WallpaperId(item.Id), selected));
             }
 
             Add(Action("Pick random wallpaper", PickRandomBackground));
@@ -213,14 +218,17 @@ internal sealed class InspectorPanel
         else if (background.Type == BackgroundType.Gradient)
         {
             var swatches = SwatchGrid();
+            var gradientNumber = 0;
             foreach (var (start, end) in CuratedGradientPairs)
             {
                 var from = start;
                 var to = end;
                 var stops = background.Gradient.Stops;
                 var selected = stops.Count >= 2 && stops[0].Color == from && stops[^1].Color == to;
-                swatches.Children.Add(Swatch(Ui.Gradient(Ui.Hex(from), Ui.Hex(to), vertical: false), $"{from} to {to}", selected, () => Edit(d =>
-                    d.Background.Gradient.Stops = [new GradientStopConfig(from, 0), new GradientStopConfig(to, 1)])));
+                var gradient = Swatch(Ui.Gradient(Ui.Hex(from), Ui.Hex(to), vertical: false), $"{from} to {to}", selected, () => Edit(d =>
+                    d.Background.Gradient.Stops = [new GradientStopConfig(from, 0), new GradientStopConfig(to, 1)]));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(gradient, Loc.F("Gradient %lld", ++gradientNumber));
+                swatches.Children.Add(gradient);
             }
 
             var first = background.Gradient.Stops.Count > 0 ? background.Gradient.Stops[0].Color : "#000000";
@@ -241,7 +249,7 @@ internal sealed class InspectorPanel
                 Edit(d => SetStops(d, randomStart, randomEnd));
             }));
             var hue = new Slider { Minimum = 0, Maximum = 1, StepFrequency = 0.005, Value = gradientHueShift, IsThumbToolTipEnabled = false };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(hue, "Hue");
+            A11y.Name(hue, "Hue");
             hue.ValueChanged += (_, args) =>
             {
                 var delta = args.NewValue - gradientHueShift;
@@ -257,7 +265,9 @@ internal sealed class InspectorPanel
             foreach (var color in CuratedSolidColors)
             {
                 var value = color;
-                swatches.Children.Add(Swatch(new SolidColorBrush(Ui.Hex(value)), value, background.SolidColor == value, () => Edit(d => d.Background.SolidColor = value)));
+                var swatch = Swatch(new SolidColorBrush(Ui.Hex(value)), value, background.SolidColor == value, () => Edit(d => d.Background.SolidColor = value));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(swatch, Loc.T("Color") + ", " + value);
+                swatches.Children.Add(swatch);
             }
 
             Add(Labeled("Color", 10, ColorField.Create("Background color", background.SolidColor, hex => session.Mutate(d => d.Background.SolidColor = hex, "solid-color", structural: false), hex => Edit(d => d.Background.SolidColor = hex))));
@@ -518,7 +528,7 @@ internal sealed class InspectorPanel
         addLook.HorizontalAlignment = HorizontalAlignment.Stretch;
         addLook.Margin = new Thickness(0, 0, 6, 8);
         addLook.Padding = new Thickness(0);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(addLook, "Add a color look");
+        A11y.Name(addLook, "Add a color look");
         wrap.Children.Add(addLook);
         Add(Labeled("Color grading", 10, wrap));
         if (Doc.Camera.CustomLutRelativePath is { } lut)
@@ -1475,10 +1485,11 @@ internal sealed class InspectorPanel
     /// A thumbnail's right-click menu adds or removes it from the favorites; a favorite shows a white outlined star in its
     /// middle, under the star pill and in its own category.
     /// </summary>
-    private Button Favorite(Button swatch, string id)
+    private Button Favorite(Button swatch, string id, bool selected)
     {
         var favorites = AppSettings.Shared.FavoriteBackgrounds;
         var isFavorite = favorites.Contains(id);
+        A11y.Status(swatch, selected, isFavorite);
         if (isFavorite)
         {
             var star = Ui.Icon("\uE734", 15, Ui.Rgb(1, 1, 1));
@@ -1540,6 +1551,7 @@ internal sealed class InspectorPanel
         };
         Ui.Tip(button, tooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
+        A11y.Status(button, selected);
         button.Click += (_, _) => click();
         return button;
     }
@@ -1613,6 +1625,8 @@ internal sealed class InspectorPanel
             IsEnabled = Math.Abs(get() - fallback) > (max - min) * 0.002
         };
         reset.Click += (_, _) => slider.Value = fallback;
+        AutomationName(slider, title);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(reset, Loc.F("Reset %@", title));
         slider.ValueChanged += (_, args) =>
         {
             var value = args.NewValue;
@@ -1727,6 +1741,9 @@ internal sealed class InspectorPanel
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Content = header
         };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(button, Loc.T(isOpen ? "Expanded" : "Collapsed"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(button, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
         button.Click += (_, _) =>
         {
             if (!expanded.Remove(title))
@@ -1786,7 +1803,7 @@ internal sealed class InspectorPanel
     }
 
     private static void AutomationName(DependencyObject element, string name) =>
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(element, name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(element, Loc.T(name));
 }
 
 /// <summary>Words flow like text; a wrap grid would force one cell size.</summary>

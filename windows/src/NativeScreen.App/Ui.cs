@@ -75,8 +75,11 @@ internal static class Ui
     }
 
     /// <summary>Sets a tooltip; plain text is translated.</summary>
-    public static void Tip(DependencyObject element, object? tip) =>
+    public static void Tip(DependencyObject element, object? tip)
+    {
         ToolTipService.SetToolTip(element, tip is string text ? Loc.T(text) : tip);
+        A11y.NameFromTooltip(element, tip as string);
+    }
 
     public static TextBlock Text(string text, double size = 13, string ink = "Ink88", bool medium = false)
     {
@@ -102,7 +105,7 @@ internal static class Ui
         tooltip = Loc.T(tooltip);
         var button = new Button { Style = StyleOf("NsIconButton"), Content = content, Width = size, Height = size };
         Ui.Tip(button, tooltip);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, A11y.FromTooltip(tooltip));
         if (click is null)
         {
             button.IsEnabled = false;

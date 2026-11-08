@@ -90,7 +90,8 @@ internal static partial class Loc
     /// <summary>Translates the plain text set in a window's XAML: text, tooltips, button content, placeholders.</summary>
     public static void Apply(object? element)
     {
-        if (table is null || table.Count == 0 || element is null)
+        // Walked in English too: tooltips also name icon-only buttons (spec/06 ADR-51).
+        if (element is null)
         {
             return;
         }
@@ -102,6 +103,15 @@ internal static partial class Loc
                 break;
             case Microsoft.UI.Xaml.Controls.TextBox box:
                 box.PlaceholderText = T(box.PlaceholderText);
+                break;
+            case Microsoft.UI.Xaml.Controls.Primitives.ButtonBase composite when composite.Content is Microsoft.UI.Xaml.Controls.Panel:
+                Apply(composite.Content);
+                // A tooltip names the button better than its label (the title button shows only part of the name).
+                if (Microsoft.UI.Xaml.Controls.ToolTipService.GetToolTip(composite) is not string)
+                {
+                    A11y.NameFromContent(composite);
+                }
+
                 break;
             case Microsoft.UI.Xaml.Controls.ContentControl control:
                 if (control.Content is string content)
@@ -132,6 +142,7 @@ internal static partial class Loc
         if (element is Microsoft.UI.Xaml.DependencyObject dependency && Microsoft.UI.Xaml.Controls.ToolTipService.GetToolTip(dependency) is string tip)
         {
             Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(dependency, T(tip));
+            A11y.NameFromTooltip(dependency, tip);
         }
 
         if (element is Microsoft.UI.Xaml.Controls.ScrollViewer scroller)

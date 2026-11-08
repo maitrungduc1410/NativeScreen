@@ -1054,6 +1054,17 @@ Every control can be found and pressed by VoiceOver, Voice Control, Switch Contr
 - **Reduce Motion** (`NSWorkspace.accessibilityDisplayShouldReduceMotion` in AppKit code, `accessibilityReduceMotion` in SwiftUI): the hover-magnet highlight appears in place without flying in or following the cursor, tooltips fade without the 4 pt slide, the toast fades instead of sliding up, split mode does not wiggle the tracks, and the spring demo dot stays still.
 - **Strings.** Labels are English catalog keys like every other string (ADR-44). Literal `Text` labels are extracted by the compiler; labels passed as `String` (tooltips, `accessibleButton`, ternaries) go through `localizedUI` and are `manual` keys. A ternary inside `Text(...)` picks the `String` initializer and is never translated, so ternary labels are written as `Text((cond ? "A" : "B").localizedUI)`.
 - **Known gaps.** The window, display and area pickers follow the pointer, so choosing what to record needs a mouse. Mask rectangles and the zoom and caption position pads read their position but are not adjustable with VoiceOver.
+- **Windows** (`App/A11y.cs`, UI Automation, read by Narrator and Voice Access):
+  - **Names.** `Ui.Tip` names an icon-only button from its tooltip without the shortcut. A button with a text label gets the tooltip as help text instead. `Loc.Apply` does the same for the XAML, now in English too. A button holding an icon and a label reads its label when it has no tooltip. Literal `AutomationProperties.Name` values now go through the catalog (`A11y.Name`). Inspector sliders take their row title, `Reset` reads `Reset %@`, thumbnails report `Selected` and `Favorite` through `ItemStatus`, built-in wallpapers read "Spring 1", and gradients and colors read `Gradient %lld` and `Color, #hex`. Collapsible sections are level-2 headings reporting `Expanded` or `Collapsed`.
+  - **Timeline.** Each segment is a `TimelineSegment` peer (Button control type, Invoke and SelectionItem). Its name is the title and what the block shows, translated. Its help text is the range, spelled out from new keys (`%@ seconds`, `1 minute, %@ seconds`, `%lld minutes, %@ seconds`) with the UI culture's decimal separator. Invoke selects the segment, or splits it in split mode.
+  - **Playhead.** The ruler is a `RulerSurface` peer named `Playhead` with RangeValue in seconds (small change 1 s). Its value is read only when asked. The playhead marks and snap guide are `AccessibilityView.Raw`.
+  - **Announcements and Reduce Motion.** Toasts raise a UIA notification on the toast element. Reduce Motion comes from `UISettings.AnimationsEnabled`: the hover magnet is not attached (the plain hover fill stays), and split mode does not wiggle. WinUI tooltips already follow the system setting, and the Windows toast does not slide.
+  - **Checked with UI Automation** (a probe walking the control view, since `FindAll` does not cross the XAML content bridge), in English and Vietnamese:
+    - **Names:** 0 unnamed buttons out of 78 in the editor, and 0 out of 9 in the recording bar. Segments read "Phím tắt, Win+K, Từ 0,0 giây đến 1,6 giây".
+    - **Playhead:** `SetValue(3)` moved it to 3 s.
+    - **Invoke:** invoking a segment selected it.
+    - **Cost:** idle CPU stays 0.00%, and closing still leaves no editor object alive.
+  - **Not checked:** Narrator speech, Reduce Motion with the system setting off (this pass changes no system setting), and the preview's keycap, caption and mask hit targets. Those draw on one canvas with no element per target, so they are not exposed yet.
 
 ---
 

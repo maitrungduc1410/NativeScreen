@@ -70,6 +70,7 @@ public sealed partial class SettingsWindow : Window
             ("Light", AppTheme.Current == ElementTheme.Light, () => AppTheme.Set(ElementTheme.Light)));
         Heading("Language");
         var languages = new ComboBox { MinWidth = 220 };
+        A11y.Name(languages, "Language");
         languages.Items.Add(Loc.T("System"));
         foreach (var (_, name) in Loc.Languages)
         {

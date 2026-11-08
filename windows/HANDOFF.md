@@ -59,6 +59,24 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
   - Measure idle CPU with the setting on and no client: the pipe wait must cost nothing.
 - **Risks / unsure:** the GUI-subsystem stdio question in step 2. Large documents (`get_project` with `include_transcript`) can be big; keep the default without transcript words.
 
+## 2026-11-07, Windows port: accessibility (names, timeline, playhead, announcements, Reduce Motion)
+
+### Verifier
+- **Result:** PASS for what UI Automation can check. Narrator speech and Reduce Motion with the system setting off were not run.
+- **Build and tests:** the solution builds in Release (x64) with 0 warnings. Core 260 tests pass.
+- **Measurements** (UI Automation probe, editor with a 10 s project and the recording bar, in English and Vietnamese):
+  - **Editor:** 78 buttons, 0 unnamed (4 before, all icon-plus-label buttons), 6 sliders and 3 toggles, all named.
+  - **Recording bar:** 9 buttons, all named.
+  - **Segments:** 5 named, for example "Thuyết minh, 80%" with "Từ 0,5 giây đến 3,7 giây".
+  - **Playhead:** `Đầu phát`, value 0 of 10.43 s, small change 1. `SetValue(3)` moved it to 3.
+  - **Invoke:** invoking a shortcut segment selected it.
+  - **Cost:** idle CPU is 0.00% before and after. Open and close leaves no editor object alive (97 to 102 MB after close).
+- **Changes made:** `App/A11y.cs` (names from tooltips, durations and ranges, item status, announcements, Reduce Motion), segment and ruler automation peers in `TimelineView`, naming in `Ui`, `Loc.Apply`, `InspectorPanel` and `EditorWindow`, the hover magnet and split mode wiggle off under Reduce Motion, and 4 catalog keys (`Selected` and three duration forms) with all 7 translations.
+- **Spec updates:** a Windows note in `spec/06` ADR-51.
+- **Next / open:**
+  - **Run with Narrator:** run Narrator and Accessibility Insights FastPass.
+  - **Reduce Motion:** turn Animation effects off and check that the hover highlight and split mode no longer move.
+  - **Preview targets:** expose the preview's keycap, caption and mask targets as elements.
 
 ## 2026-11-07, Accessibility: control names, timeline, announcements, Reduce Motion (macOS done, Windows port pending)
 
