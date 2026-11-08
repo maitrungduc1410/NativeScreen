@@ -33,7 +33,7 @@ enum VideoProjectImporter {
         }
     }
 
-    private static func buildPackage(from videoURL: URL) async throws -> URL {
+    static func buildPackage(from videoURL: URL) async throws -> URL {
         let asset = AVURLAsset(url: videoURL)
         guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
             throw importError("The file has no video track.")

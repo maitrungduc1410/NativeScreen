@@ -1277,6 +1277,14 @@ public final class RecordingCoordinator {
         }
     }
 
+    /// Stops and deletes the recording without asking (AI agent `control_recording cancel`).
+    public func discardCurrentRecording() async {
+        guard isRecording else { return }
+        await stopAndDeleteCurrentRecordingFiles()
+        updateHUDPanelFrameForCurrentState(animated: true)
+        hudPanel?.orderFrontRegardless()
+    }
+
     private func stopAndDeleteCurrentRecordingFiles() async {
         recordingTimer?.invalidate()
         recordingTimer = nil

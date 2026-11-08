@@ -27,6 +27,39 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-08, Settings: sliding segmented controls, smooth tab resize, full MCP config (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** `spec/06` ADR-16 (Settings window bullets). macOS files: `Views/SlidingSegmentedControl.swift` (new), `Views/SettingsView.swift`.
+  - **Segmented choices slide:** appearance, countdown, max camera resolution, quick export format, resolution and compression, and the Shortcuts section switcher. The selected pill (accent color, 6 pt radius, light shadow) slides to the clicked segment with a 0.3 s spring; hairlines sit only between two unselected segments. Screen readers get a standard segmented control. With animations turned off in Windows (`UISettings.AnimationsEnabled == false`) the pill jumps.
+  - **Tab height animates:** when the Settings tab changes, the window (or page host) eases to the new tab's height in about 0.3 s, keeping its top edge in place, instead of jumping. Skip the animation when animations are off.
+  - **AI Agents page:** the copy blocks show their whole text (the JSON config wraps over several lines instead of showing `{…`).
+- **Built on macOS:** builds. The resize was measured frame by frame with a temporary probe (window height eased over about 27 frames, top edge fixed), and the General and AI Agents tabs were checked in screenshots. Not checked by clicking through.
+- **How to verify on Windows:** switch every Settings tab and watch the height ease; click through each segmented choice and watch the pill slide; check Narrator reads them as a list of options with the selected one.
+
+
+## 2026-11-08, AI agents through MCP (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** rules are in `spec/06` ADR-52. The tool list is `NativeScreen/NativeScreen/Resources/MCPTools.json`: link it into the Windows app as content, like `Localizable.xcstrings`, and do not fork it. A tool Windows cannot support yet should still be listed and return `isError` with a sentence.
+  - **macOS files:** `MCP/MCPServer.swift` (socket, JSON-RPC, connections), `MCP/MCPStdioBridge.swift` (`--mcp`), `MCP/MCPToolbox.swift` (the 28 tools), `MCP/MCPJSON.swift` (merge patch, argument reads), `NativeScreenApp.swift` (`NativeScreenMain` checks `--mcp` before AppKit starts), `Views/SettingsView.swift` (`AIAgentsSettingsTab`). Small additions: `ProjectSession.startNewUndoStep()`, `RecordingCoordinator.discardCurrentRecording()`, `ProjectWorkspaceStore.closeEditorWindow(for:)`, `VideoProjectImporter.buildPackage` no longer private, `AppSettings.aiAgentsEnabled`.
+- **Built on macOS:** the app builds. Tested with a scripted client through the bridge and with a real Claude Code session (ADR-52, "Checked"). Codex not tried. The tests changed the recording bar's choices on this Mac to no camera, no microphone and no system audio.
+- **What to port:**
+  1. **Server in the app.** A named pipe, `\\.\pipe\NativeScreen.MCP.<user SID>`, with a `PipeSecurity` ACL for the current user only (`PipeOptions.CurrentUserOnly` on .NET). Newline-delimited JSON-RPC, same methods as macOS. The C# SDK (`ModelContextProtocol`) can run over a `StreamServerTransport` on the pipe stream, or reuse the hand-written dispatch; either way tool names, schemas and descriptions come from `MCPTools.json`, with `$ref` to `definitions` inlined before `tools/list`.
+  2. **Bridge.** `NativeScreen.exe --mcp` must not create a window or the WinUI app. Check that a GUI-subsystem exe gets the client's redirected stdin and stdout; if not, ship a tiny console `nativescreen-mcp.exe` next to the app instead. If the pipe is missing: when the setting is off, answer the first request with the same error text and exit; otherwise start the app and wait up to 20 s. With Velopack, point configs at the stable `current` folder path so updates do not break them.
+  3. **Setting.** `AiAgentsEnabled` in `settings.json`, off by default, read by the bridge too. Settings gets an `AI Agents` page with the switch, the status (`Off`, `Waiting for an agent to connect`, `Connected: %@`) and three copy blocks: `claude mcp add nativescreen -- "<exe>" --mcp`, `codex mcp add nativescreen -- "<exe>" --mcp`, and the `mcpServers` JSON.
+  4. **Tools.** Same behavior as `MCPToolbox.swift`: merge patch against the document JSON (validated by deserializing before applying), `update_item` per kind, one undo step per call (break the undo coalescing first), overlap refusal for zooms, camera layouts, captions on a track and masks on a track, `render_frame` as a PNG image result, `export_video` with `notifications/progress` every 2% and cancellation, `delete_project` to the Recycle Bin, `control_recording cancel` without a dialog. JSON property names must match the macOS document exactly (the projects are shared), and `list_options enums` must list the same paths.
+  5. **Visibility.** Toast `AI agent connected` on the first connection, connected clients in the tray menu (`AI agent connected: %@`), `Exporting video…` and `Export finished` toasts.
+- **Strings:** 16 new keys with all 7 translations: `AI Agents`, `Allow AI agents to control Native Screen` and its description, `Status`, `Waiting for an agent to connect`, `Connected: %@`, `Connect an agent`, the paste hint, `Copied`, `Copy %@`, `Claude Desktop, Cursor and other apps`, the footnote, `AI agent connected`, `AI agent connected: %@`, `Exporting video…`, `Export finished`. The macOS texts mention `⌘Z`; add Windows keys with `Ctrl+Z` where needed.
+- **How to verify on Windows:**
+  - Turn the setting on, run `claude mcp add nativescreen -- "<exe>" --mcp` (or the Codex line), and in the agent ask for `get_status`; quit the app first to check that the bridge starts it.
+  - Ask the agent to open a copy of a project, change the background, add a zoom, render a frame and export a 720p MP4. Each edit appears in the editor and `Ctrl+Z` undoes them one by one.
+  - Start and stop a short area recording from the agent; the recording bar and countdown show.
+  - With the setting off, the client shows the "turned off" message and the app does not start.
+  - Measure idle CPU with the setting on and no client: the pipe wait must cost nothing.
+- **Risks / unsure:** the GUI-subsystem stdio question in step 2. Large documents (`get_project` with `include_transcript`) can be big; keep the default without transcript words.
+
+
 ## 2026-11-07, Accessibility: control names, timeline, announcements, Reduce Motion (macOS done, Windows port pending)
 
 ### Writer

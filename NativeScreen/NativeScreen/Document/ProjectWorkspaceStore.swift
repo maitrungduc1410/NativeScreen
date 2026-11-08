@@ -631,6 +631,11 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
     }
 
     /// Moves a project's package to the Trash and forgets it, so closing its window cannot save it back.
+    /// Closes a project's editor window (the caller saves first; unsaved changes would ask).
+    public func closeEditorWindow(for session: ProjectSession) {
+        editorWindowsBySessionID[session.id]?.close()
+    }
+
     public func trashProject(_ session: ProjectSession) {
         let url = session.packageURL.standardizedFileURL
         guard (try? FileManager.default.trashItem(at: url, resultingItemURL: nil)) != nil else { return }

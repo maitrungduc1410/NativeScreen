@@ -2,23 +2,62 @@ import SwiftUI
 import AppKit
 
 /// `Native Screen > Settings…` (⌘,). Native toolbar tabs; only options the app actually supports.
+/// The Settings tab being shown; also lets other parts of the app open Settings on a given tab.
+@Observable
+@MainActor
+final class SettingsNavigation {
+    static let shared = SettingsNavigation()
+    enum Tab: String, CaseIterable { case general, recording, editing, quickExport, shortcuts, aiAgents }
+    var tab: Tab = .general
+}
+
 struct SettingsView: View {
+    @Bindable private var navigation = SettingsNavigation.shared
+    /// The window height follows this, animated between tabs; `nil` until the first tab has been measured.
+    @State private var height: CGFloat?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        TabView {
+        TabView(selection: $navigation.tab) {
             GeneralSettingsTab()
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(SettingsNavigation.Tab.general)
             RecordingSettingsTab()
                 .tabItem { Label("Recording", systemImage: "record.circle") }
+                .tag(SettingsNavigation.Tab.recording)
             EditingSettingsTab()
                 .tabItem { Label("Editing", systemImage: "pencil.and.outline") }
+                .tag(SettingsNavigation.Tab.editing)
             QuickExportSettingsTab()
                 .tabItem { Label("Quick export", systemImage: "square.and.arrow.up") }
+                .tag(SettingsNavigation.Tab.quickExport)
             ShortcutsSettingsTab()
                 .tabItem { Label("Shortcuts", systemImage: "command.circle") }
+                .tag(SettingsNavigation.Tab.shortcuts)
+            AIAgentsSettingsTab()
+                .tabItem { Label("AI Agents", systemImage: "sparkles") }
+                .tag(SettingsNavigation.Tab.aiAgents)
         }
-        .frame(width: 720)
+        .frame(width: 720, height: height, alignment: .top)
+        .onPreferenceChange(SettingsTabHeightKey.self) { measured in
+            guard measured > 0, abs(measured - (height ?? 0)) > 0.5 else { return }
+            if height == nil || reduceMotion {
+                height = measured
+            } else {
+                withAnimation(.smooth(duration: 0.28)) { height = measured }
+            }
+        }
     }
 }
+
+/// Natural height of the tab being shown, measured apart from the window's current height.
+private struct SettingsTabHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 
 // MARK: - Building blocks
 
@@ -65,6 +104,12 @@ private struct SettingsPage<Content: View>: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 20)
+        // Its own height, whatever the window's is now, so `SettingsView` can animate the window to it.
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { proxy in
+            Color.clear.preference(key: SettingsTabHeightKey.self, value: proxy.size.height)
+        })
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -117,12 +162,10 @@ private struct GeneralSettingsTab: View {
                 title: "Appearance",
                 description: "Light, dark, or follow the system setting. Also available in the command menu (⌘K)."
             ) {
-                Picker("", selection: $settings.appearance) {
-                    ForEach(AppSettings.Appearance.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                SlidingSegmentedControl(
+                    selection: $settings.appearance,
+                    options: AppSettings.Appearance.allCases.map { ($0, $0.title) }
+                )
             }
 
             SettingsRow(
@@ -186,12 +229,10 @@ private struct RecordingSettingsTab: View {
             }
 
             SettingsRow(title: "Countdown", description: "Time before the recording starts.") {
-                Picker("", selection: $recorder.countdownOption) {
-                    ForEach(RecordingCountdownOption.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                SlidingSegmentedControl(
+                    selection: $recorder.countdownOption,
+                    options: RecordingCountdownOption.allCases.map { ($0, $0.label) }
+                )
             }
 
             SettingsRow(
@@ -231,12 +272,10 @@ private struct RecordingSettingsTab: View {
                 title: "Maximum camera resolution",
                 description: "Highest resolution the camera is recorded at, if supported. Higher resolutions look better but use more resources while recording."
             ) {
-                Picker("", selection: $recorder.cameraMaxResolution) {
-                    ForEach(CameraMaxResolutionOption.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                SlidingSegmentedControl(
+                    selection: $recorder.cameraMaxResolution,
+                    options: CameraMaxResolutionOption.allCases.map { ($0, $0.rawValue) }
+                )
             }
         }
     }
@@ -270,6 +309,107 @@ private struct EditingSettingsTab: View {
     }
 }
 
+// MARK: - AI agents
+
+/// Turns the MCP server on and gives the line to paste into each client (ADR-52).
+private struct AIAgentsSettingsTab: View {
+    @Bindable private var settings = AppSettings.shared
+    private var server: MCPServer { MCPServer.shared }
+    @State private var copiedClient: String?
+
+    /// The executable MCP clients run with `--mcp`. Inside the app bundle, so it moves and updates with the app.
+    private var executablePath: String {
+        Bundle.main.executablePath ?? "/Applications/Native Screen.app/Contents/MacOS/Native Screen"
+    }
+
+    private var clients: [(id: String, title: String, text: String)] {
+        let exe = executablePath
+        let json = """
+        {
+          "mcpServers": {
+            "nativescreen": {
+              "command": "\(exe)",
+              "args": ["--mcp"]
+            }
+          }
+        }
+        """
+        return [
+            ("claude-code", "Claude Code", "claude mcp add nativescreen -- \"\(exe)\" --mcp"),
+            ("codex", "Codex", "codex mcp add nativescreen -- \"\(exe)\" --mcp"),
+            ("json", "Claude Desktop, Cursor and other apps", json),
+        ]
+    }
+
+    private var statusText: String {
+        if !settings.aiAgentsEnabled { return "Off".localizedUI }
+        if let error = server.lastError { return error }
+        if server.connectedClients.isEmpty { return "Waiting for an agent to connect".localizedUI }
+        return String(format: "Connected: %@".localizedUI, server.connectedClients.joined(separator: ", "))
+    }
+
+    var body: some View {
+        SettingsPage {
+            SettingsRow(
+                title: "Allow AI agents to control Native Screen",
+                description: "Claude, Codex, Cursor and other MCP apps can record, edit, change settings and export for you. They connect on this Mac only."
+            ) {
+                Toggle("", isOn: $settings.aiAgentsEnabled).toggleStyle(.switch).labelsHidden()
+            }
+
+            SettingsRow(title: "Status", titleLabelsControl: false) {
+                Text(verbatim: statusText)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
+
+            Divider().padding(.vertical, 6)
+
+            Text("Connect an agent")
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.top, 4)
+                .accessibilityAddTraits(.isHeader)
+            Text("Paste this in the agent’s terminal or settings. The agent starts Native Screen when it needs it.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 4)
+
+            ForEach(clients, id: \.id) { client in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(client.title.localizedUI)
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                        Button((copiedClient == client.id ? "Copied" : "Copy").localizedUI) {
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString(client.text, forType: .string)
+                            copiedClient = client.id
+                        }
+                        .accessibilityLabel(Text(String(format: "Copy %@".localizedUI, client.title.localizedUI)))
+                    }
+                    Text(verbatim: client.text)
+                        .font(.system(size: 11.5).monospaced())
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+                }
+                .padding(.vertical, 6)
+            }
+
+            Text("Every edit an agent makes shows in the editor and can be undone with ⌘Z. Recording shows the recording bar and its countdown. A deleted project goes to the Trash.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+        }
+    }
+}
+
 // MARK: - Quick export
 
 private struct QuickExportSettingsTab: View {
@@ -294,12 +434,10 @@ private struct QuickExportSettingsTab: View {
                 .padding(.bottom, 6)
 
             SettingsRow(title: "Format") {
-                Picker("", selection: config.format) {
-                    ForEach(HardwareVideoExporter.ExportFormat.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                SlidingSegmentedControl(
+                    selection: config.format,
+                    options: HardwareVideoExporter.ExportFormat.allCases.map { ($0, $0.label) }
+                )
             }
 
             SettingsRow(title: "Frame rate") {
@@ -311,25 +449,21 @@ private struct QuickExportSettingsTab: View {
             }
 
             SettingsRow(title: "Resolution") {
-                Picker("", selection: config.resolutionHeight) {
-                    ForEach(config.wrappedValue.enabledResolutionHeights, id: \.self) {
-                        Text(HardwareVideoExporter.ExportConfiguration.resolutionLabel(forHeight: $0)).tag($0)
+                SlidingSegmentedControl(
+                    selection: config.resolutionHeight,
+                    options: config.wrappedValue.enabledResolutionHeights.map {
+                        ($0, HardwareVideoExporter.ExportConfiguration.resolutionLabel(forHeight: $0))
                     }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                )
             }
 
             switch config.wrappedValue.format {
             case .mp4:
                 SettingsRow(title: "Compression", description: config.wrappedValue.compression.descriptionText) {
-                    Picker("", selection: config.compression) {
-                        ForEach(HardwareVideoExporter.ExportCompression.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
+                    SlidingSegmentedControl(
+                        selection: config.compression,
+                        options: HardwareVideoExporter.ExportCompression.allCases.map { ($0, $0.label) }
+                    )
                 }
                 SettingsRow(title: "Codec", description: config.wrappedValue.mp4Codec.descriptionText) {
                     Picker("", selection: config.mp4Codec) {
@@ -409,13 +543,11 @@ private struct ShortcutsSettingsTab: View {
 
     var body: some View {
         SettingsPage {
-            Picker("", selection: $section) {
-                ForEach(Section.allCases) { Text($0.rawValue.localizedUI).tag($0) }
-            }
-            .pickerStyle(.segmented)
+            SlidingSegmentedControl(
+                selection: $section,
+                options: Section.allCases.map { ($0, $0.rawValue.localizedUI) }
+            )
             .accessibilityLabel(Text("Shortcuts"))
-            .labelsHidden()
-            .fixedSize()
             .frame(maxWidth: .infinity)
             .padding(.bottom, 8)
 

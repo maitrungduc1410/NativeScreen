@@ -1,0 +1,353 @@
+{
+  "instructions": "Native Screen records the screen and turns recordings into polished videos. Typical flow: get_status, then open_project or start_recording, get_project to read the document, edit with update_project / add_item / update_item / delete_item / split_item / run_action, check the result with render_frame, then export_video. Every edit is one undo step in the editor the user sees, and undo / redo are available. Times named source*Ms are positions in the original recording; timeline*Ms are positions in the edited video after cuts and speed changes (get_project returns the mapping in info.slices). Ids come from get_project. When project is omitted, the frontmost editor is used.",
+  "tools": [
+    {
+      "name": "get_status",
+      "description": "What Native Screen is doing now: open projects (id, name, path, whether it is the frontmost editor, unsaved changes), the recording state (idle, picking, counting down, recording, paused, elapsed seconds) and exports in progress.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "list_projects",
+      "description": "Projects on disk: recent projects and the .nativescreen packages in the projects folder, newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Maximum number of projects. Default 30." }
+        }
+      },
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "open_project",
+      "description": "Opens a .nativescreen project in an editor window (or brings it to the front) and returns its id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Absolute path of the .nativescreen package." }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "create_project_from_video",
+      "description": "Creates a new project from a movie file (no cursor or keystroke data, so no auto zooms) in the projects folder and opens it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Absolute path of the movie file (mp4, mov, m4v...)." }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "close_project",
+      "description": "Saves the project and closes its editor window.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "project": { "$ref": "#/definitions/project" } }
+      }
+    },
+    {
+      "name": "delete_project",
+      "description": "Moves the project package to the Trash and closes its window. This cannot be undone with undo; the user can restore it from the Trash.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "project": { "$ref": "#/definitions/project" } },
+        "required": ["project"]
+      },
+      "annotations": { "destructiveHint": true }
+    },
+    {
+      "name": "rename_project",
+      "description": "Renames the project and its package on disk.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "name": { "type": "string", "description": "New name, without the .nativescreen extension." }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "save_project",
+      "description": "Saves the project now (autosave may be off in Settings).",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "project": { "$ref": "#/definitions/project" } }
+      }
+    },
+    {
+      "name": "get_project",
+      "description": "The project document as JSON (canvas, background, frameStyle, cursor, camera, motion, audio, captions, timeline) plus info: durations, what was recorded (camera, microphone, system audio, cursor, keystrokes), the playhead and info.slices with each clip's source and timeline range. The transcript words (captions.segments) are left out unless include_transcript is true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "include_transcript": { "type": "boolean", "description": "Include captions.segments (every transcript word). Default false." }
+        }
+      },
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "update_project",
+      "description": "Changes the document with a JSON Merge Patch (RFC 7386) against the JSON from get_project: objects merge, null removes an optional value, arrays are replaced whole. Use it for settings such as background, frameStyle, cursor, camera, motion, audio, canvas and caption styles. For one timeline item use update_item instead of replacing an array. One undo step.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "patch": { "type": "object", "description": "Merge patch, e.g. {\"background\":{\"blurRadius\":12},\"frameStyle\":{\"borderRadius\":18}}." }
+        },
+        "required": ["patch"]
+      }
+    },
+    {
+      "name": "add_item",
+      "description": "Adds a timeline item and returns its id. zoom, mask, camera_layout, caption and shortcut need sourceStartMs and sourceEndMs. mask goes on trackId or the first mask track free at that time (a new track if none). caption goes on trackId or the first caption track (created if needed). shortcut is a custom keystroke on trackId or the first shortcut track. caption_track and shortcut_track add an empty track. properties is a merge patch applied to the new item, e.g. {\"scale\":2.2,\"mode\":\"manual\",\"manualCenter01\":{\"x\":0.3,\"y\":0.4}} for a zoom.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "kind": { "type": "string", "enum": ["zoom", "mask", "camera_layout", "caption", "shortcut", "caption_track", "shortcut_track"] },
+          "sourceStartMs": { "type": "number" },
+          "sourceEndMs": { "type": "number" },
+          "trackId": { "type": "string" },
+          "text": { "type": "string", "description": "caption: its text." },
+          "maskType": { "type": "string", "enum": ["blur", "spotlight"], "description": "mask: blur hides sensitive data, spotlight highlights. Default blur." },
+          "rect01": {
+            "type": "object",
+            "description": "mask: area in the recording, 0...1 from the top left. Default a centered box.",
+            "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number" }, "height": { "type": "number" } }
+          },
+          "layoutType": { "type": "string", "description": "camera_layout: one of the values from list_options kind enums (CameraTimelineLayoutType). Default cameraOverlay." },
+          "modifiers": { "type": "array", "items": { "type": "string", "enum": ["Meta", "Shift", "Alt", "Ctrl", "CapsLock"] }, "description": "shortcut: modifier keys (Meta is Command)." },
+          "primaryKey": { "type": "string", "description": "shortcut: the main key, e.g. K, Return, Space." },
+          "properties": { "type": "object", "description": "Merge patch applied to the new item." }
+        },
+        "required": ["kind"]
+      }
+    },
+    {
+      "name": "update_item",
+      "description": "Changes one timeline item or track with a JSON Merge Patch against its JSON in get_project. Kinds: slice (timeline.slices: speed, volumes, muted, hideCursor, source range), zoom (timeline.zooms), mask (items inside timeline.maskTracks), camera_layout (timeline.cameraLayouts), voiceover (timeline.voiceovers), caption (captions.captionBlocks; {\"text\": \"...\"} sets the caption text), caption_track, mask_track, shortcut_track, custom_shortcut (captions.customShortcuts). One undo step.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "camera_layout", "voiceover", "caption", "caption_track", "mask_track", "shortcut_track", "custom_shortcut"] },
+          "id": { "type": "string" },
+          "patch": { "type": "object" }
+        },
+        "required": ["kind", "id", "patch"]
+      }
+    },
+    {
+      "name": "delete_item",
+      "description": "Deletes a timeline item or a whole track with everything on it. Item kinds: slice, zoom, mask, camera_layout, voiceover, caption, shortcut (a shortcut cluster id from get_project info.shortcuts). Track kinds: caption_track, mask_track, shortcut_track, voiceover_track (id is the track index, 0 based), camera_layouts_track (id is ignored). One undo step.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "camera_layout", "voiceover", "caption", "shortcut", "caption_track", "mask_track", "shortcut_track", "voiceover_track", "camera_layouts_track"] },
+          "id": { "type": "string" }
+        },
+        "required": ["kind"]
+      },
+      "annotations": { "destructiveHint": true }
+    },
+    {
+      "name": "split_item",
+      "description": "Splits a clip, zoom, mask, caption or camera layout in two at a timeline time. Splitting a slice and deleting one half is how to cut a part of the recording.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "caption", "camera_layout"] },
+          "id": { "type": "string" },
+          "atTimelineMs": { "type": "number" }
+        },
+        "required": ["kind", "id", "atTimelineMs"]
+      }
+    },
+    {
+      "name": "undo",
+      "description": "Undoes the last edit, like Cmd+Z in the editor.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "steps": { "type": "integer", "minimum": 1, "maximum": 50, "description": "Default 1." }
+        }
+      }
+    },
+    {
+      "name": "redo",
+      "description": "Redoes the last undone edit.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "steps": { "type": "integer", "minimum": 1, "maximum": 50, "description": "Default 1." }
+        }
+      }
+    },
+    {
+      "name": "render_frame",
+      "description": "Renders one frame of the edited video as a PNG (background, zoom, cursor, camera, captions, keystrokes, exactly as exported) and moves the editor's playhead there. Use it to check an edit.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "timelineMs": { "type": "number", "description": "Default: the playhead." },
+          "height": { "type": "integer", "minimum": 240, "maximum": 2160, "description": "Output height in pixels. Default 720." }
+        }
+      },
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "run_action",
+      "description": "One-off editor commands. regenerate_auto_zooms replaces the zooms with ones made from the recorded clicks and typing. generate_transcript transcribes the voice on device and fills captions (it runs in the background; poll get_project until info.isGeneratingTranscript is false). remove_filler_words and tighten_pauses need a transcript. reset_cuts restores the whole recording as one clip. scan_sensitive_data and scan_faces add blur masks automatically. play and pause control the editor preview.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "action": { "type": "string", "enum": ["regenerate_auto_zooms", "generate_transcript", "remove_filler_words", "tighten_pauses", "reset_cuts", "scan_sensitive_data", "scan_faces", "play", "pause"] }
+        },
+        "required": ["action"]
+      }
+    },
+    {
+      "name": "list_options",
+      "description": "Values the document accepts: wallpapers (names for set_background), mesh_presets (background.meshPresetId), cursor_themes (cursor.themeId), presets (apply_preset), background_music (audio.backgroundMusic.relativePath), enums (every enum field and its allowed values).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "enum": ["wallpapers", "mesh_presets", "cursor_themes", "presets", "background_music", "enums"] }
+        },
+        "required": ["kind"]
+      },
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "set_background",
+      "description": "Sets the background to a wallpaper by name (from list_options wallpapers), an image file, a mesh preset, a solid color or a two-color gradient. For other background settings use update_project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "wallpaper": { "type": "string" },
+          "imagePath": { "type": "string", "description": "Absolute path of an image file; it is copied into the project." },
+          "meshPresetId": { "type": "string" },
+          "solidColor": { "type": "string", "description": "#RRGGBB" },
+          "gradient": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2, "description": "Two #RRGGBB colors." }
+        }
+      }
+    },
+    {
+      "name": "apply_preset",
+      "description": "Applies a saved style preset (from list_options presets) to the project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "name": { "type": "string" }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "list_capture_targets",
+      "description": "What can be recorded: displays, windows (front to back), cameras, microphones and apps playing audio.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "start_recording",
+      "description": "Starts a screen recording of a display, a window or an area, with the recording bar and the countdown from Settings (the user sees it). Returns at once; the recording runs until control_recording stop. Omitted options keep the recording bar's current choice.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["display", "window", "area"] },
+              "displayId": { "type": "integer", "description": "display: from list_capture_targets. Default the main display." },
+              "windowId": { "type": "integer", "description": "window: from list_capture_targets." },
+              "rect": {
+                "type": "object",
+                "description": "area: global screen points, origin at the top left of the main display.",
+                "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number" }, "height": { "type": "number" } }
+              }
+            },
+            "required": ["type"]
+          },
+          "cameraId": { "type": ["string", "null"], "description": "Camera to record, or null for none." },
+          "microphoneId": { "type": ["string", "null"], "description": "Microphone to record, or null for none." },
+          "systemAudio": { "type": "boolean" },
+          "countdownSeconds": { "type": "integer", "enum": [0, 3, 5, 10] }
+        },
+        "required": ["target"]
+      }
+    },
+    {
+      "name": "control_recording",
+      "description": "Controls the recording in progress. stop finishes it, creates the project, opens it and returns its id. restart throws away what was recorded and starts again. cancel stops and deletes the recording; it cannot be undone.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["pause", "resume", "stop", "restart", "cancel"] }
+        },
+        "required": ["action"]
+      }
+    },
+    {
+      "name": "get_settings",
+      "description": "App settings: general (appearance, language, launchAtLogin), recording (countdownSeconds, afterRecording, autoCreateZooms, hideDesktopIcons, hideDockIcon, highlightRecordedArea, cameraMaxResolution), editing (useLastProjectSettings, autosave, projectsDirectory, presetsDirectory) and quickExport.",
+      "inputSchema": { "type": "object", "properties": {} },
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "update_settings",
+      "description": "Changes app settings with a merge patch against get_settings. A language change applies after the app restarts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "patch": { "type": "object" }
+        },
+        "required": ["patch"]
+      }
+    },
+    {
+      "name": "export_video",
+      "description": "Exports the edited video and waits until it is done (progress notifications are sent when the client asks for them). target file writes outputPath (default: the Desktop, named after the project); target clipboard copies the file to the clipboard. config overrides the defaults: format (mp4, prores, gif), fps, resolutionHeight, compression, mp4Codec, proResProfile, gifHighQuality, gifDisableLoop. Values a format does not allow are adjusted, and the result lists what was used.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "target": { "type": "string", "enum": ["file", "clipboard"], "description": "Default file." },
+          "outputPath": { "type": "string", "description": "Absolute path. An existing file is replaced." },
+          "useQuickExportSettings": { "type": "boolean", "description": "Start from the Quick export settings instead of the export defaults." },
+          "config": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "export_frame",
+      "description": "Saves one frame of the edited video as a PNG or JPEG file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": { "$ref": "#/definitions/project" },
+          "timelineMs": { "type": "number", "description": "Default: the playhead." },
+          "outputPath": { "type": "string", "description": "Absolute path ending in .png or .jpg." },
+          "height": { "type": "integer", "minimum": 240, "maximum": 4320, "description": "Default 1440." }
+        },
+        "required": ["outputPath"]
+      }
+    }
+  ],
+  "definitions": {
+    "project": { "type": "string", "description": "Project id from get_status, or the path of a .nativescreen package (opened if needed). Default: the frontmost editor." }
+  }
+}

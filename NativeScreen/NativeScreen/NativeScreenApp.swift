@@ -16,6 +16,12 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
         if !ProjectWorkspaceStore.shared.hasOpenEditorWindows {
             RecordingCoordinator.shared.showRecordingHUD()
         }
+        MCPServer.shared.applySetting()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Removes the socket file so the bridge knows the app is gone.
+        MCPServer.shared.shutdown()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -36,7 +42,17 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// `NativeScreen --mcp` is the stdio bridge MCP clients start (`MCPStdioBridge`); it must not start AppKit.
 @main
+enum NativeScreenMain {
+    static func main() {
+        if CommandLine.arguments.contains("--mcp") {
+            MCPStdioBridge.run()
+        }
+        NativeScreenApp.main()
+    }
+}
+
 struct NativeScreenApp: App {
     @NSApplicationDelegateAdaptor(NativeScreenAppDelegate.self) private var appDelegate
     @Bindable private var workspace = ProjectWorkspaceStore.shared
@@ -86,6 +102,11 @@ struct NativeScreenApp: App {
                         }
                     }
                 }
+            }
+
+            if !MCPServer.shared.connectedClients.isEmpty {
+                Divider()
+                Text("AI agent connected: \(MCPServer.shared.connectedClients.joined(separator: ", "))")
             }
 
             Divider()

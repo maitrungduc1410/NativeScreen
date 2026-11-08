@@ -65,6 +65,14 @@ public final class AppSettings {
         }
     }
 
+    /// Lets MCP clients (Claude, Codex, Cursor...) control the app through `MCPServer`. Off by default.
+    public var aiAgentsEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(aiAgentsEnabled, forKey: MCPServer.enabledDefaultsKey)
+            MCPServer.shared.applySetting()
+        }
+    }
+
     public var launchAtLogin: Bool {
         get {
             access(keyPath: \.launchAtLogin)
@@ -111,6 +119,7 @@ public final class AppSettings {
         presetsDirectoryPath = defaults.string(forKey: Keys.presetsDirectory) ?? Self.defaultPresetsDirectoryPath
         useLastProjectSettings = defaults.bool(forKey: Keys.useLastProjectSettings)
         autosaveEnabled = defaults.object(forKey: Keys.autosave) == nil ? true : defaults.bool(forKey: Keys.autosave)
+        aiAgentsEnabled = defaults.bool(forKey: MCPServer.enabledDefaultsKey)
         if let data = defaults.data(forKey: Keys.quickExport),
            let config = try? JSONDecoder().decode(HardwareVideoExporter.ExportConfiguration.self, from: data) {
             quickExportConfig = config

@@ -476,6 +476,12 @@ public final class ProjectSession: Identifiable {
         }
     }
 
+    /// The next `mutate` starts its own undo step even if it comes right after another one (used by AI agent tools,
+    /// whose calls can arrive faster than `undoCoalesceWindow`).
+    public func startNewUndoStep() {
+        lastMutateUptime = 0
+    }
+
     public var canUndo: Bool { !undoStack.isEmpty }
     public var canRedo: Bool { !redoStack.isEmpty }
 
