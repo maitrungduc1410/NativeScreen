@@ -1,19 +1,19 @@
-# AGENTS.md — NativeScreen Root Guide
+# AGENTS.md: NativeScreen Root Guide
 
 This repository contains **NativeScreen**, a 100% native, high-performance screen recorder and cinematic demo video editor for macOS (SwiftUI + AppKit + Metal) and Windows (WinUI 3 + Direct3D 11).
 
 ## 1. Mandatory Reading Before Making Changes
 
 Before implementing features or modifying data structures, consult the specifications in [`spec/`](./spec/README.md):
-- [`spec/01-OVERVIEW-AND-ARCHITECTURE.md`](./spec/01-OVERVIEW-AND-ARCHITECTURE.md) — 5-Layer Architecture, NLE State Engine, Snapshot Undo/Redo, Multi-Window support, and `0.0%` Idle CPU budget.
-- [`spec/02-FILE-FORMAT-AND-SCHEMA.md`](./spec/02-FILE-FORMAT-AND-SCHEMA.md) — `.nativescreen` package format, `[0.0, 1.0]` normalized coordinate convention, `.jsonl` telemetry schemas, and `project.json` schema.
-- [`spec/03-CINEMATIC-ENGINE-AND-MATH.md`](./spec/03-CINEMATIC-ENGINE-AND-MATH.md) — 120Hz Spring Physics Solver, Auto-Zoom click clustering, and 6-Pass GPU Compositor pipeline.
-- [`spec/04-UI-UX-AND-LEGAL-GUIDELINES.md`](./spec/04-UI-UX-AND-LEGAL-GUIDELINES.md) — "80% OS Native + 20% Custom Pro" UI guidelines, Window Picker Z-order overlay, and copyright & asset rules.
-- [`spec/05-FEATURE-CHECKLIST.md`](./spec/05-FEATURE-CHECKLIST.md) — Master feature checklist ordered by priority.
-- [`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`](./spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md) — Architectural Decision Records (ADRs), root-cause analyses, mathematical trade-offs, and performance optimizations across the engine and UI.
-- [`spec/07-RENDERING-PARITY.md`](./spec/07-RENDERING-PARITY.md) — Every compositor pass and CoreImage behavior stated explicitly so the Windows renderer produces the same frames.
-- [`spec/08-WINDOWS-PORT-PLAN.md`](./spec/08-WINDOWS-PORT-PLAN.md) — Swift → C# porting map, conformance fixtures, Windows phases and acceptance checks.
-- [`spec/platforms/macos-metal-videotoolbox.md`](./spec/platforms/macos-metal-videotoolbox.md) & [`spec/platforms/windows-d3d11-mediafoundation.md`](./spec/platforms/windows-d3d11-mediafoundation.md) — Platform-specific GPU compositor, hardware video decode/encode, and windowing blueprints.
+- [`spec/01-OVERVIEW-AND-ARCHITECTURE.md`](./spec/01-OVERVIEW-AND-ARCHITECTURE.md): 5-Layer Architecture, NLE State Engine, Snapshot Undo/Redo, Multi-Window support, and `0.0%` Idle CPU budget.
+- [`spec/02-FILE-FORMAT-AND-SCHEMA.md`](./spec/02-FILE-FORMAT-AND-SCHEMA.md): `.nativescreen` package format, `[0.0, 1.0]` normalized coordinate convention, `.jsonl` telemetry schemas, and `project.json` schema.
+- [`spec/03-CINEMATIC-ENGINE-AND-MATH.md`](./spec/03-CINEMATIC-ENGINE-AND-MATH.md): 120Hz Spring Physics Solver, Auto-Zoom click clustering, and 6-Pass GPU Compositor pipeline.
+- [`spec/04-UI-UX-AND-LEGAL-GUIDELINES.md`](./spec/04-UI-UX-AND-LEGAL-GUIDELINES.md): "80% OS Native + 20% Custom Pro" UI guidelines, Window Picker Z-order overlay, and copyright & asset rules.
+- [`spec/05-FEATURE-CHECKLIST.md`](./spec/05-FEATURE-CHECKLIST.md): Master feature checklist ordered by priority.
+- [`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`](./spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md): Architectural Decision Records (ADRs), root-cause analyses, mathematical trade-offs, and performance optimizations across the engine and UI.
+- [`spec/07-RENDERING-PARITY.md`](./spec/07-RENDERING-PARITY.md): Every compositor pass and CoreImage behavior stated explicitly so the Windows renderer produces the same frames.
+- [`spec/08-WINDOWS-PORT-PLAN.md`](./spec/08-WINDOWS-PORT-PLAN.md): Swift → C# porting map, conformance fixtures, Windows phases and acceptance checks.
+- [`spec/platforms/macos-metal-videotoolbox.md`](./spec/platforms/macos-metal-videotoolbox.md) & [`spec/platforms/windows-d3d11-mediafoundation.md`](./spec/platforms/windows-d3d11-mediafoundation.md): Platform-specific GPU compositor, hardware video decode/encode, and windowing blueprints.
 
 ## 2. Core Engineering Rules (All Platforms)
 

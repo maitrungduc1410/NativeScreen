@@ -17,6 +17,7 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
             RecordingCoordinator.shared.showRecordingHUD()
         }
         MCPServer.shared.applySetting()
+        _ = AppUpdater.shared // starts Sparkle's scheduled checks
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -83,7 +84,7 @@ struct NativeScreenApp: App {
             }
             .keyboardShortcut("n", modifiers: [.command])
 
-            Button("Open .nativescreen Project…") {
+            Button("Open .nativescreen Project...") {
                 workspace.promptOpenProjectDialog()
             }
             .keyboardShortcut("o", modifiers: [.command])
@@ -110,13 +111,19 @@ struct NativeScreenApp: App {
             }
 
             Divider()
+            if AppUpdater.shared.isAvailable {
+                Button("Check for Updates...") {
+                    AppUpdater.shared.checkForUpdates()
+                }
+                .disabled(!AppUpdater.shared.canCheckForUpdates)
+            }
             Button("Quit Native Screen") {
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: [.command])
         }
 
-        // `Native Screen > Settings…` (⌘,); the Settings scene also keeps the app running without a placeholder window
+        // `Native Screen > Settings...` (⌘,); the Settings scene also keeps the app running without a placeholder window
         Settings {
             SettingsView()
         }

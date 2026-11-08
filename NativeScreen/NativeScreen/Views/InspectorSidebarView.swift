@@ -198,7 +198,7 @@ public struct InspectorSidebarView: View {
         }()
 
         VStack(alignment: .leading, spacing: 24) {
-            // 1. Background Type Selector (`Wallpaper` | `Gradient` | `Color` | `Image` — Horizontal Scroll + Auto-Center on Click!)
+            // 1. Background Type Selector (`Wallpaper` | `Gradient` | `Color` | `Image`: Horizontal Scroll + Auto-Center on Click!)
             VStack(alignment: .leading, spacing: 10) {
                 Text("Background")
                     .font(.system(size: 13, weight: .regular))
@@ -833,7 +833,7 @@ public struct InspectorSidebarView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("Scanning recording for sensitive data on device…")
+                            Text("Scanning recording for sensitive data on device...")
                                 .font(.system(size: 12, weight: .regular))
                                 .foregroundStyle(.ink.opacity(0.75))
                         }
@@ -963,7 +963,7 @@ public struct InspectorSidebarView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("Detecting faces in recording on device…")
+                            Text("Detecting faces in recording on device...")
                                 .font(.system(size: 12, weight: .regular))
                                 .foregroundStyle(.ink.opacity(0.75))
                         }
@@ -1156,7 +1156,7 @@ public struct InspectorSidebarView: View {
                                                     .frame(width: 48, height: 48)
                                                     .background(
                                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                            .fill(Color(white: isVarSelected ? 0.54 : 0.48))
+                                                            .fill(isVarSelected ? CursorStyleHorizontalCardView.tileSelected : CursorStyleHorizontalCardView.tileFill)
                                                     )
                                                     .overlay(
                                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -2338,7 +2338,7 @@ public struct InspectorSidebarView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "waveform.badge.plus")
                                 .font(.system(size: 13.0, weight: .medium))
-                            Text("Upload audio…")
+                            Text("Upload audio...")
                                 .font(.system(size: 12.5, weight: .medium))
                         }
                         .foregroundStyle(.ink.opacity(0.90))
@@ -2941,7 +2941,7 @@ public struct InspectorSidebarView: View {
 
             inspectorDivider
 
-            // 3. `Crop` (`crop` + `"Crop camera"` / `"Edit crop"` + `"Reset"` — Opens Standalone Camera Crop Window)
+            // 3. `Crop` (`crop` + `"Crop camera"` / `"Edit crop"` + `"Reset"`: Opens Standalone Camera Crop Window)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "crop")
@@ -3080,23 +3080,18 @@ public struct InspectorSidebarView: View {
 
         VStack(alignment: .leading, spacing: 22) {
             if !cap.captionTracks.isEmpty {
-                // 1. `Captions` Header + `Disable captions` Toggle
-                VStack(alignment: .leading, spacing: 14) {
+                // 1. `Captions` header. Turning captions off is in the caption's right-click menu.
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Captions")
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(.ink.opacity(0.45))
 
-                    inspectorToggleRow(
-                        title: "Disable captions",
-                        icon: nil,
-                        description: nil,
-                        isOn: Binding(
-                            get: { !cap.enabled },
-                            set: { disabled in
-                                session.mutate { $0.captions.enabled = !disabled }
-                            }
-                        )
-                    )
+                    if !cap.enabled {
+                        Text("Captions are off. Right-click a caption on the timeline to turn them back on.")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.ink.opacity(0.55))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 captionTrackPicker(tracks: cap.captionTracks, activeTrackId: activeTrackId)
@@ -3279,24 +3274,6 @@ public struct InspectorSidebarView: View {
                     .foregroundStyle(.ink.opacity(0.45))
 
                 localTranscriptGeneratorControls(isRegenerating: false)
-
-                inspectorDivider
-
-                Button {
-                    captionInspectorTrackId = session.addCaptionTrack()
-                } label: {
-                    Text("Add caption track")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.ink.opacity(0.90))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 36)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.ink.opacity(0.04))
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -3318,21 +3295,6 @@ public struct InspectorSidebarView: View {
                         }
                     }
 
-                    Button {
-                        captionInspectorTrackId = session.addCaptionTrack()
-                    } label: {
-                        Image(systemName: "plus")
-                            .accessibilityLabel(Text("Add caption track"))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.ink.opacity(0.85))
-                            .frame(width: 34, height: 34)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.ink.opacity(0.04))
-                            )
-                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
                 }
             }
 
@@ -3484,7 +3446,7 @@ public struct InspectorSidebarView: View {
                         Image(systemName: "waveform.badge.magnifyingglass")
                             .font(.system(size: 13, weight: .semibold))
                     }
-                    Text(session.isGeneratingTranscript ? "Generating on device…" : "Generate transcript")
+                    Text(session.isGeneratingTranscript ? "Generating on device..." : "Generate transcript")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -3681,8 +3643,8 @@ public struct InspectorSidebarView: View {
                                     .buttonStyle(.plain)
                                     .help(
                                         isGapPresent
-                                            ? "Pause — click to tighten to a natural breath"
-                                            : "Tightened pause — click to restore"
+                                            ? "Pause: click to tighten to a natural breath"
+                                            : "Tightened pause: click to restore"
                                     )
                                 }
                             }
@@ -3786,7 +3748,7 @@ public struct InspectorSidebarView: View {
                     }
                 }
 
-                Text("Click any word to edit or cut — Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only.")
+                Text("Click any word to edit or cut. Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only.")
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(.ink.opacity(0.38))
                     .fixedSize(horizontal: false, vertical: true)
@@ -3847,7 +3809,7 @@ public struct InspectorSidebarView: View {
                             .overlay {
                                 Image(systemName: "display")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.black.opacity(0.85))
+                                    .foregroundStyle(.inkInverse)
                             }
 
                         ZStack {
@@ -3870,7 +3832,7 @@ public struct InspectorSidebarView: View {
                                 Color.ink
                                 Image(systemName: "display")
                                     .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundStyle(.black.opacity(0.85))
+                                    .foregroundStyle(.inkInverse)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -3891,7 +3853,7 @@ public struct InspectorSidebarView: View {
                             .overlay {
                                 Image(systemName: "display")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.black.opacity(0.85))
+                                    .foregroundStyle(.inkInverse)
                             }
 
                         Image(systemName: "person.fill")
@@ -4473,7 +4435,7 @@ public struct InspectorSidebarView: View {
         }
     }
 
-    // MARK: - 7. Dedicated Shortcut Segment Editor (`← Close Shortcut editor` — Per-Segment Keys, Position, Offset, Color & Delete!)
+    // MARK: - 7. Dedicated Shortcut Segment Editor (`← Close Shortcut editor`: Per-Segment Keys, Position, Offset, Color & Delete!)
 
     @ViewBuilder
     private func shortcutSegmentEditor(cluster: ProjectSession.ShortcutPressCluster) -> some View {
@@ -4528,7 +4490,7 @@ public struct InspectorSidebarView: View {
                         )
                 }
 
-                // Interactive `Record shortcut…` Button
+                // Interactive `Record shortcut...` Button
                 Button {
                     if isRecordingShortcutKeys {
                         stopShortcutKeyRecording()
@@ -4540,7 +4502,7 @@ public struct InspectorSidebarView: View {
                         Image(systemName: isRecordingShortcutKeys ? "record.circle.fill" : "keyboard")
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(isRecordingShortcutKeys ? Color.red : .ink.opacity(0.90))
-                        Text(isRecordingShortcutKeys ? "Press any shortcut on keyboard… (ESC to cancel)" : "Record shortcut keys…")
+                        Text(isRecordingShortcutKeys ? "Press any shortcut on keyboard... (ESC to cancel)" : "Record shortcut keys...")
                             .font(.system(size: 12.5, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.92))
                     }
@@ -5073,7 +5035,7 @@ public struct InspectorSidebarView: View {
                             .overlay {
                                 Image(systemName: "display")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.black.opacity(0.85))
+                                    .foregroundStyle(.inkInverse)
                             }
 
                         ZStack {
@@ -5095,7 +5057,7 @@ public struct InspectorSidebarView: View {
                                 Color.ink
                                 Image(systemName: "display")
                                     .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundStyle(.black.opacity(0.85))
+                                    .foregroundStyle(.inkInverse)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -5115,7 +5077,7 @@ public struct InspectorSidebarView: View {
                             .overlay {
                                 Image(systemName: "display")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.black.opacity(0.85))
+                                    .foregroundStyle(.inkInverse)
                             }
 
                         Image(systemName: "person.fill")
@@ -5138,7 +5100,7 @@ public struct InspectorSidebarView: View {
                             .overlay {
                                 Image(systemName: "display")
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.black.opacity(0.85))
+                                    .foregroundStyle(.inkInverse)
                             }
                     }
                 }
@@ -6324,6 +6286,12 @@ private struct CursorStyleHorizontalCardView: View {
     @State private var hoverVariantIndex: Int = 0
     @State private var hoverCycleTask: Task<Void, Never>?
 
+    /// Mid gray in dark mode; a light gray in light mode, still dark enough for white cursors (which have a dark
+    /// outline) to read.
+    static let tileFill = Color.adaptive(dark: Color(white: 0.48), light: Color(white: 0.84))
+    static let tileHovered = Color.adaptive(dark: Color(white: 0.51), light: Color(white: 0.80))
+    static let tileSelected = Color.adaptive(dark: Color(white: 0.54), light: Color(white: 0.88))
+
     var body: some View {
         let displayedVariantId: String? = {
             if isSelected {
@@ -6345,7 +6313,7 @@ private struct CursorStyleHorizontalCardView: View {
                 .frame(width: cardSize, height: cardSize)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(white: isSelected ? 0.54 : (isHovered ? 0.51 : 0.48))) // neutral, so dark and light cursors both read
+                        .fill(isSelected ? Self.tileSelected : (isHovered ? Self.tileHovered : Self.tileFill)) // neutral, so dark and light cursors both read
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)

@@ -25,6 +25,10 @@
 	</array>
 	<key>CFBundleName</key>
 	<string>Native Screen</string>
+	<key>SUFeedURL</key>
+	<string>https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_KEY)</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

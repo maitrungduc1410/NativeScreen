@@ -1,0 +1,17 @@
+[
+  {"op": "wait", "ms": 1200},
+  {"op": "key", "key": "k", "mods": ["cmd"], "after": 500},
+  {"op": "type", "text": "sett", "cps": 7},
+  {"op": "wait", "ms": 300},
+  {"op": "key", "key": "return", "after": 1000},
+  {"op": "key", "key": "k", "mods": ["cmd"], "after": 500},
+  {"op": "type", "text": "dark", "cps": 7},
+  {"op": "wait", "ms": 300},
+  {"op": "key", "key": "return", "after": 1200},
+  {"op": "key", "key": "s", "mods": ["cmd"], "after": 1000},
+  {"op": "key", "key": "e", "mods": ["cmd"], "after": 1200},
+  {"op": "key", "key": "k", "mods": ["cmd"], "after": 500},
+  {"op": "type", "text": "light", "cps": 7},
+  {"op": "wait", "ms": 300},
+  {"op": "key", "key": "return", "after": 1200}
+]

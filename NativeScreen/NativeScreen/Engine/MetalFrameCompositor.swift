@@ -49,7 +49,7 @@ public final class MetalFrameCompositor {
     private var lastBlurredBgCacheKey: BlurredBackgroundCacheKey?
     private var cachedBlurredBackgroundImage: CIImage?
 
-    // Pass 2 (Masked & Cropped Screen) Cache — avoids re-running Gaussian blur masks when adjusting Padding/Shadow/Corners/Background!
+    // Pass 2 (Masked & Cropped Screen) Cache: avoids re-running Gaussian blur masks when adjusting Padding/Shadow/Corners/Background!
     private struct MaskedScreenCacheKey: Equatable {
         let framePtr: ObjectIdentifier?
         let sourceTimeQuantized: Int
@@ -60,7 +60,7 @@ public final class MetalFrameCompositor {
     private var lastMaskedScreenKey: MaskedScreenCacheKey?
     private var cachedMaskedScreenImage: CIImage?
 
-    // Pass 3 (Screen Rounded Corners & Drop Shadow Stencil) Cache — materialized into GPU `MTLTexture`s so 4K Gaussian blur & rounded-rect generators run only ONCE!
+    // Pass 3 (Screen Rounded Corners & Drop Shadow Stencil) Cache: materialized into GPU `MTLTexture`s so 4K Gaussian blur & rounded-rect generators run only ONCE!
     private struct ShadowCacheKey: Equatable {
         let screenRect: CGRect
         let canvasRect: CGRect
@@ -85,7 +85,7 @@ public final class MetalFrameCompositor {
     private var lastDeviceBezelKey: DeviceBezelCacheKey?
     private var cachedDeviceBezelImage: CIImage?
 
-    // Pass 6 (3D Shortcut Keycap Sprite Cache) — avoids re-rasterizing keycap graphics on every frame!
+    // Pass 6 (3D Shortcut Keycap Sprite Cache): avoids re-rasterizing keycap graphics on every frame!
     private var keycapSpriteCache: [String: CIImage] = [:]
 
     /// Where each visible keycap group was drawn in the last composed frame, normalized `0...1` with a top-left origin.
@@ -181,7 +181,7 @@ public final class MetalFrameCompositor {
         // --- PASS 3: Screen Rounded Corners, Device Mockup Bezel, Drop Shadow & Camera Zoom/Pan Transform ---
         // Screen and camera placement, including timeline transitions (identical in preview and export) and, in the
         // live preview only, a spring toward the new placement when a setting is edited.
-        let targetStage = resolvedStageLayout(
+        let targetStage = Self.resolvedStageLayout(
             session: session,
             sourceTimeMs: sourceTimeMs,
             canvasRect: canvasRect,
@@ -607,7 +607,7 @@ public final class MetalFrameCompositor {
                 canvasPaddingRatio: doc.canvas.paddingRatio
             ).screenRect
         }
-        return calculateFittedScreenRect(
+        return Self.calculateFittedScreenRect(
             sourceSize: rawSize,
             inCanvas: CGRect(origin: .zero, size: canvasSize),
             paddingRatio: CGFloat(session.document.canvas.paddingRatio)
@@ -923,7 +923,7 @@ public final class MetalFrameCompositor {
         return output
     }
 
-    private func calculateFittedScreenRect(sourceSize: CGSize, inCanvas canvas: CGRect, paddingRatio: CGFloat) -> CGRect {
+    private static func calculateFittedScreenRect(sourceSize: CGSize, inCanvas canvas: CGRect, paddingRatio: CGFloat) -> CGRect {
         let clampedRatio = min(0.45, max(0.0, paddingRatio))
         let shortestCanvasSide = min(canvas.width, canvas.height)
         // `padByRatio(-paddingRatio01)`:
@@ -1635,7 +1635,7 @@ public final class MetalFrameCompositor {
     }
 
     /// Placement for one discrete set of settings (no transition).
-    private func rawStageLayout(
+    private static func rawStageLayout(
         key: StageLayout.Key,
         session: ProjectSession,
         canvasRect: CGRect,
@@ -1658,7 +1658,7 @@ public final class MetalFrameCompositor {
             let padding: CGFloat = doc.frameStyle.deviceMockup.enabled
                 ? max(0.08, CGFloat(doc.canvas.paddingRatio))
                 : CGFloat(doc.canvas.paddingRatio)
-            return calculateFittedScreenRect(sourceSize: screenSourceSize, inCanvas: canvasRect, paddingRatio: padding)
+            return Self.calculateFittedScreenRect(sourceSize: screenSourceSize, inCanvas: canvasRect, paddingRatio: padding)
         }()
 
         var camera = Self.cameraPlacement(
@@ -1681,7 +1681,7 @@ public final class MetalFrameCompositor {
 
     /// Placement at `sourceTimeMs`, blending from the previous layout for `stageTransitionMs` after a change on the
     /// timeline. Depends only on the project and the time, so preview and export produce the same frames.
-    func resolvedStageLayout(
+    static func resolvedStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
         canvasRect: CGRect,
@@ -1689,7 +1689,7 @@ public final class MetalFrameCompositor {
         zoomScale: Double
     ) -> StageLayout {
         let keyNow = Self.stageKey(session: session, at: sourceTimeMs)
-        let current = rawStageLayout(key: keyNow, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
+        let current = Self.rawStageLayout(key: keyNow, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
         let windowStart = sourceTimeMs - Self.stageTransitionMs
         guard windowStart > 0 else { return current }
         let keyBefore = Self.stageKey(session: session, at: windowStart)
@@ -1707,7 +1707,7 @@ public final class MetalFrameCompositor {
             }
         }
         let previousKey = Self.stageKey(session: session, at: lo)
-        let previous = rawStageLayout(key: previousKey, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
+        let previous = Self.rawStageLayout(key: previousKey, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
         let progress = StageLayout.ease(CGFloat((sourceTimeMs - hi) / Self.stageTransitionMs))
         return StageLayout.blend(previous, current, progress)
     }

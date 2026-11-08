@@ -207,7 +207,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         voiceoverRecorder = recorder;
         voiceoverRelativePath = "assets/" + name;
         session.BeginVoiceoverRecording();
-        toast("Recording voiceover… Click again to finish");
+        toast("Recording voiceover... Click again to finish");
     }
 
     private async Task StopVoiceoverRecording()
@@ -553,7 +553,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
 
         IsScanningSensitive = true;
-        Report("Scanning for sensitive data…");
+        Report("Scanning for sensitive data...");
         try
         {
             var phrases = session.Document.Background.SensitiveDataCustomPhrases;
@@ -601,7 +601,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
 
         IsScanningFaces = true;
-        Report("Scanning for faces…");
+        Report("Scanning for faces...");
         try
         {
             var found = await OnDeviceMaskScanner.DetectFacesAsync(path, session.SourceDurationMs, null, CancellationToken.None);
@@ -664,7 +664,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                 await model.DownloadAsync(new Progress<double>(share => Report($"Downloading the speech model • {share:P0}")), cancel.Token);
             }
 
-            Report("Transcribing…");
+            Report("Transcribing...");
             var document = session.Document;
             var segments = await WhisperTranscriber.TranscribeAsync(
                 audioPath,

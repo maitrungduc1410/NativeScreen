@@ -1,0 +1,13 @@
+[
+  {"op": "wait", "ms": 1200},
+  {"op": "move", "sel": ".stat:nth-child(1)"},
+  {"op": "move", "sel": ".stat:nth-child(4)"},
+  {"op": "click", "sel": "#chart .col:nth-child(3) .bar", "fy": 0.5, "after": 350},
+  {"op": "click", "sel": "#chart .col:nth-child(5) .bar", "fy": 0.5, "after": 350},
+  {"op": "click", "sel": "#chart .col:nth-child(8) .bar", "fy": 0.5, "after": 500},
+  {"op": "move", "sel": ".nav-item[data-page=team]"},
+  {"op": "move", "sel": "#mark-read"},
+  {"op": "click", "sel": "#mark-read", "after": 1200},
+  {"op": "move", "sel": ".stat:nth-child(2)"},
+  {"op": "wait", "ms": 800}
+]

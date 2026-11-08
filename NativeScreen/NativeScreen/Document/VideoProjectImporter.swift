@@ -3,7 +3,7 @@ import AppKit
 import AVFoundation
 import UniformTypeIdentifiers
 
-/// `File > Create project from video…`: turns any movie file into a `.nativescreen` project.
+/// `File > Create project from video...`: turns any movie file into a `.nativescreen` project.
 /// The video becomes `recording/display.<ext>` (its audio, if any, is the system-audio track). There is no cursor,
 /// click or key telemetry, so the editor offers manual zoom positioning instead of cursor-following zooms.
 @MainActor

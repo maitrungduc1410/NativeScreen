@@ -16,7 +16,7 @@ struct StageLayout: Equatable {
         var borderOpacity: CGFloat
         /// Person cutout instead of a rectangular frame (discrete: switches halfway through a transition).
         var isCutout: Bool
-        /// Styling of the camera image itself (grade, crop, mirror, delay…); not blended.
+        /// Styling of the camera image itself (grade, crop, mirror, delay...); not blended.
         var config: CameraConfig
     }
 

@@ -70,7 +70,36 @@ public static class AutoZoomClusterGenerator
             blocks.Add(Make(clusterStart, clusterEnd, defaultScale, centerX / clickCount, centerY / clickCount));
         }
 
-        return NormalizeNonOverlappingZooms(blocks, durationMs);
+        return NormalizeNonOverlappingZooms(MergeCloseZooms(blocks), durationMs);
+    }
+
+    /// Two zooms less than this far apart become one: a shorter gap only zooms out and straight back in.
+    public const double MergeGapMs = 1500;
+
+    /// Joins neighbouring zooms whose gap is under <see cref="MergeGapMs"/>. The joined zoom spans both, and its center
+    /// is the duration-weighted mean of their centers. Same as the macOS `mergeCloseZooms`.
+    internal static List<ZoomBlock> MergeCloseZooms(IReadOnlyList<ZoomBlock> blocks)
+    {
+        var result = new List<ZoomBlock>();
+        foreach (var block in blocks.OrderBy(zoom => zoom.SourceStartMs))
+        {
+            if (result.Count == 0 || block.SourceStartMs - result[^1].SourceEndMs >= MergeGapMs)
+            {
+                result.Add(block);
+                continue;
+            }
+
+            var last = result[^1];
+            var lastMs = last.SourceEndMs - last.SourceStartMs;
+            var blockMs = block.SourceEndMs - block.SourceStartMs;
+            var total = Math.Max(1, lastMs + blockMs);
+            last.ManualCenter01 = new Point01(
+                (last.ManualCenter01.X * lastMs + block.ManualCenter01.X * blockMs) / total,
+                (last.ManualCenter01.Y * lastMs + block.ManualCenter01.Y * blockMs) / total);
+            last.SourceEndMs = Math.Max(last.SourceEndMs, block.SourceEndMs);
+        }
+
+        return result;
     }
 
     public static List<ZoomBlock> NormalizeNonOverlappingZooms(IReadOnlyList<ZoomBlock> zooms, double durationMs)

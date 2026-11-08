@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapleboard</title>
+<link rel="icon" href="data:,">
+<!-- Recording material for Native Screen demos. A made-up product; every name, email and key is fake.
+     Open this file in a browser window around 1280 x 800. Press ? for the shot list. Works offline. -->
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1b1c1f; --ink-2: #5d6068; --muted: #8b8e96;
+    --line: #e6e6e1; --hover: #f0f0ec; --accent: #2f6f5e; --accent-2: #e8f1ee; --warn: #b4542d;
+    --bar: #2f6f5e; --bar-2: #c9dcd5; --radius: 10px; color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #15161a; --panel: #1d1f24; --ink: #ececef; --ink-2: #a9acb5; --muted: #7c8089;
+    --line: #2c2f36; --hover: #25282e; --accent: #6cc3a8; --accent-2: #1f3530; --warn: #e48a62;
+    --bar: #6cc3a8; --bar-2: #2f4a43; color-scheme: dark;
+  }
+  :root[data-theme="sepia"] {
+    --bg: #f3ece0; --panel: #fbf6ec; --ink: #2d261d; --ink-2: #6a5d4c; --muted: #9a8c78;
+    --line: #e2d7c4; --hover: #efe6d6; --accent: #9c4f2a; --accent-2: #f2e0d2; --warn: #9c4f2a;
+    --bar: #9c4f2a; --bar-2: #e3cdb9;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; transition: background .25s, color .25s; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  .app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
+
+  /* Sidebar */
+  aside { border-right: 1px solid var(--line); padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; background: var(--panel); }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; font-weight: 650; font-size: 15px; }
+  .brand svg { flex: none; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; border: 0; background: none; text-align: left; cursor: pointer; color: var(--ink-2); }
+  .nav-item:hover { background: var(--hover); color: var(--ink); }
+  .nav-item[aria-current="page"] { background: var(--accent-2); color: var(--accent); font-weight: 600; }
+  .nav-item .count { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .side-foot { margin-top: auto; padding: 10px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--panel); display: grid; place-items: center; font-weight: 600; font-size: 12px; flex: none; }
+
+  /* Main */
+  main { overflow: auto; }
+  .topbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 12px 28px; background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  .search { flex: 1; max-width: 420px; display: flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  .search input { border: 0; outline: 0; background: none; flex: 1; }
+  kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--muted); background: var(--panel); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-weight: 500; }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.small { height: 28px; padding: 0 10px; font-size: 13px; }
+  .page { padding: 28px; max-width: 1080px; display: none; }
+  .page.active { display: block; animation: in .25s ease; }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } }
+  h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); margin: 0 0 24px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+  .grid { display: grid; gap: 16px; }
+  .stats { grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat .delta { font-size: 12px; color: var(--accent); }
+  .two { grid-template-columns: 1.6fr 1fr; }
+  .card h2 { font-size: 15px; margin: 0 0 14px; display: flex; align-items: center; justify-content: space-between; }
+  .chart { display: flex; align-items: flex-end; gap: 10px; height: 180px; padding-top: 10px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+  .chart .bar { width: 100%; border-radius: 5px 5px 2px 2px; background: var(--bar-2); height: 0; transition: height .8s cubic-bezier(.2,.8,.2,1), background .2s; cursor: pointer; position: relative; }
+  .chart .bar:hover, .chart .bar.hi { background: var(--bar); }
+  .chart .bar span { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--ink-2); opacity: 0; transition: opacity .15s; }
+  .chart .bar:hover span { opacity: 1; }
+  .chart small { color: var(--muted); font-size: 11px; }
+  .list { list-style: none; padding: 0; margin: 0; }
+  .list li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .list li:first-child { border-top: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 6px; flex: none; }
+  .dot.warn { background: var(--warn); }
+  .time { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 11px 10px; border-bottom: 1px solid var(--line); }
+  tr:hover td { background: var(--hover); }
+  .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--accent-2); color: var(--accent); }
+  .pill.draft { background: var(--hover); color: var(--ink-2); }
+
+  /* Settings */
+  .settings { display: grid; grid-template-columns: 180px 1fr; gap: 28px; }
+  .settings nav a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink-2); text-decoration: none; }
+  .settings nav a:hover { background: var(--hover); }
+  .section { margin-bottom: 18px; }
+  .row { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row label { font-weight: 500; }
+  .row .hint { color: var(--muted); font-size: 12px; font-weight: 400; display: block; }
+  .field { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); outline: none; }
+  .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+  .themes { display: flex; gap: 12px; }
+  .theme { width: 120px; border: 2px solid var(--line); border-radius: 10px; padding: 6px; cursor: pointer; background: none; text-align: center; font-size: 13px; }
+  .theme[aria-checked="true"] { border-color: var(--accent); }
+  .theme .sw { height: 56px; border-radius: 6px; margin-bottom: 6px; display: grid; grid-template-columns: 30% 1fr; overflow: hidden; border: 1px solid rgba(0,0,0,.08); }
+  .key { display: flex; gap: 8px; align-items: center; }
+  .key code { flex: 1; font: 13px ui-monospace, Menlo, monospace; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 7px; background: var(--bg); min-height: 36px; letter-spacing: .02em; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--bg); }
+  .seg button { border: 0; background: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; color: var(--ink-2); }
+  .seg button[aria-checked="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .switch { width: 38px; height: 22px; border-radius: 999px; background: var(--line); border: 0; position: relative; cursor: pointer; transition: background .2s; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch[aria-checked="true"] { background: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(16px); }
+
+  /* Overlays */
+  .scrim { position: fixed; inset: 0; background: rgba(10,10,12,.35); display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 10; }
+  .scrim.open { display: flex; animation: in .15s ease; }
+  .palette, .modal { width: 560px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.2); overflow: hidden; }
+  .palette input { width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; outline: 0; background: none; font-size: 15px; }
+  .palette ul { list-style: none; margin: 0; padding: 6px; max-height: 300px; overflow: auto; }
+  .palette li { padding: 8px 10px; border-radius: 7px; display: flex; justify-content: space-between; cursor: pointer; }
+  .palette li.sel { background: var(--accent-2); color: var(--accent); }
+  .modal { padding: 20px; }
+  .modal h3 { margin: 0 0 14px; }
+  .modal .field + .field { margin-top: 10px; }
+  .modal textarea { min-height: 110px; resize: none; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 20px); opacity: 0; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 9px; font-weight: 500; transition: .25s; z-index: 20; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .shots { width: 620px; max-height: 76vh; overflow: auto; padding: 20px 24px; }
+  .shots h3 { margin-top: 0; }
+  .shots ol { padding-left: 20px; margin: 0; }
+  .shots li { margin-bottom: 10px; color: var(--ink-2); }
+  .shots li b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="var(--accent)"/><path d="M7 17l4-8 3 5 2-3 3 6" fill="none" stroke="var(--panel)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Mapleboard
+    </div>
+    <button class="nav-item" data-page="overview" aria-current="page">◧ Overview</button>
+    <button class="nav-item" data-page="releases">⇡ Releases <span class="count">12</span></button>
+    <button class="nav-item" data-page="team">◎ Team <span class="count">8</span></button>
+    <button class="nav-item" data-page="settings">⚙ Settings</button>
+    <div class="side-foot"><div class="avatar">JR</div><div>Jamie Rivera<br><span style="color:var(--muted)">Harbor Labs</span></div></div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <label class="search"><span aria-hidden="true">⌕</span><input id="search" placeholder="Search releases, people, settings..."><kbd>⌘K</kbd></label>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn" id="export-top">Export</button>
+        <button class="btn primary" id="new-release">+ New release</button>
+      </div>
+    </div>
+
+    <!-- Overview -->
+    <section class="page active" id="overview">
+      <h1>Good morning, Jamie</h1>
+      <p class="sub">Here is how the spring release is going.</p>
+      <div class="grid stats">
+        <div class="card stat"><div class="label">Shipped</div><div class="value" data-count="128">0</div><div class="delta">+14 this week</div></div>
+        <div class="card stat"><div class="label">In review</div><div class="value" data-count="23">0</div><div class="delta">6 waiting on you</div></div>
+        <div class="card stat"><div class="label">Readers</div><div class="value" data-count="4820">0</div><div class="delta">+9.2%</div></div>
+        <div class="card stat"><div class="label">Open issues</div><div class="value" data-count="7">0</div><div class="delta" style="color:var(--warn)">2 urgent</div></div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <h2>Releases per week <span class="seg" id="range"><button aria-checked="true">8 wk</button><button aria-checked="false">6 mo</button></span></h2>
+          <div class="chart" id="chart"></div>
+        </div>
+        <div class="card">
+          <h2>Activity <button class="btn small" id="mark-read">Mark all read</button></h2>
+          <ul class="list" id="activity">
+            <li><span class="dot"></span><div><b>Priya</b> published <b>v2.4 Offline mode</b></div><span class="time">2m</span></li>
+            <li><span class="dot warn"></span><div><b>Build 812</b> failed on the Windows runner</div><span class="time">18m</span></li>
+            <li><span class="dot"></span><div><b>Theo</b> commented on <b>Faster sync</b></div><span class="time">1h</span></li>
+            <li><span class="dot"></span><div><b>Mina</b> invited <b>sam@example.com</b></div><span class="time">3h</span></li>
+            <li><span class="dot"></span><div><b>You</b> scheduled <b>v2.5 Shared boards</b></div><span class="time">1d</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Releases -->
+    <section class="page" id="releases">
+      <h1>Releases</h1>
+      <p class="sub">Everything the team has shipped or is about to.</p>
+      <div class="card" style="padding:6px 10px">
+        <table>
+          <thead><tr><th>Name</th><th>Version</th><th>Owner</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody id="release-rows">
+            <tr><td>Shared boards</td><td>2.5</td><td>Jamie Rivera</td><td><span class="pill draft">Draft</span></td><td>Apr 28</td></tr>
+            <tr><td>Offline mode</td><td>2.4</td><td>Priya Nair</td><td><span class="pill">Shipped</span></td><td>Apr 14</td></tr>
+            <tr><td>Faster sync</td><td>2.3.1</td><td>Theo Lambert</td><td><span class="pill">Shipped</span></td><td>Apr 2</td></tr>
+            <tr><td>Dark theme</td><td>2.3</td><td>Mina Okafor</td><td><span class="pill">Shipped</span></td><td>Mar 19</td></tr>
+            <tr><td>Keyboard shortcuts</td><td>2.2</td><td>Sam Fischer</td><td><span class="pill">Shipped</span></td><td>Mar 3</td></tr>
+            <tr><td>Import from CSV</td><td>2.1</td><td>Lucía Gómez</td><td><span class="pill">Shipped</span></td><td>Feb 16</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Team -->
+    <section class="page" id="team">
+      <h1>Team</h1>
+      <p class="sub">8 people in Harbor Labs.</p>
+      <div class="grid" style="grid-template-columns:repeat(4,1fr)" id="people"></div>
+    </section>
+
+    <!-- Settings -->
+    <section class="page" id="settings">
+      <h1>Settings</h1>
+      <p class="sub">Your profile, how Mapleboard looks, and access for other tools.</p>
+      <div class="settings">
+        <nav><a href="#s-profile">Profile</a><a href="#s-appearance">Appearance</a><a href="#s-keys">API keys</a><a href="#s-export">Export</a></nav>
+        <div>
+          <div class="card section" id="s-profile">
+            <h2>Profile</h2>
+            <div class="row"><label for="name">Name</label><input class="field" id="name" value="Jamie Rivera"></div>
+            <div class="row"><label for="email">Email<span class="hint">Shown to your team</span></label><input class="field" id="email" value="jamie.rivera@example.com"></div>
+            <div class="row"><label for="phone">Phone</label><input class="field" id="phone" value="+1 555 0142 3378"></div>
+          </div>
+          <div class="card section" id="s-appearance">
+            <h2>Appearance</h2>
+            <div class="row"><label>Theme</label>
+              <div class="themes" role="radiogroup" aria-label="Theme">
+                <button class="theme" role="radio" aria-checked="true" data-theme="light"><div class="sw" style="background:#f7f7f5"><span style="background:#fff;border-right:1px solid #e6e6e1"></span><span></span></div>Light</button>
+                <button class="theme" role="radio" aria-checked="false" data-theme="dark"><div class="sw" style="background:#15161a"><span style="background:#1d1f24"></span><span></span></div>Dark</button>
+                <button class="theme" role="radio" aria-checked="false" data-theme="sepia"><div class="sw" style="background:#f3ece0"><span style="background:#fbf6ec"></span><span></span></div>Sepia</button>
+              </div>
+            </div>
+            <div class="row"><label>Email digest<span class="hint">Every Monday</span></label><button class="switch" role="switch" aria-checked="false"></button></div>
+          </div>
+          <div class="card section" id="s-keys">
+            <h2>API keys</h2>
+            <div class="row"><label>Personal key<span class="hint">Keep it secret</span></label>
+              <div class="key"><code id="api-key">No key yet</code><button class="btn" id="gen-key">Generate</button><button class="btn" id="copy-key" disabled>Copy</button></div></div>
+          </div>
+          <div class="card section" id="s-export">
+            <h2>Export</h2>
+            <div class="row"><label>Format</label><div class="seg" id="format"><button aria-checked="true">Markdown</button><button aria-checked="false">PDF</button><button aria-checked="false">CSV</button></div></div>
+            <div class="row"><label>Include drafts</label><button class="switch" role="switch" aria-checked="true"></button></div>
+            <div class="row"><span></span><div><button class="btn primary" id="export-clip">Export to clipboard</button></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Command palette -->
+<div class="scrim" id="palette-scrim"><div class="palette" role="dialog" aria-label="Command palette">
+  <input id="palette-input" placeholder="Type a command..." autocomplete="off">
+  <ul id="palette-list"></ul>
+</div></div>
+
+<!-- New release -->
+<div class="scrim" id="release-scrim"><div class="modal" role="dialog" aria-label="New release">
+  <h3>New release</h3>
+  <input class="field" id="rel-title" placeholder="Title, for example Shared boards">
+  <textarea class="field" id="rel-notes" placeholder="What changed?"></textarea>
+  <div class="actions"><button class="btn" data-close>Cancel</button><button class="btn primary" id="rel-publish">Publish</button></div>
+</div></div>
+
+<!-- Shot list (press ?) -->
+<div class="scrim" id="shots-scrim"><div class="modal shots" role="dialog" aria-label="Shot list">
+  <h3>Shot list</h3>
+  <ol>
+    <li><b>Hero.</b> Overview → hover the chart → Settings → pick Dark, then Light → Export to clipboard. Slow, deliberate clicks.</li>
+    <li><b>Auto zoom.</b> Click “+ New release”, type a title and two lines of notes, Publish. The typing gives a held zoom.</li>
+    <li><b>Cursor.</b> Move between the four stat cards and the sidebar items in big arcs; click a few chart bars.</li>
+    <li><b>Blur.</b> Settings → Profile (email, phone) and API keys → Generate. Blur the email on one track, the key on another.</li>
+    <li><b>Shortcuts.</b> ⌘K, type “set”, Enter. ⌘K, “theme”, Enter. ⌘S. ⌘E.</li>
+    <li><b>Captions / transcript.</b> Talk through Settings while clicking: “So, um, this is the settings page...”.</li>
+    <li><b>Aspect ratios.</b> Reuse the hero recording.</li>
+    <li><b>Light / dark screenshots.</b> Overview page, same window size both times.</li>
+  </ol>
+  <div class="actions"><button class="btn" data-close>Close</button></div>
+</div></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const toast = (msg) => { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800); };
+
+  // Pages
+  function go(page) {
+    $$(".page").forEach(p => p.classList.toggle("active", p.id === page));
+    $$(".nav-item").forEach(n => n.dataset.page === page ? n.setAttribute("aria-current", "page") : n.removeAttribute("aria-current"));
+    $("main").scrollTop = 0;
+    if (page === "overview") animateOverview();
+  }
+  $$(".nav-item").forEach(n => n.addEventListener("click", () => go(n.dataset.page)));
+
+  // Overview numbers and chart
+  const weeks = [[9, "W1"], [12, "W2"], [8, "W3"], [15, "W4"], [11, "W5"], [18, "W6"], [14, "W7"], [21, "W8"]];
+  const months = [[34, "Nov"], [41, "Dec"], [29, "Jan"], [52, "Feb"], [47, "Mar"], [63, "Apr"]];
+  function drawChart(data) {
+    const max = Math.max(...data.map(d => d[0]));
+    $("#chart").innerHTML = data.map(([v, l], i) => `<div class="col"><div class="bar${i === data.length - 1 ? " hi" : ""}" data-h="${(v / max) * 100}"><span>${v}</span></div><small>${l}</small></div>`).join("");
+    requestAnimationFrame(() => requestAnimationFrame(() => $$("#chart .bar").forEach(b => b.style.height = b.dataset.h + "%")));
+  }
+  function animateOverview() {
+    $$("[data-count]").forEach(el => {
+      const end = +el.dataset.count, start = performance.now();
+      const step = (t) => { const p = Math.min(1, (t - start) / 900), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(end * e).toLocaleString("en-US"); if (p < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    });
+    drawChart($("#range button[aria-checked=true]").textContent.startsWith("8") ? weeks : months);
+  }
+  function segmented(el, onChange) {
+    $$("button", el).forEach(b => b.addEventListener("click", () => { $$("button", el).forEach(x => x.setAttribute("aria-checked", String(x === b))); onChange && onChange(b); }));
+  }
+  segmented($("#range"), b => drawChart(b.textContent.startsWith("8") ? weeks : months));
+  segmented($("#format"));
+  $("#mark-read").addEventListener("click", () => { $$("#activity .dot").forEach(d => d.style.background = "var(--line)"); toast("All caught up"); });
+
+  // Team
+  const people = [["Jamie Rivera", "Product"], ["Priya Nair", "Engineering"], ["Theo Lambert", "Engineering"], ["Mina Okafor", "Design"], ["Sam Fischer", "Support"], ["Lucía Gómez", "Engineering"], ["Kenji Mori", "Marketing"], ["Ada Novak", "Data"]];
+  $("#people").innerHTML = people.map(([n, r]) => `<div class="card" style="text-align:center"><div class="avatar" style="width:48px;height:48px;margin:0 auto 10px;font-size:15px">${n.split(" ").map(w => w[0]).join("")}</div><b>${n}</b><div style="color:var(--muted);font-size:13px">${r}</div></div>`).join("");
+
+  // Settings
+  function setTheme(name) {
+    if (name === "light") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = name;
+    $$(".theme").forEach(t => t.setAttribute("aria-checked", String(t.dataset.theme === name)));
+  }
+  $$(".theme").forEach(t => t.addEventListener("click", () => setTheme(t.dataset.theme)));
+  $$(".switch").forEach(s => s.addEventListener("click", () => s.setAttribute("aria-checked", String(s.getAttribute("aria-checked") !== "true"))));
+  $("#gen-key").addEventListener("click", () => {
+    const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let k = "demo_"; for (let i = 0; i < 28; i++) k += chars[Math.floor(Math.random() * chars.length)];
+    $("#api-key").textContent = k; $("#copy-key").disabled = false; toast("New key created");
+  });
+  $("#copy-key").addEventListener("click", () => toast("Key copied"));
+  const exportNow = () => toast(`Exported as ${$("#format button[aria-checked=true]").textContent} · copied to clipboard`);
+  $("#export-clip").addEventListener("click", exportNow);
+  $("#export-top").addEventListener("click", exportNow);
+
+  // Overlays
+  const open = (id) => { $$(".scrim").forEach(s => s.classList.remove("open")); $(id).classList.add("open"); };
+  const closeAll = () => $$(".scrim").forEach(s => s.classList.remove("open"));
+  $$(".scrim").forEach(s => s.addEventListener("mousedown", e => { if (e.target === s) closeAll(); }));
+  $$("[data-close]").forEach(b => b.addEventListener("click", closeAll));
+  $("#new-release").addEventListener("click", () => { open("#release-scrim"); $("#rel-title").value = ""; $("#rel-notes").value = ""; setTimeout(() => $("#rel-title").focus(), 50); });
+  $("#rel-publish").addEventListener("click", () => {
+    const title = $("#rel-title").value.trim() || "Untitled release";
+    closeAll();
+    $("#release-rows").insertAdjacentHTML("afterbegin", `<tr><td>${title.replace(/</g, "&lt;")}</td><td>2.6</td><td>Jamie Rivera</td><td><span class="pill">Shipped</span></td><td>Today</td></tr>`);
+    $("#activity").insertAdjacentHTML("afterbegin", `<li><span class="dot"></span><div><b>You</b> published <b>${title.replace(/</g, "&lt;")}</b></div><span class="time">now</span></li>`);
+    toast("Release published");
+  });
+
+  // Command palette
+  const commands = [
+    ["Go to Overview", () => go("overview")], ["Go to Releases", () => go("releases")], ["Go to Team", () => go("team")],
+    ["Go to Settings", () => go("settings")], ["Theme: Light", () => setTheme("light")], ["Theme: Dark", () => setTheme("dark")],
+    ["Theme: Sepia", () => setTheme("sepia")], ["New release", () => $("#new-release").click()], ["Export to clipboard", exportNow],
+  ];
+  let sel = 0, shown = commands;
+  function renderPalette() {
+    const q = $("#palette-input").value.toLowerCase();
+    shown = commands.filter(([n]) => n.toLowerCase().includes(q)); sel = Math.min(sel, Math.max(0, shown.length - 1));
+    $("#palette-list").innerHTML = shown.map(([n], i) => `<li class="${i === sel ? "sel" : ""}" data-i="${i}">${n}<kbd>↵</kbd></li>`).join("") || `<li>No results</li>`;
+    $$("#palette-list li[data-i]").forEach(li => li.addEventListener("click", () => run(+li.dataset.i)));
+  }
+  const run = (i) => { const c = shown[i]; closeAll(); if (c) c[1](); };
+  $("#palette-input").addEventListener("input", () => { sel = 0; renderPalette(); });
+  $("#palette-input").addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { sel = Math.min(shown.length - 1, sel + 1); renderPalette(); e.preventDefault(); }
+    if (e.key === "ArrowUp") { sel = Math.max(0, sel - 1); renderPalette(); e.preventDefault(); }
+    if (e.key === "Enter") run(sel);
+  });
+  const openPalette = () => { open("#palette-scrim"); $("#palette-input").value = ""; sel = 0; renderPalette(); setTimeout(() => $("#palette-input").focus(), 30); };
+  $("#search").addEventListener("focus", e => { e.target.blur(); openPalette(); });
+
+  // Keyboard
+  document.addEventListener("keydown", e => {
+    const mod = e.metaKey || e.ctrlKey, typing = /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+    if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); }
+    else if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); toast("Saved"); }
+    else if (mod && e.key.toLowerCase() === "e") { e.preventDefault(); exportNow(); }
+    else if (e.key === "Escape") closeAll();
+    else if (e.key === "?" && !typing) open("#shots-scrim");
+  });
+
+  animateOverview();
+})();
+</script>
+</body>
+</html>

@@ -1766,7 +1766,7 @@ public struct MultiTrackTimelineView: View {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 7, height: 7)
-                    Text("Recording voiceover…")
+                    Text("Recording voiceover...")
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(.ink)
                 }
@@ -2319,7 +2319,7 @@ private struct SmoothTimeRulerView: View {
     }
 }
 
-// MARK: - Clip Segment Decoration (Ruler Tick Lines + Audio Waveform Curve — Equatable so Canvas never redraws on hover skim!)
+// MARK: - Clip Segment Decoration (Ruler Tick Lines + Audio Waveform Curve, Equatable so Canvas never redraws on hover skim!)
 
 private struct ClipSegmentDecoration: Equatable, View {
     let timelineStartMs: Double
@@ -2603,7 +2603,7 @@ private struct SegmentShaderPalette: Equatable {
     /// - `ring` (`lightness(+40)`): `#F4C677` (`0.957, 0.776, 0.467`)
     /// - `playedRing` (`lightness(+15)`): `#DA9012` (`0.855, 0.565, 0.071`)
     /// - `selectedOuterOutline` (`lightness(+20).opacity(0.8)`): `#EC9E18` (`0.925, 0.620, 0.094, 0.80`)
-    static let clip = SegmentShaderPalette(
+    static let clipDark = SegmentShaderPalette(
         fillTop: Color(red: 0.576, green: 0.380, blue: 0.047),
         fillBottom: Color(red: 0.855, green: 0.565, blue: 0.071),
         innerEdgeGlow: Color(red: 0.463, green: 0.306, blue: 0.039).opacity(0.80),
@@ -2623,7 +2623,7 @@ private struct SegmentShaderPalette: Equatable {
     /// - `ring` (`lightness(+40)`): `#F4F2FE` (`0.957, 0.949, 0.996`)
     /// - `playedRing` (`lightness(+15)`): `#8B78F9` (`0.545, 0.471, 0.976`)
     /// - `selectedOuterOutline` (`lightness(+20).opacity(0.8)`): `#A091FA` (`0.627, 0.569, 0.980, 0.80`)
-    static let zoom = SegmentShaderPalette(
+    static let zoomDark = SegmentShaderPalette(
         fillTop: Color(red: 0.302, green: 0.184, blue: 0.961),
         fillBottom: Color(red: 0.545, green: 0.471, blue: 0.976),
         innerEdgeGlow: Color(red: 0.169, green: 0.043, blue: 0.875).opacity(0.80),
@@ -2643,7 +2643,7 @@ private struct SegmentShaderPalette: Equatable {
     /// - `ring` (`lightness(+40)`): `#DCA6C0` (`0.863, 0.651, 0.753`)
     /// - `playedRing` (`lightness(+15)`): `#B74B80` (`0.718, 0.294, 0.502`)
     /// - `selectedOuterOutline` (`lightness(+20).opacity(0.8)`): `#C65D91` (`0.776, 0.365, 0.569, 0.80`)
-    static let mask = SegmentShaderPalette(
+    static let maskDark = SegmentShaderPalette(
         fillTop: Color(red: 0.510, green: 0.204, blue: 0.353),
         fillBottom: Color(red: 0.718, green: 0.294, blue: 0.502),
         innerEdgeGlow: Color(red: 0.408, green: 0.165, blue: 0.282).opacity(0.80),
@@ -2655,7 +2655,7 @@ private struct SegmentShaderPalette: Equatable {
     )
 
     /// Caption:
-    static let caption = SegmentShaderPalette(
+    static let captionDark = SegmentShaderPalette(
         fillTop: Color(red: 0.086, green: 0.388, blue: 0.431),
         fillBottom: Color(red: 0.122, green: 0.561, blue: 0.620),
         innerEdgeGlow: Color(red: 0.067, green: 0.310, blue: 0.345).opacity(0.80),
@@ -2667,7 +2667,7 @@ private struct SegmentShaderPalette: Equatable {
     )
 
     /// Camera Layout:
-    static let cameraLayout = SegmentShaderPalette(
+    static let cameraLayoutDark = SegmentShaderPalette(
         fillTop: Color(red: 0.396, green: 0.341, blue: 0.369),
         fillBottom: Color(red: 0.553, green: 0.486, blue: 0.518),
         innerEdgeGlow: Color(red: 0.310, green: 0.267, blue: 0.290).opacity(0.80),
@@ -2677,6 +2677,78 @@ private struct SegmentShaderPalette: Equatable {
         playedRingBorder: Color(red: 0.553, green: 0.486, blue: 0.518),
         selectedOuterOutline: Color(red: 0.660, green: 0.596, blue: 0.627).opacity(0.80)
     )
+
+    // Light mode: brighter, more saturated fills, and a softer edge glow in the fill's own hue. The dark palettes'
+    // darkened edge glow reads as dirt on a light timeline.
+    static let clipLight = SegmentShaderPalette(
+        fillTop: Color(red: 0.851, green: 0.533, blue: 0.098),
+        fillBottom: Color(red: 0.937, green: 0.663, blue: 0.231),
+        innerEdgeGlow: Color(red: 0.710, green: 0.420, blue: 0.050).opacity(0.35),
+        activeInnerEdgeGlow: Color(red: 0.710, green: 0.420, blue: 0.050).opacity(0.22),
+        playedInnerEdgeGlow: Color(red: 0.851, green: 0.533, blue: 0.098).opacity(0.35),
+        ringBorder: Color(red: 1.000, green: 0.875, blue: 0.655),
+        playedRingBorder: Color(red: 0.937, green: 0.663, blue: 0.231),
+        selectedOuterOutline: Color(red: 0.925, green: 0.580, blue: 0.100).opacity(0.85)
+    )
+    static let zoomLight = SegmentShaderPalette(
+        fillTop: Color(red: 0.388, green: 0.290, blue: 0.973),
+        fillBottom: Color(red: 0.596, green: 0.533, blue: 0.984),
+        innerEdgeGlow: Color(red: 0.250, green: 0.150, blue: 0.850).opacity(0.35),
+        activeInnerEdgeGlow: Color(red: 0.250, green: 0.150, blue: 0.850).opacity(0.22),
+        playedInnerEdgeGlow: Color(red: 0.388, green: 0.290, blue: 0.973).opacity(0.35),
+        ringBorder: Color(red: 0.902, green: 0.882, blue: 1.000),
+        playedRingBorder: Color(red: 0.596, green: 0.533, blue: 0.984),
+        selectedOuterOutline: Color(red: 0.553, green: 0.471, blue: 0.976).opacity(0.85)
+    )
+    static let maskLight = SegmentShaderPalette(
+        fillTop: Color(red: 0.733, green: 0.310, blue: 0.522),
+        fillBottom: Color(red: 0.851, green: 0.475, blue: 0.663),
+        innerEdgeGlow: Color(red: 0.550, green: 0.200, blue: 0.380).opacity(0.35),
+        activeInnerEdgeGlow: Color(red: 0.550, green: 0.200, blue: 0.380).opacity(0.22),
+        playedInnerEdgeGlow: Color(red: 0.733, green: 0.310, blue: 0.522).opacity(0.35),
+        ringBorder: Color(red: 0.980, green: 0.820, blue: 0.898),
+        playedRingBorder: Color(red: 0.851, green: 0.475, blue: 0.663),
+        selectedOuterOutline: Color(red: 0.800, green: 0.380, blue: 0.600).opacity(0.85)
+    )
+    static let captionLight = SegmentShaderPalette(
+        fillTop: Color(red: 0.106, green: 0.561, blue: 0.616),
+        fillBottom: Color(red: 0.231, green: 0.722, blue: 0.773),
+        innerEdgeGlow: Color(red: 0.050, green: 0.400, blue: 0.450).opacity(0.35),
+        activeInnerEdgeGlow: Color(red: 0.050, green: 0.400, blue: 0.450).opacity(0.22),
+        playedInnerEdgeGlow: Color(red: 0.106, green: 0.561, blue: 0.616).opacity(0.35),
+        ringBorder: Color(red: 0.700, green: 0.941, blue: 0.969),
+        playedRingBorder: Color(red: 0.231, green: 0.722, blue: 0.773),
+        selectedOuterOutline: Color(red: 0.180, green: 0.690, blue: 0.757).opacity(0.85)
+    )
+    static let cameraLayoutLight = SegmentShaderPalette(
+        fillTop: Color(red: 0.533, green: 0.478, blue: 0.510),
+        fillBottom: Color(red: 0.690, green: 0.643, blue: 0.667),
+        innerEdgeGlow: Color(red: 0.400, green: 0.350, blue: 0.380).opacity(0.35),
+        activeInnerEdgeGlow: Color(red: 0.400, green: 0.350, blue: 0.380).opacity(0.22),
+        playedInnerEdgeGlow: Color(red: 0.533, green: 0.478, blue: 0.510).opacity(0.35),
+        ringBorder: Color(red: 0.918, green: 0.890, blue: 0.906),
+        playedRingBorder: Color(red: 0.690, green: 0.643, blue: 0.667),
+        selectedOuterOutline: Color(red: 0.620, green: 0.561, blue: 0.600).opacity(0.85)
+    )
+
+    static let clip = adaptive(dark: clipDark, light: clipLight)
+    static let zoom = adaptive(dark: zoomDark, light: zoomLight)
+    static let mask = adaptive(dark: maskDark, light: maskLight)
+    static let caption = adaptive(dark: captionDark, light: captionLight)
+    static let cameraLayout = adaptive(dark: cameraLayoutDark, light: cameraLayoutLight)
+
+    private static func adaptive(dark: SegmentShaderPalette, light: SegmentShaderPalette) -> SegmentShaderPalette {
+        SegmentShaderPalette(
+            fillTop: .adaptive(dark: dark.fillTop, light: light.fillTop),
+            fillBottom: .adaptive(dark: dark.fillBottom, light: light.fillBottom),
+            innerEdgeGlow: .adaptive(dark: dark.innerEdgeGlow, light: light.innerEdgeGlow),
+            activeInnerEdgeGlow: .adaptive(dark: dark.activeInnerEdgeGlow, light: light.activeInnerEdgeGlow),
+            playedInnerEdgeGlow: .adaptive(dark: dark.playedInnerEdgeGlow, light: light.playedInnerEdgeGlow),
+            ringBorder: .adaptive(dark: dark.ringBorder, light: light.ringBorder),
+            playedRingBorder: .adaptive(dark: dark.playedRingBorder, light: light.playedRingBorder),
+            selectedOuterOutline: .adaptive(dark: dark.selectedOuterOutline, light: light.selectedOuterOutline)
+        )
+    }
 }
 
 /// Renders the `shadeBody`
@@ -2831,7 +2903,7 @@ private struct TimelineInteractiveSegmentView: View {
         // so even a minimum-width segment always has a left resize zone, a center move zone, and a right resize zone!
         let edgeHitWidth = min(edgeHandleHitWidth, max(5.5, segWidth * 0.34))
         // Hover: `.track-item.is-hovered & { opacity: 1; transform: scaleY(1); }`
-        // Resize handles appear on hover or during an active resize drag — including on narrow segments!
+        // Resize handles appear on hover or during an active resize drag, including on narrow segments!
         let showHandles = !isSplitMode
             && (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight)
         let handleBarWidth: CGFloat = segWidth < 24 ? 2.4 : 3.0
@@ -3430,8 +3502,8 @@ private struct SpeedUpTypingSuggestionChipView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color(red: 0.40, green: 0.27, blue: 0.04),
-                                Color(red: 0.56, green: 0.37, blue: 0.05)
+                                .adaptive(dark: Color(red: 0.40, green: 0.27, blue: 0.04), light: Color(red: 0.80, green: 0.49, blue: 0.08)),
+                                .adaptive(dark: Color(red: 0.56, green: 0.37, blue: 0.05), light: Color(red: 0.90, green: 0.60, blue: 0.17))
                             ],
                             startPoint: .top,
                             endPoint: .bottom

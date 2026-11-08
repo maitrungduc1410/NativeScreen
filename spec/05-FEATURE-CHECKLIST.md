@@ -1,4 +1,4 @@
-# NativeScreen — Master Feature Checklist & Roadmap
+# NativeScreen: Master Feature Checklist & Roadmap
 
 > **Instructions:** This is the living implementation tracker for **NativeScreen**.
 > - Features are ordered by priority (**Phase 1 MVP** -> **Phase 2 Cinematic Polish** -> **Phase 3 Pro Features** -> **Phase 4 AI & Automation** -> **Phase 5 Windows Port**).
@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 1: MVP Core (macOS — Record, Auto-Zoom, Multi-Blur, Edit & Export)
+## Phase 1: MVP Core (macOS: Record, Auto-Zoom, Multi-Blur, Edit & Export)
 *Goal: Deliver a super-fast, 100% native macOS recorder & editor with auto-zoom, backgrounds, and unlimited blur tracks.*
 
 ### 1.1. Project Package (`.nativescreen`) & State Engine
@@ -112,6 +112,22 @@
   - [ ] Moving and resizing segments, drawing masks and picking a window or area without a pointer.
 - [x] **AI agents (MCP):** `Settings > AI Agents` lets Claude Code, Claude Desktop, Codex, Cursor and other MCP clients record, edit (whole document as JSON merge patches plus timeline item tools, each one undo step), render frames to check their work, change settings and export with progress. Clients run the app's own executable with `--mcp`, which opens the app when needed (`spec/06` ADR-52).
   - [ ] A command line (`nativescreen export ...`) on the same tools.
+- [x] **Releases and updates:** manual GitHub Actions release (`docs/releasing.md`, ADR-53) builds a signed, notarized DMG and a Sparkle appcast for macOS and a Velopack installer for Windows, as a draft release. `Check for Updates...` in the app menu and menu bar menu, `Check for updates automatically` in Settings > General (release builds only).
+  - [ ] Windows: Velopack startup hook and update check in the app (see `windows/HANDOFF.md`).
+  - [ ] Windows code signing (SignPath Foundation).
+- [x] **README and website** (`site/`, GitHub Pages): editorial layout, an aspect ratio switch, screenshot slots for macOS and Windows; `tools/demo-page/` to record demos against and `tools/demo-driver/` to play scripted takes on it.
+  - [x] macOS demo videos and editor screenshots, recorded against `tools/demo-page/`.
+  - [x] Second pass: merged hero zooms, mask and cursor demos zoomed in, large before/after switches, light theme screenshots retaken, measured native numbers.
+  - [x] Edit by transcript screenshot (a voice take on the demo page, `tools/demo-driver/takes/transcript.json`).
+  - [x] AI agent demo video (a real agent session next to the editor, area recording, private text masked).
+  - [ ] Still a placeholder: Windows editor screenshot.
+- [x] **Fix:** MCP tools reject unknown arguments and enforce `required` (`spec/06` ADR-52).
+- [x] Clip speed menu goes up to 10x (6x, 8x, 10x added).
+- [x] **Fix:** mask handles matched the drawn mask only without padding; they now use the compositor's stage rect and the crop (`spec/06` ADR-55).
+- [x] Auto zooms closer than 1.5 s merge into one (`spec/03` §3.1), on macOS and in the Windows port.
+- [x] **Fix:** two-lane H.264 export wrote two sample descriptions and Chrome could not play past the first switch; now one description with in-band SPS/PPS (`spec/06` ADR-01).
+- [x] **Fix:** fragmented recording writer failed mid-take with -11800 / -16341 and the video stopped early; recordings now use H.264 without frame reordering (`spec/06` ADR-54).
+- [x] A failed capture writer or a stream that stops by itself ends the recording, keeps what plays back, and tells the user (`spec/06` ADR-54).
 
 ---
 
@@ -123,14 +139,14 @@
   - [x] 3 Default Layout modes (`Camera overlay`, `Split screen`, and `Camera cutout`) + dedicated `Layouts` timeline track & Quick Dock buttons with 5 per-segment layout types (`Camera overlay`, `Split screen`, `Camera cutout`, `Fullscreen camera`, `Only screen`), 8-point perimeter `Camera Position` dot grid, `Camera aspect ratio` (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`), and `Camera Size` slider.
   - [x] Auto-shrink webcam bubble (`Make smaller during zoom` / `scaleWhenZoomed`) when the main screen zooms in.
   - [x] 13 built-in filmic color grading looks (`Original`, `Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`) + custom `.cube` 3D LUT loader, `Sharpen`, interactive `Crop camera` modal, `Mirror horizontally`, `Face tracking` (100% local via `Vision`), and `Camera delay` (`-200ms ... +200ms`).
-  - [x] **AI Person Cutout:** Real-time background removal using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest` — 0MB model bloat!).
+  - [x] **AI Person Cutout:** Real-time background removal using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest`: 0MB model bloat!).
   - [x] Auto-hide webcam during silence (`Hide during silence`).
 - [x] **Optical Glass Loupe Zoom:**
   - [x] Alternative zoom presentation mode (`presentation: "loupe"`) with circular magnifying lens, bevel rim highlight, and adjustable loupe radius.
 - [x] **Keyboard Shortcuts 3D Keycaps & Multi-Track Editor:**
   - [x] Render 3D bevel keycaps (`⌘`, `⇧`, `⌥`, `⌃`, `Space`, `⌫`, etc.) both on the live Preview Canvas and baked directly into exported videos/GIFs (`Pass 6` in `MetalFrameCompositor`).
   - [x] Prose-typing suppression filter (ignores normal typing words/code even when `Show single key shortcuts` is enabled).
-  - [x] Dedicated `Close Shortcut editor` Inspector panel on segment click with live keyboard shortcut recording (`Record shortcut keys…`), 4-edge positioning (`Bottom`, `Top`, `Left` vertical stack, `Right` vertical stack), `Horizontal / Vertical offset` sliders (to avoid captions), `Default / Solid / Gradient` keycap color picker, multi-track support, and permanent deletion (`Remove shortcut`).
+  - [x] Dedicated `Close Shortcut editor` Inspector panel on segment click with live keyboard shortcut recording (`Record shortcut keys...`), 4-edge positioning (`Bottom`, `Top`, `Left` vertical stack, `Right` vertical stack), `Horizontal / Vertical offset` sliders (to avoid captions), `Default / Solid / Gradient` keycap color picker, multi-track support, and permanent deletion (`Remove shortcut`).
 - [x] **Device Mockups (`Use device mockup`):**
   - [x] High-DPI vector metallic device bezels (`MacBook Pro 16"`, `MacBook Air 15"`, `iPhone 16 Pro`, `iPad Pro 13"`) with `Perfect` / `Flexible` sizing modes and hardware color finishes (`Space Black`, `Silver`, `Midnight`, `Starlight`, `Black Titanium`, `Natural Titanium`, `Desert Titanium`, `White Titanium`).
 

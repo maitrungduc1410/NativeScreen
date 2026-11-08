@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// `Native Screen > Settings…` (⌘,). Native toolbar tabs; only options the app actually supports.
+/// `Native Screen > Settings...` (⌘,). Native toolbar tabs; only options the app actually supports.
 /// The Settings tab being shown; also lets other parts of the app open Settings on a given tab.
 @Observable
 @MainActor
@@ -124,7 +124,7 @@ private struct DirectoryRow: View {
                 Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                 }
-                Button("Change directory…") {
+                Button("Change directory...") {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
                     panel.canChooseFiles = false
@@ -144,6 +144,7 @@ private struct DirectoryRow: View {
 
 private struct GeneralSettingsTab: View {
     @Bindable private var settings = AppSettings.shared
+    @Bindable private var updater = AppUpdater.shared
     @State private var isConfirmingReset = false
     @State private var language = AppLanguage.current
 
@@ -190,6 +191,17 @@ private struct GeneralSettingsTab: View {
             if language != AppLanguage.atLaunch {
                 SettingsRow(title: "Restart Native Screen to use the new language.") {
                     Button("Restart Now") { AppLanguage.relaunch() }
+                }
+            }
+
+            if AppUpdater.shared.isAvailable {
+                SettingsRow(
+                    title: "Check for updates automatically",
+                    description: "Native Screen checks GitHub for a new version once a day and asks before installing it."
+                ) {
+                    Toggle("", isOn: $updater.automaticallyChecksForUpdates)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                 }
             }
 
@@ -533,7 +545,7 @@ private struct ShortcutsSettingsTab: View {
         Shortcut(icon: "eye.slash", title: "Hide or show camera", keys: "H"),
         Shortcut(icon: "plus.magnifyingglass", title: "Zoom timeline in / out", keys: "⌘ +  ⌘ −"),
         Shortcut(icon: "command", title: "Command menu", keys: "⌘ K"),
-        Shortcut(icon: "sidebar.right", title: "Sidebar tabs", keys: "⌘ 1 … ⌘ 0"),
+        Shortcut(icon: "sidebar.right", title: "Sidebar tabs", keys: "⌘ 1 ... ⌘ 0"),
         Shortcut(icon: "arrow.uturn.backward", title: "Undo / redo", keys: "⌘ Z  ⇧ ⌘ Z"),
         Shortcut(icon: "square.and.arrow.down", title: "Save", keys: "⌘ S"),
         Shortcut(icon: "square.and.arrow.up", title: "Export", keys: "⇧ ⌘ E"),

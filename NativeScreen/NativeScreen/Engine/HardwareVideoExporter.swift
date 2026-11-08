@@ -714,6 +714,70 @@ public final class HardwareVideoExporter {
         }
     }
 
+    /// Keeps a two-lane H.264 export to ONE sample description (`spec/06` ADR-01). The hardware and software lanes produce
+    /// different SPS/PPS; written as-is they become two `avc1` sample descriptions that switch every GOP, and Chrome stops
+    /// with a decode error at the first switch. Instead every sample is muxed under the first description, and every
+    /// keyframe carries its own lane's SPS/PPS in-band in front of the IDR, so decoders pick up each GOP's parameter sets.
+    private nonisolated enum H264InBandParameterSets {
+        static func rewrite(_ sample: CMSampleBuffer, sharedDescription: CMFormatDescription) throws -> CMSampleBuffer {
+            guard let own = CMSampleBufferGetFormatDescription(sample) else { return sample }
+            let attachments = (CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[CFString: Any]])?.first ?? [:]
+            let isKeyframe = (attachments[kCMSampleAttachmentKey_NotSync] as? Bool) != true
+            let sameDescription = CMFormatDescriptionEqual(own, otherFormatDescription: sharedDescription)
+            if !isKeyframe && sameDescription { return sample }
+
+            var payload = Data()
+            if isKeyframe {
+                var count = 0
+                var lengthSize: Int32 = 4
+                CMVideoFormatDescriptionGetH264ParameterSetAtIndex(own, parameterSetIndex: 0, parameterSetPointerOut: nil,
+                    parameterSetSizeOut: nil, parameterSetCountOut: &count, nalUnitHeaderLengthOut: &lengthSize)
+                for index in 0..<count {
+                    var pointer: UnsafePointer<UInt8>?
+                    var size = 0
+                    guard CMVideoFormatDescriptionGetH264ParameterSetAtIndex(own, parameterSetIndex: index, parameterSetPointerOut: &pointer,
+                        parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil) == noErr, let pointer else { continue }
+                    for shift in stride(from: Int(lengthSize - 1) * 8, through: 0, by: -8) { payload.append(UInt8((size >> shift) & 0xFF)) }
+                    payload.append(pointer, count: size)
+                }
+            }
+            guard let dataBuffer = CMSampleBufferGetDataBuffer(sample) else { return sample }
+            let length = CMBlockBufferGetDataLength(dataBuffer)
+            let prefix = payload.count
+            payload.count += length
+            let copied = payload.withUnsafeMutableBytes { raw in
+                CMBlockBufferCopyDataBytes(dataBuffer, atOffset: 0, dataLength: length, destination: raw.baseAddress! + prefix)
+            }
+            guard copied == noErr else { throw rewriteError(copied) }
+
+            var block: CMBlockBuffer?
+            var status = CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: payload.count, blockAllocator: nil,
+                customBlockSource: nil, offsetToData: 0, dataLength: payload.count, flags: kCMBlockBufferAssureMemoryNowFlag, blockBufferOut: &block)
+            guard status == noErr, let block else { throw rewriteError(status) }
+            status = payload.withUnsafeBytes { CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: payload.count) }
+            guard status == noErr else { throw rewriteError(status) }
+
+            var timing = CMSampleTimingInfo()
+            CMSampleBufferGetSampleTimingInfo(sample, at: 0, timingInfoOut: &timing)
+            var size = payload.count
+            var rewritten: CMSampleBuffer?
+            status = CMSampleBufferCreateReady(allocator: nil, dataBuffer: block, formatDescription: sharedDescription, sampleCount: 1,
+                sampleTimingEntryCount: 1, sampleTimingArray: &timing, sampleSizeEntryCount: 1, sampleSizeArray: &size, sampleBufferOut: &rewritten)
+            guard status == noErr, let rewritten else { throw rewriteError(status) }
+            if !attachments.isEmpty, let array = CMSampleBufferGetSampleAttachmentsArray(rewritten, createIfNecessary: true), CFArrayGetCount(array) > 0 {
+                let dictionary = unsafeBitCast(CFArrayGetValueAtIndex(array, 0), to: CFMutableDictionary.self)
+                for (key, value) in attachments {
+                    CFDictionarySetValue(dictionary, Unmanaged.passUnretained(key).toOpaque(), Unmanaged.passUnretained(value as AnyObject).toOpaque())
+                }
+            }
+            return rewritten
+        }
+
+        private static func rewriteError(_ status: OSStatus) -> NSError {
+            NSError(domain: "NativeScreenExport", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Could not prepare an H.264 frame for the MP4 file."])
+        }
+    }
+
     /// Puts frames coming back from both encoder lanes into presentation order and hands them to the muxer as soon
     /// as the next expected frame is available. Memory stays bounded to the GOPs currently in flight
     /// (a few MB) instead of the whole encoded video. Also tracks the Media Engine's real bitrate so the
@@ -966,8 +1030,8 @@ public final class HardwareVideoExporter {
     /// - The software lane is continuously re-targeted to the Media Engine's measured bitrate so both halves of the
     ///   video have matched quality (no visible quality pulse every 2 seconds).
     /// - Encoded frames are re-ordered and muxed (interleaved with audio) WHILE encoding, so memory stays bounded.
-    /// - The two lanes produce different SPS/PPS; `AVAssetWriter` stores them as two `avc1` sample descriptions in one
-    ///   track (verified decodable by AVFoundation and FFmpeg).
+    /// - The two lanes produce different SPS/PPS. The file still has one `avc1` sample description: the muxer writes every
+    ///   keyframe with its own SPS/PPS in-band (`H264InBandParameterSets`), so Chrome can play it.
     /// - HEVC uses only the Hardware Media Engine lane.
     @MainActor
     private static func exportMP4VideoFileHybrid(
@@ -1066,6 +1130,7 @@ public final class HardwareVideoExporter {
         var muxInput: AVAssetWriterInput?
         var muxAudioInput: AVAssetWriterInput?
         var nextVideoSample: CMSampleBuffer?
+        var muxDescription: CMFormatDescription?
         var pendingAudioSample: CMSampleBuffer?
         var isVideoInputFinished = false
         var isAudioDone = (audioPipeline == nil)
@@ -1113,13 +1178,17 @@ public final class HardwareVideoExporter {
                     throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: "No video frames were encoded."])
                 }
                 try startMuxer(formatHint: formatDesc)
+                muxDescription = formatDesc
             }
             guard let writer = muxWriter, let input = muxInput else { return }
             if writer.status == .failed {
                 throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
             }
 
-            while !isVideoInputFinished, input.isReadyForMoreMediaData, let sample = nextVideoSample {
+            while !isVideoInputFinished, input.isReadyForMoreMediaData, let encoded = nextVideoSample {
+                let sample = (codecOption == .h264 && muxDescription != nil)
+                    ? try H264InBandParameterSets.rewrite(encoded, sharedDescription: muxDescription!)
+                    : encoded
                 guard input.append(sample) else {
                     throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
                 }

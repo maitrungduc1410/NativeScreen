@@ -317,7 +317,7 @@ public struct StandaloneCameraCropWindowView: View {
     public var body: some View {
         ZStack {
             // Brighter Studio Slate Base + Soft Ambient Image Bleed
-            Color(red: 0.19, green: 0.19, blue: 0.23)
+            Color.surface(red: 0.19, green: 0.19, blue: 0.23)
                 .ignoresSafeArea()
 
             if let img = uncroppedWebcamImage {
@@ -341,12 +341,12 @@ public struct StandaloneCameraCropWindowView: View {
                     HStack(spacing: 6) {
                         Text("Size")
                             .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(.ink.opacity(0.45))
 
                         cropDimensionBadge("\(Int(round(draftCrop01.width * sourcePixelWidth)))")
                         Text("×")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(.ink.opacity(0.45))
                         cropDimensionBadge("\(Int(round(draftCrop01.height * sourcePixelHeight)))")
                     }
 
@@ -367,19 +367,19 @@ public struct StandaloneCameraCropWindowView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "sidebar.left")
                                 .font(.system(size: 12))
-                            Text("Select…")
+                            Text("Select...")
                                 .font(.system(size: 12, weight: .regular))
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 9.5, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.55))
+                                .foregroundStyle(.ink.opacity(0.55))
                         }
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(.ink.opacity(0.92))
                         .padding(.horizontal, 10)
                         .frame(height: 30)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .background(Color.ink.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
@@ -390,7 +390,7 @@ public struct StandaloneCameraCropWindowView: View {
                     HStack(spacing: 6) {
                         Text("Position")
                             .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(.ink.opacity(0.45))
 
                         cropDimensionBadge("\(Int(round(draftCrop01.x * sourcePixelWidth)))")
                         cropDimensionBadge("\(Int(round(draftCrop01.y * sourcePixelHeight)))")
@@ -408,13 +408,13 @@ public struct StandaloneCameraCropWindowView: View {
                             Text("Reset")
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .foregroundStyle(.white.opacity(draftCrop01 == .full ? 0.42 : 0.94))
+                        .foregroundStyle(.ink.opacity(draftCrop01 == .full ? 0.42 : 0.94))
                         .padding(.horizontal, 12)
                         .frame(height: 30)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .background(Color.ink.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
@@ -424,7 +424,7 @@ public struct StandaloneCameraCropWindowView: View {
 
                     Image(systemName: "keyboard")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(.ink.opacity(0.65))
                         .frame(width: 30, height: 30)
                 }
                 .padding(.horizontal, 18)
@@ -566,16 +566,16 @@ public struct StandaloneCameraCropWindowView: View {
                     } label: {
                         Text("Discard changes")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.88))
+                            .foregroundStyle(.ink.opacity(0.88))
                             .padding(.horizontal, 18)
                             .frame(height: 36)
                             .background(
-                                Color.white.opacity(0.07),
+                                Color.ink.opacity(0.07),
                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
@@ -585,7 +585,6 @@ public struct StandaloneCameraCropWindowView: View {
                 .padding(.vertical, 18)
             }
         }
-        .preferredColorScheme(.dark)
         .task {
             draftCrop01 = session.document.camera.cropRect01
             if let extracted = await session.extractRawWebcamFrameNSImage() {
@@ -599,14 +598,14 @@ public struct StandaloneCameraCropWindowView: View {
     private func cropDimensionBadge(_ text: String) -> some View {
         Text(text.localizedUI)
             .font(.system(size: 12, weight: .regular).monospacedDigit())
-            .foregroundStyle(.white.opacity(0.94))
+            .foregroundStyle(.ink.opacity(0.94))
             .frame(minWidth: 46)
             .padding(.horizontal, 8)
             .frame(height: 30)
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(Color.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                    .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
             )
     }
 
@@ -737,7 +736,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
 
         ZStack {
             // Brighter Studio Slate Base + Soft Ambient Image Bleed
-            Color(red: 0.19, green: 0.19, blue: 0.23)
+            Color.surface(red: 0.19, green: 0.19, blue: 0.23)
                 .ignoresSafeArea()
 
             Image(nsImage: previewNSImage)
@@ -753,7 +752,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
                     Spacer()
                     Text("Color preset studio")
                         .font(.system(size: 13.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.ink.opacity(0.88))
                     Spacer()
                 }
                 .frame(height: 44)
@@ -785,21 +784,21 @@ public struct StandaloneColorPresetStudioWindowView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Preset name")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.92))
+                                .foregroundStyle(.ink.opacity(0.92))
 
                             TextField("My preset", text: $presetName)
                                 .textFieldStyle(.plain)
                                 .font(.system(size: 13.5, weight: .regular))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(.ink)
                                 .padding(.horizontal, 12)
                                 .frame(height: 36)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.white.opacity(0.05))
+                                        .fill(Color.ink.opacity(0.05))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                                 )
                         }
 
@@ -844,16 +843,16 @@ public struct StandaloneColorPresetStudioWindowView: View {
                             } label: {
                                 Text("Cancel")
                                     .font(.system(size: 13.5, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.90))
+                                    .foregroundStyle(.ink.opacity(0.90))
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 38)
                                     .background(
-                                        Color.white.opacity(0.07),
+                                        Color.ink.opacity(0.07),
                                         in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                            .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                                     )
                                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
@@ -868,7 +867,6 @@ public struct StandaloneColorPresetStudioWindowView: View {
                 .padding(.bottom, 22)
             }
         }
-        .preferredColorScheme(.dark)
         .task {
             if let cgImg = await session.extractRawWebcamFrameCGImage() {
                 sourceWebcamCIImage = CIImage(cgImage: cgImg)
@@ -887,7 +885,7 @@ public struct StandaloneColorPresetStudioWindowView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.localizedUI)
                 .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
 
             HStack(spacing: 12) {
                 Slider(value: value, in: range)
@@ -901,12 +899,12 @@ public struct StandaloneColorPresetStudioWindowView: View {
                 } label: {
                     Text("Reset")
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(isAtDefault ? 0.25 : 0.72))
+                        .foregroundStyle(.ink.opacity(isAtDefault ? 0.25 : 0.72))
                         .padding(.horizontal, 10)
                         .frame(height: 28)
                         .background(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(Color.white.opacity(0.03))
+                                .fill(Color.ink.opacity(0.03))
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }

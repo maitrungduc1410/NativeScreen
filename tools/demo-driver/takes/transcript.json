@@ -1,0 +1,16 @@
+[
+  {"op": "play", "file": "../build/transcript.aiff"},
+  {"op": "wait", "ms": 4200},
+  {"op": "js", "code": "document.querySelector('main').scrollTo({top: 260, behavior: 'smooth'})"},
+  {"op": "wait", "ms": 5200},
+  {"op": "js", "code": "document.querySelector('.theme[data-theme=dark]').click()"},
+  {"op": "wait", "ms": 5600},
+  {"op": "js", "code": "document.querySelector('main').scrollTo({top: 640, behavior: 'smooth'})"},
+  {"op": "wait", "ms": 1200},
+  {"op": "js", "code": "document.querySelector('#gen-key').click()"},
+  {"op": "wait", "ms": 2400},
+  {"op": "js", "code": "document.querySelector('#copy-key').click()"},
+  {"op": "wait", "ms": 3600},
+  {"op": "js", "code": "document.querySelector('.theme[data-theme=light]').click()"},
+  {"op": "wait", "ms": 600}
+]

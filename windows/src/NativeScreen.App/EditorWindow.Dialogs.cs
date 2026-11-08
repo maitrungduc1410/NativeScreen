@@ -298,7 +298,7 @@ public sealed partial class EditorWindow
         var aspect = session.Document.Canvas.EffectiveAspectRatio(source.SourceWidth, source.SourceHeight);
         var time = ExportEstimator.DurationString(exportSettings, aspect, session.DurationMs);
         var size = ExportEstimator.SizeString(exportSettings, aspect, session.DurationMs);
-        var estimate = Ui.Text($"Estimation — Export time {time} — Output size {size}", 12.5, "Ink45");
+        var estimate = Ui.Text($"Estimation: Export time {time}, Output size {size}", 12.5, "Ink45");
         estimate.HorizontalAlignment = HorizontalAlignment.Right;
         footer.Children.Add(estimate);
         if (exportSettings.Format == ExportFormat.Gif)
@@ -572,7 +572,7 @@ public sealed partial class EditorWindow
         }
 
         stillBusy = true;
-        button.Content = Loc.T("Exporting…");
+        button.Content = Loc.T("Exporting...");
         button.IsEnabled = false;
         try
         {

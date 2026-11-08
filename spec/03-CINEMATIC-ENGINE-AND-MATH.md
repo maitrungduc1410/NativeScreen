@@ -1,4 +1,4 @@
-# NativeScreen — Cinematic Engine, Physics & GPU Shaders
+# NativeScreen: Cinematic Engine, Physics & GPU Shaders
 
 NativeScreen's signature cinematic feel is driven by deterministic mathematical solvers and real-time GPU shaders. This specification defines the complete cross-platform algorithms to implement identically on both **macOS** (`Swift` + `Metal`) and **Windows** (`C#` + `Direct3D 11` / `HLSL`).
 
@@ -26,7 +26,7 @@ Where:
 | **Smooth** *(Default)* | `470.0` | `70.0` | `3.0` | `0.93` | `148.9 ms` |
 | **Medium** | `340.0` | `60.0` | `3.0` | `0.94` | `176.5 ms` |
 | **Rapid** | `530.0` | `40.0` | `1.0` | `0.87` | `75.5 ms` |
-| **None** | — | — | — | Instant (`1:1`) | `0.0 ms` |
+| **None** | n/a | n/a | n/a | Instant (`1:1`) | `0.0 ms` |
 
 #### B. Camera Zoom / Pan Spring Presets
 | Preset | `stiffness` ($k$) | `damping` ($c$) | `mass` ($m$) | Damping Ratio ($\zeta$) | Behavior |
@@ -97,6 +97,7 @@ When a recording finishes, mouse clicks (`clicks.jsonl`) and keystrokes (`keys.j
 - **Click Merge Window:** Consecutive clicks within `2500 ms` of each other are merged into the same zoom block, holding for `2500 ms` after the last click.
 - **Typing Hold:** If active keystrokes occur during the zoom window, extend `sourceEndMs` until `1500 ms` after the last keystroke.
 - **Minimum Duration:** Enforce a minimum duration of `2200 ms` per zoom block.
+- **Merge Close Zooms:** After the blocks are built, neighbours less than `1500 ms` apart (`mergeGapMs`) become one block spanning both, centered on the duration-weighted mean of their centers. Zooming out takes about `750 ms` to settle, so a shorter gap only zooms out and straight back in. Same rule in the Windows `AutoZoomClusterGenerator.MergeCloseZooms`.
 
 ### 3.2. Stationary Dead-Zone Focus Groups (`CursorMovesGroup`)
 If a zoomed-in camera chased every minor mouse movement continuously, the viewport would swim constantly and cause motion sickness. Instead, inside each `followCursor` zoom block:

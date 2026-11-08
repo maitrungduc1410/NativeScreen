@@ -1,0 +1,19 @@
+[
+  {"op": "wait", "ms": 1300},
+  {"op": "move", "sel": ".stat:nth-child(3)"},
+  {"op": "wait", "ms": 500},
+  {"op": "move", "sel": "#chart .col:nth-child(6) .bar", "fy": 0.4},
+  {"op": "wait", "ms": 500},
+  {"op": "move", "sel": "#chart .col:nth-child(8) .bar", "fy": 0.4},
+  {"op": "wait", "ms": 600},
+  {"op": "click", "sel": "#range button:nth-child(2)", "after": 1100},
+  {"op": "click", "sel": ".nav-item[data-page=settings]", "after": 900},
+  {"op": "move", "sel": "#email", "fx": 0.3},
+  {"op": "wait", "ms": 400},
+  {"op": "click", "sel": ".theme[data-theme=dark]", "after": 1400},
+  {"op": "click", "sel": ".theme[data-theme=light]", "after": 900},
+  {"op": "scroll", "lines": 18},
+  {"op": "wait", "ms": 500},
+  {"op": "click", "sel": "#format button:nth-child(2)", "after": 500},
+  {"op": "click", "sel": "#export-clip", "after": 1800}
+]

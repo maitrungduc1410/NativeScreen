@@ -47,14 +47,21 @@ public struct InteractiveMaskCanvasOverlayView: View {
                 let suppressZoomForMaskEditing = !session.isPlaying
                     && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
 
+                let crop = session.document.canvas.cropRect01
+                let stage = MetalFrameCompositor.resolvedStageLayout(
+                    session: session,
+                    sourceTimeMs: srcMs,
+                    canvasRect: CGRect(origin: .zero, size: canvasSize),
+                    screenSourceSize: CGSize(
+                        width: max(16.0, CGFloat(max(640, session.metadata.captureTarget.pixelSize.width)) * CGFloat(crop.width)),
+                        height: max(16.0, CGFloat(max(400, session.metadata.captureTarget.pixelSize.height)) * CGFloat(crop.height))
+                    ),
+                    zoomScale: eval.camera.scale
+                )
                 let transform = CanvasCoordinateTransform(
                     canvasSize: canvasSize,
-                    sourcePixelSize: CGSize(
-                        width: max(640, session.metadata.captureTarget.pixelSize.width),
-                        height: max(400, session.metadata.captureTarget.pixelSize.height)
-                    ),
-                    paddingRatio: session.document.canvas.paddingRatio,
-                    cropRect01: session.document.canvas.cropRect01,
+                    screenRectBottomLeft: stage.screenRect,
+                    cropRect01: crop,
                     cameraCenter01: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? .center : eval.camera.center01,
                     cameraScale: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? 1.0 : eval.camera.scale
                 )

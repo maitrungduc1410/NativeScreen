@@ -56,7 +56,7 @@ public final class AppSettings {
         didSet { UserDefaults.standard.set(autosaveEnabled, forKey: Keys.autosave) }
     }
 
-    /// Settings used by `Quick export` and by the recorder's `After Recording > Export…` actions.
+    /// Settings used by `Quick export` and by the recorder's `After Recording > Export...` actions.
     public var quickExportConfig: HardwareVideoExporter.ExportConfiguration {
         didSet {
             if let data = try? JSONEncoder().encode(quickExportConfig) {

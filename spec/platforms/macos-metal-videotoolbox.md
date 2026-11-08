@@ -1,4 +1,4 @@
-# macOS Platform Deep Dive — AppKit, Metal, CoreImage & VideoToolbox
+# macOS Platform Deep Dive: AppKit, Metal, CoreImage & VideoToolbox
 
 This guide documents the macOS-specific implementation details, API pitfalls, and hardware benchmarks for **NativeScreen** (`NativeScreen/NativeScreen/`). Any contributor modifying the macOS engine should read these notes first to avoid regressions.
 
