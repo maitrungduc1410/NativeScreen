@@ -41,6 +41,30 @@ public struct CanvasCoordinateTransform: Sendable {
         )
     }
 
+    /// Where the focus lands on the canvas: the same blend from the screen's center to the canvas center as the compositor.
+    private var zoomAnchor: CGPoint {
+        let t = min(1.0, max(0.0, (cameraScale - 1.0) / 0.5))
+        return CGPoint(
+            x: baseScreenRect.midX + (canvasSize.width * 0.5 - baseScreenRect.midX) * t,
+            y: baseScreenRect.midY + (canvasSize.height * 0.5 - baseScreenRect.midY) * t
+        )
+    }
+
+    private func zoomed(_ unzoomed: CGPoint) -> CGPoint {
+        CGPoint(
+            x: zoomAnchor.x + (unzoomed.x - focusCanvasPoint.x) * cameraScale,
+            y: zoomAnchor.y + (unzoomed.y - focusCanvasPoint.y) * cameraScale
+        )
+    }
+
+    /// The part of the canvas the recording covers under the current zoom.
+    public var visibleScreenRect: CGRect {
+        let topLeft = zoomed(CGPoint(x: baseScreenRect.minX, y: baseScreenRect.minY))
+        let bottomRight = zoomed(CGPoint(x: baseScreenRect.maxX, y: baseScreenRect.maxY))
+        return CGRect(x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y)
+            .intersection(CGRect(origin: .zero, size: canvasSize))
+    }
+
     /// Maps a source-clip normalized point `[0.0, 1.0]` (top-left origin) to top-left canvas coordinates,
     /// accounting for current Virtual Camera Zoom & Pan.
     public func canvasPoint(fromSource01 p01: Point01) -> CGPoint {
@@ -48,16 +72,7 @@ public struct CanvasCoordinateTransform: Sendable {
         let cropY = (p01.y - cropRect01.y) / max(0.0001, cropRect01.height)
         let unzoomedX = baseScreenRect.minX + CGFloat(cropX) * baseScreenRect.width
         let unzoomedY = baseScreenRect.minY + CGFloat(cropY) * baseScreenRect.height
-        guard cameraScale > 1.001 else {
-            return CGPoint(x: unzoomedX, y: unzoomedY)
-        }
-        let focus = focusCanvasPoint
-        let centerX = canvasSize.width * 0.5
-        let centerY = canvasSize.height * 0.5
-        return CGPoint(
-            x: centerX + (unzoomedX - focus.x) * cameraScale,
-            y: centerY + (unzoomedY - focus.y) * cameraScale
-        )
+        return zoomed(CGPoint(x: unzoomedX, y: unzoomedY))
     }
 
     /// Maps a source-clip normalized rectangle `[0.0, 1.0]` (top-left origin) to top-left canvas coordinates.
@@ -74,18 +89,9 @@ public struct CanvasCoordinateTransform: Sendable {
 
     /// Inverse mapping: converts a point on the preview canvas (top-left origin) back into source-clip normalized `[0.0, 1.0]` coordinates.
     public func sourcePoint01(fromCanvasPoint pt: CGPoint) -> Point01 {
-        let unzoomedX: CGFloat
-        let unzoomedY: CGFloat
-        if cameraScale > 1.001 {
-            let focus = focusCanvasPoint
-            let centerX = canvasSize.width * 0.5
-            let centerY = canvasSize.height * 0.5
-            unzoomedX = focus.x + (pt.x - centerX) / cameraScale
-            unzoomedY = focus.y + (pt.y - centerY) / cameraScale
-        } else {
-            unzoomedX = pt.x
-            unzoomedY = pt.y
-        }
+        let focus = focusCanvasPoint
+        let unzoomedX = focus.x + (pt.x - zoomAnchor.x) / cameraScale
+        let unzoomedY = focus.y + (pt.y - zoomAnchor.y) / cameraScale
         let sx = Double((unzoomedX - baseScreenRect.minX) / max(1.0, baseScreenRect.width))
         let sy = Double((unzoomedY - baseScreenRect.minY) / max(1.0, baseScreenRect.height))
         return Point01(x: cropRect01.x + sx * cropRect01.width, y: cropRect01.y + sy * cropRect01.height)

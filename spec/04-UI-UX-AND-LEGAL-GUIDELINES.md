@@ -104,6 +104,10 @@ The snap button sits right after the split button and uses the same lit style: p
 
 Hold `⌘` (`Ctrl` on Windows) and scroll over the ruler, the track labels or the lanes to zoom the timeline. The time under the cursor stays where it is (`spec/06` ADR-45). The zoom buttons and `⌘+` / `⌘-` keep the playhead in place.
 
+### Timeline segment labels
+
+A segment shows its title and, under it, its details (`Zoom` over `1.8× Auto`). As it narrows, the details fade out once they no longer fit in full and the title slides to the vertical center over 0.18 s (instant with Reduce Motion). When the title no longer fits it fades out too, leaving the bare segment. Text that can truncate (captions, mask names) stays until about 44 pt of it is left. The smallest segment is set by time (200 to 250 ms depending on the track), not by its label.
+
 ### Language
 
 `Settings > General > Language` lists `System`, then each language in its own name (`Tiếng Việt`, `日本語`, ...). Changing it shows `Restart Native Screen to use the new language.` with `Restart Now`. Every new UI string must go through the catalog (`spec/06` ADR-44): a literal in a SwiftUI control, `String(localized:)` for AppKit and display names, or `.localizedUI` inside a component that takes a `String`. Leave room for text 40% longer than English.

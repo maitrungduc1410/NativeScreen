@@ -27,6 +27,35 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-08, Timeline segment labels collapse as a segment narrows (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** `spec/04` "Timeline segment labels". macOS: `TimelineInteractiveSegmentView` in `MultiTrackTimelineView.swift`. Windows: `TimelineView.Block`, which today always shows both lines and trims them with an ellipsis.
+  - Details (`1.8× Auto`) show only if they fit in full. When they stop fitting they fade out and the title slides to the vertical center over 0.18 s. When the title stops fitting it fades out too.
+  - "Fits" means the measured text width fits inside the block minus 6 pt on each side. Do not hard-code widths: titles differ per language.
+  - Text that may truncate (caption text, mask names) keeps the details until about 44 pt of text is left, then trims with an ellipsis as now.
+  - `A11y.ReduceMotion`: change at once, no animation. The accessible name keeps both lines when they are hidden.
+  - Minimum durations do not change (200 to 250 ms depending on the track), and the block floor stays 6 pt.
+- **Built on macOS:** macOS builds. 8 zooms from 0.25 to 3.2 s showed all three states. The animation during a real drag was not watched.
+- **How to verify on Windows:** drag a zoom's edge inward. Expect both lines, then a centered `Zoom`, then a bare block, with no `...` in the title. Repeat in a language with long titles.
+- **Risks / unsure:** measure text only for narrow blocks (macOS skips it from 220 pt up), since a project can have hundreds of captions.
+
+## 2026-11-08, Masks: solid color, editing under a zoom (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** `spec/02`, `spec/07` (solid mask) and `spec/06` ADR-55.
+  - **Solid color (port):**
+    - `MaskItem.SolidColor` (`string?`, `#RRGGBB`, JSON `solidColor`, optional). Add it even before the UI: `MaskItem` has no extension data, so saving on Windows drops a color set on macOS.
+    - `FrameCompositor.Compose.cs`, the `MaskStyle.Solid` branch: fill with `SolidColor` when set, otherwise keep `(0.08, 0.08, 0.11, 1)`. Old projects must render the same.
+    - `InspectorPanel`, mask section: when the style is Solid, show `ColorField` labeled `Color` (the key exists in the catalog; default shown is `#14141C`), and hide `Blur intensity`, which does nothing for Solid. The stored intensity stays, so switching style back restores it.
+  - **Editing under a zoom (check):** the macOS bug was the overlay computing at 1x while the preview stayed zoomed. A mask dragged inside a zoom landed away from the drag. The rule now is that masks are created and edited under the zoom on screen; nothing zooms out. Windows looks right already: nothing zooms out, and `DrawNewMaskLayer` maps through `Transform(...)`.
+  - **Camera anchor (check):** macOS moves the focus from the screen's center to the canvas center by `min(1, (scale - 1) / 0.5)`. `CanvasCoordinateTransform.ToCanvas` and `ToSource` always use the canvas center, and no blend appears in the Windows code. Compare with what the compositor draws at zooms under 1.5x and in split screen; the overlay must use the same math as the renderer.
+- **Built on macOS:** macOS builds. Windows has no code change in this entry.
+- **How to verify on Windows:**
+  - Set a Solid mask to `#E11D48` with the hex field and with the picker: the preview and an export both show it, `project.json` has `solidColor`, and `Blur intensity` is gone. Reopen a project saved on macOS and save it: the color stays.
+  - At a 1.8x zoom, drag a mask over a small field: it lands where dragged, handles on its corners, and the preview stays zoomed. Repeat at about 1.2x.
+- **Risks / unsure:** no conformance fixture uses a solid color, so nothing needs regenerating.
+
 ## 2026-11-08, Windows port: light theme, failed captures, updates, Settings and the rest of this batch
 
 ### Verifier

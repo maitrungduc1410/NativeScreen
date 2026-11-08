@@ -122,6 +122,9 @@
   - [x] AI agent demo video (a real agent session next to the editor, area recording, private text masked).
   - [x] Windows editor screenshot.
 - [x] **Fix:** MCP tools reject unknown arguments and enforce `required` (`spec/06` ADR-52).
+- [x] **Fix:** a mask added inside a zoom appeared away from the drag; masks are now created and edited under the zoom on screen (`spec/06` ADR-55).
+- [x] Solid masks have a color: swatch picker and hex field in the mask inspector (`solidColor`, optional).
+- [x] Timeline segment labels collapse as a segment narrows: details, then title, animated (`spec/04`).
 - [x] Clip speed menu goes up to 10x (6x, 8x, 10x added).
 - [x] **Fix:** mask handles matched the drawn mask only without padding; they now use the compositor's stage rect and the crop (`spec/06` ADR-55).
 - [x] Auto zooms closer than 1.5 s merge into one (`spec/03` §3.1), on macOS and in the Windows port.

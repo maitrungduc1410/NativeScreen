@@ -383,6 +383,7 @@
                     "style": { "type": "string", "enum": ["gaussian", "pixelate", "solid", "dim"] },
                     "intensity": { "type": "number", "minimum": 0, "maximum": 160 },
                     "cornerRadius": { "type": "number", "minimum": 0 },
+                    "solidColor": { "type": "string", "description": "Fill of a solid mask, #RRGGBB. Absent means the default dark fill." },
                     "keyframes": {
                       "type": "array",
                       "minItems": 1,

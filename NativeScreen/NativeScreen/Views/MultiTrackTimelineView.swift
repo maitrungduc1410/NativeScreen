@@ -2894,7 +2894,14 @@ private struct TimelineInteractiveSegmentView: View {
     @State private var verticalDragOffset: CGFloat = 0.0
     @Environment(TimelineSnapController.self) private var snap
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let edgeHandleHitWidth: CGFloat = 13.0
+    private let labelInset: CGFloat = 6.0
+    /// Every label fits at this width, so wide segments skip measuring text.
+    private let alwaysFitsLabelWidth: CGFloat = 220.0
+    /// Text that may truncate (captions, mask names) still needs this much room to be worth showing.
+    private let shortestTruncatedTextWidth: CGFloat = 44.0
 
     var body: some View {
         // 1px visual gap between adjacent touching segments
@@ -2908,6 +2915,9 @@ private struct TimelineInteractiveSegmentView: View {
             && (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight)
         let handleBarWidth: CGFloat = segWidth < 24 ? 2.4 : 3.0
         let handleHorizontalInset: CGFloat = min(6.5, max(2.2, (segWidth - handleBarWidth * 2.0 - 3.5) * 0.5))
+        let labelRoom = segWidth - labelInset * 2.0
+        let showsTitle = labelRoom >= titleLabelWidth(whenRoomIs: labelRoom)
+        let showsSubtitle = showsTitle && labelRoom >= subtitleLabelWidth(whenRoomIs: labelRoom)
 
         // opacity rules (`0.50` when disabled, `0.30` when dimmed by another open item on the same track)
         let bodyOpacity: Double = (isDimmed ? 0.50 : 1.0) * (isDimmedBySelection ? 0.30 : 1.0)
@@ -2937,24 +2947,29 @@ private struct TimelineInteractiveSegmentView: View {
                     .allowsHitTesting(false)
             }
 
-            // 4. Centered Title (`w600`, `12px`, `opacity: 0.55`) & Icon Subtitle (`449` weight, `13px`)
-            if segWidth > 42 {
-                VStack(spacing: 1.5) {
+            // 4. Centered title and subtitle. As the segment narrows the subtitle goes first, the title slides to the
+            //    vertical center, then the title goes too, so a segment can be resized down to almost nothing.
+            VStack(spacing: 1.5) {
+                if showsTitle {
                     Text(topTitle.localizedUI)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(1)
-
-                    if segWidth > 64 {
-                        subtitleRowView
-                    }
+                        .transition(.opacity)
                 }
-                .opacity(bodyOpacity)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 1)
-                .allowsHitTesting(false)
+
+                if showsSubtitle {
+                    subtitleRowView
+                        .transition(.opacity)
+                }
             }
+            .opacity(bodyOpacity)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, labelInset)
+            .padding(.bottom, 1)
+            .allowsHitTesting(false)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: showsTitle)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: showsSubtitle)
 
             // 5. Left & Right Edge Resize Bars
             if !isSplitMode && segWidth >= 10 {
@@ -3124,6 +3139,31 @@ private struct TimelineInteractiveSegmentView: View {
                     }
                 }
         )
+    }
+
+    private func textWidth(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular) -> CGFloat {
+        ceil((text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width)
+    }
+
+    private func titleLabelWidth(whenRoomIs room: CGFloat) -> CGFloat {
+        room >= alwaysFitsLabelWidth ? 0.0 : textWidth(topTitle.localizedUI, size: 11.5, weight: .semibold)
+    }
+
+    /// Width of `subtitleRowView` when nothing in it is cut off. Matches its fonts and spacing; icons are about 13 pt.
+    private func subtitleLabelWidth(whenRoomIs room: CGFloat) -> CGFloat {
+        guard room < alwaysFitsLabelWidth else { return 0.0 }
+        let iconWidth: CGFloat = 13.0
+        switch subtitleContent {
+        case .clip(let durationText, let speedText):
+            return textWidth(durationText, size: 12.0) + 6.0 + iconWidth + 3.0 + textWidth(speedText, size: 12.0)
+        case .zoom(let scaleText, let modeText):
+            return iconWidth + 3.5 + textWidth(scaleText, size: 12.0) + 8.0 + iconWidth + 3.5 + textWidth(modeText, size: 12.0)
+        case .mask(let text):
+            return 11.0 + 5.0 + min(textWidth(text.localizedUI, size: 11.5), shortestTruncatedTextWidth)
+        case .voiceover(let volumeText, _):
+            return iconWidth + 3.5 + textWidth("Microphone".localizedUI, size: 11.5) + 7.0
+                + iconWidth + 3.0 + textWidth(volumeText, size: 11.5)
+        }
     }
 
     /// Title plus what the subtitle row shows, translated, e.g. "Zoom, 1.6×, Auto".

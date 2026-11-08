@@ -2,8 +2,7 @@ import SwiftUI
 import AppKit
 
 /// Clean, zero-jitter interactive mask handle & drag-to-create overlay on the Preview Canvas.
-/// - When creating (`pendingAddMaskType != nil`) or editing (`selectedMaskId != nil`) a mask while paused,
-///   the preview automatically zooms out to `1x` (`cameraScale = 1.0`) so masks are drawn/adjusted on the full unzoomed source clip.
+/// - Masks are created and edited under the zoom on screen: staying zoomed in is what makes small text easy to hit.
 /// - In Add-Mask mode (`pendingAddMaskType != nil`), the cursor changes to `NSCursor.crosshair` **only inside the actual video area**
 ///   (`transform.screenFrameRect`), reverting to `NSCursor.arrow` over the outer background padding!
 public struct InteractiveMaskCanvasOverlayView: View {
@@ -44,9 +43,6 @@ public struct InteractiveMaskCanvasOverlayView: View {
                 let srcMs = session.currentSourceTimeMs
                 let activeMasks = session.activeMasks(atSourceMs: srcMs)
                 let eval = session.trajectorySolver.evaluate(atSourceMs: srcMs)
-                let suppressZoomForMaskEditing = !session.isPlaying
-                    && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
-
                 let crop = session.document.canvas.cropRect01
                 let stage = MetalFrameCompositor.resolvedStageLayout(
                     session: session,
@@ -62,10 +58,10 @@ public struct InteractiveMaskCanvasOverlayView: View {
                     canvasSize: canvasSize,
                     screenRectBottomLeft: stage.screenRect,
                     cropRect01: crop,
-                    cameraCenter01: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? .center : eval.camera.center01,
-                    cameraScale: (suppressZoomForMaskEditing || eval.camera.isLoupeMode) ? 1.0 : eval.camera.scale
+                    cameraCenter01: eval.camera.isLoupeMode ? .center : eval.camera.center01,
+                    cameraScale: eval.camera.isLoupeMode ? 1.0 : eval.camera.scale
                 )
-                let videoRect = transform.baseScreenRect
+                let videoRect = transform.visibleScreenRect
                 // 1. Existing Mask Interactive Handles
                 ForEach(activeMasks) { mask in
                     let rect01 = mask.interpolatedRect(at: srcMs)
@@ -169,7 +165,7 @@ public struct InteractiveMaskCanvasOverlayView: View {
                 }
 
                 // 2. Interactive Drag-to-Select New Mask Overlay
-                //    Scoped strictly to `videoRect` (`transform.screenFrameRect`), so `NSCursor.crosshair` ONLY activates
+                //    Scoped strictly to `videoRect` (`transform.visibleScreenRect`), so `NSCursor.crosshair` ONLY activates
                 //    over the actual recorded video area and reverts to `NSCursor.arrow` over the background padding!
                 if let pendingMaskType = session.pendingAddMaskType, videoRect.width > 10, videoRect.height > 10 {
                     ZStack(alignment: .topLeading) {
@@ -259,23 +255,28 @@ public struct InteractiveMaskCanvasOverlayView: View {
                                 let finalRect01: Rect01
 
                                 if dragW >= 6.0 && dragH >= 6.0 {
-                                    let normX0 = Double(min(clampedStartX, clampedEndX) / max(1.0, videoRect.width))
-                                    let normY0 = Double(min(clampedStartY, clampedEndY) / max(1.0, videoRect.height))
-                                    let normW = Double(dragW / max(1.0, videoRect.width))
-                                    let normH = Double(dragH / max(1.0, videoRect.height))
-
+                                    let topLeft = transform.sourcePoint01(fromCanvasPoint: CGPoint(
+                                        x: videoRect.minX + min(clampedStartX, clampedEndX),
+                                        y: videoRect.minY + min(clampedStartY, clampedEndY)
+                                    ))
+                                    let bottomRight = transform.sourcePoint01(fromCanvasPoint: CGPoint(
+                                        x: videoRect.minX + max(clampedStartX, clampedEndX),
+                                        y: videoRect.minY + max(clampedStartY, clampedEndY)
+                                    ))
                                     finalRect01 = Rect01(
-                                        x: crop.x + normX0 * crop.width,
-                                        y: crop.y + normY0 * crop.height,
-                                        width: normW * crop.width,
-                                        height: normH * crop.height
+                                        x: topLeft.x,
+                                        y: topLeft.y,
+                                        width: bottomRight.x - topLeft.x,
+                                        height: bottomRight.y - topLeft.y
                                     ).clamped()
                                 } else {
                                     // Single click without drag -> place a default 28% × 14% mask centered at click point
-                                    let clickNormX = Double(clampedEndX / max(1.0, videoRect.width))
-                                    let clickNormY = Double(clampedEndY / max(1.0, videoRect.height))
-                                    let srcX = crop.x + clickNormX * crop.width
-                                    let srcY = crop.y + clickNormY * crop.height
+                                    let click = transform.sourcePoint01(fromCanvasPoint: CGPoint(
+                                        x: videoRect.minX + clampedEndX,
+                                        y: videoRect.minY + clampedEndY
+                                    ))
+                                    let srcX = click.x
+                                    let srcY = click.y
                                     let defW = min(0.28, crop.width)
                                     let defH = min(0.14, crop.height)
                                     finalRect01 = Rect01(

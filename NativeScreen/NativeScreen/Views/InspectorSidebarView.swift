@@ -1926,15 +1926,34 @@ public struct InspectorSidebarView: View {
                         .labelsHidden()
                     }
 
-                    coalescedSlider(
-                        title: "Blur intensity",
-                        value: Binding(
-                            get: { mask.intensity },
-                            set: { v in updateMask(id: maskId) { $0.intensity = v } }
-                        ),
-                        range: 4...160,
-                        defaultValue: 36.0
-                    )
+                    if mask.style == .solid {
+                        let solidColor = Binding(
+                            get: { mask.solidColor ?? MaskItem.defaultSolidColor },
+                            set: { hex in updateMask(id: maskId) { $0.solidColor = hex } }
+                        )
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Color")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+
+                            HStack(spacing: 8) {
+                                ColorSwatchPickerButton(hexColor: solidColor)
+                                HexInputBox(hexColor: solidColor, width: 112)
+                            }
+                        }
+                    }
+
+                    if mask.style != .solid {
+                        coalescedSlider(
+                            title: "Blur intensity",
+                            value: Binding(
+                                get: { mask.intensity },
+                                set: { v in updateMask(id: maskId) { $0.intensity = v } }
+                            ),
+                            range: 4...160,
+                            defaultValue: 36.0
+                        )
+                    }
                 } else {
                     coalescedSlider(
                         title: String(format: String(localized: "Highlight intensity (%d%%)"), Int(round(mask.intensity))),

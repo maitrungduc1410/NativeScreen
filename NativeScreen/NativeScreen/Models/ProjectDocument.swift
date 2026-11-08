@@ -1718,6 +1718,8 @@ public struct MaskKeyframe: Codable, Equatable, Hashable, Sendable {
 }
 
 public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public static let defaultSolidColor = "#14141C"
+
     public var id: String
     public var sourceStartMs: Double
     public var sourceEndMs: Double
@@ -1725,6 +1727,8 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var style: MaskStyle
     public var intensity: Double
     public var cornerRadius: Double
+    /// Fill of a `.solid` mask as `#RRGGBB`. `nil` (older projects) is `MaskItem.defaultSolidColor`.
+    public var solidColor: String?
     public var keyframes: [MaskKeyframe]
     public var disabled: Bool
     public var isAutoSensitiveMask: Bool
@@ -1738,6 +1742,7 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
         style: MaskStyle = .gaussian,
         intensity: Double = 36.0,
         cornerRadius: Double = 10.0,
+        solidColor: String? = nil,
         keyframes: [MaskKeyframe],
         disabled: Bool = false,
         isAutoSensitiveMask: Bool = false,
@@ -1750,6 +1755,7 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.style = style
         self.intensity = intensity
         self.cornerRadius = cornerRadius
+        self.solidColor = solidColor
         self.keyframes = keyframes
         self.disabled = disabled
         self.isAutoSensitiveMask = isAutoSensitiveMask
@@ -1757,7 +1763,7 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, sourceStartMs, sourceEndMs, type, style, intensity, cornerRadius, keyframes, disabled
+        case id, sourceStartMs, sourceEndMs, type, style, intensity, cornerRadius, solidColor, keyframes, disabled
         case isAutoSensitiveMask, isAutoFaceMask
     }
 
@@ -1770,6 +1776,7 @@ public struct MaskItem: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.style = try container.decodeIfPresent(MaskStyle.self, forKey: .style) ?? .gaussian
         self.intensity = try container.decodeIfPresent(Double.self, forKey: .intensity) ?? 36.0
         self.cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? 10.0
+        self.solidColor = try container.decodeIfPresent(String.self, forKey: .solidColor)
         self.keyframes = try container.decodeIfPresent([MaskKeyframe].self, forKey: .keyframes) ?? []
         self.disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
         self.isAutoSensitiveMask = try container.decodeIfPresent(Bool.self, forKey: .isAutoSensitiveMask) ?? false

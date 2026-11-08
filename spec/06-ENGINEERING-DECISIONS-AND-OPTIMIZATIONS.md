@@ -1172,6 +1172,11 @@ The overlay takes `StageLayout.screenRect` from `MetalFrameCompositor.resolvedSt
 ### Verified
 Mask at (0.01, 0.04, 0.2, 0.12) with 0.1 padding: all four handles land on the corners of the blur in the preview.
 
+### Masks are edited under the zoom on screen
+The overlay zoomed out to 1x while a mask was being added or was selected, but the compositor's matching zoom-out never ran for the preview. A mask dragged inside a zoom was therefore computed as if at 1x and appeared away from the drag. Zooming the preview out would fix the math but shrink the very text the user is trying to cover, so neither side zooms out now. The overlay maps points through the zoom on screen, with the compositor's camera math, and the drag area is the part of the canvas the recording covers.
+
+Verified at a 1.8x zoom: a mask added by clicking on a field stays centered on the click, with the handles on its corners, and the preview stays zoomed.
+
 ### Windows
 The overlay already used `stage.ScreenRect`. `CanvasCoordinateTransform` now takes the crop like the macOS one, and the new-mask layer covers the crop. Unit test: `CanvasMappingUsesFullFrameCoordinatesUnderACrop`.
 

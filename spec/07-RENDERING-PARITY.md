@@ -94,7 +94,7 @@ min 8 px, clipped to the frame. Corner radius `min(min(w, h) / 2, cornerRadius *
 - **Blur:** `sigma = max(4, intensity * 0.92)`, computed at quarter resolution: crop the rect padded by `2.4 * sigma`,
   downscale 0.25, Gaussian `max(1.2, sigma * 0.25)`, upscale back, clip to the rounded rect.
 - **Pixelate:** cell `max(8, intensity * 0.85)` centered on the rect center.
-- **Solid:** color `(0.08, 0.08, 0.11, 1)`.
+- **Solid:** `solidColor` when set, otherwise color `(0.08, 0.08, 0.11, 1)`.
 - **Spotlight:** everything outside the rounded rect is multiplied by `1 - min(0.95, intensity / 100)` (RGB only).
 Then apply `canvas.cropRect01` (min 16 px).
 

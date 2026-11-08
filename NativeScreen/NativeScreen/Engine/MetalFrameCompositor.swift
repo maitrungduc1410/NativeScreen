@@ -303,14 +303,9 @@ public final class MetalFrameCompositor {
         }
 
         // Apply Virtual Camera Pan & Zoom Transform (Classic mode)
-        // Note: When the user is interactively selecting or editing a Mask on the paused Preview Canvas,
-        // zoom out to 1x (`zoomScale = 1.0`) so masks are drawn/adjusted on the full unzoomed source clip!
-        let suppressZoomForMaskEditing = !includeShortcutOverlay
-            && !session.isPlaying
-            && (session.pendingAddMaskType != nil || session.selectedMaskId != nil)
-        let zoomScale = suppressZoomForMaskEditing ? 1.0 : CGFloat(max(1.0, cameraState.scale))
+        let zoomScale = CGFloat(max(1.0, cameraState.scale))
         let hasCenterOffset = hypot(cameraState.center01.x - 0.5, cameraState.center01.y - 0.5) > 0.0005
-        if !suppressZoomForMaskEditing && !cameraState.isLoupeMode && (zoomScale > 1.0005 || hasCenterOffset) {
+        if !cameraState.isLoupeMode && (zoomScale > 1.0005 || hasCenterOffset) {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
             let zoomInterp01 = min(1.0, max(0.0, (zoomScale - 1.0) / 0.5))
@@ -343,8 +338,7 @@ public final class MetalFrameCompositor {
             && !session.isPlaying
             && session.hoverSkimTimelineMs == nil
             && session.playheadTimelineMs >= session.timeMapper.totalTimelineDurationMs - 16.7
-        if !suppressZoomForMaskEditing
-            && !isPausedAtTimelineEnd
+        if !isPausedAtTimelineEnd
             && !isInInstantSnapWindow
             && !cameraState.isLoupeMode
             && doc.motion.motionBlurIntensity > 0.02
@@ -395,7 +389,7 @@ public final class MetalFrameCompositor {
 
         // --- PASS 5B: Magnifier lens (loupe zoom) ---
         // Drawn over the whole scene (screen + background) so the lens and its shadow work over the wallpaper too.
-        if !suppressZoomForMaskEditing && cameraState.loupePresence01 > 0.005 && cameraState.loupeScale > 1.002 {
+        if cameraState.loupePresence01 > 0.005 && cameraState.loupeScale > 1.002 {
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
             let maxScreenDim = max(screenFrameRect.width, screenFrameRect.height)
@@ -846,7 +840,8 @@ public final class MetalFrameCompositor {
                         ])
                         .cropped(to: pixelRect)
                 case .solid:
-                    filteredPatch = CIImage(color: CIColor(red: 0.08, green: 0.08, blue: 0.11, alpha: 1.0))
+                    let fill = mask.solidColor.map { CIColor(hexString: $0) } ?? CIColor(red: 0.08, green: 0.08, blue: 0.11, alpha: 1.0)
+                    filteredPatch = CIImage(color: fill)
                         .cropped(to: pixelRect)
                 default:
                     // Fast Pyramid Downsample -> Small Sigma Blur -> Upsample ONLY inside `paddedRect`!
