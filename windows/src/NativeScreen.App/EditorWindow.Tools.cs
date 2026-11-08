@@ -682,6 +682,35 @@ internal static class Projects
 
     private static readonly Dictionary<string, EditorWindow> OpenEditors = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Open editors by package path, for the MCP tools.</summary>
+    internal static IReadOnlyDictionary<string, EditorWindow> Editors => OpenEditors;
+
+    /// <summary>The editor activated last, or the only one open: what a tool works on when no project is named.</summary>
+    internal static EditorWindow? Active
+    {
+        get
+        {
+            if (lastActive?.TryGetTarget(out var active) == true && !active.McpIsClosed)
+            {
+                return active;
+            }
+
+            return OpenEditors.Count == 1 ? OpenEditors.Values.First() : null;
+        }
+        set => lastActive = value is null ? null : new WeakReference<EditorWindow>(value);
+    }
+
+    // Weak: a closed editor must not stay in memory because it was the last one activated (spec/06 ADR-48).
+    private static WeakReference<EditorWindow>? lastActive;
+
+    /// <summary>The editor of a package, opening it when needed.</summary>
+    internal static async Task<EditorWindow?> OpenAndGet(string path)
+    {
+        var key = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        await Open(key, null);
+        return OpenEditors.TryGetValue(key, out var editor) ? editor : null;
+    }
+
     public static async Task ImportVideo(string file, XamlRoot? xamlRoot)
     {
         try

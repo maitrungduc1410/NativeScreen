@@ -44,6 +44,7 @@ public partial class App : Application
 
     public static void Quit()
     {
+        McpServer.Shared.Stop();
         RecordingHudWindow.Shutdown();
         tray?.Dispose();
         Current.Exit();
@@ -68,6 +69,7 @@ public partial class App : Application
         SingleInstance.Listen(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(), OpenRequested);
         _ = Task.Run(ExplorerContextMenu.Register);
         OpenRequested(folder);
+        McpServer.Shared.ApplySetting();
     }
 
     private static void OpenRequested(string? folder)
@@ -96,6 +98,17 @@ public partial class App : Application
             {
                 var target = path;
                 items.Add((Path.GetFileNameWithoutExtension(path), () => _ = Projects.Open(target, null)));
+            }
+        }
+
+        // Agents connected through MCP are listed, so the user always knows one is driving the app (spec/06 ADR-52).
+        var agents = McpServer.Shared.ConnectedClients;
+        if (agents.Count > 0)
+        {
+            items.Add((null, null));
+            foreach (var agent in agents)
+            {
+                items.Add((Loc.F("AI agent connected: %@", agent), null));
             }
         }
 

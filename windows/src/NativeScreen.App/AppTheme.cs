@@ -27,6 +27,12 @@ public sealed class AppSettings
     /// <summary>Favorite backgrounds in add order: mesh:&lt;id&gt; or wallpaper:&lt;id&gt; (spec/06 ADR-32).</summary>
     public List<string> FavoriteBackgrounds { get; set; } = [];
 
+    /// <summary>Settings > AI Agents: lets MCP clients drive the app (spec/06 ADR-52). Off by default; the bridge reads it too.</summary>
+    public bool AiAgentsEnabled { get; set; }
+
+    /// <summary>What Quick export uses, and what agents start from with useQuickExportSettings.</summary>
+    public NativeScreen.Core.ExportSettings QuickExport { get; set; } = new();
+
     /// <summary>A catalog language id, or empty for the system language. Applies on the next launch.</summary>
     public string Language { get; set; } = "";
 

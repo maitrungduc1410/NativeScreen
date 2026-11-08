@@ -305,6 +305,32 @@ public sealed partial class EditorSession
         DocumentChanged?.Invoke(structural);
     }
 
+    /// <summary>
+    /// The next edit opens its own undo step, even when it comes within the window that merges slider ticks. Agent calls can
+    /// arrive that fast, and each one must undo on its own (spec/06 ADR-52).
+    /// </summary>
+    public void StartNewUndoStep()
+    {
+        coalesceKey = null;
+        interactiveEditCommitted = false;
+    }
+
+    /// <summary>Replaces the whole document as one undo step: a merge patch that was already read back and validated.</summary>
+    public void ReplaceDocument(ProjectDocument replacement)
+    {
+        StartNewUndoStep();
+        Mutate(document =>
+        {
+            foreach (var property in typeof(ProjectDocument).GetProperties())
+            {
+                if (property.CanRead && property.CanWrite)
+                {
+                    property.SetValue(document, property.GetValue(replacement));
+                }
+            }
+        });
+    }
+
     /// <summary>Every edit until EndInteractiveEdit (a timeline drag) becomes a single undo step.</summary>
     public void BeginInteractiveEdit()
     {

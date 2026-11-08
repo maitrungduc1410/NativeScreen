@@ -27,6 +27,33 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-08, Windows port: AI agents through MCP
+
+### Verifier
+- **Result:** PASS through a scripted stdio client. A real Claude Code or Codex session was not run.
+- **Build and tests:** the solution builds in Release (x64) with 0 warnings. Core 269 (10 new in `McpDocumentTests`), Rendering 21 and Media 20 pass.
+- **Measurements:**
+  - **Startup:** the bridge started the app and `initialize` answered in 1.1 s.
+  - **Export:** 720p of a 10 s project took 14.5 s, with 46 progress notifications.
+  - **Idle:** 0.00% CPU with the server listening and no client.
+- **Changes made:**
+  - **Bridge and entry point:** `Program.Main` handles `--mcp` before WinUI starts, and `McpBridge` copies stdio to the pipe.
+  - **Server:** `McpServer` is the named pipe and JSON-RPC, and `McpToolbox` holds the 28 tools.
+  - **Facades:** `EditorWindow.Mcp.cs` and `RecordingHudWindow.Mcp.cs`.
+  - **Core:** `McpDocument` (merge patch, strict enums, overlaps, `$ref` inlining, enum table), and `EditorSession.StartNewUndoStep` / `ReplaceDocument`.
+  - **UI:** `Settings > AI Agents`, the tray menu's list of agents, and 2 Windows strings.
+- **Bugs found and fixed:**
+  - **Pause:** pausing a recording failed (0x800F1000, a reused clock element), from the bar too.
+  - **File lock:** a video without audio stayed locked after the waveform read.
+  - **Delete dialog:** `delete_project` waited on an error dialog.
+  - **Inherited handles:** the bridge passed its std handles to the app it started.
+  - **Enums:** numeric enum values were accepted in patches.
+- **Spec updates:** a Windows note in `spec/06` ADR-52, three rows in the platform pitfalls table, and `NS_MCP_TRACE` in `windows/AGENTS.md`.
+- **Next / open:**
+  - **Real agents:** run a real `claude mcp add` session.
+  - **Microphone recording:** a recording with a microphone was not tried here.
+  - **Settings layout:** the Settings sliding segmented controls (the entry below) are not ported yet.
+
 ## 2026-11-08, Settings: sliding segmented controls, smooth tab resize, full MCP config (macOS done, Windows port pending)
 
 ### Writer

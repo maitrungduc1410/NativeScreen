@@ -1084,3 +1084,24 @@ AI agents (Claude Code, Claude Desktop, Codex, Cursor, VS Code and any other Mod
 - **Long work.** `export_video` waits until the file is written, sends progress every 2% when the client passed a `progressToken`, shows the Dock progress, and stops on `notifications/cancelled`. `generate_transcript` returns at once; `get_project` reports `info.isGeneratingTranscript`.
 - **The user stays informed.** The first agent to connect shows the toast `AI agent connected`, the menu bar menu lists connected clients, `Settings > AI Agents` shows the status and a copyable line for Claude Code (`claude mcp add`), Codex (`codex mcp add`) and JSON clients. Recording always goes through the recording bar and its countdown.
 - **Checked:** with a scripted client over the bridge: launch on demand, every read tool, update and patch errors, add, update, split, delete, undo and redo, overlap refusal, `render_frame` (image checked), `export_frame`, `export_video` with 17 progress notifications, an area recording with pause, resume and stop, a cancelled countdown, and the bridge's answer when the setting is off. Then a real Claude Code session (`claude -p --mcp-config`, the bridge starting the app) was asked to style a project, add a zoom, check a rendered frame and export: it used 10 tool calls with no failures, and the exported MP4 (1280×720, 30 fps, 7.6 s) shows the gradient, rounded corners and the 2x zoom. Codex has not been tried.
+- **Windows** (`App/Mcp/`, `Core/Mcp/McpDocument.cs`):
+  - **Transport.** The server is a named pipe, `NativeScreen.MCP.<user SID>`, created with `PipeOptions.CurrentUserOnly`. A wait for a client is an overlapped pipe wait: 0.00% CPU while listening.
+  - **Bridge.** `NativeScreen.App.exe --mcp` is handled in `Program.Main` (the XAML-generated `Main` is turned off with `DISABLE_XAML_GENERATED_MAIN`) before WinUI starts. The app is a GUI-subsystem executable, and it still gets the client's redirected stdin and stdout, so no separate console helper is needed. When the bridge starts the app, it goes through `ShellExecute`. Started directly, the app inherited the bridge's stdout and kept it open, so the client never saw the bridge exit.
+  - **Tools.** The same `MCPTools.json` is linked into the app as content. The dispatch is written by hand, like on macOS. Patches are checked by reading the document back with enums limited to their names: the file reader also takes numbers, and `aspectRatioPreset: 7` would otherwise be stored.
+  - **Undo.** `EditorSession.StartNewUndoStep` and `ReplaceDocument` give each call its own undo step.
+  - **Frames.** `render_frame` renders through the export path (`ProjectExporter.ExportStillAsync`).
+  - **Delete.** `delete_project` uses `SHFileOperation` with no UI, and retries for 5 s while a file is still in use. The error names the busy files. A plain `DeleteDirectory` showed an error dialog that left the call waiting with nobody to answer it.
+  - **Settings.** `Settings > AI Agents` has the switch, the status and copy blocks. The tray menu lists connected agents. The macOS texts that say Mac, ⌘Z and Trash have Windows keys (PC, Ctrl+Z, Recycle Bin).
+  - **Not on Windows.** `launchAtLogin`, `hideDesktopIcons`, `hideDockIcon`, `cameraMaxResolution` and `useLastProjectSettings` cannot be set. `get_settings` says so in `notes`. ProRes export returns an error.
+  - **Bugs found by the tests:**
+    - **Pause:** pausing a recording threw 0x800F1000, because the bar reused its clock `TextBlock` while the old row still held it. This failed from the UI too.
+    - **File lock:** `AudioFileReader` kept a video with no audio stream open after it failed, so a recording without system audio could not be deleted for a while.
+  - **Checked** with a scripted stdio client through the bridge:
+    - **Setting off:** the first request gets the "turned off" error, and the app does not start.
+    - **Setting on:** the bridge started the app. All 28 tools are listed, with no `$ref` left.
+    - **Edits:** open, get, set background, add, update and split a zoom, add a mask and a caption, overlap refusals, a bad enum refused with its path, and undo and redo two steps each.
+    - **Frames:** `render_frame` returned a 640×360 PNG; `export_frame` wrote a JPEG.
+    - **Export:** `export_video` at 720p took 14.5 s and sent 46 progress notifications, and a second export stopped on `notifications/cancelled`.
+    - **Recording:** an area recording with no camera, microphone or system audio. A countdown was cancelled; then start, pause, resume and stop opened the new project, which was closed and moved to the Recycle Bin.
+    - **Closing:** `close_project` closed the project, and the bridge exited while the app kept running.
+  - **Not checked:** a real Claude Code or Codex session, and a recording with a microphone or camera (not opened on this machine, ADR-23).

@@ -6,7 +6,7 @@ namespace NativeScreen.App;
 
 public sealed partial class SettingsWindow : Window
 {
-    private static readonly string[] TabTitles = ["General", "Recording", "Editing", "Quick export", "Shortcuts"];
+    private static readonly string[] TabTitles = ["General", "Recording", "Editing", "Quick export", "Shortcuts", "AI Agents"];
 
     private static readonly (string Action, string Keys)[] ShortcutList =
     [
@@ -31,6 +31,9 @@ public sealed partial class SettingsWindow : Window
     {
         InitializeComponent();
         Loc.Apply(Content);
+        // The status follows the server while the window is open; the handler is removed when it closes.
+        McpServer.Shared.Changed += RefreshAgentStatus;
+        Closed += WindowClosed;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragBar);
         AppTheme.Register(this);
@@ -38,8 +41,15 @@ public sealed partial class SettingsWindow : Window
         Refresh();
     }
 
+    private void WindowClosed(object sender, WindowEventArgs args)
+    {
+        Closed -= WindowClosed;
+        McpServer.Shared.Changed -= RefreshAgentStatus;
+    }
+
     private void Refresh()
     {
+        agentStatus = null;
         Tabs.Children.Clear();
         foreach (var title in TabTitles)
         {
@@ -58,6 +68,7 @@ public sealed partial class SettingsWindow : Window
             case "Recording": Recording(); break;
             case "Editing": Editing(); break;
             case "Quick export": QuickExport(); break;
+            case "AI Agents": Agents(); break;
             default: Shortcuts(); break;
         }
     }

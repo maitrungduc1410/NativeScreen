@@ -13,7 +13,7 @@ namespace NativeScreen.App;
 /// The floating recording bar, with the three states of RecordingHUDBarView on macOS: idle, countdown and a compact bar while
 /// recording. Choosing a mode opens the picker, which carries the Start button. Microphone and camera start off (spec/06 ADR-23).
 /// </summary>
-public sealed class RecordingHudWindow : Window
+public sealed partial class RecordingHudWindow : Window
 {
     private const double BarHeight = 64;
     private const double ButtonHeight = 44;
@@ -35,7 +35,7 @@ public sealed class RecordingHudWindow : Window
     private readonly DispatcherTimer tick = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer countdownTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly DispatcherTimer meterTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
-    private readonly TextBlock elapsed = new() { FontSize = 15, VerticalAlignment = VerticalAlignment.Center, MinWidth = 38 };
+    private TextBlock elapsed = NewClock();
     private readonly ProgressRing countdownRing = new() { IsIndeterminate = false, Width = 22, Height = 22, Maximum = 1, Minimum = 0, Foreground = Coral };
     private readonly TextBlock countdownNumber = new() { FontSize = 11.5, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = Coral, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     private CaptureTargetMode? pickingMode;
@@ -1005,10 +1005,11 @@ public sealed class RecordingHudWindow : Window
 
     // MARK: Countdown
 
-    private void BeginCountdown(CaptureTarget chosen)
+    /// <param name="seconds">A countdown for this recording only, as an agent can ask; otherwise the setting.</param>
+    private void BeginCountdown(CaptureTarget chosen, int? seconds = null)
     {
         pending = chosen;
-        countdownTotal = AppSettings.Shared.CountdownSeconds;
+        countdownTotal = seconds ?? AppSettings.Shared.CountdownSeconds;
         if (countdownTotal <= 0)
         {
             _ = StartRecording();
@@ -1117,6 +1118,7 @@ public sealed class RecordingHudWindow : Window
             busy = false;
             pending = null;
             capturing = false;
+            mcpLastError = exception.Message;
             AppExclusion(false);
             ShowIdle();
             UpdateDevices();
@@ -1137,6 +1139,9 @@ public sealed class RecordingHudWindow : Window
         var stopIcon = new Grid { Width = 20, Height = 20 };
         stopIcon.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Stroke = StopRed, StrokeThickness = 2.2 });
         stopIcon.Children.Add(new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(2.2), Background = StopRed, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        // A new clock each rebuild: the previous one stays a child of the previous row, and adding it again threw "No
+        // installed components were detected" (0x800F1000), so pausing failed and the bar stopped changing.
+        elapsed = NewClock();
         elapsed.Text = FormatElapsed(Elapsed());
         elapsed.Foreground = isPaused ? Orange : StopRed;
         var stopRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 9, Padding = new Thickness(10, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -1159,6 +1164,8 @@ public sealed class RecordingHudWindow : Window
         FitToContent();
         tick.Start();
     }
+
+    private static TextBlock NewClock() => new() { FontSize = 15, VerticalAlignment = VerticalAlignment.Center, MinWidth = 38 };
 
     private void TogglePause()
     {

@@ -84,7 +84,8 @@ internal sealed class TrayIcon : IDisposable
         {
             if (items[index].Title is { } title)
             {
-                AppendMenuW(menu, 0, (nuint)(index + 1), title);
+                // A title without an action is information, shown greyed out.
+                AppendMenuW(menu, items[index].Click is null ? MfGrayed : 0, (nuint)(index + 1), title);
             }
             else
             {
@@ -169,6 +170,8 @@ internal sealed class TrayIcon : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool AppendMenuW(nint menu, uint flags, nuint id, string? text);
+
+    private const uint MfGrayed = 0x1;
 
     [DllImport("user32.dll")]
     private static extern int TrackPopupMenu(nint menu, uint flags, int x, int y, int reserved, nint window, nint rect);

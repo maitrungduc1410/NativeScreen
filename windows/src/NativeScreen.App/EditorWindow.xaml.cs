@@ -765,6 +765,10 @@ public sealed partial class EditorWindow : Window
         {
             EndHeldSplit();
         }
+        else
+        {
+            Projects.Active = this;
+        }
     }
 
     /// <summary>

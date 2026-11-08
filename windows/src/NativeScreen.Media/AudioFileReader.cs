@@ -14,16 +14,26 @@ public sealed class AudioFileReader : IDisposable
     {
         MediaFoundationRuntime.EnsureStarted();
         reader = MediaFactory.MFCreateSourceReaderFromURL(path, null);
-        reader.SetStreamSelection(SourceReaderIndex.AllStreams, false);
-        reader.SetStreamSelection(SourceReaderIndex.FirstAudioStream, true);
-        using var requested = MediaFactory.MFCreateMediaType();
-        requested.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Audio);
-        requested.Set(MediaTypeAttributeKeys.Subtype, AudioFormats.Pcm);
-        requested.Set(MediaTypeAttributeKeys.AudioBitsPerSample, 16u);
-        reader.SetCurrentMediaType(SourceReaderIndex.FirstAudioStream, requested);
-        using var actual = reader.GetCurrentMediaType(SourceReaderIndex.FirstAudioStream);
-        SampleRate = (int)actual.GetUInt32(MediaTypeAttributeKeys.AudioSamplesPerSecond);
-        Channels = (int)actual.GetUInt32(MediaTypeAttributeKeys.AudioNumChannels);
+        try
+        {
+            reader.SetStreamSelection(SourceReaderIndex.AllStreams, false);
+            reader.SetStreamSelection(SourceReaderIndex.FirstAudioStream, true);
+            using var requested = MediaFactory.MFCreateMediaType();
+            requested.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Audio);
+            requested.Set(MediaTypeAttributeKeys.Subtype, AudioFormats.Pcm);
+            requested.Set(MediaTypeAttributeKeys.AudioBitsPerSample, 16u);
+            reader.SetCurrentMediaType(SourceReaderIndex.FirstAudioStream, requested);
+            using var actual = reader.GetCurrentMediaType(SourceReaderIndex.FirstAudioStream);
+            SampleRate = (int)actual.GetUInt32(MediaTypeAttributeKeys.AudioSamplesPerSecond);
+            Channels = (int)actual.GetUInt32(MediaTypeAttributeKeys.AudioNumChannels);
+        }
+        catch
+        {
+            // A file with no audio stream (a recording without system audio) throws here; the open reader would keep the
+            // file locked until a collection, so a project could not be deleted or moved right after it was opened.
+            reader.Dispose();
+            throw;
+        }
     }
 
     /// <summary>The file has no audio stream, or none this machine can decode.</summary>
