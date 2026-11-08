@@ -75,12 +75,12 @@ public sealed class AudioTrackRecorder : IRecordedAudioTrack
         }
     }
 
-    internal static AudioTrackRecorder? TryMicrophone(string deviceId, string path, Func<double, double?> elapsed)
+    internal static AudioTrackRecorder? TryMicrophone(string deviceId, string path, Func<double, double?> elapsed, Action<string>? writeFailed = null)
     {
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            var writer = new AudioFileWriter(path, new AudioFormat(SampleRate, 1, 128_000));
+            var writer = new AudioFileWriter(path, new AudioFormat(SampleRate, 1, 128_000)) { WriteFailed = writeFailed };
             var capture = new WasapiCapture(enumerator.GetDevice(deviceId), true, 50);
             return new AudioTrackRecorder(capture, 1, (data, length, at, duration) => writer.Write(data.AsSpan(0, length), at, duration), writer.Dispose, elapsed);
         }

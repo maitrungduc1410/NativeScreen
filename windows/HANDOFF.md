@@ -27,6 +27,39 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-08, Windows port: light theme, failed captures, updates, Settings and the rest of this batch
+
+### Verifier
+- **Result:** PASS for what could run on this machine, except where listed under **Not checked**.
+- **Build and tests:** the solution builds in Release (x64) with 0 warnings. Core 273, Rendering 21 and Media 21 pass.
+- **Machine:** Windows 10 22H2, 3840x2160 at 150%.
+- **Ported from the entries below:**
+  - **Light theme:** timeline palettes, selected outline, cursor tiles. Dialogs, tooltips and hover already followed the theme.
+  - **Captions:** on/off moved to the caption's right-click menu; the inspector's switch and add-track buttons are gone.
+  - **Mask handles:** `CanvasCoordinateTransform` applies the crop.
+  - **MCP:** unknown and missing arguments are refused, and `add_item caption` takes `trackId: "new"`.
+  - **Failed captures:** see `spec/06` ADR-54.
+  - **Updates:** Velopack hook, `AppUpdater`, tray and Settings items, 5 new strings with all translations.
+  - **Settings:** sliding segmented controls and an animated tab height.
+- **Measurements:**
+  - **Window closed while recording:** the recording ended by itself about 4 s later at the latest, and the project was 3.8 s long.
+  - **Forced writer failure at 5 s:** the project was 4.7 s long, cut to the playable fragments.
+  - **Tab height:** eased from 540 to 999 px in 16 steps, top edge fixed.
+  - **Packaging:** `dotnet publish` and `vpk pack` work with the workflow's arguments. `NativeScreen-win-Setup.exe` is 33.3 MB, and the published app starts.
+- **Bugs found and fixed:**
+  - **Sheared video:** recordings whose width is not a multiple of 16 were sheared in the preview and exports (`spec/06` ADR-56).
+  - **AI Agents page:** the Copy buttons were disabled and the JSON block showed only its first line.
+  - **Published app:** `dotnet publish` left out the compiled XAML and the resource index, so the installed app would have crashed at startup. A csproj target copies them, which answers the open VERIFY item in the release entry.
+  - **Copied commands:** PowerShell dropped the bare `--`, so the lines now quote it.
+- **Auto zooms:** the two new tests pass (one zoom from 0 to 8500 ms).
+- **Export:** one encoder only, so one sample description. Nothing to change.
+- **Site:** `site/assets/shots/editor-windows.jpg` replaces the placeholder: the demo page recorded in the Windows app, light theme.
+- **Not checked:**
+  - **Install and update:** `Setup.exe`, a real update and the `Release` workflow, which need a clean VM rather than this machine. The installed folder is also where `settings.json` lives, so uninstalling removes the settings.
+  - **Windows 11:** this machine is Windows 10, so the shot has no Mica title bar.
+  - **Devices:** webcam and microphone writer failures (ADR-23).
+  - **Codex:** not installed here.
+
 ## 2026-11-08, Light theme pass (macOS done, Windows check pending)
 
 ### Writer
@@ -125,7 +158,6 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Next / open:**
   - **Codex:** not tried. The copied lines quote `--` for PowerShell.
   - **Microphone recording:** a recording with a microphone was not tried here.
-  - **Settings layout:** the Settings sliding segmented controls (the entry below) are not ported yet.
 
 ## 2026-11-08, Settings: sliding segmented controls, smooth tab resize, full MCP config (macOS done, Windows port pending)
 

@@ -15,7 +15,8 @@ public sealed class VideoFileReader : IDisposable
     private const double UnknownKeyframeIntervalMs = 5000;
 
     private readonly IMFSourceReader reader;
-    private readonly int stride;
+    private int stride;
+    private bool strideMeasured;
     private readonly double startMs;
     private readonly Mp4FragmentIndex? index;
     private readonly DecodeAccelerator? accelerator;
@@ -89,6 +90,7 @@ public sealed class VideoFileReader : IDisposable
             buffer.Lock(out var pointer, out _, out var length);
             try
             {
+                MeasureStride(length);
                 var source = (byte*)pointer;
                 // Decoders pad rows to their macroblock height, which the media type does not report. NV12 is always
                 // two thirds luma, so the buffer length gives the plane offset whatever the padding is.
@@ -192,6 +194,31 @@ public sealed class VideoFileReader : IDisposable
         }
 
         return (codedWidth & ~1, codedHeight & ~1);
+    }
+
+    /// <summary>
+    /// A hardware decoder pads rows to its macroblock width: 1904 for a 1900-wide video. The media type still says 1900,
+    /// which shears the picture by 4 pixels per row. The locked buffer is pitch x padded height x 3/2, so the first frame's
+    /// length gives the pitch. (IMF2DBuffer reports the pitch of the mapped texture, which is not the layout Lock returns.)
+    /// </summary>
+    private void MeasureStride(int length)
+    {
+        if (strideMeasured)
+        {
+            return;
+        }
+
+        strideMeasured = true;
+        var luma = length / 3 * 2;
+        for (var alignment = 1; alignment <= 128; alignment *= 2)
+        {
+            var pitch = (Width + alignment - 1) / alignment * alignment;
+            if (luma % pitch == 0 && luma / pitch is var rows && rows >= Height && rows < Height + 128)
+            {
+                stride = pitch;
+                return;
+            }
+        }
     }
 
     private static int ReadStride(IMFMediaType type, int fallback)

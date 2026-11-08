@@ -57,6 +57,7 @@ public sealed partial class RecordingHudWindow : Window
     private (int X, int Y)? dragPointer;
     private Windows.Graphics.PointInt32 dragWindow;
     private (double DurationMs, bool HasWebcam, bool HasMicrophone, bool HasSystemAudio) lastDuration;
+    private bool lastRecordingFailed;
     private bool isShown;
     private bool systemAudioAllApps = true;
     private readonly HashSet<string> systemAudioApps = new(StringComparer.OrdinalIgnoreCase);
@@ -1091,6 +1092,7 @@ public sealed partial class RecordingHudWindow : Window
             package = directory;
             recorder = created;
             busy = false;
+            created.Failed += failure => DispatcherQueue.TryEnqueue(() => _ = EndAfterFailure(created, failure));
             if (previewWindow is { } preview)
             {
                 created.CameraFrame += preview.ShowFrame;
@@ -1204,6 +1206,7 @@ public sealed partial class RecordingHudWindow : Window
             {
                 running.Stop();
                 var result = (running.DurationMs, running.HasWebcam, running.HasMicrophone, running.HasSystemAudio);
+                lastRecordingFailed = running.Failure is not null;
                 running.Dispose();
                 return result;
             });
@@ -1213,11 +1216,61 @@ public sealed partial class RecordingHudWindow : Window
         UpdateDevices();
     }
 
-    private async Task StopAndOpen()
+    /// <summary>The captured window went away or a writer failed: keep what was written, open it, and say why the recording stopped.</summary>
+    private async Task EndAfterFailure(ScreenRecorder engine, CaptureFailure failure)
+    {
+        if (recorder != engine || busy)
+        {
+            return;
+        }
+
+        var savedMs = await StopAndOpen();
+        var reason = Loc.T(failure.Kind switch
+        {
+            CaptureFailureKind.Stream => "The recorded window or display is no longer available.",
+            CaptureFailureKind.ScreenWriter => "The screen video could not be written.",
+            CaptureFailureKind.WebcamWriter => "The camera video could not be written.",
+            _ => "The microphone audio could not be written."
+        });
+        mcpLastError = reason;
+        var outcome = Loc.T("Nothing could be saved.");
+        if (savedMs is { } ms)
+        {
+            var total = (int)Math.Round(ms / 1000);
+            outcome = Loc.F("The first %@ was saved and opened in the editor.", $"{total / 60}:{total % 60:00}");
+        }
+
+        // A message box and not a dialog: the recording bar is too small to host one. Off the UI thread, so the app keeps running.
+        var text = $"{reason} {outcome}\n\n{failure.Details}";
+        var title = Loc.T("Recording stopped");
+        _ = Task.Run(() => MessageBoxW(0, text, title, MessageBoxWarningTopmost));
+    }
+
+    private const uint MessageBoxWarningTopmost = 0x30 | 0x40000 | 0x10000;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBoxW(nint owner, string text, string caption, uint type);
+
+    /// <summary>What a failed writer left that can be played: its complete fragments.</summary>
+    private static double PlayableMs(string directory)
+    {
+        try
+        {
+            using var reader = new VideoFileReader(Path.Combine(directory, "recording", "display.mp4"));
+            return reader.DurationMs;
+        }
+        catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or COMException or IOException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Returns the saved length in milliseconds, or null when nothing was saved.</summary>
+    private async Task<double?> StopAndOpen()
     {
         if (busy || package is null || target is null)
         {
-            return;
+            return null;
         }
 
         busy = true;
@@ -1226,11 +1279,27 @@ public sealed partial class RecordingHudWindow : Window
         var (directory, chosen, stats) = (package, target, lastDuration);
         package = null;
         target = null;
+        if (lastRecordingFailed)
+        {
+            // A failed writer is never finished, so the project must not be longer than what can be played back.
+            var playableMs = await Task.Run(() => PlayableMs(directory));
+            if (!double.IsFinite(playableMs) || playableMs < 500)
+            {
+                await Task.Run(() => Directory.Delete(directory, true));
+                busy = false;
+                ShowIdle();
+                return null;
+            }
+
+            stats.DurationMs = Math.Min(stats.DurationMs, playableMs);
+        }
+
         await Task.Run(() => RecordingPackage.Finish(directory, chosen.Metadata(), stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms, DateTimeOffset.UtcNow));
         await Task.Run(() => ApplyDefaultPreset(directory));
         busy = false;
         ShowIdle();
         await Projects.Open(directory, root.XamlRoot, AppSettings.Shared.AfterRecording);
+        return stats.DurationMs;
     }
 
     /// <summary>A new project starts in the style of the default preset, when one is set.</summary>

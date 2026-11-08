@@ -22,6 +22,16 @@ public sealed record RecordingOptions(
     int CameraMaxHeight = 1080,
     IReadOnlyCollection<string>? SystemAudioApps = null);
 
+public enum CaptureFailureKind
+{
+    Stream,
+    ScreenWriter,
+    WebcamWriter,
+    MicrophoneWriter
+}
+
+public sealed record CaptureFailure(CaptureFailureKind Kind, string Details);
+
 public readonly record struct RecordingStats(int FramesWritten, int FramesRepeated, int FramesDropped, double ConvertMsAverage);
 
 /// <summary>
@@ -72,6 +82,8 @@ public sealed class ScreenRecorder : IDisposable
     private int framesDropped;
     private double convertTotalMs;
     private int disposed;
+    private CaptureFailure? failure;
+    private readonly nint recordedWindow;
 
     public ScreenRecorder(RecordingOptions options)
     {
@@ -97,6 +109,7 @@ public sealed class ScreenRecorder : IDisposable
         // A capture of one window drops the flyouts, menus and tooltips a demo of the editor needs. Those are separate windows of
         // this app, so its own windows capture the monitor and crop to the window.
         var cropsMonitor = target.Mode == CaptureTargetMode.Area || (target.Window is { } own && CaptureTargets.IsOwnWindow(own.Handle));
+        recordedWindow = target.Mode == CaptureTargetMode.Window ? target.Window!.Handle : 0;
         item = target.Mode == CaptureTargetMode.Window && !cropsMonitor
             ? CaptureItemInterop.ForWindow(target.Window!.Handle)
             : CaptureItemInterop.ForMonitor(target.Display.Handle);
@@ -128,6 +141,7 @@ public sealed class ScreenRecorder : IDisposable
             hevc: false,
             fragmented: true,
             audioFormat);
+        writer.WriteFailed = details => Report(CaptureFailureKind.ScreenWriter, details);
         telemetry = new TelemetryRecorder(Path.Combine(recording, "telemetry"), target.Rect);
         if (options.SystemAudio)
         {
@@ -138,16 +152,17 @@ public sealed class ScreenRecorder : IDisposable
 
         if (options.MicrophoneId is { } microphoneId)
         {
-            microphone = AudioTrackRecorder.TryMicrophone(microphoneId, Path.Combine(recording, "microphone.m4a"), ElapsedForTrack);
+            microphone = AudioTrackRecorder.TryMicrophone(microphoneId, Path.Combine(recording, "microphone.m4a"), ElapsedForTrack, details => Report(CaptureFailureKind.MicrophoneWriter, details));
         }
 
         if (options.CameraId is { } cameraId)
         {
-            webcam = WebcamRecorder.TryStart(cameraId, Path.Combine(recording, "webcam.mp4"), options.CameraMaxHeight, ElapsedForTrack);
+            webcam = WebcamRecorder.TryStart(cameraId, Path.Combine(recording, "webcam.mp4"), options.CameraMaxHeight, ElapsedForTrack, details => Report(CaptureFailureKind.WebcamWriter, details));
         }
 
         framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(captureDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, FramePoolSize, poolSize);
         framePool.FrameArrived += (_, _) => frameReady.Set();
+        item.Closed += ItemClosed;
         session = framePool.CreateCaptureSession(item);
         session.IsCursorCaptureEnabled = CapturePolicy.CaptureCursor;
         TrySetBorderless(session);
@@ -185,6 +200,15 @@ public sealed class ScreenRecorder : IDisposable
 
     public double DurationMs { get; private set; }
 
+    /// <summary>
+    /// Raised once, on a capture thread, when the captured window or display goes away or a writer fails. A failed writer
+    /// drops every later sample, so the owner ends the recording instead of recording on (spec/06 ADR-54).
+    /// </summary>
+    public event Action<CaptureFailure>? Failed;
+
+    /// <summary>The first failure, if any.</summary>
+    public CaptureFailure? Failure => Volatile.Read(ref failure);
+
     public RecordingStats Stats => new(framesWritten, framesRepeated, framesDropped, framesWritten == 0 ? 0 : convertTotalMs / framesWritten);
 
     /// <summary>Blocks until the first frame was written. False means the target never produced one.</summary>
@@ -210,8 +234,9 @@ public sealed class ScreenRecorder : IDisposable
         }
 
         var stopHostMs = NowMs();
-        session.Dispose();
         stopping = true;
+        item.Closed -= ItemClosed;
+        session.Dispose();
         frameReady.Set();
         worker.Join();
         framePool.Dispose();
@@ -288,25 +313,56 @@ public sealed class ScreenRecorder : IDisposable
         }
     }
 
+    // GraphicsCaptureItem.Closed did not fire for a closed window here, so the window itself is checked while no frames come.
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(nint window);
+
+    private void ItemClosed(GraphicsCaptureItem sender, object args) => Report(CaptureFailureKind.Stream, "The capture item closed.");
+
+    private void Report(CaptureFailureKind kind, string details)
+    {
+        var next = new CaptureFailure(kind, details);
+        if (!stopping && Interlocked.CompareExchange(ref failure, next, null) is null)
+        {
+            Failed?.Invoke(next);
+        }
+    }
+
     private void Run()
     {
-        while (!stopping)
+        try
         {
-            frameReady.WaitOne(KeepAliveMs);
-            var captured = false;
-            while (framePool.TryGetNextFrame() is { } frame)
+            while (!stopping)
             {
-                using (frame)
+                frameReady.WaitOne(KeepAliveMs);
+                var captured = false;
+                while (framePool.TryGetNextFrame() is { } frame)
                 {
-                    captured = true;
-                    HandleFrame(frame);
+                    using (frame)
+                    {
+                        captured = true;
+                        HandleFrame(frame);
+                    }
+                }
+
+                // Checked with frames arriving too: this app's own windows are captured through their monitor.
+                if (recordedWindow != 0 && !IsWindow(recordedWindow))
+                {
+                    Report(CaptureFailureKind.Stream, "The recorded window closed.");
+                    return;
+                }
+
+                if (!captured)
+                {
+                    RepeatLastFrame();
                 }
             }
-
-            if (!captured)
-            {
-                RepeatLastFrame();
-            }
+        }
+        catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or COMException)
+        {
+            // A lost GPU device, for example. Nothing more can be recorded.
+            Report(CaptureFailureKind.ScreenWriter, $"0x{exception.HResult:X8}");
         }
     }
 

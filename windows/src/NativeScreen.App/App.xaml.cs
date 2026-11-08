@@ -70,6 +70,7 @@ public partial class App : Application
         _ = Task.Run(ExplorerContextMenu.Register);
         OpenRequested(folder);
         McpServer.Shared.ApplySetting();
+        _ = AppUpdater.Shared.StartBackgroundChecks();
     }
 
     private static void OpenRequested(string? folder)
@@ -113,6 +114,17 @@ public partial class App : Application
         }
 
         items.Add((null, null));
+        if (AppUpdater.Shared.IsAvailable)
+        {
+            items.Add(AppUpdater.Shared.ReadyVersion is null
+                ? ("Check for Updates...", () =>
+                {
+                    new SettingsWindow().Activate();
+                    _ = AppUpdater.Shared.Check();
+                })
+                : ("Install update and restart", AppUpdater.Shared.InstallAndRestart));
+        }
+
         items.Add(("Settings", () => new SettingsWindow().Activate()));
         items.Add(("Quit Native Screen", Quit));
         return items;

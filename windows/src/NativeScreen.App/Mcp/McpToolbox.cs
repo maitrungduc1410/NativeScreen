@@ -30,6 +30,7 @@ internal sealed class McpToolbox
         var args = new McpArgs(raw);
         try
         {
+            McpDocument.ValidateArguments(Definitions, name, raw);
             return name switch
             {
                 "get_status" => Ok(Status()),
@@ -407,14 +408,21 @@ internal sealed class McpToolbox
                 session.AddCameraLayoutInRange(type, start, end);
                 break;
             case "caption":
-                var trackId = args.String("trackId") ?? document.Captions.CaptionTracks.FirstOrDefault()?.Id ?? session.AddCaptionTrack();
+                var requestedTrack = args.String("trackId");
+                if (requestedTrack == "new" || (requestedTrack is null && document.Captions.CaptionTracks.Count == 0))
+                {
+                    session.AddCaptionTrack(start, end, args.String("text") ?? "New caption");
+                    break;
+                }
+
+                var trackId = requestedTrack ?? document.Captions.CaptionTracks[0].Id;
                 if (!session.Document.Captions.CaptionTracks.Exists(track => track.Id == trackId))
                 {
                     throw new McpToolException("No caption track " + trackId + ".");
                 }
 
                 McpDocument.RequireFree(session.Document.Captions.CaptionBlocks.Where(item => item.TrackId == trackId).Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)), start, end,
-                    "caption on that track (pass another trackId, or add_item caption_track)");
+                    "caption on that track (pass another trackId, or trackId \"new\" for a new track)");
                 session.AddCaption(trackId, start, end, args.String("text") ?? "New caption");
                 break;
             case "mask":

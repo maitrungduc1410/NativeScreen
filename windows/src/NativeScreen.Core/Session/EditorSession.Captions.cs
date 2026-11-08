@@ -60,19 +60,22 @@ public sealed partial class EditorSession
     }
 
     /// <summary>A track always holds a caption, so a new one starts with one at the playhead, kept whole near the end.</summary>
-    public string AddCaptionTrack()
+    public string AddCaptionTrack() => AddCaptionTrack(null, null, "New caption");
+
+    /// A track is never empty, so it is created holding one caption, in one undo step.
+    public string AddCaptionTrack(double? startMs, double? endMs, string text)
     {
         var tracks = Document.Captions.CaptionTracks;
         var bounds = CaptionSourceBounds();
-        var start = Math.Max(bounds.Start, Math.Min(SourceAtPlayhead, bounds.End - NewCaptionMs));
-        var end = Math.Min(bounds.End, start + NewCaptionMs);
+        var start = startMs ?? Math.Max(bounds.Start, Math.Min(SourceAtPlayhead, bounds.End - NewCaptionMs));
+        var end = endMs ?? Math.Min(bounds.End, start + NewCaptionMs);
         var created = new CaptionTrack
         {
             Id = NewId(),
             Name = tracks.Count == 0 ? "Captions" : $"Captions {tracks.Count + 1}",
             Style = tracks.Count == 0 ? new CaptionStyle() : StyleForNewTrack(tracks[^1].Style)
         };
-        var block = new CaptionBlock { Id = NewId(), TrackId = created.Id, SourceStartMs = start, SourceEndMs = end, CustomText = "New caption" };
+        var block = new CaptionBlock { Id = NewId(), TrackId = created.Id, SourceStartMs = start, SourceEndMs = end, CustomText = text };
         Mutate(document =>
         {
             document.Captions.Enabled = true;

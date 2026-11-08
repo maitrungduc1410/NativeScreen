@@ -1608,7 +1608,7 @@ internal sealed class TimelineView
             Height = height,
             CornerRadius = new CornerRadius(height >= 40 ? 9 : 7),
             Background = Ui.Gradient(palette.Top, palette.Bottom),
-            BorderBrush = new SolidColorBrush(selected ? Colors.White : palette.Ring),
+            BorderBrush = new SolidColorBrush(selected ? palette.Selected : palette.Ring),
             BorderThickness = new Thickness(selected ? 2 : 1),
             Opacity = dimmed ? 0.35 : 1
         };
@@ -2060,13 +2060,33 @@ internal sealed class TimelineView
     /// <summary>The last bitmap of a slice or voiceover, kept across rebuilds so a zoom can show it stretched.</summary>
     private sealed record WaveCache(string Key, int WidthPx, WriteableBitmap? Bitmap);
 
-    private sealed record Palette(Color Top, Color Bottom, Color Ring)
+    private sealed record Palette(Color Top, Color Bottom, Color Ring, Color Selected)
     {
-        public static readonly Palette Clip = new(Color.FromArgb(255, 147, 97, 12), Color.FromArgb(255, 218, 144, 18), Color.FromArgb(255, 244, 198, 119));
-        public static readonly Palette Zoom = new(Color.FromArgb(255, 77, 47, 245), Color.FromArgb(255, 139, 120, 249), Color.FromArgb(255, 244, 242, 254));
-        public static readonly Palette Mask = new(Color.FromArgb(255, 130, 52, 90), Color.FromArgb(255, 183, 75, 128), Color.FromArgb(255, 220, 166, 192));
-        public static readonly Palette Caption = new(Color.FromArgb(255, 22, 99, 110), Color.FromArgb(255, 31, 143, 158), Color.FromArgb(255, 153, 222, 231));
-        public static readonly Palette Layout = new(Color.FromArgb(255, 101, 87, 94), Color.FromArgb(255, 141, 124, 132), Color.FromArgb(255, 209, 200, 205));
+        private static readonly Color DarkSelected = Color.FromArgb(255, 255, 255, 255);
+
+        private static Color C(double r, double g, double b, double a = 1) =>
+            Color.FromArgb((byte)Math.Round(a * 255), (byte)Math.Round(r * 255), (byte)Math.Round(g * 255), (byte)Math.Round(b * 255));
+
+        // Light theme: brighter, more saturated fills, as on macOS.
+        private static readonly Palette ClipLight = new(C(0.851, 0.533, 0.098), C(0.937, 0.663, 0.231), C(1, 0.875, 0.655), C(0.925, 0.58, 0.1, 0.85));
+        private static readonly Palette ZoomLight = new(C(0.388, 0.29, 0.973), C(0.596, 0.533, 0.984), C(0.902, 0.882, 1), C(0.553, 0.471, 0.976, 0.85));
+        private static readonly Palette MaskLight = new(C(0.733, 0.31, 0.522), C(0.851, 0.475, 0.663), C(0.98, 0.82, 0.898), C(0.8, 0.38, 0.6, 0.85));
+        private static readonly Palette CaptionLight = new(C(0.106, 0.561, 0.616), C(0.231, 0.722, 0.773), C(0.7, 0.941, 0.969), C(0.18, 0.69, 0.757, 0.85));
+        private static readonly Palette LayoutLight = new(C(0.533, 0.478, 0.51), C(0.69, 0.643, 0.667), C(0.918, 0.89, 0.906), C(0.62, 0.561, 0.6, 0.85));
+
+        private static bool IsLight => AppTheme.Current == ElementTheme.Light;
+
+        public static Palette Clip => IsLight ? ClipLight : ClipDark;
+        public static Palette Zoom => IsLight ? ZoomLight : ZoomDark;
+        public static Palette Mask => IsLight ? MaskLight : MaskDark;
+        public static Palette Caption => IsLight ? CaptionLight : CaptionDark;
+        public static Palette Layout => IsLight ? LayoutLight : LayoutDark;
+
+        private static readonly Palette ClipDark = new(Color.FromArgb(255, 147, 97, 12), Color.FromArgb(255, 218, 144, 18), Color.FromArgb(255, 244, 198, 119), DarkSelected);
+        private static readonly Palette ZoomDark = new(Color.FromArgb(255, 77, 47, 245), Color.FromArgb(255, 139, 120, 249), Color.FromArgb(255, 244, 242, 254), DarkSelected);
+        private static readonly Palette MaskDark = new(Color.FromArgb(255, 130, 52, 90), Color.FromArgb(255, 183, 75, 128), Color.FromArgb(255, 220, 166, 192), DarkSelected);
+        private static readonly Palette CaptionDark = new(Color.FromArgb(255, 22, 99, 110), Color.FromArgb(255, 31, 143, 158), Color.FromArgb(255, 153, 222, 231), DarkSelected);
+        private static readonly Palette LayoutDark = new(Color.FromArgb(255, 101, 87, 94), Color.FromArgb(255, 141, 124, 132), Color.FromArgb(255, 209, 200, 205), DarkSelected);
     }
 
     /// <summary>A block-colored ghost for most rows; shortcuts have their own see-through purple.</summary>

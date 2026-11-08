@@ -371,6 +371,7 @@ Menu bar items are app-wide, but almost every action belongs to one project wind
   - **`SettingsNavigation.shared.tab`** holds the selected tab, so other code can open Settings on a given tab.
 - **Document icon**: `CFBundleTypeIconSystemGenerated` plus `UTTypeIcons` (`UTTypeIconBadgeName = AppIcon`, `UTTypeIconText`) let macOS draw `.nativescreen` packages as a page with the app icon.
 - **Verification**: the editor, Settings tabs, Export modal and command menu were rendered offscreen in both appearances (`NSView.cacheDisplay`) and checked visually.
+- **Windows:** timeline segments use the same light palettes, the selected outline comes from the palette instead of white, and cursor tiles use the same light grays. Dialogs already followed the theme and the preview has no shadow to shrink. Settings has `SlidingSegmentedControl`: the segments are radio buttons, so Narrator announces options, and it reacts to `Checked` because automation raises no click. The window height eases over 280 ms with its top edge fixed (measured from 540 to 999 px over 16 steps); with animations off it jumps.
 
 
 ---
@@ -1115,6 +1116,7 @@ AI agents (Claude Code, Claude Desktop, Codex, Cursor, VS Code and any other Mod
     - **Recording:** an area recording with no camera, microphone or system audio. A countdown was cancelled; then start, pause, resume and stop opened the new project, which was closed and moved to the Recycle Bin.
     - **Closing:** `close_project` closed the project, and the bridge exited while the app kept running.
   - **Real client:** Claude Code 2.1 registered the server with `claude mcp add` (health check: Connected) and ran open, wallpaper, zoom, render, undo and redo, a 720p export and close in one session, with the recording tools blocked. In PowerShell the copied line failed, because PowerShell drops a bare `--` before `claude.ps1` sees it. The Settings page now quotes it.
+  - **Arguments:** `McpDocument.ValidateArguments` is the macOS check, and `add_item caption` takes `trackId: "new"` in one undo step.
   - **Not checked:** Codex, and a recording with a microphone or camera (not opened on this machine, ADR-23).
 
 ---
@@ -1133,6 +1135,7 @@ Releases are built by GitHub Actions only when started by hand, and land as a dr
 - **Voice for the transcript shot.** A window recording captures audio only from the app that owns the window, so speech from `say` in another process recorded silence. The demo driver now plays a pre-rendered voice file itself (`play` step), and the take is recorded with system audio on.
 - **Two-lane H.264 MP4s did not play in Chrome.** Found while making these demos: two sample descriptions switching every GOP. Fixed in the muxer (ADR-01, in-band parameter sets).
 - **Recordings stopped early.** While making these demos the screen recording often ended seconds into a take. Cause and fix in ADR-54. Demo videos live in `site/assets/` (tracked despite the global `*.mp4` ignore). `tools/demo-driver/` holds the app that played the takes and the take scripts.
+- **Windows app side.** `Program.Main` runs `VelopackApp` before WinUI (after the `--mcp` check, so the bridge stays fast). `AppUpdater` exists only when `UpdateManager.IsInstalled`, checks once a day, downloads in the background and installs only when the user picks `Install update and restart` (tray or Settings). A package is a folder, so there is no file association to register (ADR-41): the uninstall hook removes the Explorer menu key instead. `dotnet publish` leaves out the compiled XAML (`*.xbf`) and `NativeScreen.App.pri` of an unpackaged app, and WinUI then failed at startup (0xC000027B), so a target in the csproj copies them. Checked: `dotnet publish` and `vpk pack` with the workflow's arguments, the published exe starts, and `--veloapp-uninstall` removes the key. Not checked: running `Setup.exe` and a real update. Velopack installs to `%LocalAppData%\NativeScreen`, the folder that also holds `settings.json`, so uninstalling removes the settings.
 
 ## 54. ADR-54: Fragmented Recording Without Frame Reordering
 
@@ -1155,6 +1158,9 @@ A failed writer is never finished, so `display.mp4` holds only its complete 2 s 
 
 Verified by building with reordering on: the writer failed about 2 s in, the recording stopped by itself about 2 s later, the alert appeared, and the project was 2051.7 ms long, the same as the playable video (before, it would have been about 4.1 s with a black tail). Not tried: the stream stopping by itself, and webcam or microphone writer failures.
 
+### Windows
+Recordings already have no B-frames (ADR-22). `ScreenRecorder.Failed` is raised once for a closed window or display and for a failed screen, webcam or microphone writer. `VideoFileWriter.WriteFailed` is set only for recordings: a failed write is reported once, later samples are dropped, and `Finalize` is skipped, so nothing throws on an audio or timer thread. An export still throws. `GraphicsCaptureItem.Closed` did not fire for a closed window (Windows 10 22H2), so the capture loop also checks `IsWindow`. The alert is a message box, because the recording bar is too small to host a dialog. Verified: closing the recorded window ended the recording, opened the project at 3.8 s and showed the alert with `lastError` set. With a writer forced to fail at 5 s, the project was 4.7 s long and played. A webcam or microphone writer failure was not exercised, because those devices are not opened on this machine (ADR-23).
+
 ## 55. ADR-55: Mask Handles Use the Compositor's Stage Rect
 
 ### Problem
@@ -1165,3 +1171,17 @@ The overlay takes `StageLayout.screenRect` from `MetalFrameCompositor.resolvedSt
 
 ### Verified
 Mask at (0.01, 0.04, 0.2, 0.12) with 0.1 padding: all four handles land on the corners of the blur in the preview.
+
+### Windows
+The overlay already used `stage.ScreenRect`. `CanvasCoordinateTransform` now takes the crop like the macOS one, and the new-mask layer covers the crop. Unit test: `CanvasMappingUsesFullFrameCoordinatesUnderACrop`.
+
+## 56. ADR-56: Decoder Row Pitch on Windows
+
+### Problem
+A 1900-wide recording played sheared, in the preview and in exports: every row started 4 pixels further along. Widths that are a multiple of 16 were fine, so tests and most area recordings never showed it.
+
+### Cause
+A hardware decoder pads rows to its macroblock width (1904), while `MF_MT_DEFAULT_STRIDE` still says 1900. `IMF2DBuffer` is no help: it reports the pitch of the mapped texture, which is not the layout `Lock` returns, and using it read past the buffer.
+
+### Solution
+A locked NV12 buffer is pitch x padded height x 3/2. `VideoFileReader.MeasureStride` tries the width aligned to 1, 2, 4 ... 128 on the first frame and takes the first pitch that divides the luma size into a height just above the video's. Regression test: `UnalignedWidthRoundTripTests`, which fails without the fix.

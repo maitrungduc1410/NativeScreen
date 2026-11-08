@@ -190,6 +190,35 @@ public static class McpDocument
     }
 
     /// <summary>The tool list from MCPTools.json with $ref to its definitions inlined, since clients do not resolve them.</summary>
+    /// <summary>
+    /// Checks top-level arguments against the tool's schema. Leaving out <c>project</c> means the frontmost editor, so a
+    /// misspelled key must fail: it would otherwise run the tool, even delete_project, on the wrong project.
+    /// </summary>
+    public static void ValidateArguments(JsonArray definitions, string name, JsonObject arguments)
+    {
+        var schema = definitions.FirstOrDefault(tool => tool?["name"]?.GetValue<string>() == name)?["inputSchema"];
+        if (schema?["properties"] is not JsonObject properties)
+        {
+            return;
+        }
+
+        var unknown = arguments.Select(item => item.Key).Where(key => !properties.ContainsKey(key)).Order(StringComparer.Ordinal).ToArray();
+        if (unknown.Length > 0)
+        {
+            var accepted = properties.Count == 0 ? "no arguments" : string.Join(", ", properties.Select(item => item.Key).Order(StringComparer.Ordinal));
+            throw new McpToolException($"Unknown argument {string.Join(", ", unknown)} for {name}. It accepts: {accepted}.");
+        }
+
+        foreach (var required in (schema["required"] as JsonArray ?? []).Select(item => item!.GetValue<string>()))
+        {
+            var value = arguments[required];
+            if (value is null || (value is JsonValue text && text.TryGetValue<string>(out var content) && content.Length == 0))
+            {
+                throw new McpToolException("Missing argument: " + required);
+            }
+        }
+    }
+
     public static (string Instructions, JsonArray Tools) LoadTools(string json)
     {
         var root = JsonNode.Parse(json) as JsonObject ?? new JsonObject();

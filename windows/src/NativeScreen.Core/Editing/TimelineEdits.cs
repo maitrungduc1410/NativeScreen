@@ -269,8 +269,8 @@ public static class TimelineEdits
     }
 }
 
-/// <summary>Maps between the source frame and the preview canvas under the virtual camera. Port of CanvasCoordinateTransform.swift, with the stage's own screen rect.</summary>
-public sealed class CanvasCoordinateTransform(double canvasWidth, double canvasHeight, PixelRect screen, Point01 cameraCenter01, double cameraScale)
+/// <summary>Maps between the full source frame (mask rects are stored in it) and the preview canvas under the virtual camera. Port of CanvasCoordinateTransform.swift. The stage's screen rect shows only the crop.</summary>
+public sealed class CanvasCoordinateTransform(double canvasWidth, double canvasHeight, PixelRect screen, Rect01 crop, Point01 cameraCenter01, double cameraScale)
 {
     private readonly double scale = Math.Max(1, cameraScale);
 
@@ -280,8 +280,8 @@ public sealed class CanvasCoordinateTransform(double canvasWidth, double canvasH
 
     public (double X, double Y) ToCanvas(double x01, double y01)
     {
-        var x = screen.X + x01 * screen.Width;
-        var y = screen.Y + y01 * screen.Height;
+        var x = screen.X + (x01 - crop.X) / Math.Max(0.0001, crop.Width) * screen.Width;
+        var y = screen.Y + (y01 - crop.Y) / Math.Max(0.0001, crop.Height) * screen.Height;
         return scale <= 1.001
             ? (x, y)
             : (canvasWidth * 0.5 + (x - FocusX) * scale, canvasHeight * 0.5 + (y - FocusY) * scale);
@@ -298,9 +298,9 @@ public sealed class CanvasCoordinateTransform(double canvasWidth, double canvasH
     {
         var x = scale > 1.001 ? FocusX + (canvasX - canvasWidth * 0.5) / scale : canvasX;
         var y = scale > 1.001 ? FocusY + (canvasY - canvasHeight * 0.5) / scale : canvasY;
-        return ((x - screen.X) / Math.Max(1, screen.Width), (y - screen.Y) / Math.Max(1, screen.Height));
+        return (crop.X + (x - screen.X) / Math.Max(1, screen.Width) * crop.Width, crop.Y + (y - screen.Y) / Math.Max(1, screen.Height) * crop.Height);
     }
 
     public (double X, double Y) DeltaToSource(double deltaX, double deltaY) =>
-        (deltaX / Math.Max(1, screen.Width * scale), deltaY / Math.Max(1, screen.Height * scale));
+        (deltaX / Math.Max(1, screen.Width * scale) * crop.Width, deltaY / Math.Max(1, screen.Height * scale) * crop.Height);
 }

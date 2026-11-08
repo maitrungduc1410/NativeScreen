@@ -114,6 +114,28 @@ public sealed class McpDocumentTests
     }
 
     [Fact]
+    public void ArgumentsAreCheckedAgainstTheSchema()
+    {
+        var (_, tools) = McpDocument.LoadTools("""
+            {"instructions":"","tools":[
+             {"name":"delete_project","inputSchema":{"type":"object","properties":{"project":{"type":"string"},"confirm":{"type":"boolean"}},"required":["confirm"]}},
+             {"name":"get_status","inputSchema":{"type":"object","properties":{}}}]}
+            """);
+
+        McpDocument.ValidateArguments(tools, "delete_project", Json("""{"confirm":true,"project":"a"}"""));
+
+        var error = Assert.Throws<McpToolException>(() => McpDocument.ValidateArguments(tools, "delete_project", Json("""{"confirm":true,"projct":"a"}""")));
+        Assert.Equal("Unknown argument projct for delete_project. It accepts: confirm, project.", error.Message);
+
+        error = Assert.Throws<McpToolException>(() => McpDocument.ValidateArguments(tools, "get_status", Json("""{"x":1}""")));
+        Assert.Equal("Unknown argument x for get_status. It accepts: no arguments.", error.Message);
+
+        Assert.Equal("Missing argument: confirm", Assert.Throws<McpToolException>(() => McpDocument.ValidateArguments(tools, "delete_project", Json("{}"))).Message);
+        Assert.Equal("Missing argument: confirm", Assert.Throws<McpToolException>(() => McpDocument.ValidateArguments(tools, "delete_project", Json("""{"confirm":""}"""))).Message);
+        Assert.Equal("Missing argument: confirm", Assert.Throws<McpToolException>(() => McpDocument.ValidateArguments(tools, "delete_project", Json("""{"confirm":null}"""))).Message);
+    }
+
+    [Fact]
     public void EnumOptionsUseTheFileNames()
     {
         var options = McpDocument.EnumOptions();

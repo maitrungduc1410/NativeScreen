@@ -145,11 +145,11 @@ public sealed class TimelineEditsTests
     public void CanvasMappingInvertsUnderZoom()
     {
         var screen = new PixelRect(100, 50, 800, 450);
-        var plain = new CanvasCoordinateTransform(1000, 550, screen, Point01.Center, 1);
+        var plain = new CanvasCoordinateTransform(1000, 550, screen, new Rect01(0, 0, 1, 1), Point01.Center, 1);
         Assert.Equal((100, 50), plain.ToCanvas(0, 0));
         Assert.Equal((0.5, 0.5), plain.ToSource(500, 275));
 
-        var zoomed = new CanvasCoordinateTransform(1000, 550, screen, new Point01(0.25, 0.75), 2);
+        var zoomed = new CanvasCoordinateTransform(1000, 550, screen, new Rect01(0, 0, 1, 1), new Point01(0.25, 0.75), 2);
         var (x, y) = zoomed.ToCanvas(0.25, 0.75);
         Assert.Equal(500, x, 6);
         Assert.Equal(275, y, 6);
@@ -158,5 +158,16 @@ public sealed class TimelineEditsTests
         Assert.Equal(x + 100, again, 6);
         Assert.Equal(y - 40, againY, 6);
         Assert.Equal((0.0625, 0.0), zoomed.DeltaToSource(100, 0));
+    }
+
+    [Fact]
+    public void CanvasMappingUsesFullFrameCoordinatesUnderACrop()
+    {
+        // The screen rect shows only the right half of the frame.
+        var map = new CanvasCoordinateTransform(1000, 550, new PixelRect(100, 50, 800, 450), new Rect01(0.5, 0, 0.5, 1), Point01.Center, 1);
+        Assert.Equal((100, 50), map.ToCanvas(0.5, 0));
+        Assert.Equal((900, 500), map.ToCanvas(1, 1));
+        Assert.Equal((0.75, 0.5), map.ToSource(500, 275));
+        Assert.Equal((0.25, 0.0), map.DeltaToSource(400, 0));
     }
 }

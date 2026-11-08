@@ -555,15 +555,18 @@ internal sealed class InspectorPanel
     private void Captions()
     {
         var captions = Doc.Captions;
-        Add(Text("Captions", medium: true));
-        Add(Toggle("Disable captions", null, () => !Doc.Captions.Enabled, (d, v) => d.Captions.Enabled = !v));
         if (captions.CaptionTracks.Count == 0)
         {
             Add(Note("Generate transcript"));
             TranscriptControls();
-            AddDivider();
-            Add(Action("Add caption track", () => captionInspectorTrackId = session.AddCaptionTrack()));
             return;
+        }
+
+        // Turning captions off and adding a track are in the caption's right-click menu and the dock.
+        Add(Text("Captions", medium: true));
+        if (!captions.Enabled)
+        {
+            Add(Note("Captions are off. Right-click a caption on the timeline to turn them back on."));
         }
 
         var selected = session.SelectedCaption;
@@ -584,7 +587,6 @@ internal sealed class InspectorPanel
             }));
         }
 
-        tracks.Add(("+", false, () => captionInspectorTrackId = session.AddCaptionTrack()));
         Add(Labeled("Track", 10, OptionsWrap(tracks.ToArray())));
         if (captions.CaptionTracks.Count > 1)
         {

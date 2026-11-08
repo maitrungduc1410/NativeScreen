@@ -37,6 +37,18 @@ internal static partial class ExplorerContextMenu
         }
     }
 
+    public static void Unregister()
+    {
+        try
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(KeyPath, throwOnMissingSubKey: false);
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or SecurityException or IOException)
+        {
+            // Uninstalling must not stop on this.
+        }
+    }
+
     private static bool IsPackaged()
     {
         var length = 0u;

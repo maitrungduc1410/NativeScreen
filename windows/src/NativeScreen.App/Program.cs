@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Velopack;
 
 namespace NativeScreen.App;
 
@@ -16,6 +17,11 @@ public static class Program
         {
             return McpBridge.Run();
         }
+
+        // The installer starts the app with hook arguments; these exit before any window, COM or single-instance work.
+        VelopackApp.Build()
+            .OnBeforeUninstallFastCallback(_ => ExplorerContextMenu.Unregister())
+            .Run();
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(callback =>

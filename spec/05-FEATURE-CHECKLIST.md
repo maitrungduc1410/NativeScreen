@@ -113,14 +113,14 @@
 - [x] **AI agents (MCP):** `Settings > AI Agents` lets Claude Code, Claude Desktop, Codex, Cursor and other MCP clients record, edit (whole document as JSON merge patches plus timeline item tools, each one undo step), render frames to check their work, change settings and export with progress. Clients run the app's own executable with `--mcp`, which opens the app when needed (`spec/06` ADR-52).
   - [ ] A command line (`nativescreen export ...`) on the same tools.
 - [x] **Releases and updates:** manual GitHub Actions release (`docs/releasing.md`, ADR-53) builds a signed, notarized DMG and a Sparkle appcast for macOS and a Velopack installer for Windows, as a draft release. `Check for Updates...` in the app menu and menu bar menu, `Check for updates automatically` in Settings > General (release builds only).
-  - [ ] Windows: Velopack startup hook and update check in the app (see `windows/HANDOFF.md`).
+  - [x] Windows: Velopack startup hook and update check in the app (see `windows/HANDOFF.md`).
   - [ ] Windows code signing (SignPath Foundation).
 - [x] **README and website** (`site/`, GitHub Pages): editorial layout, an aspect ratio switch, screenshot slots for macOS and Windows; `tools/demo-page/` to record demos against and `tools/demo-driver/` to play scripted takes on it.
   - [x] macOS demo videos and editor screenshots, recorded against `tools/demo-page/`.
   - [x] Second pass: merged hero zooms, mask and cursor demos zoomed in, large before/after switches, light theme screenshots retaken, measured native numbers.
   - [x] Edit by transcript screenshot (a voice take on the demo page, `tools/demo-driver/takes/transcript.json`).
   - [x] AI agent demo video (a real agent session next to the editor, area recording, private text masked).
-  - [ ] Still a placeholder: Windows editor screenshot.
+  - [x] Windows editor screenshot.
 - [x] **Fix:** MCP tools reject unknown arguments and enforce `required` (`spec/06` ADR-52).
 - [x] Clip speed menu goes up to 10x (6x, 8x, 10x added).
 - [x] **Fix:** mask handles matched the drawn mask only without padding; they now use the compositor's stage rect and the crop (`spec/06` ADR-55).

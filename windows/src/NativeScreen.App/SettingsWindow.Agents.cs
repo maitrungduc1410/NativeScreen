@@ -77,25 +77,26 @@ public sealed partial class SettingsWindow
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.Children.Add(Ui.Text(title, 12.5, "Ink88", true));
-        var copy = Ui.Option("Copy", false, null);
-        copy.Padding = new Thickness(12, 4, 12, 4);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(copy, Loc.F("Copy %@", Loc.T(title)));
-        copy.Click += (_, _) =>
+        Button? copy = null;
+        copy = Ui.Option("Copy", false, () =>
         {
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
             package.SetText(text);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-            copy.Content = Loc.T("Copied");
-        };
+            copy!.Content = Loc.T("Copied");
+        });
+        copy.Padding = new Thickness(12, 4, 12, 4);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(copy, Loc.F("Copy %@", Loc.T(title)));
         Grid.SetColumn(copy, 1);
         header.Children.Add(copy);
         block.Children.Add(header);
         var code = new TextBox
         {
+            // AcceptsReturn comes before Text: without it a TextBox keeps only the first line.
+            AcceptsReturn = true,
             Text = text,
             IsReadOnly = true,
             TextWrapping = TextWrapping.Wrap,
-            AcceptsReturn = true,
             FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Cascadia Mono, Consolas"),
             FontSize = 12
         };

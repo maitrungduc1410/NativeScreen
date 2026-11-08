@@ -23,6 +23,13 @@ public sealed class VideoFileWriter : IDisposable
     private readonly string path;
     private readonly int frameBytes;
     private bool finished;
+    private bool failed;
+
+    /// <summary>
+    /// Recordings set this: a failed write is reported here once and later samples are dropped, and the file keeps its
+    /// complete fragments. Without it a failed write throws, as an export needs.
+    /// </summary>
+    public Action<string>? WriteFailed { get; set; }
 
     public VideoFileWriter(string path, int width, int height, int fps, int bitrate, bool hevc, bool fragmented, AudioFormat? audio = null)
     {
@@ -121,7 +128,7 @@ public sealed class VideoFileWriter : IDisposable
     {
         lock (writer)
         {
-            if (!finished)
+            if (!finished && !failed)
             {
                 finished = true;
                 writer.Finalize();
@@ -157,9 +164,19 @@ public sealed class VideoFileWriter : IDisposable
         // Screen and system audio arrive on different threads; a sample must not be written after Finish.
         lock (writer)
         {
-            if (!finished)
+            if (finished || failed)
+            {
+                return;
+            }
+
+            try
             {
                 SinkWriterSamples.Write(writer, stream, data, presentationMs, durationMs);
+            }
+            catch (SharpGen.Runtime.SharpGenException exception) when (WriteFailed is not null)
+            {
+                failed = true;
+                WriteFailed($"0x{exception.HResult:X8}");
             }
         }
     }

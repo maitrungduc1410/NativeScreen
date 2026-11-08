@@ -42,6 +42,13 @@ internal static class CursorThemeCards
             .ToList();
     }
 
+    // Light gray in the light theme, still dark enough for white cursors, which have a dark outline.
+    private static Brush Tile(double dark, double light)
+    {
+        var gray = AppTheme.Current == ElementTheme.Light ? light : dark;
+        return Ui.Rgb(gray, gray, gray);
+    }
+
     /// <param name="hoverFiles">Other variants a card cycles through while hovered, to show the style has more than one.</param>
     public static Button Card(string file, string name, bool selected, Action click, double size = 50, double spriteSize = 31, IReadOnlyList<string>? hoverFiles = null)
     {
@@ -51,10 +58,10 @@ internal static class CursorThemeCards
         image.ImageOpened += (_, _) => _ = Center(image, file);
         var sprites = new Grid();
         sprites.Children.Add(image);
-        var fill = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(10), Background = Ui.Rgb(0.48, 0.48, 0.48), Child = sprites };
+        var fill = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(10), Background = Tile(0.48, 0.84), Child = sprites };
         if (selected)
         {
-            fill.Background = Ui.Rgb(0.54, 0.54, 0.54);
+            fill.Background = Tile(0.54, 0.88);
             fill.BorderBrush = Ui.Rgb(0.44, 0.34, 0.98);
             fill.BorderThickness = new Thickness(1.5);
         }
@@ -65,8 +72,8 @@ internal static class CursorThemeCards
         button.Click += (_, _) => click();
         if (!selected)
         {
-            button.PointerEntered += (_, _) => fill.Background = Ui.Rgb(0.51, 0.51, 0.51);
-            button.PointerExited += (_, _) => fill.Background = Ui.Rgb(0.48, 0.48, 0.48);
+            button.PointerEntered += (_, _) => fill.Background = Tile(0.51, 0.80);
+            button.PointerExited += (_, _) => fill.Background = Tile(0.48, 0.84);
             if (hoverFiles is { Count: > 0 })
             {
                 CycleOnHover(button, sprites, image, hoverFiles, spriteSize);

@@ -8,6 +8,10 @@ public sealed class AudioFileWriter : IDisposable
     private readonly IMFSinkWriter writer;
     private readonly int stream;
     private bool finished;
+    private bool failed;
+
+    /// <summary>When set, a failed write is reported here once and later samples are dropped, instead of throwing on the audio thread.</summary>
+    public Action<string>? WriteFailed { get; set; }
 
     public AudioFileWriter(string path, AudioFormat format)
     {
@@ -28,12 +32,27 @@ public sealed class AudioFileWriter : IDisposable
         writer.BeginWriting();
     }
 
-    public void Write(ReadOnlySpan<byte> pcm, double presentationMs, double durationMs) =>
-        SinkWriterSamples.Write(writer, stream, pcm, presentationMs, durationMs);
+    public void Write(ReadOnlySpan<byte> pcm, double presentationMs, double durationMs)
+    {
+        if (failed)
+        {
+            return;
+        }
+
+        try
+        {
+            SinkWriterSamples.Write(writer, stream, pcm, presentationMs, durationMs);
+        }
+        catch (SharpGen.Runtime.SharpGenException exception) when (WriteFailed is not null)
+        {
+            failed = true;
+            WriteFailed($"0x{exception.HResult:X8}");
+        }
+    }
 
     public void Dispose()
     {
-        if (!finished)
+        if (!finished && !failed)
         {
             finished = true;
             writer.Finalize();

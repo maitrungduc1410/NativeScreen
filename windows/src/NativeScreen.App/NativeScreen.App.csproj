@@ -38,6 +38,7 @@
     <Content Include="..\..\..\NativeScreen\NativeScreen\Resources\MCPTools.json" Link="Mcp\MCPTools.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Vortice.Direct2D1" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="Velopack" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     <ProjectReference Include="..\NativeScreen.Core\NativeScreen.Core.csproj" />
     <ProjectReference Include="..\NativeScreen.Media\NativeScreen.Media.csproj" />
@@ -49,4 +50,11 @@
     <AppxManifest Include="Package.appxmanifest" />
     <Content Include="Assets\StoreLogo.png;Assets\Square44x44Logo.png;Assets\Square150x150Logo.png" />
   </ItemGroup>
+  <!-- Publishing an unpackaged app leaves out its compiled XAML and resource index, and WinUI then fails at startup. -->
+  <Target Name="NsCopyXamlToPublish" AfterTargets="Publish" Condition="'$(NsPackage)' != 'true'">
+    <ItemGroup>
+      <NsXamlOutput Include="$(OutDir)*.xbf;$(OutDir)NativeScreen.App.pri" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NsXamlOutput)" DestinationFolder="$(PublishDir)" />
+  </Target>
 </Project>

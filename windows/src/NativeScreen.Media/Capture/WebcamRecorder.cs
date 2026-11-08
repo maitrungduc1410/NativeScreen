@@ -30,7 +30,7 @@ public sealed class WebcamRecorder : IDisposable
     /// <summary>The newest frame in NV12 for the floating preview, swapped atomically. Null before the first frame.</summary>
     public event Action<byte[], int, int>? PreviewFrame;
 
-    private WebcamRecorder(IMFMediaSource source, IMFSourceReader reader, string path, int width, int height, int fps, Func<double, double?> elapsed)
+    private WebcamRecorder(IMFMediaSource source, IMFSourceReader reader, string path, int width, int height, int fps, Func<double, double?> elapsed, Action<string>? writeFailed)
     {
         this.source = source;
         this.reader = reader;
@@ -39,7 +39,7 @@ public sealed class WebcamRecorder : IDisposable
         this.height = height;
         frameMs = 1000.0 / fps;
         nv12 = new byte[width * height * 3 / 2];
-        writer = new VideoFileWriter(path, width, height, fps, RecordingRates.WebcamBitrate(width, height), hevc: false, fragmented: true);
+        writer = new VideoFileWriter(path, width, height, fps, RecordingRates.WebcamBitrate(width, height), hevc: false, fragmented: true) { WriteFailed = writeFailed };
         thread = new Thread(Run) { IsBackground = true, Name = "NativeScreen webcam" };
         thread.Start();
     }
@@ -56,10 +56,10 @@ public sealed class WebcamRecorder : IDisposable
         return results;
     }
 
-    public static WebcamRecorder? TryStart(string deviceId, string path, int maxHeight, Func<double, double?> elapsed)
+    public static WebcamRecorder? TryStart(string deviceId, string path, int maxHeight, Func<double, double?> elapsed, Action<string>? writeFailed = null)
     {
         return OpenCamera(deviceId, maxHeight) is { } opened
-            ? new WebcamRecorder(opened.Source, opened.Reader, path, opened.Width, opened.Height, opened.Fps, elapsed)
+            ? new WebcamRecorder(opened.Source, opened.Reader, path, opened.Width, opened.Height, opened.Fps, elapsed, writeFailed)
             : null;
     }
 

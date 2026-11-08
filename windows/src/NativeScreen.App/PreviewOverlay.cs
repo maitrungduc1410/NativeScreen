@@ -123,7 +123,7 @@ internal sealed class PreviewOverlay
     /// <summary>Drag over the recording to choose the area; a plain click places a default mask around the click.</summary>
     private void DrawNewMaskLayer(MaskType type, double width, double height)
     {
-        var (x, y, videoWidth, videoHeight) = Transform(width, height).ToCanvas(new Rect01(0, 0, 1, 1));
+        var (x, y, videoWidth, videoHeight) = Transform(width, height).ToCanvas(session.Document.Canvas.CropRect01);
         var layer = new CrosshairCanvas { Width = videoWidth, Height = videoHeight, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 255, 255, 255)) };
         Canvas.SetLeft(layer, x);
         Canvas.SetTop(layer, y);
@@ -229,8 +229,8 @@ internal sealed class PreviewOverlay
         var camera = trajectory.Evaluate(at).Camera;
         var stage = new StageLayoutEngine().Resolve(document, at, width, height, Math.Max(16, sourceWidth * crop.Width), Math.Max(16, sourceHeight * crop.Height), camera.Scale, hasCamera);
         return camera.IsLoupeMode
-            ? new CanvasCoordinateTransform(width, height, stage.ScreenRect, Point01.Center, 1)
-            : new CanvasCoordinateTransform(width, height, stage.ScreenRect, camera.Center01, camera.Scale);
+            ? new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, Point01.Center, 1)
+            : new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, camera.Center01, camera.Scale);
     }
 
     private void DrawSafeZones(double width, double height)

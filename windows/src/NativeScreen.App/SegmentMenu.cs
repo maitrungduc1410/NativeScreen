@@ -111,6 +111,9 @@ internal sealed class SegmentMenu
         var menu = new SegmentMenu();
         menu.Command("Split at playhead", "C", () => session.SplitCaption(id, session.SourceAtPlayhead));
         menu.Command("Add caption track", "", () => session.AddCaptionTrack());
+        // Turns every caption on or off; the inspector does not have this switch.
+        var captionsOn = session.Document.Captions.Enabled;
+        menu.Command(captionsOn ? "Disable captions" : "Enable captions", "", () => session.Mutate(document => document.Captions.Enabled = !captionsOn));
         menu.Separator();
         menu.Danger("Remove caption", "Delete", () => session.DeleteCaption(id));
         menu.Danger("Remove this track", "", () => session.DeleteCaptionTrack(trackId));

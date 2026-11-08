@@ -30,6 +30,10 @@ public sealed class AppSettings
     /// <summary>Settings > AI Agents: lets MCP clients drive the app (spec/06 ADR-52). Off by default; the bridge reads it too.</summary>
     public bool AiAgentsEnabled { get; set; }
 
+    public bool CheckForUpdatesAutomatically { get; set; } = true;
+
+    public DateTimeOffset? LastUpdateCheckUtc { get; set; }
+
     /// <summary>What Quick export uses, and what agents start from with useQuickExportSettings.</summary>
     public NativeScreen.Core.ExportSettings QuickExport { get; set; } = new();
 
