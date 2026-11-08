@@ -1104,4 +1104,5 @@ AI agents (Claude Code, Claude Desktop, Codex, Cursor, VS Code and any other Mod
     - **Export:** `export_video` at 720p took 14.5 s and sent 46 progress notifications, and a second export stopped on `notifications/cancelled`.
     - **Recording:** an area recording with no camera, microphone or system audio. A countdown was cancelled; then start, pause, resume and stop opened the new project, which was closed and moved to the Recycle Bin.
     - **Closing:** `close_project` closed the project, and the bridge exited while the app kept running.
-  - **Not checked:** a real Claude Code or Codex session, and a recording with a microphone or camera (not opened on this machine, ADR-23).
+  - **Real client:** Claude Code 2.1 registered the server with `claude mcp add` (health check: Connected) and ran open, wallpaper, zoom, render, undo and redo, a 720p export and close in one session, with the recording tools blocked. In PowerShell the copied line failed, because PowerShell drops a bare `--` before `claude.ps1` sees it. The Settings page now quotes it.
+  - **Not checked:** Codex, and a recording with a microphone or camera (not opened on this machine, ADR-23).

@@ -53,10 +53,12 @@ public sealed partial class SettingsWindow
               }
             }
             """;
+        // The "--" is quoted: npm installs these CLIs as PowerShell scripts (claude.ps1), and PowerShell drops a bare "--"
+        // before the script sees it, so "--mcp" was read as the CLI's own option. The quoted form works in Git Bash too.
         foreach (var (title, text) in new[]
         {
-            ("Claude Code", $"claude mcp add nativescreen -- \"{executable}\" --mcp"),
-            ("Codex", $"codex mcp add nativescreen -- \"{executable}\" --mcp"),
+            ("Claude Code", $"claude mcp add nativescreen '--' \"{executable}\" --mcp"),
+            ("Codex", $"codex mcp add nativescreen '--' \"{executable}\" --mcp"),
             ("Claude Desktop, Cursor and other apps", json)
         })
         {
