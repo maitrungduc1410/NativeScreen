@@ -45,9 +45,29 @@ final class MCPToolbox {
 
     // MARK: - Dispatch
 
+    /// Checks the top-level arguments against the tool's schema. Omitting `project` means the frontmost editor, so a
+    /// misspelled key must fail rather than be ignored: it would otherwise run the tool on the wrong project.
+    private func validate(tool name: String, arguments raw: [String: Any]) throws {
+        guard let schema = definitions.first(where: { $0["name"] as? String == name })?["inputSchema"] as? [String: Any],
+              let properties = schema["properties"] as? [String: Any]
+        else { return }
+        let unknown = raw.keys.filter { properties[$0] == nil }.sorted()
+        if !unknown.isEmpty {
+            let accepted = properties.isEmpty ? "no arguments" : properties.keys.sorted().joined(separator: ", ")
+            throw MCPToolError("Unknown argument \(unknown.joined(separator: ", ")) for \(name). It accepts: \(accepted).")
+        }
+        for key in schema["required"] as? [String] ?? [] {
+            let value = raw[key]
+            if value == nil || value is NSNull || (value as? String)?.isEmpty == true {
+                throw MCPToolError("Missing argument: \(key)")
+            }
+        }
+    }
+
     func call(name: String, arguments raw: [String: Any], progress: MCPProgress?) async -> [String: Any] {
         let args = MCPArguments(raw: raw)
         do {
+            try validate(tool: name, arguments: raw)
             switch name {
             case "get_status": return ok(getStatus())
             case "list_projects": return ok(listProjects(args))
@@ -376,7 +396,7 @@ final class MCPToolbox {
             if let trackId = args.string("trackId") ?? doc.captions.captionTracks.first?.id {
                 try Self.requireFree(
                     doc.captions.captionBlocks.filter { $0.trackId == trackId }.map { ($0.id, $0.sourceStartMs, $0.sourceEndMs) },
-                    start, clampedEnd, what: "caption on that track (pass another trackId, or add_item caption_track)"
+                    start, clampedEnd, what: "caption on that track (pass another trackId, or trackId \"new\" for a new track)"
                 )
             }
         case "mask":
@@ -403,11 +423,24 @@ final class MCPToolbox {
             } ?? .cameraOverlay
             session.addCameraLayoutInRange(sourceStartMs: start, sourceEndMs: clampedEnd, type: type)
         case "caption":
-            let trackId = args.string("trackId") ?? session.document.captions.captionTracks.first?.id ?? session.addCaptionTrack()
-            guard session.document.captions.captionTracks.contains(where: { $0.id == trackId }) else {
-                throw MCPToolError("No caption track \(trackId).")
+            let text = args.string("text") ?? "New caption"
+            let requested = args.string("trackId")
+            if requested == "new" || (requested == nil && session.document.captions.captionTracks.isEmpty) {
+                // A caption track is never empty, so it is created holding a starter caption; that caption becomes this one.
+                let trackId = session.addCaptionTrack()
+                session.mutate { doc in
+                    guard let index = doc.captions.captionBlocks.firstIndex(where: { $0.trackId == trackId }) else { return }
+                    doc.captions.captionBlocks[index].sourceStartMs = start
+                    doc.captions.captionBlocks[index].sourceEndMs = clampedEnd
+                    doc.captions.captionBlocks[index].customText = text
+                }
+            } else {
+                let trackId = requested ?? session.document.captions.captionTracks[0].id
+                guard session.document.captions.captionTracks.contains(where: { $0.id == trackId }) else {
+                    throw MCPToolError("No caption track \(trackId).")
+                }
+                session.addCaption(trackId: trackId, sourceStartMs: start, sourceEndMs: clampedEnd, text: text)
             }
-            session.addCaption(trackId: trackId, sourceStartMs: start, sourceEndMs: clampedEnd, text: args.string("text") ?? "New caption")
         case "shortcut":
             newID = session.addCustomShortcut(
                 trackId: args.string("trackId"),
@@ -1173,7 +1206,7 @@ final class MCPToolbox {
             DockProgressIndicatingController.shared.setProgress(nil)
         }
         session.isPlaying = false
-        session.showToast("Exporting video…")
+        session.showToast("Exporting video...")
         DockProgressIndicatingController.shared.setProgress(0)
         let started = Date()
         var lastReported = -1.0

@@ -45,7 +45,7 @@ public enum StillFrameFormat: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-// MARK: - 1. Reel Mode Safe-Zone Preview Overlay (TikTok & Instagram Reels — Smooth Show/Hide & Switch)
+// MARK: - 1. Reel Mode Safe-Zone Preview Overlay (TikTok & Instagram Reels, Smooth Show/Hide & Switch)
 
 public struct ReelModeSafeZoneOverlayView: View {
     @Bindable var session: ProjectSession
@@ -199,7 +199,7 @@ public struct ReelModeSafeZoneOverlayView: View {
                             HStack(spacing: 5 * scale) {
                                 Image(systemName: "music.note")
                                     .font(.system(size: 10.5 * scale))
-                                Text("original sound — Native Screen")
+                                Text("original sound · Native Screen")
                                     .font(.system(size: 11 * scale, weight: .medium))
                             }
                             .foregroundStyle(.white.opacity(0.90))
@@ -347,12 +347,12 @@ public struct StandaloneCropWindowView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "rectangle.dashed")
                             .font(.system(size: 12))
-                        Text("Select…")
+                        Text("Select...")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+                    .background(Color.ink.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
                     .contentShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .menuStyle(.borderlessButton)
@@ -380,13 +380,13 @@ public struct StandaloneCropWindowView: View {
                         Text("Reset")
                             .font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundStyle(.white.opacity(draftCrop01 == .full ? 0.35 : 0.92))
+                    .foregroundStyle(.ink.opacity(draftCrop01 == .full ? 0.35 : 0.92))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+                    .background(Color.ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
                     .overlay(
                         RoundedRectangle(cornerRadius: 7)
-                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                            .strokeBorder(Color.ink.opacity(0.12), lineWidth: 1)
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 7))
                 }
@@ -534,16 +534,16 @@ public struct StandaloneCropWindowView: View {
                 } label: {
                     Text("Discard changes")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.ink.opacity(0.88))
                         .padding(.horizontal, 18)
                         .padding(.vertical, 10)
                         .background(
-                            Color.white.opacity(0.08),
+                            Color.ink.opacity(0.08),
                             in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.12), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
@@ -554,7 +554,7 @@ public struct StandaloneCropWindowView: View {
         }
         .background {
             ZStack {
-                Color(red: 0.19, green: 0.19, blue: 0.23)
+                Color.surface(red: 0.19, green: 0.19, blue: 0.23)
                 if let img = uncroppedScreenImage {
                     Image(nsImage: img)
                         .resizable()
@@ -565,7 +565,6 @@ public struct StandaloneCropWindowView: View {
             }
             .ignoresSafeArea()
         }
-        .preferredColorScheme(.dark)
         .task {
             draftCrop01 = session.document.canvas.cropRect01
             uncroppedScreenImage = await session.extractRawSourceFrameNSImage()
@@ -576,14 +575,14 @@ public struct StandaloneCropWindowView: View {
     private func cropDimensionBadge(_ text: String) -> some View {
         Text(text.localizedUI)
             .font(.system(size: 12, weight: .semibold).monospacedDigit())
-            .foregroundStyle(.white)
+            .foregroundStyle(.ink)
             .frame(minWidth: 46)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.adaptive(dark: .black.opacity(0.28), light: .white), in: RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                    .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
             )
     }
 
@@ -696,7 +695,7 @@ public struct ExportStillFrameModalView: View {
             // Top Header Title
             Text("Export still frames")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(.ink.opacity(0.92))
                 .padding(.horizontal, 22)
                 .padding(.vertical, 16)
 
@@ -707,7 +706,7 @@ public struct ExportStillFrameModalView: View {
                 // Left: Composited Still Frame Preview
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.black.opacity(0.45))
+                        .fill(Color.adaptive(dark: .black.opacity(0.45), light: .black.opacity(0.05)))
 
                     if let img = previewImage {
                         Image(nsImage: img)
@@ -728,19 +727,19 @@ public struct ExportStillFrameModalView: View {
                     HStack(spacing: 16) {
                         Text("Name")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.ink.opacity(0.85))
                             .frame(width: 96, alignment: .leading)
 
                         TextField("Frame name", text: $frameName)
                             .textFieldStyle(.plain)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .background(Color.adaptive(dark: .black.opacity(0.35), light: .white), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                             )
                     }
 
@@ -748,44 +747,44 @@ public struct ExportStillFrameModalView: View {
                     HStack(spacing: 16) {
                         Text("Export to")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.ink.opacity(0.85))
                             .frame(width: 96, alignment: .leading)
 
                         HStack(spacing: 6) {
                             Text(exportDirectoryURL.path)
                                 .font(.system(size: 12.5, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.85))
+                                .foregroundStyle(.ink.opacity(0.85))
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                .background(Color.adaptive(dark: .black.opacity(0.35), light: .white), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                        .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                                 )
 
                             Button {
                                 chooseExportDirectory()
                             } label: {
                                 Image(systemName: "folder")
-                                    .accessibilityLabel(Text("Change directory…"))
+                                    .accessibilityLabel(Text("Change directory..."))
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.9))
+                                    .foregroundStyle(.ink.opacity(0.9))
                                     .frame(width: 34, height: 32)
-                                    .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                    .background(Color.ink.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                                     .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
                     }
 
-                    // 3. Resolution (`480P`, `720P`, `1080P`, `2K`, `4K`, `8K` — Clean dropdown matching Export Video's Frame rate menu!)
+                    // 3. Resolution (`480P`, `720P`, `1080P`, `2K`, `4K`, `8K`: Clean dropdown matching Export Video's Frame rate menu!)
                     HStack(spacing: 16) {
                         Text("Resolution")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.ink.opacity(0.85))
                             .frame(width: 96, alignment: .leading)
 
                         Menu {
@@ -805,21 +804,21 @@ public struct ExportStillFrameModalView: View {
                             HStack(spacing: 6) {
                                 Text(selectedResolution.rawValue)
                                     .font(.system(size: 13.5, weight: .regular).monospacedDigit())
-                                    .foregroundStyle(.white.opacity(0.95))
+                                    .foregroundStyle(.ink.opacity(0.95))
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 10.5, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.65))
+                                    .foregroundStyle(.ink.opacity(0.65))
                                     .padding(.leading, 4)
                             }
                             .padding(.horizontal, 14)
                             .frame(height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .fill(Color.white.opacity(0.04))
+                                    .fill(Color.ink.opacity(0.04))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
                             )
                             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         }
@@ -829,11 +828,11 @@ public struct ExportStillFrameModalView: View {
                         Spacer()
                     }
 
-                    // 4. Format (`PNG` | `JPEG` — 2 toggle pill buttons)
+                    // 4. Format (`PNG` | `JPEG`: 2 toggle pill buttons)
                     HStack(spacing: 16) {
                         Text("Format")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.ink.opacity(0.85))
                             .frame(width: 96, alignment: .leading)
 
                         HStack(spacing: 6) {
@@ -846,19 +845,19 @@ public struct ExportStillFrameModalView: View {
                                 } label: {
                                     Text(fmt.rawValue)
                                         .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(.white.opacity(isSelected ? 0.98 : 0.82))
+                                        .foregroundStyle(.ink.opacity(isSelected ? 0.98 : 0.82))
                                         .padding(.horizontal, 18)
                                         .frame(height: 36)
                                         .background(
                                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                .fill(Color.white.opacity(isSelected ? 0.08 : 0.035))
+                                                .fill(Color.ink.opacity(isSelected ? 0.08 : 0.035))
                                         )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                                 .strokeBorder(
                                                     isSelected
                                                         ? Color(red: 0.50, green: 0.44, blue: 0.78).opacity(0.88)
-                                                        : Color.white.opacity(0.05),
+                                                        : Color.ink.opacity(0.05),
                                                     lineWidth: 1.0
                                                 )
                                         )
@@ -885,12 +884,12 @@ public struct ExportStillFrameModalView: View {
                 } label: {
                     Text("Cancel")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.ink.opacity(0.88))
                         .frame(width: 88, height: 34)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color.ink.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                .strokeBorder(Color.ink.opacity(0.10), lineWidth: 1)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
@@ -900,7 +899,7 @@ public struct ExportStillFrameModalView: View {
                 Button {
                     performExportStillFrame()
                 } label: {
-                    Text(isExporting ? "Exporting…" : "Export")
+                    Text(isExporting ? "Exporting..." : "Export")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 92, height: 34)
@@ -918,8 +917,7 @@ public struct ExportStillFrameModalView: View {
             .padding(.bottom, 20)
         }
         .frame(width: 660, height: 460)
-        .background(Color(red: 0.08, green: 0.08, blue: 0.10))
-        .preferredColorScheme(.dark)
+        .background(Color.surface(red: 0.08, green: 0.08, blue: 0.10))
         .task {
             let totalSec = Int(session.effectivePreviewTimelineMs / 1000.0)
             frameName = "\(session.document.name)(\(totalSec)s)"

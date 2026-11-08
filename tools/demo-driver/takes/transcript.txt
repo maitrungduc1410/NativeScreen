@@ -1,0 +1,1 @@
+So, um, this is the settings page for Mapleboard. [[slnc 1200]] Here you can change your profile, uh, and the way the app looks. [[slnc 2200]] Let's switch to the dark theme. Um, that looks much better. [[slnc 1800]] And finally, uh, we generate a new A P I key, and copy it. [[slnc 1500]] That's it.

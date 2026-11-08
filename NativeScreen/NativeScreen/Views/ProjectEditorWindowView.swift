@@ -51,7 +51,7 @@ public struct ProjectEditorWindowView: View {
                 // 1. UNIFIED DARK WINDOW HEADER BAR (Matches Header & 2!)
                 let centerY = max(24.0, trafficLightCenterY)
                 ZStack {
-                    // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢 — 36pt buttons, 6pt radius & 16pt icons!)
+                    // Left Controls (Placed after macOS traffic lights 🔴 🟡 🟢, 36pt buttons, 6pt radius & 16pt icons!)
                     HStack(spacing: 4) {
                         InstantTooltipButton(
                             tooltip: "Show project in Finder",
@@ -167,7 +167,7 @@ public struct ProjectEditorWindowView: View {
                     HStack(spacing: 10) {
                         Spacer()
 
-                        // 1. Command Menu Button (`command.circle` — "Show command menu... ⌘ K")
+                        // 1. Command Menu Button (`command.circle`: "Show command menu... ⌘ K")
                         InstantTooltipButton(
                             tooltip: "Show command menu...",
                             shortcutBadge: "⌘ K",
@@ -541,7 +541,7 @@ public struct ProjectEditorWindowView: View {
                     // Unified Transport Playback & Timeline Bar (layout:
                     // Left = Split Tool `✂️` | Center = Timecodes + Jump Start / Play / Jump End with Top Tooltips | Right = Extract Frame + Timeline Zoom Slider)
                     ZStack {
-                        // Left: Split Tool Button (`✂️` — Dual activation: Click to toggle OR Hold Option `⌥` key!)
+                        // Left: Split Tool Button (`✂️`: Dual activation: Click to toggle OR Hold Option `⌥` key!)
                         HStack(spacing: 8) {
                             InstantTooltipButton(
                                 tooltip: "Split clip (⌥)",
@@ -658,7 +658,7 @@ public struct ProjectEditorWindowView: View {
                         HStack(spacing: 10) {
                             Spacer()
 
-                            // Playback Speed Button (`1x` — Opens Native Liquid Glass NSMenu on click)
+                            // Playback Speed Button (`1x`: Opens Native Liquid Glass NSMenu on click)
                             InstantTooltipButton(
                                 tooltip: "Playback speed",
                                 edge: .top,
@@ -1520,6 +1520,7 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
     let containerSize: CGSize
     var aspect: Double
     @Binding var isHoveringPreviewCanvas: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     nonisolated var animatableData: Double {
         get { aspect }
@@ -1557,7 +1558,13 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
                     lineWidth: isHoveringPreviewCanvas ? 1.5 : 1.0
                 )
         )
-        .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+        // A light editor gets a much smaller, fainter shadow: the dark one is cut off by the toolbar and playback bar
+        // above and below the canvas and looks like a smudge on a light background.
+        .shadow(
+            color: colorScheme == .dark ? .black.opacity(0.55) : .black.opacity(0.10),
+            radius: colorScheme == .dark ? 20 : 6,
+            y: colorScheme == .dark ? 8 : 2
+        )
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 isHoveringPreviewCanvas = hovering
@@ -2247,7 +2254,7 @@ private struct CommandMenuOverlayView: View {
         items.append(EditorCommandItem(
             id: "importVoiceoverAudio",
             group: "Voiceover",
-            title: "Upload voiceover audio file…",
+            title: "Upload voiceover audio file...",
             icon: "waveform.badge.plus"
         ) {
             session.promptImportVoiceoverAudioFile()
@@ -2338,7 +2345,7 @@ private struct CommandMenuOverlayView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Dimmed Backdrop (`#08090D` at 0.82 opacity — click outside to dismiss)
+            // Dimmed Backdrop (`#08090D` at 0.82 opacity, click outside to dismiss)
             Color.surface(red: 0.03, green: 0.035, blue: 0.05).opacity(0.82)
                 .ignoresSafeArea()
                 .onTapGesture {
@@ -2964,11 +2971,11 @@ private struct ExportSettingsModalView: View {
                         }
                     }
 
-                    // Bottom-Right Estimation Line (`Estimation — Export time 19 seconds — Output size 35–85MB`)
+                    // Bottom-Right Estimation Line (`Estimation: Export time 19 seconds, Output size 35–85MB`)
                     HStack {
                         Spacer()
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text("Estimation — Export time \(estimatedTimeText) — Output size \(estimatedSizeText)")
+                            Text("Estimation: Export time \(estimatedTimeText), Output size \(estimatedSizeText)")
                                 .font(.system(size: 12.5, weight: .regular).monospacedDigit())
                                 .foregroundStyle(.ink.opacity(0.30))
 
@@ -3012,7 +3019,7 @@ private struct ExportSettingsModalView: View {
             if badgeIcon {
                 Image(systemName: icon)
                     .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(.black.opacity(0.9))
+                    .foregroundStyle(.inkInverse)
                     .frame(width: 17, height: 15)
                     .background(
                         RoundedRectangle(cornerRadius: 4, style: .continuous)

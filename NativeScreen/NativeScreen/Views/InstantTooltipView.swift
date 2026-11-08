@@ -261,10 +261,17 @@ private final class TooltipContentView: NSView {
         ctx.addPath(outlinePath)
         ctx.clip()
 
-        ctx.setFillColor(NSColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 0.58).cgColor)
+        // The panel follows the owner window's appearance: a dark tint over the dark popover material, or a light one
+        // over the light material, so `labelColor` text always reads.
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ctx.setFillColor(isDark
+            ? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 0.58).cgColor
+            : NSColor(srgbRed: 0.98, green: 0.98, blue: 0.99, alpha: 0.72).cgColor)
         ctx.fill(bounds)
 
-        ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.16).cgColor)
+        ctx.setStrokeColor(isDark
+            ? NSColor.white.withAlphaComponent(0.16).cgColor
+            : NSColor.black.withAlphaComponent(0.10).cgColor)
         ctx.setLineWidth(1.5)
         ctx.addPath(outlinePath)
         ctx.strokePath()
@@ -733,6 +740,10 @@ private struct ScalarSpring1D {
     }
 }
 
+/// A window whose chrome is dark in both appearances (the recording bar). Hover highlights inside it stay light.
+@MainActor
+protocol AlwaysDarkChromeWindow: NSWindow {}
+
 /// Pure AppKit `NSView` that renders the directional `.hover-magnet` `CALayer` (`overflow: visible`)
 /// and drives `SharedFloatingTooltipWindowController` with zero SwiftUI `@State` invalidations during hover/move!
 @MainActor
@@ -813,6 +824,17 @@ public final class HoverMagnetTrackingNSView: NSView {
     }
 
     private let magnetLayer = CALayer()
+
+    /// Light appearance, unless the window draws its own dark chrome whatever the appearance (the recording bar).
+    private var isOnLightChrome: Bool {
+        guard !(window is AlwaysDarkChromeWindow) else { return false }
+        return effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .aqua
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyMagnetTransform()
+    }
     private var trackingAreaRef: NSTrackingArea?
     private var springTimer: Timer?
 
@@ -1064,8 +1086,10 @@ public final class HoverMagnetTrackingNSView: NSView {
                 magnetLayer.borderWidth = 0.0
             }
         } else {
-            // `#ffffff14`
-            magnetLayer.backgroundColor = NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.095).cgColor
+            // `#ffffff14` on dark chrome; a dark tint on light chrome, where white would not show.
+            magnetLayer.backgroundColor = isOnLightChrome
+                ? NSColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.065).cgColor
+                : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.095).cgColor
             magnetLayer.borderWidth = 0.0
         }
 

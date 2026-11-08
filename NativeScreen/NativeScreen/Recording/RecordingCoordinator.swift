@@ -7,7 +7,7 @@ import AVFoundation
 
 /// Custom `NSPanel` that allows dragging the Recording HUD from ANYWHERE on the bar (even when pressing on buttons),
 /// while still allowing normal clicks on buttons, and persists its global multi-monitor position.
-private final class DraggableHUDPanel: NSPanel {
+private final class DraggableHUDPanel: NSPanel, AlwaysDarkChromeWindow {
     var onPanelMoved: ((NSPoint) -> Void)?
     var isDragEnabled: (() -> Bool)?
 
@@ -1168,6 +1168,12 @@ public final class RecordingCoordinator {
             engine.onFirstVideoFrameArrived = { firstFrameUptimeSec in
                 telemetry.markFirstVideoFrameArrived(atUptimeSec: firstFrameUptimeSec)
             }
+            engine.onCaptureFailed = { [weak self, weak engine] failure in
+                Task { @MainActor [weak self, weak engine] in
+                    guard let self, let engine else { return }
+                    await self.endRecordingAfterCaptureFailure(failure, engine: engine)
+                }
+            }
             telemetry.start()
 
             try await engine.startCapture(
@@ -1365,8 +1371,48 @@ public final class RecordingCoordinator {
         recordedAreaHighlightWindow = nil
     }
 
-    public func stopRecordingAndOpenEditor() async {
-        guard isRecording else { return }
+    /// A writer failed or the stream ended by itself (`ScreenCaptureEngine.onCaptureFailed`): keep what was written,
+    /// open it, and say why the recording stopped.
+    private func endRecordingAfterCaptureFailure(_ failure: ScreenCaptureEngine.CaptureFailure, engine: ScreenCaptureEngine) async {
+        guard isRecording, captureEngine === engine else { return }
+        let savedMs = await stopRecordingAndOpenEditor()
+        let reason: String
+        let details: String
+        switch failure {
+        case .stream(let d):
+            reason = String(localized: "The recorded window or display is no longer available.")
+            details = d
+        case .screenWriter(let d):
+            reason = String(localized: "The screen video could not be written.")
+            details = d
+        case .webcamWriter(let d):
+            reason = String(localized: "The camera video could not be written.")
+            details = d
+        case .microphoneWriter(let d):
+            reason = String(localized: "The microphone audio could not be written.")
+            details = d
+        }
+        lastErrorMessage = reason
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Recording stopped")
+        let outcome: String
+        if let savedMs {
+            let total = Int((savedMs / 1000.0).rounded())
+            let length = String(format: "%d:%02d", total / 60, total % 60)
+            outcome = String(localized: "The first \(length) was saved and opened in the editor.")
+        } else {
+            outcome = String(localized: "Nothing could be saved.")
+        }
+        alert.informativeText = "\(reason) \(outcome)\n\n\(details)"
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    /// Returns the saved length in milliseconds, or nil when nothing was saved.
+    @discardableResult
+    public func stopRecordingAndOpenEditor() async -> Double? {
+        guard isRecording else { return nil }
         recordingTimer?.invalidate()
         recordingTimer = nil
         isRecording = false
@@ -1378,7 +1424,8 @@ public final class RecordingCoordinator {
         if let engine = captureEngine {
             await engine.stopCapture()
         }
-        let durationMs = max(1000.0, captureEngine?.recordedDurationMs ?? (recordingElapsedSeconds * 1000.0))
+        var durationMs = max(1000.0, captureEngine?.recordedDurationMs ?? (recordingElapsedSeconds * 1000.0))
+        let failed = captureEngine?.captureFailure != nil
         captureEngine = nil
         activeLogicalBoundsQuartz = nil
         restorePostRecordingSystemState()
@@ -1386,10 +1433,26 @@ public final class RecordingCoordinator {
         guard let packageURL = activePackageURL,
               let targetMeta = activeTargetMetadata else {
             updateHUDPanelFrameForCurrentState(animated: true)
-            return
+            return nil
         }
 
         let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+
+        // A failed writer is never finished: the file holds only its complete 2 s fragments, so the project must not
+        // be longer than what can be played back.
+        if failed {
+            let asset = AVURLAsset(url: recordingDir.appendingPathComponent("display.mp4"))
+            let playableMs = ((try? await asset.load(.duration)).map(CMTimeGetSeconds) ?? 0) * 1000.0
+            guard playableMs.isFinite, playableMs >= 500 else {
+                try? FileManager.default.removeItem(at: packageURL)
+                activePackageURL = nil
+                activeTargetMetadata = nil
+                updateHUDPanelFrameForCurrentState(animated: true)
+                hudPanel?.orderFrontRegardless()
+                return nil
+            }
+            durationMs = min(durationMs, playableMs)
+        }
         let hasRecordedWebcam = selectedCameraDeviceID != nil
         let hasRecordedMic = captureMicrophone && selectedMicrophoneDeviceID != nil
         let metadata = RecordingMetadata(
@@ -1453,6 +1516,7 @@ public final class RecordingCoordinator {
             }
             onRecordingCompleted?(session)
         }
+        return durationMs
     }
 
     // MARK: - App Menu Entry Points (`Record`, `View > Show recording widget`, `Window > Reset windows positions`)
@@ -1779,7 +1843,7 @@ public final class HUDNativeMenuPresenter: NSObject {
         beforeHeaderItem.view = beforeHeaderView
         menu.addItem(beforeHeaderItem)
 
-        // 2. Countdown Row (`Off | 3s | 5s | 10s` — Single-line `.fixedSize(horizontal: true)` for i18n safety!)
+        // 2. Countdown Row (`Off | 3s | 5s | 10s`: Single-line `.fixedSize(horizontal: true)` for i18n safety!)
         let countdownItem = NSMenuItem()
         let countdownView = NSHostingView(rootView: HUDCountdownSegmentedRowView(coordinator: coordinator))
         let countdownIntrinsicW = ceil(countdownView.fittingSize.width)
@@ -1872,7 +1936,7 @@ public final class HUDNativeMenuPresenter: NSObject {
         menu.autoenablesItems = false
         retainedTargets.removeAll()
 
-        menu.addItem(makeCommandItem(title: "Open .nativescreen Project…", symbol: "folder") {
+        menu.addItem(makeCommandItem(title: "Open .nativescreen Project...", symbol: "folder") {
             workspace.promptOpenProjectDialog()
         })
 
@@ -1904,7 +1968,7 @@ public final class HUDNativeMenuPresenter: NSObject {
     }
 
     /// Pops up the HUD context menu cleanly **outside** the clicked button highlight (below the button if there is room below on screen,
-    /// or cleanly above the HUD bar if near the bottom of the screen — NEVER overlapping the button!).
+    /// or cleanly above the HUD bar if near the bottom of the screen, NEVER overlapping the button!).
     private func popUpMenuOutsideButton(menu: NSMenu, anchorButtonScreenRect: NSRect, in panel: NSWindow?) {
         let menuSize = menu.size
         let menuW = max(260.0, menuSize.width)
@@ -2525,7 +2589,7 @@ private struct HUDLiquidGlassBackgroundView: NSViewRepresentable {
     }
 }
 
-// MARK: - Floating Recording HUD Bar View (`NSPanel` Content — Idle Bar, Countdown Bar, and Compact Recording Bar)
+// MARK: - Floating Recording HUD Bar View (`NSPanel` content: Idle Bar, Countdown Bar, and Compact Recording Bar)
 
 public struct RecordingHUDBarView: View {
     @Bindable var coordinator: RecordingCoordinator
@@ -2564,7 +2628,7 @@ public struct RecordingHUDBarView: View {
 
     private var idlePreRecordingBar: some View {
         HStack(spacing: 8) {
-            // 1. Close button (`xmark.circle.fill` — No tooltip, rounded-rectangle hover background matching other HUD buttons!)
+            // 1. Close button (`xmark.circle.fill`: No tooltip, rounded-rectangle hover background matching other HUD buttons!)
             HUDInteractiveItemButton(
                 tooltip: nil,
                 isSelected: false,
@@ -2585,7 +2649,7 @@ public struct RecordingHUDBarView: View {
                 .frame(width: 1, height: 28)
                 .padding(.horizontal, 2)
 
-            // 2. Capture Target Mode Buttons (`Display`, `Window`, `Area`, `Device` — Uniform 44pt height, crisp white icons!)
+            // 2. Capture Target Mode Buttons (`Display`, `Window`, `Area`, `Device`: Uniform 44pt height, crisp white icons!)
             HStack(spacing: 4) {
                 ForEach(CaptureTargetMode.allCases) { mode in
                     let isSelected = (coordinator.isPickingTarget && coordinator.selectedMode == mode)
@@ -2619,7 +2683,7 @@ public struct RecordingHUDBarView: View {
 
             // 3. Camera, Microphone & System Audio Selector Buttons (No tooltips since they have explicit text labels!)
             HStack(spacing: 4) {
-                // 3a. Camera Button (`No camera` or `<Camera Name>` — Truncated cleanly like `MacBoo...` in)
+                // 3a. Camera Button (`No camera` or `<Camera Name>`: Truncated cleanly like `MacBoo...` in)
                 let hasCamera = (coordinator.selectedCameraDeviceID != nil)
                 HUDInteractiveItemButton(
                     tooltip: nil,
@@ -2714,7 +2778,7 @@ public struct RecordingHUDBarView: View {
                     }
                 }
 
-                // 3c. System Audio Button (`System audio`, `Sound from 1 app`, or `No system audio` with `tv.music.note` icon — Images 1, 2, 3, 4!)
+                // 3c. System Audio Button (`System audio`, `Sound from 1 app`, or `No system audio` with `tv.music.note` icon, Images 1, 2, 3, 4!)
                 let sysAudioActive = coordinator.isSystemAudioEffectivelyActive
                 HUDInteractiveItemButton(
                     tooltip: nil,
@@ -2798,7 +2862,7 @@ public struct RecordingHUDBarView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    // MARK: - 2. Pre-Recording Countdown HUD Bar ( — `Get ready. Recording will start soon.` + `Continue (1)`)
+    // MARK: - 2. Pre-Recording Countdown HUD Bar (`Get ready. Recording will start soon.` + `Continue (1)`)
 
     private var countdownBar: some View {
         let coralColor = Color(red: 0.96, green: 0.46, blue: 0.43)
@@ -2878,7 +2942,7 @@ public struct RecordingHUDBarView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    // MARK: - 3. Active Recording Compact HUD Bar ( — `[⏹ 0:04 | ⏸  ↺  🗑]`)
+    // MARK: - 3. Active Recording Compact HUD Bar (`[⏹ 0:04 | ⏸  ↺  🗑]`)
 
     private var activeRecordingCompactBar: some View {
         let stopRed = Color(red: 1.0, green: 0.27, blue: 0.21)
@@ -2980,7 +3044,7 @@ public struct RecordingHUDBarView: View {
 }
 
 /// Borderless Hover-Highlight Button for the Recording HUD Panel:
-/// NO border/outline on hover — only a smooth rounded fill + standalone floating top tooltip window that never clips!).
+/// NO border/outline on hover, only a smooth rounded fill + standalone floating top tooltip window that never clips!).
 private struct HUDInteractiveItemButton<LabelContent: View>: View {
     let tooltip: String?
     let isSelected: Bool

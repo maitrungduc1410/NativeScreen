@@ -228,10 +228,10 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         cropWin.isReleasedWhenClosed = false
         cropWin.contentViewController = hostingController
         cropWin.minSize = NSSize(width: 640, height: 480)
-        cropWin.title = String(localized: "Crop — \(session.document.name)")
+        cropWin.title = String(localized: "Crop: \(session.document.name)")
         cropWin.titleVisibility = .hidden
         cropWin.titlebarAppearsTransparent = true
-        cropWin.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
+        cropWin.backgroundColor = .surface(red: 0.19, green: 0.19, blue: 0.23)
         cropWin.isMovableByWindowBackground = true
 
         let toolbar = NSToolbar(identifier: "NativeScreenCropToolbar-\(session.id.uuidString)")
@@ -292,10 +292,10 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         win.isReleasedWhenClosed = false
         win.contentViewController = hostingController
         win.minSize = NSSize(width: 720, height: 520)
-        win.title = String(localized: "Crop camera — \(session.document.name)")
+        win.title = String(localized: "Crop camera: \(session.document.name)")
         win.titleVisibility = .hidden
         win.titlebarAppearsTransparent = true
-        win.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
+        win.backgroundColor = .surface(red: 0.19, green: 0.19, blue: 0.23)
         win.isMovableByWindowBackground = true
 
         let toolbar = NSToolbar(identifier: "NativeScreenCameraCropToolbar-\(session.id.uuidString)")
@@ -358,7 +358,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         win.title = String(localized: "Color preset studio")
         win.titleVisibility = .hidden
         win.titlebarAppearsTransparent = true
-        win.backgroundColor = NSColor(red: 0.19, green: 0.19, blue: 0.23, alpha: 1.0)
+        win.backgroundColor = .surface(red: 0.19, green: 0.19, blue: 0.23)
         win.isMovableByWindowBackground = true
 
         let toolbar = NSToolbar(identifier: "NativeScreenColorPresetToolbar-\(session.id.uuidString)")
@@ -520,7 +520,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([Self.defaultProjectsDirectory])
     }
 
-    /// `File > Save as…`: saves, copies the whole package to a new location and continues editing the copy.
+    /// `File > Save as...`: saves, copies the whole package to a new location and continues editing the copy.
     public func saveActiveProjectAs() {
         guard let session = activeSession else { return }
         session.isPlaying = false
@@ -596,7 +596,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         return dated.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
     }
 
-    /// `Export > Extract raw recording files…`: copies the untouched recorded media (screen, camera, microphone) to a folder.
+    /// `Export > Extract raw recording files...`: copies the untouched recorded media (screen, camera, microphone) to a folder.
     public func extractRawRecordingFiles() {
         guard let session = activeSession else { return }
         let panel = NSOpenPanel()
@@ -857,7 +857,7 @@ public final class ProjectPresetsStore {
         }
     }
 
-    /// `File > Import preset…`: imports preset `.json` files (as written to the presets folder) shared by another user or machine.
+    /// `File > Import preset...`: imports preset `.json` files (as written to the presets folder) shared by another user or machine.
     /// An imported preset gets a fresh id so it never overwrites an existing one.
     public func promptImportPresets() {
         let panel = NSOpenPanel()

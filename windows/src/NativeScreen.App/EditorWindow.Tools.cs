@@ -315,7 +315,7 @@ public sealed partial class EditorWindow
 
         var id = slice.Id;
         var menu = new MenuFlyout();
-        foreach (var speed in new[] { 0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8 })
+        foreach (var speed in new[] { 0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 10 })
         {
             var value = speed;
             menu.Items.Add(Menu($"{value:0.##}x", () => session.Mutate(document => document.Timeline.Slices.First(other => other.Id == id).Speed = value)));

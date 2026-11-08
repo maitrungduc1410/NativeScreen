@@ -104,7 +104,7 @@
     },
     {
       "name": "add_item",
-      "description": "Adds a timeline item and returns its id. zoom, mask, camera_layout, caption and shortcut need sourceStartMs and sourceEndMs. mask goes on trackId or the first mask track free at that time (a new track if none). caption goes on trackId or the first caption track (created if needed). shortcut is a custom keystroke on trackId or the first shortcut track. caption_track and shortcut_track add an empty track. properties is a merge patch applied to the new item, e.g. {\"scale\":2.2,\"mode\":\"manual\",\"manualCenter01\":{\"x\":0.3,\"y\":0.4}} for a zoom.",
+      "description": "Adds a timeline item and returns its id. zoom, mask, camera_layout, caption and shortcut need sourceStartMs and sourceEndMs. mask goes on trackId or the first mask track free at that time (a new track if none). caption goes on trackId, on a new track when trackId is \"new\", or on the first caption track (created if needed). shortcut is a custom keystroke on trackId or the first shortcut track. shortcut_track adds an empty track; caption_track adds a track holding one \"New caption\" at the playhead, because a caption track is never empty (to start a track with your own caption, add a caption with trackId \"new\"). properties is a merge patch applied to the new item, e.g. {\"scale\":2.2,\"mode\":\"manual\",\"manualCenter01\":{\"x\":0.3,\"y\":0.4}} for a zoom.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -144,7 +144,7 @@
     },
     {
       "name": "delete_item",
-      "description": "Deletes a timeline item or a whole track with everything on it. Item kinds: slice, zoom, mask, camera_layout, voiceover, caption, shortcut (a shortcut cluster id from get_project info.shortcuts). Track kinds: caption_track, mask_track, shortcut_track, voiceover_track (id is the track index, 0 based), camera_layouts_track (id is ignored). One undo step.",
+      "description": "Deletes a timeline item or a whole track with everything on it. Item kinds: slice, zoom, mask, camera_layout, voiceover, caption, shortcut (a shortcut cluster id from get_project info.shortcuts). Track kinds: caption_track, mask_track and shortcut_track (id is the track's id), voiceover_track (id is the track index, 0 based), camera_layouts_track (id is ignored). One undo step.",
       "inputSchema": {
         "type": "object",
         "properties": {

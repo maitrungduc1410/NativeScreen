@@ -1,0 +1,6 @@
+[
+  {"op": "reload", "ms": 300},
+  {"op": "front"},
+  {"op": "js", "code": "document.querySelector('.nav-item[data-page=settings]').click()"},
+  {"op": "wait", "ms": 400}
+]

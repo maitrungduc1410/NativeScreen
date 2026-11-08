@@ -62,7 +62,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         // 4. Set speed submenu
         let speedSubmenu = NSMenu(title: String(localized: "Set speed"))
-        for spd in [0.5, 1.0, 1.25, 1.5, 2.0, 4.0] {
+        for spd in [0.5, 1.0, 1.25, 1.5, 2.0, 4.0, 6.0, 8.0, 10.0] {
             let subItem = makeCommandItem(title: String(format: "%gx", spd), keyEquivalent: "", modifiers: []) {
                 session.setSliceSpeed(id: sliceId, speed: spd)
             }
@@ -189,7 +189,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         menu.addItem(.separator())
 
-        // 2. Zoom level SliderRow (`100%` - `400%`, 10% step increments — Native AppKit `NSSlider` with Purple Fill!)
+        // 2. Zoom level SliderRow (`100%` - `400%`, 10% step increments, Native AppKit `NSSlider` with Purple Fill!)
         let sliderItem = NSMenuItem()
         let sliderView = NSHostingView(
             rootView: MenuEmbeddedSliderRowView(
@@ -406,6 +406,11 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         menu.addItem(makeCommandItem(title: "Add caption track", keyEquivalent: "", modifiers: []) {
             session.addCaptionTrack()
         })
+        // Turns every caption on or off (`captions.enabled`); the Inspector no longer has this switch.
+        let captionsOn = session.document.captions.enabled
+        menu.addItem(makeCommandItem(title: captionsOn ? "Disable captions" : "Enable captions", keyEquivalent: "", modifiers: []) {
+            session.mutate { $0.captions.enabled = !captionsOn }
+        })
 
         menu.addItem(.separator())
 
@@ -456,7 +461,7 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         menu.addItem(.separator())
 
-        menu.addItem(makeCommandItem(title: "Edit shortcut…", keyEquivalent: "", modifiers: []) {
+        menu.addItem(makeCommandItem(title: "Edit shortcut...", keyEquivalent: "", modifiers: []) {
             session.selectShortcut(cluster.id)
         })
 
@@ -578,11 +583,11 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
             session.toggleVoiceoverDisabled(id: voiceoverId)
         })
 
-        menu.addItem(makeCommandItem(title: "Record new voiceover…", keyEquivalent: "", modifiers: []) {
+        menu.addItem(makeCommandItem(title: "Record new voiceover...", keyEquivalent: "", modifiers: []) {
             session.startVoiceoverRecording()
         })
 
-        menu.addItem(makeCommandItem(title: "Upload voiceover audio file…", keyEquivalent: "", modifiers: []) {
+        menu.addItem(makeCommandItem(title: "Upload voiceover audio file...", keyEquivalent: "", modifiers: []) {
             session.promptImportVoiceoverAudioFile()
         })
 
@@ -898,7 +903,7 @@ private struct MenuImmediateClickOverlay: NSViewRepresentable {
     }
 }
 
-/// Native AppKit `NSSlider` Row for `NSMenuItem.view` — works 100% natively during `NSMenu` event tracking
+/// Native AppKit `NSSlider` Row for `NSMenuItem.view`: works 100% natively during `NSMenu` event tracking
 /// and uses `trackFillColor` so the slider track stays purple in both appearances.
 private struct MenuEmbeddedSliderRowView: View {
     let title: String

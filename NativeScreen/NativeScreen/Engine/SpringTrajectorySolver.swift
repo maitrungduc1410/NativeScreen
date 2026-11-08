@@ -1113,7 +1113,34 @@ public enum AutoZoomClusterGenerator {
             )
         }
 
-        return normalizeNonOverlappingZooms(blocks, durationMs: durationMs)
+        return normalizeNonOverlappingZooms(mergeCloseZooms(blocks), durationMs: durationMs)
+    }
+
+    /// Two zooms less than this far apart become one. Zooming out takes about 750 ms to settle, so a shorter gap only
+    /// zooms out and straight back in, which reads as a jolt.
+    public static let mergeGapMs = 1500.0
+
+    /// Joins neighbouring zooms whose gap is under `mergeGapMs`. The joined zoom spans both, and its center is the
+    /// duration-weighted mean of their centers.
+    static func mergeCloseZooms(_ blocks: [ZoomBlock]) -> [ZoomBlock] {
+        var result: [ZoomBlock] = []
+        for block in blocks.sorted(by: { $0.sourceStartMs < $1.sourceStartMs }) {
+            guard var last = result.last, block.sourceStartMs - last.sourceEndMs < mergeGapMs else {
+                result.append(block)
+                continue
+            }
+            let lastMs = last.sourceEndMs - last.sourceStartMs
+            let blockMs = block.sourceEndMs - block.sourceStartMs
+            let total = max(1.0, lastMs + blockMs)
+            let a = last.manualCenter01, b = block.manualCenter01
+            last.manualCenter01 = Point01(
+                x: (a.x * lastMs + b.x * blockMs) / total,
+                y: (a.y * lastMs + b.y * blockMs) / total
+            )
+            last.sourceEndMs = max(last.sourceEndMs, block.sourceEndMs)
+            result[result.count - 1] = last
+        }
+        return result
     }
 
     /// Ensures zoom blocks are sorted and strictly non-overlapping within `[0, durationMs]`.

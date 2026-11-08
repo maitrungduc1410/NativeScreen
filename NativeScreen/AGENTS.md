@@ -1,4 +1,4 @@
-# AGENTS.md — NativeScreen for macOS (`NativeScreen/`)
+# AGENTS.md: NativeScreen for macOS (`NativeScreen/`)
 
 This directory contains the native macOS implementation of **NativeScreen** built with **Swift, SwiftUI, AppKit, Metal, ScreenCaptureKit, and AVFoundation**.
 
@@ -15,11 +15,11 @@ xcodebuild -project NativeScreen.xcodeproj -scheme NativeScreen -configuration D
 - `NativeScreen.xcodeproj` uses `PBXFileSystemSynchronizedRootGroup` pointing at the `NativeScreen/` source folder.
 - Any `.swift` or `.metal` file created inside `NativeScreen/` (and its subdirectories) is **automatically compiled by Xcode** without needing manual edits to `project.pbxproj`.
 - Keep sources organized in logical subdirectories under `NativeScreen/NativeScreen/`:
-  - `Models/` — `ProjectDocument`, `RecordingMetadata`, Telemetry `.jsonl` models, and NLE time mapping.
-  - `Document/` — `ProjectSession`, Snapshot `UndoStack`, `.nativescreen` package load/save, and multi-window coordination.
-  - `Recording/` — `RecordingCoordinator`, Floating HUD (`NSPanel`), `WindowPickerOverlay` (`CGWindowListCopyWindowInfo` + `AXUIElement`), `ScreenCaptureEngine` (`ScreenCaptureKit` + `AVAssetWriter`), and `TelemetryRecorder` (`CGEvent` / `NSEvent`).
-  - `Engine/` — `SpringSolver` (120Hz cursor & camera physics), `AutoZoomSolver`, `MetalCompositor` (`MTKView` + Metal shaders), and `HardwareExporter` (`AVAssetReader` + `AVAssetWriter`).
-  - `Views/` — Welcome window, Editor window, Inspector sidebar, Preview canvas with interactive Mask/Crop handles, and Multi-Track NLE Timeline.
+  - `Models/`: `ProjectDocument`, `RecordingMetadata`, Telemetry `.jsonl` models, and NLE time mapping.
+  - `Document/`: `ProjectSession`, Snapshot `UndoStack`, `.nativescreen` package load/save, and multi-window coordination.
+  - `Recording/`: `RecordingCoordinator`, Floating HUD (`NSPanel`), `WindowPickerOverlay` (`CGWindowListCopyWindowInfo` + `AXUIElement`), `ScreenCaptureEngine` (`ScreenCaptureKit` + `AVAssetWriter`), and `TelemetryRecorder` (`CGEvent` / `NSEvent`).
+  - `Engine/`: `SpringSolver` (120Hz cursor & camera physics), `AutoZoomSolver`, `MetalCompositor` (`MTKView` + Metal shaders), and `HardwareExporter` (`AVAssetReader` + `AVAssetWriter`).
+  - `Views/`: Welcome window, Editor window, Inspector sidebar, Preview canvas with interactive Mask/Crop handles, and Multi-Track NLE Timeline.
 
 ## 3. macOS Specific Technical Guidelines
 

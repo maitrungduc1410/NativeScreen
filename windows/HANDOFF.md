@@ -17,7 +17,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 ### Verifier
 - **Result:** PASS | FAIL
 - **verify.ps1:** summary (build, tests, shaders)
-- **Measurements:** frame timing, A/V offset, export speed, memory, SSIM, … (with machine: CPU, GPU, display Hz)
+- **Measurements:** frame timing, A/V offset, export speed, memory, SSIM, ... (with machine: CPU, GPU, display Hz)
 - **Changes made:** files and why
 - **Spec updates:** ADRs or guide changes added
 - **Next:** what the writer should do next
@@ -26,6 +26,79 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 ---
 
 <!-- Entries start below this line. -->
+
+## 2026-11-08, Light theme pass (macOS done, Windows check pending)
+
+### Writer
+- **Scope:** `spec/06` ADR-16 "Light mode pass". macOS only; these are the places the first light theme missed, so check each one in the Windows light theme.
+- **How to verify on Windows:** switch to Light and check:
+  - Timeline segments (clip, zoom, mask, caption, layout) have their own brighter light colors, not the dark ones.
+  - Tooltip text is readable.
+  - The crop, camera crop, color preset and export frame dialogs follow the theme. Only what is drawn over the video stays fixed.
+  - Glyphs on a filled badge use the inverse of the text color, not black (export section badges, layout icons).
+  - Cursor tiles are light gray; a white cursor stays visible.
+  - The preview shadow is small and faint, and is not cut off by the toolbars.
+  - The hover highlight shows on light surfaces. The recording bar stays dark in both themes.
+
+## 2026-11-08, Clip speed up to 10x; mask handles and crop (macOS done, Windows check pending)
+
+### Planner
+- **Scope:** the clip speed menu and clamp go up to 10x (`spec/01`). macOS mask handles now use the compositor's stage rect and the crop (`spec/06` ADR-55).
+- **MCP (`spec/06` ADR-52):** `McpToolbox` must check top-level arguments against `MCPTools.json` before each tool: reject unknown keys, enforce `required` (an empty string counts as missing). Without it, a misspelled key on `delete_project` acts on the frontmost project.
+- **Windows:** the menu (App, not compiled) and `SetSliceSpeed` (Core, builds) are changed. The overlay already uses `stage.ScreenRect`, but `CanvasCoordinateTransform.ToCanvas` and `DeltaToSource` still ignore the crop: mask rects are full-frame, so handles are off on a cropped project. Apply the crop there as `CanvasCoordinateTransform.swift` does.
+
+## 2026-11-08, Captions: on/off moved to the right-click menu (macOS done, Windows check pending)
+
+### Writer
+- **Scope:** `spec/04` "Caption tracks in the inspector". The Captions inspector no longer has the `Disable captions` switch or the add-track buttons (the `+` next to `Track` and `Add caption track` under the transcript generator). A caption's right-click menu has `Disable captions` / `Enable captions` (toggles `captions.enabled`). When captions are off, the inspector shows `Captions are off. Right-click a caption on the timeline to turn them back on.` Both strings are in the catalog with all translations.
+- **How to verify on Windows:** match the inspector and the caption context menu.
+
+## 2026-11-08, Strings: three dots instead of the ellipsis character (catalog shared)
+
+### Writer
+- **Scope:** every catalog key and translation now uses three dots (`...`) instead of the ellipsis character, and so does the Swift and C# code (`Loc.T("Exporting...")`, `"Recording voiceover..."` and others). `Upload voiceover audio file...` and `Export current frame as image...` existed in both forms; they were merged, keeping the macOS translations. Seven keys with an em dash were also renamed (`Crop: %@`, `Crop camera: %@`, `Estimation: Export time %@, Output size %@`, `Pause: click to tighten to a natural breath`, `Tightened pause: click to restore`, `original sound · Native Screen`, and `Click any word to edit or cut. Cut video ...`).
+- **How to verify on Windows:** build, switch the language, and check that the menus, the export dialog and the voiceover strings are translated (a missing key shows English).
+- **Risks / unsure:** the C# was not compiled here.
+
+## 2026-11-08, Auto zooms: merge zooms less than 1.5 s apart (macOS done, Windows check pending)
+
+### Writer
+- **Scope:** `spec/03` §3.1. Auto zooms whose gap is under 1500 ms become one zoom spanning both, centered on the duration-weighted mean of their centers. Without it the camera zooms out and straight back in. macOS: `AutoZoomClusterGenerator.mergeCloseZooms`. Windows: the same logic is written in `NativeScreen.Core/Motion/AutoZoomClusterGenerator.cs` (`MergeCloseZooms`, `MergeGapMs`), but it was not built or tested here (no .NET SDK on this Mac).
+- **Fixtures:** regenerated with `--generate-conformance`; no `autozoom.json` changed, because no case has zooms that close. Nothing to update.
+- **How to verify on Windows:** `dotnet test windows/tests/NativeScreen.Core.Tests` still passes. Add a unit test with clicks at 0, 3000 and 6000 ms in a 12000 ms recording (blocks end 2500 ms after each click, the next starts 300 ms before its click) and expect one zoom from 0 to 8500 ms.
+- **Built on macOS:** `NativeScreen.Core` builds and its tests pass, 268 of 269. `BuiltInBackgroundMusicTests.PackageFilesWinOverBuiltIns` fails on macOS because it expects Windows path separators.
+
+## 2026-11-08, Recording: a failed capture must end the recording (macOS done, Windows check pending)
+
+### Writer
+- **Scope:** macOS, `spec/06` ADR-54. The fragmented `display.mp4` writer failed mid-take with -11800 / -16341 when H.264 frame reordering (B-frames) was on, and then dropped every frame silently. Fix: no frame reordering on the screen and webcam writers. Also: when any capture writer fails or the stream stops by itself, the recording ends as if Stop was pressed, the project is cut to the playable length, and an alert says what failed (`Recording stopped` and five more strings, already translated in the catalog). `get_status` reports the reason as `lastError`.
+- **How to verify on Windows:** recordings already use H.264 baseline (no B-frames, ADR-22). Check that a failed `IMFSinkWriter::WriteSample` or a `GraphicsCaptureItem.Closed` during a recording ends it the same way instead of recording black, and that the project length matches what plays back.
+- **Risks / unsure:** none known.
+
+## 2026-11-08, Export: MP4 must have one sample description (macOS done, Windows check pending)
+
+### Writer
+- **Scope:** macOS fix in `HardwareVideoExporter.swift` (`H264InBandParameterSets`), see `spec/06` ADR-01. The two-lane H.264 export (hardware and software `VTCompressionSession`, alternate 2 s GOPs) produced two SPS/PPS, so the MP4 had two `avc1` sample descriptions switching every GOP. Chrome fails at the first switch with `PIPELINE_ERROR_DECODE`. The muxer now writes all samples under the first description and puts each keyframe's own SPS/PPS in-band in front of the IDR.
+- **Also:** MCP `add_item caption` takes `trackId: "new"` to start a new caption track with that caption (ADR-52). The Windows MCP port should match.
+- **How to verify on Windows:** if the Windows exporter ever encodes with more than one encoder (or restarts the `IMFSinkWriter` mid-file), check the file has one `avc1` sample description (`ffprobe -show_streams` shows one stream, and no extra `stsd` entries in an MP4 box viewer) and that it plays to the end in Chrome. Keep the same rule if a parallel encode path is added later.
+- **Risks / unsure:** none for Windows today if it uses one encoder.
+
+## 2026-11-08, Releases: Velopack installer and updates (macOS done, Windows app work pending)
+
+### Writer
+- **Scope:** `.github/workflows/release.yml` (manual) now has a `windows` job: `dotnet publish` self-contained win-x64 into `publish/`, then `vpk pack --packId NativeScreen --channel win --mainExe NativeScreen.App.exe`, and uploads `Setup.exe`, the portable zip and the update feed to a draft GitHub release. Design in `spec/06` ADR-53, setup in `docs/releasing.md`. macOS got Sparkle the same way. Nothing in `windows/src` changed yet; this is what the app needs:
+  1. **Velopack startup hook.** Add `Velopack` (same version as the workflow's `vpk`, 1.2.161) to `Directory.Packages.props`. Velopack must run first thing in the process, before WinUI starts: define `DISABLE_XAML_GENERATED_MAIN`, write a `Program.Main` that calls `VelopackApp.Build().Run()` and then does what the generated `Main` did (`ComWrappersSupport.InitializeComWrappers()`, `Application.Start(...)`). Keep `SingleInstance` working: install and update hooks exit before it runs.
+  2. **Update check.** `UpdateManager(new GithubSource("https://github.com/maitrungduc1410/NativeScreen", null, false))`. Only when `UpdateManager.IsInstalled` (a `dotnet run` build must never update itself, the same rule as macOS, where local builds have no updater). Check once a day in the background; when an update is ready, show it in the tray menu and Settings (`Check for Updates...`, `Check for updates automatically`) and apply on restart with `WaitExitThenApplyUpdates`. Reuse the macOS strings: `Check for Updates...`, `Check for updates automatically`, `Native Screen checks GitHub for a new version once a day and asks before installing it.` (already translated in the catalog).
+  3. **Exe name.** The workflow packs `NativeScreen.App.exe`. If you rename the assembly (the MCP entry suggests `NativeScreen.exe`), change `--mainExe` in the workflow in the same commit.
+  4. **File association.** MSIX used to carry the `.nativescreen` association. With Velopack, register it in the install hook (`OnAfterInstallFastCallback`, current user, `HKCU\Software\Classes`) and remove it in `OnBeforeUninstallFastCallback`. Point it at the stable `current` path, not a versioned folder.
+  5. **Not signed yet.** SmartScreen will show "Windows protected your PC" on first run; the README and website explain More info > Run anyway. When SignPath approves, sign before packing (marked in the workflow).
+- **Built on macOS:** the workflow is written but has not run. The macOS side built a Release app locally with a test key: hardened runtime on, Sparkle embedded, launches.
+- **How to verify:**
+  1. `dotnet publish windows/src/NativeScreen.App/NativeScreen.App.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained -o publish`, then `vpk pack` with the arguments from the workflow. Install `releases\NativeScreen-win-Setup.exe` on a clean Windows 11 VM: it installs to `%LocalAppData%\NativeScreen`, starts once, shows in Apps, uninstalls cleanly.
+  2. Pack a higher `--packVersion` into the same `releases` folder, serve it with `SimpleWebSource` or a test release, and check that the installed app updates and keeps its settings.
+  3. Then run the `Release` workflow with platforms `windows` and `prerelease` on, and check the draft's files.
+- **Open VERIFY items:** whether WinUI's self-contained publish needs anything else in `publish/` for Velopack (resources.pri, the Windows App SDK runtime DLLs); the app must start from the installed folder on a machine without the SDK.
+- **Risks / unsure:** the Velopack hook must not create a window or touch COM before `Run()` returns.
 
 ## 2026-11-08, Windows port: AI agents through MCP
 
@@ -60,7 +133,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Scope:** `spec/06` ADR-16 (Settings window bullets). macOS files: `Views/SlidingSegmentedControl.swift` (new), `Views/SettingsView.swift`.
   - **Segmented choices slide:** appearance, countdown, max camera resolution, quick export format, resolution and compression, and the Shortcuts section switcher. The selected pill (accent color, 6 pt radius, light shadow) slides to the clicked segment with a 0.3 s spring; hairlines sit only between two unselected segments. Screen readers get a standard segmented control. With animations turned off in Windows (`UISettings.AnimationsEnabled == false`) the pill jumps.
   - **Tab height animates:** when the Settings tab changes, the window (or page host) eases to the new tab's height in about 0.3 s, keeping its top edge in place, instead of jumping. Skip the animation when animations are off.
-  - **AI Agents page:** the copy blocks show their whole text (the JSON config wraps over several lines instead of showing `{…`).
+  - **AI Agents page:** the copy blocks show their whole text (the JSON config wraps over several lines instead of showing `{...`).
 - **Built on macOS:** builds. The resize was measured frame by frame with a temporary probe (window height eased over about 27 frames, top edge fixed), and the General and AI Agents tabs were checked in screenshots. Not checked by clicking through.
 - **How to verify on Windows:** switch every Settings tab and watch the height ease; click through each segmented choice and watch the pill slide; check Narrator reads them as a list of options with the selected one.
 
@@ -76,8 +149,8 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
   2. **Bridge.** `NativeScreen.exe --mcp` must not create a window or the WinUI app. Check that a GUI-subsystem exe gets the client's redirected stdin and stdout; if not, ship a tiny console `nativescreen-mcp.exe` next to the app instead. If the pipe is missing: when the setting is off, answer the first request with the same error text and exit; otherwise start the app and wait up to 20 s. With Velopack, point configs at the stable `current` folder path so updates do not break them.
   3. **Setting.** `AiAgentsEnabled` in `settings.json`, off by default, read by the bridge too. Settings gets an `AI Agents` page with the switch, the status (`Off`, `Waiting for an agent to connect`, `Connected: %@`) and three copy blocks: `claude mcp add nativescreen -- "<exe>" --mcp`, `codex mcp add nativescreen -- "<exe>" --mcp`, and the `mcpServers` JSON.
   4. **Tools.** Same behavior as `MCPToolbox.swift`: merge patch against the document JSON (validated by deserializing before applying), `update_item` per kind, one undo step per call (break the undo coalescing first), overlap refusal for zooms, camera layouts, captions on a track and masks on a track, `render_frame` as a PNG image result, `export_video` with `notifications/progress` every 2% and cancellation, `delete_project` to the Recycle Bin, `control_recording cancel` without a dialog. JSON property names must match the macOS document exactly (the projects are shared), and `list_options enums` must list the same paths.
-  5. **Visibility.** Toast `AI agent connected` on the first connection, connected clients in the tray menu (`AI agent connected: %@`), `Exporting video…` and `Export finished` toasts.
-- **Strings:** 16 new keys with all 7 translations: `AI Agents`, `Allow AI agents to control Native Screen` and its description, `Status`, `Waiting for an agent to connect`, `Connected: %@`, `Connect an agent`, the paste hint, `Copied`, `Copy %@`, `Claude Desktop, Cursor and other apps`, the footnote, `AI agent connected`, `AI agent connected: %@`, `Exporting video…`, `Export finished`. The macOS texts mention `⌘Z`; add Windows keys with `Ctrl+Z` where needed.
+  5. **Visibility.** Toast `AI agent connected` on the first connection, connected clients in the tray menu (`AI agent connected: %@`), `Exporting video...` and `Export finished` toasts.
+- **Strings:** 16 new keys with all 7 translations: `AI Agents`, `Allow AI agents to control Native Screen` and its description, `Status`, `Waiting for an agent to connect`, `Connected: %@`, `Connect an agent`, the paste hint, `Copied`, `Copy %@`, `Claude Desktop, Cursor and other apps`, the footnote, `AI agent connected`, `AI agent connected: %@`, `Exporting video...`, `Export finished`. The macOS texts mention `⌘Z`; add Windows keys with `Ctrl+Z` where needed.
 - **How to verify on Windows:**
   - Turn the setting on, run `claude mcp add nativescreen -- "<exe>" --mcp` (or the Codex line), and in the agent ask for `get_status`; quit the app first to check that the bridge starts it.
   - Ask the agent to open a copy of a project, change the background, add a zoom, render a frame and export a 720p MP4. Each edit appears in the editor and `Ctrl+Z` undoes them one by one.
@@ -164,7 +237,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
   - **`Pick random wallpaper`:** draws from mesh, system and built-in wallpapers together, then switches to the pick's category and scrolls its pill into view.
   - **Strings:** `Add to Favorites`, `Remove from Favorites` and the empty hint are in the catalog with all 7 translations.
 - **Built on macOS:** the app builds. Not clicked through in the running app yet.
-- **Also in this change:** `STRING_CATALOG_GENERATE_SYMBOLS = NO` on macOS. The Windows-only keys that differ from macOS keys only by case or by `...` versus `…` produced duplicate Swift symbols and failed the build (ADR-44). No catalog key changed.
+- **Also in this change:** `STRING_CATALOG_GENERATE_SYMBOLS = NO` on macOS. The Windows-only keys that differ from macOS keys only by case or by three dots versus the ellipsis character produced duplicate Swift symbols and failed the build (ADR-44). No catalog key changed.
 - **How to verify on Windows:** right-click a wallpaper, add it, and check that it shows under `★` and survives a restart. Remove it from the `★` grid. Press the random button several times from `★` and check that it lands in different categories and the pill row follows.
 
 ## 2026-11-07, Performance pass: closing frees the project, no work for unused features (macOS done, Windows pass pending)
@@ -494,7 +567,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 ### Writer
 - **Scope:** `EditorSession` holds the playhead, inspector tab, command search, and the existing undo stack. The WinUI app opens a welcome window, an editor (menu bar, preview `SwapChainPanel`, inspector tabs, timeline slider, command menu), and a settings window with light and dark. Accelerators use Ctrl. Preview attach is `ISwapChainPanelNative` (`63aad0b8-7c24-40ff-85a8-640d944cc325`).
-- **Built on macOS:** `dotnet test windows/tests/NativeScreen.Core.Tests` — 46 passed. The WinUI XAML compiler is a Windows executable, so the app project was not built here.
+- **Built on macOS:** `dotnet test windows/tests/NativeScreen.Core.Tests`: 46 passed. The WinUI XAML compiler is a Windows executable, so the app project was not built here.
 - **How to verify:** `pwsh windows/scripts/verify.ps1`, then `dotnet run --project windows/src/NativeScreen.App -c Debug -p:Platform=x64`. Welcome opens. Open project loads a `.nativescreen` package into the editor. Play moves the time label and pauses at the end. Scrubbing stops playback. Undo restores the document name. Settings toggles dark and light. Command menu filters titles. Timeline drag must not stall the UI more than 8 ms.
 - **Open VERIFY items:** `EditorWindow.xaml.cs` attaches the swap chain on the UI thread; the render thread must wait on the latency object and call `Present(1, 0)`. `WelcomeWindow.xaml.cs` file picker hwnd init. `SwapChainPanelInterop.cs` QueryInterface of the panel.
 - **Risks / unsure:** The 16 ms dispatcher timer only updates the time label. The 120 Hz playhead still needs a Composition visual. Inspector pages show the tab title, not the full macOS control set.
@@ -513,7 +586,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Scope:** `PauseTimeline` matches `ScreenCaptureEngine.pausedOffset` (samples inside a pause are dropped). Display and webcam bitrates, even dimensions, cursor kind names (`IDC_HAND` → `pointer`, `IDC_IBEAM` → `ibeam`), normalized capture coordinates, package-relative telemetry paths, and jsonl append. `CapturePolicy` records cursor-off, `WDA_EXCLUDEFROMCAPTURE` (`0x11`), and the borderless-capture rule.
 - **Built on macOS:** Core tests passed, including a cursor jsonl round trip. No Windows.Graphics.Capture call was made.
 - **How to verify:** Record display, window, and area. Cursor is absent from `display.mp4` and present in `telemetry/cursor.jsonl`. Pause removes that span from every track. Kill the process mid-recording and confirm `display.mp4` still opens on macOS. HUD windows are excluded.
-- **Open VERIFY items:** `CapturePolicy.cs` — `IsCursorCaptureEnabled`, borderless access, `SetWindowDisplayAffinity`, and QPC inside the hook callback. Fragmented MP4 for the recording (2 s) is still the export writer; the recording path should call `MFCreateFMPEG4MediaSink`.
+- **Open VERIFY items:** `CapturePolicy.cs`: `IsCursorCaptureEnabled`, borderless access, `SetWindowDisplayAffinity`, and QPC inside the hook callback. Fragmented MP4 for the recording (2 s) is still the export writer; the recording path should call `MFCreateFMPEG4MediaSink`.
 - **Risks / unsure:** `IDC_SIZEALL` is mapped to `openhand`. Hook callbacks must only enqueue.
 
 ### Verifier
@@ -530,7 +603,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Scope:** Audio gains match `HardwareVideoExporter` (system, microphone, voiceover mute, music × 2.5). `ExportPlan` frame count, quality 87/72/58/42, and ProRes hidden on Windows. `ExportJob` progress is encoded frames / total frames; cancel deletes the partial file. `FragmentedMp4Writer` creates an `IMFSinkWriter` with hardware transforms, H.264 or HEVC, NV12 input, GOP of 2 s.
 - **Built on macOS:** Core tests passed. The sink writer was not opened.
 - **How to verify:** Export the conformance project. Progress moves with encoded frames. Cancel leaves no partial file. Encoded frames match `conformance/frames/*.png`. A 30 minute project stays flat in memory. GIF still needs a WIC encoder; the job only plans the frame count.
-- **Open VERIFY items:** `FragmentedMp4Writer.cs` — `ICodecAPI` quality, hardware MFT check, BT.709 tags, and `MFCreateFMPEG4MediaSink` for recordings. `ID3D11VideoProcessor` BGRA to NV12 is not wired yet.
+- **Open VERIFY items:** `FragmentedMp4Writer.cs`: `ICodecAPI` quality, hardware MFT check, BT.709 tags, and `MFCreateFMPEG4MediaSink` for recordings. `ID3D11VideoProcessor` BGRA to NV12 is not wired yet.
 - **Risks / unsure:** Quality mode may be rejected; the writer already sets the average bitrate as the fallback value.
 
 ### Verifier
@@ -545,9 +618,9 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 ### Writer
 - **Scope:** `PlaybackClock` uses QPC, or the audio clock minus device latency when audio is playing. `FrameRing` keeps 4 frames and picks the newest `pts <= clock`. Late-frame ratio, scrub coalescing, and idle-when-paused are in Core. `HardwareVideoReader` starts Media Foundation, requests NV12, disables advanced video processing, and enables hardware transforms. The composition swap chain presents with sync interval 1.
-- **Built on macOS:** Core tests passed. `dotnet build windows/src/NativeScreen.Media` — 0 warnings. No file was decoded.
+- **Built on macOS:** Core tests passed. `dotnet build windows/src/NativeScreen.Media`: 0 warnings. No file was decoded.
 - **How to verify:** Play a 60 s project. Late frames stay under 1%. A/V offset stays within 20 ms. First frame appears within 100 ms of play. Pausing drops to 0% CPU because the render loop blocks.
-- **Open VERIFY items:** `HardwareVideoReader.cs` — `IMFDXGIBuffer` textures on the compositor device, and `MFShutdown` at process exit. `CompositionSwapChain.cs` — wait on `FrameLatencyWaitableObject` before `Present(1, 0)`.
+- **Open VERIFY items:** `HardwareVideoReader.cs`: `IMFDXGIBuffer` textures on the compositor device, and `MFShutdown` at process exit. `CompositionSwapChain.cs`: wait on `FrameLatencyWaitableObject` before `Present(1, 0)`.
 - **Risks / unsure:** The reader is synchronous. A scrub must `Flush` and keep only the latest seek.
 
 ### Verifier
@@ -562,9 +635,9 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 ### Writer
 - **Scope:** Core color math (`Rgba`, BT.709 limited NV12, source-over, CIColorControls order saturation → brightness → contrast, vibrance, warmth approximation, LUT lerp), mesh preset table, cursor SVG filename parser, `.cube` reader (red fastest), composite pass order and the screen-shadow / click / motion-blur sample caps from `MetalFrameCompositor` and `EffectKernels`. Rendering embeds `Nv12ToRgb`, `RoundedRect`, `MeshBackground`, `MagnifierLens`, `CameraMotionBlur`, and `Lut3D`. `FrameCompositor` compiles them with Vortice.D3DCompiler 3.8.3, creates a B8G8R8A8_UNORM target (not `_SRGB`), and a source-over blend of ONE / INV_SRC_ALPHA. `CompositionSwapChain` is flip, two buffers, waitable latency 1. `verify.ps1` compiles every `.hlsl` with Windows SDK `dxc`.
-- **Built on macOS:** `dotnet test windows/tests/NativeScreen.Core.Tests` — 38 passed. `dotnet build windows/src/NativeScreen.Rendering` — 0 warnings. GPU draw, SSIM, and `dxc` were not run here.
+- **Built on macOS:** `dotnet test windows/tests/NativeScreen.Core.Tests`: 38 passed. `dotnet build windows/src/NativeScreen.Rendering`: 0 warnings. GPU draw, SSIM, and `dxc` were not run here.
 - **How to verify:** `pwsh windows/scripts/verify.ps1`. Shader step should PASS (6 files). On a GPU, `FrameCompositor` constructs without throwing and `CompiledShaderCount` is 6. Frame fixtures in `conformance/frames/` are the SSIM target (not compared on macOS). Compose budget is ≤4 ms/frame at 1080p and ≤8 ms at 4K; motion blur stays at 8 samples in preview and 24 in export.
-- **Open VERIFY items:** `D3D11GraphicsDevice.cs` hardware device then WARP. `CompositionSwapChain.cs` — `ISwapChainPanelNative.SetSwapChain` is not called yet (Phase 6 preview). `FrameCompositor` runtime `Compiler.Compile` against the embedded HLSL. Mesh radial center is top-down `(0.78 W, 0.28 H)`, matching the Swift bottom-left `(0.78 W, 0.72 H)`.
+- **Open VERIFY items:** `D3D11GraphicsDevice.cs` hardware device then WARP. `CompositionSwapChain.cs`: `ISwapChainPanelNative.SetSwapChain` is not called yet (Phase 6 preview). `FrameCompositor` runtime `Compiler.Compile` against the embedded HLSL. Mesh radial center is top-down `(0.78 W, 0.28 H)`, matching the Swift bottom-left `(0.78 W, 0.72 H)`.
 - **Risks / unsure:** Built-in looks must sample `conformance/looks/*.cube`. The warmth approximation is only for custom presets; if SSIM is under 0.97, fit it, do not reimplement the CI chain for the built-in looks. Shadows are metrics only; they are not baked into a texture yet.
 
 ### Verifier
@@ -579,9 +652,9 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 ### Writer
 - **Scope:** macOS `--generate-conformance` writes `conformance/` (already generated). Windows `NativeScreen.Core` ports project JSON, `NLETimeMapper`, `SpringTrajectorySolver`, `AutoZoomClusterGenerator`, stage layout (top-left fixture rects), caption lines, shortcut clusters / envelopes / typing suggestions, export size and duration estimators, snapshot undo, and `LoadedProject`. `NativeScreen.Rendering`, `Media`, and `Intelligence` are empty class libraries. `NativeScreen.App` is an unpackaged WinUI 3 window. `windows/scripts/verify.ps1` builds Debug and Release x64, runs tests, and writes `windows/artifacts/verify-report.md`.
-- **Built on macOS:** `dotnet test windows/tests/NativeScreen.Core.Tests` — 27 passed, 0 failed. `dotnet build` of Core, Rendering, Media, and Intelligence — 0 warnings. The WinUI app was not built here.
+- **Built on macOS:** `dotnet test windows/tests/NativeScreen.Core.Tests`: 27 passed, 0 failed. `dotnet build` of Core, Rendering, Media, and Intelligence: 0 warnings. The WinUI app was not built here.
 - **How to verify:** `pwsh windows/scripts/verify.ps1`. Expect Debug and Release x64 builds, Core tests green, and a PASS report. Then `dotnet run --project windows/src/NativeScreen.App -c Debug -p:Platform=x64` and confirm a window titled Native Screen.
-- **Open VERIFY items:** `windows/src/NativeScreen.App/App.xaml.cs` — unpackaged WinUI 3 on Windows App SDK 2.6.4, `net10.0-windows10.0.22621.0`, `win-x64`, shows the empty window.
+- **Open VERIFY items:** `windows/src/NativeScreen.App/App.xaml.cs`: unpackaged WinUI 3 on Windows App SDK 2.6.4, `net10.0-windows10.0.22621.0`, `win-x64`, shows the empty window.
 - **Risks / unsure:** No HLSL yet, so the shader step in `verify.ps1` is a skip. Stage transitions compare the camera settings that change placement; a color-only edit does not start a blend because the rects would be identical. `spec/05` Phase 5 stays unchecked until the verifier records PASS.
 
 ### Verifier

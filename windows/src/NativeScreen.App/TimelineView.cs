@@ -1062,7 +1062,7 @@ internal sealed class TimelineView
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
         content.Children.Add(new Ellipse { Width = 7, Height = 7, Fill = new SolidColorBrush(Color.FromArgb(255, 255, 59, 48)), VerticalAlignment = VerticalAlignment.Center });
-        content.Children.Add(new TextBlock { Text = Loc.T("Recording voiceover…"), FontSize = 11.5, FontWeight = FontWeights.Medium, Foreground = Ui.Pal("Ink95"), TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = Loc.T("Recording voiceover..."), FontSize = 11.5, FontWeight = FontWeights.Medium, Foreground = Ui.Pal("Ink95"), TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center });
         recordingVoiceoverBlock = new Border
         {
             Height = MaskRowHeight,

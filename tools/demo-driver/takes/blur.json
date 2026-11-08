@@ -1,0 +1,10 @@
+[
+  {"op": "wait", "ms": 900},
+  {"op": "move", "sel": "#email", "fx": 0.25},
+  {"op": "wait", "ms": 600},
+  {"op": "move", "sel": "#phone", "fx": 0.2},
+  {"op": "wait", "ms": 400},
+  {"op": "click", "sel": "#gen-key", "after": 1200},
+  {"op": "click", "sel": "#copy-key", "after": 1500},
+  {"op": "rects", "sels": ["#email", "#phone", "#api-key"], "file": "blur-rects.json"}
+]

@@ -744,7 +744,7 @@ internal sealed class InspectorPanel
             CornerRadius = new CornerRadius(13),
             Background = Ui.Pal("Ink07")
         };
-        Ui.Tip(pause, open ? "Pause — click to tighten to a natural breath" : "Tightened pause — click to restore");
+        Ui.Tip(pause, open ? "Pause: click to tighten to a natural breath" : "Tightened pause: click to restore");
         pause.Click += (_, _) => session.Mutate(document =>
         {
             if (open)
@@ -907,7 +907,7 @@ internal sealed class InspectorPanel
             Add(WordBar(picked));
         }
 
-        Add(Note("Click any word to edit or cut — Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only."));
+        Add(Note("Click any word to edit or cut. Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only."));
         AddDivider();
         Add(Toggle("Show deleted text", "Keep cut words visible as strikethrough so they can be restored.", () => Doc.Captions.ShowDeletedTextInTranscript, (d, v) => d.Captions.ShowDeletedTextInTranscript = v));
         Add(Toggle("Show hidden words", "Keep words hidden from captions visible here so they can be restored.", () => Doc.Captions.ShowHiddenWordsInTranscript, (d, v) => d.Captions.ShowHiddenWordsInTranscript = v));
@@ -1576,7 +1576,7 @@ internal sealed class InspectorPanel
         recordButton.HorizontalAlignment = HorizontalAlignment.Stretch;
         recordButton.Background = Ui.Rgb(1, 0, 0, recording ? 1 : 0.14);
         recordButton.BorderBrush = Ui.Rgb(1, 0, 0, 0.35);
-        var upload = Action("Upload audio…", tools.UploadVoiceover);
+        var upload = Action("Upload audio...", tools.UploadVoiceover);
         var grid = new Grid { ColumnSpacing = 8 };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition());

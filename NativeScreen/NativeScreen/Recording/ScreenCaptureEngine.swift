@@ -405,6 +405,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
     /// Writes a movie fragment every 2s so a crash, force-quit or power loss mid-recording leaves a playable file
     /// (everything up to the last fragment) instead of an MP4 with no `moov` atom. `finishWriting` defragments as usual.
+    /// Fragmented writing needs H.264 without frame reordering (no B-frames). With reordering on, the writer fails
+    /// mid-recording with -11800 / -16341 (most often after the screen sat still for longer than a fragment) and the
+    /// rest of the recording is lost (spec/06 ADR-54).
     private static let crashSafeFragmentInterval = CMTime(seconds: 2.0, preferredTimescale: 600)
 
     private var isWritingSessionStarted = false
@@ -426,6 +429,46 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     public var onFirstVideoFrameArrived: ((TimeInterval) -> Void)?
 
     public var onWebcamFrameCaptured: (@Sendable (IOSurfaceRef) -> Void)?
+
+    /// Called once, on a capture queue, when the screen stream stops by itself or a writer (screen, webcam, microphone)
+    /// fails. A failed writer drops every later sample, so the coordinator ends the recording instead of recording on.
+    public var onCaptureFailed: (@Sendable (CaptureFailure) -> Void)?
+
+    public enum CaptureFailure: Sendable {
+        case stream(String)
+        case screenWriter(String)
+        case webcamWriter(String)
+        case microphoneWriter(String)
+    }
+
+    private let failureLock = NSLock()
+    private var reportedFailure: CaptureFailure?
+
+    /// The first failure, if any. Read after `stopCapture`.
+    public var captureFailure: CaptureFailure? {
+        failureLock.lock()
+        defer { failureLock.unlock() }
+        return reportedFailure
+    }
+
+    private func reportFailure(_ failure: CaptureFailure) {
+        failureLock.lock()
+        let isFirst = reportedFailure == nil && !isStopping
+        if isFirst { reportedFailure = failure }
+        failureLock.unlock()
+        guard isFirst else { return }
+        NSLog("[ScreenCaptureEngine] capture failed: %@", String(describing: failure))
+        onCaptureFailed?(failure)
+    }
+
+    private static func describe(_ error: Error?) -> String {
+        guard let error = error as NSError? else { return "unknown error" }
+        let underlying = (error.userInfo[NSUnderlyingErrorKey] as? NSError).map { " / \($0.code)" } ?? ""
+        return "\(error.domain) \(error.code)\(underlying)"
+    }
+
+    /// Set by `stopCapture`; failures after it (for example the stream ending because we stopped it) are not reported.
+    private var isStopping = false
 
     /// `uptimeSec` must be the same `systemUptime` passed to `TelemetryRecorder.setPaused` so both clocks drop the exact same span.
     public func setPaused(_ paused: Bool, atUptime uptimeSec: TimeInterval = ProcessInfo.processInfo.systemUptime) {
@@ -491,7 +534,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         let videoCompressionProps: [String: Any] = [
             AVVideoAverageBitRateKey: max(8_000_000, evenWidth * evenHeight * 4),
             AVVideoMaxKeyFrameIntervalKey: 60,
-            AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+            AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+            AVVideoAllowFrameReorderingKey: false // see crashSafeFragmentInterval
         ]
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -586,7 +630,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                                     AVVideoAverageBitRateKey: max(10_000_000, targetW * targetH * 5),
                                     AVVideoExpectedSourceFrameRateKey: configuredFps,
                                     AVVideoMaxKeyFrameIntervalKey: configuredFps,
-                                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+                                    AVVideoAllowFrameReorderingKey: false // see crashSafeFragmentInterval
                                 ]
                             ]
                             let wInput = AVAssetWriterInput(mediaType: .video, outputSettings: wSettings)
@@ -706,6 +751,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     }
 
     public func stopCapture() async {
+        failureLock.lock()
+        isStopping = true
+        failureLock.unlock()
         let endTime = videoEndTime(atUptime: ProcessInfo.processInfo.systemUptime)
         if let activeStream = stream {
             try? await activeStream.stopCapture()
@@ -798,8 +846,11 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
         guard CMSampleBufferDataIsReady(sampleBuffer),
-              let writer = assetWriter,
-              writer.status == .writing else {
+              let writer = assetWriter else {
+            return
+        }
+        guard writer.status == .writing else {
+            if writer.status == .failed { reportFailure(.screenWriter(Self.describe(writer.error))) }
             return
         }
 
@@ -833,8 +884,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             lastSampleTime = pts
             lastVideoSample = adjustedBuffer
 
-            if let vInput = videoInput, vInput.isReadyForMoreMediaData {
-                vInput.append(adjustedBuffer)
+            if let vInput = videoInput, vInput.isReadyForMoreMediaData, !vInput.append(adjustedBuffer) {
+                reportFailure(.screenWriter(Self.describe(writer.error)))
             }
 
         case .audio:
@@ -855,6 +906,14 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         }
     }
 
+    // MARK: - SCStreamDelegate
+
+    /// The stream ends by itself when, for example, the recorded window closes or screen recording permission is
+    /// taken away. No frames follow, so the recording would otherwise freeze on its last frame.
+    public func stream(_ stream: SCStream, didStopWithError error: Error) {
+        reportFailure(.stream(Self.describe(error)))
+    }
+
     // MARK: - Webcam & Microphone Sample Buffer Handling
 
     private func handleWebcamSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
@@ -868,7 +927,12 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             callback(surface)
         }
 
-        guard let wWriter = webcamWriter, wWriter.status == .writing,
+        guard let wWriter = webcamWriter else { return }
+        guard wWriter.status != .failed else {
+            reportFailure(.webcamWriter(Self.describe(wWriter.error)))
+            return
+        }
+        guard wWriter.status == .writing,
               let wInput = webcamVideoInput,
               let wAdaptor = webcamPixelBufferAdaptor else { return }
 
@@ -933,6 +997,10 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     }
 
     private func handleMicrophoneSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        if let mWriter = microphoneWriter, mWriter.status == .failed {
+            reportFailure(.microphoneWriter(Self.describe(mWriter.error)))
+            return
+        }
         guard CMSampleBufferDataIsReady(sampleBuffer),
               let mWriter = microphoneWriter, mWriter.status == .writing,
               let mInput = microphoneAudioInput,

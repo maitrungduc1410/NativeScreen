@@ -1,4 +1,4 @@
-# NativeScreen — UI/UX Design System & Legal Guidelines
+# NativeScreen: UI/UX Design System & Legal Guidelines
 
 ---
 
@@ -20,14 +20,14 @@
 - **Controls (Left to Right):**
   1. **Close (`xmark.circle.fill`)**
   2. **Target Mode Selector:**
-     - `Display` (`display`) — Full screen capture.
-     - `Window` (`macwindow`) — Interactive single-window picker. Includes the app's own editor windows, so editing can be demoed.
-     - `Area` (`viewfinder`) — Interactive drag-to-crop rectangle with size presets (`16:9`, `9:16`, `1:1`).
-     - `Device` (`iphone`) — Connected iOS device capture (Phase 3).
+     - `Display` (`display`): Full screen capture.
+     - `Window` (`macwindow`): Interactive single-window picker. Includes the app's own editor windows, so editing can be demoed.
+     - `Area` (`viewfinder`): Interactive drag-to-crop rectangle with size presets (`16:9`, `9:16`, `1:1`).
+     - `Device` (`iphone`): Connected iOS device capture (Phase 3).
   3. **Input Toggles:**
      - Camera selector (`video` / `video.slash`)
      - Microphone selector (`mic` / `mic.slash` + live input level meter)
-     - System / App Audio selector (`speaker.wave.2` — All system audio or specific apps)
+     - System / App Audio selector (`speaker.wave.2`: All system audio or specific apps)
   4. **Projects Folder & Settings menu (`folder`, `gearshape`)**
 
 ### 2.2. Interactive Window Picker Overlay (When `Window` Mode is Active)
@@ -38,7 +38,7 @@
   4. In the center of the highlighted window, render a floating card showing:
      - **High-resolution App Icon** (`NSRunningApplication(processIdentifier: pid)?.icon`)
      - **App Name & Window Title** (e.g., `Google Chrome`)
-     - **Dimensions Badge + `[Resize]` menu** (e.g., `761 × 1090 [Resize]` — uses `AXUIElementSetAttributeValue` to resize the target window to standard 16:9 / 9:16 / 4:3 presets before recording!).
+     - **Dimensions Badge + `[Resize]` menu** (e.g., `761 × 1090 [Resize]`: uses `AXUIElementSetAttributeValue` to resize the target window to standard 16:9 / 9:16 / 4:3 presets before recording!).
      - **`[Start Recording]` primary button**.
 
 ### 2.3. Main Editor Window (Multi-Document Support)
@@ -111,3 +111,5 @@ Hold `⌘` (`Ctrl` on Windows) and scroll over the ruler, the track labels or th
 ### Caption tracks in the inspector
 
 Selecting a caption shows its text and an `Apply to all captions in this track` checkbox, off by default: the options then change only that caption. With no caption selected, the options apply to the track chosen in `Track`. `Transcript method` offers `Local` only.
+
+The inspector does not add caption tracks or turn captions off: tracks are added from the quick dock left of the preview (or a caption's right-click menu), and `Disable captions` / `Enable captions` is in a caption's right-click menu. While captions are off, the inspector says so and points to that menu.

@@ -3,7 +3,7 @@ import AppKit
 
 /// Main menu bar (`File`, `Edit`, `Record`, `Export`, `View`, `Window`).
 /// Editor commands act on the project whose editor window is key (`ProjectWorkspaceStore.activeSession`).
-/// Shortcuts the editor's key monitor already handles (⌘S, ⌘Z, ⌘1…) are consumed there first, so the menu
+/// Shortcuts the editor's key monitor already handles (⌘S, ⌘Z, ⌘1...) are consumed there first, so the menu
 /// only runs them when picked with the mouse.
 struct AppMenuCommands: Commands {
     @Bindable var workspace: ProjectWorkspaceStore
@@ -13,6 +13,14 @@ struct AppMenuCommands: Commands {
     private var session: ProjectSession? { workspace.activeSession }
 
     var body: some Commands {
+        // MARK: App
+        CommandGroup(after: .appInfo) {
+            if AppUpdater.shared.isAvailable {
+                Button("Check for Updates...") { AppUpdater.shared.checkForUpdates() }
+                    .disabled(!AppUpdater.shared.canCheckForUpdates)
+            }
+        }
+
         // MARK: File
         CommandGroup(replacing: .newItem) {
             Menu("Open recent") {
@@ -30,7 +38,7 @@ struct AppMenuCommands: Commands {
 
             Divider()
 
-            Button("Open project…", systemImage: "folder") { workspace.promptOpenProjectDialog() }
+            Button("Open project...", systemImage: "folder") { workspace.promptOpenProjectDialog() }
                 .keyboardShortcut("o", modifiers: [.command])
             Button("Open last project", systemImage: "arrow.counterclockwise") { workspace.openLastProject() }
                 .keyboardShortcut("z", modifiers: [.command, .option])
@@ -39,7 +47,7 @@ struct AppMenuCommands: Commands {
 
             Divider()
 
-            Button("Create project from video…", systemImage: "folder") { VideoProjectImporter.promptAndCreateProject() }
+            Button("Create project from video...", systemImage: "folder") { VideoProjectImporter.promptAndCreateProject() }
             Button("Create interactive showcase project", systemImage: "sparkles.rectangle.stack") {
                 _ = recorder.createInteractiveSampleProject()
             }
@@ -47,14 +55,14 @@ struct AppMenuCommands: Commands {
 
             Divider()
 
-            Button("Import preset…", systemImage: "square.and.arrow.down") { ProjectPresetsStore.shared.promptImportPresets() }
+            Button("Import preset...", systemImage: "square.and.arrow.down") { ProjectPresetsStore.shared.promptImportPresets() }
         }
 
         CommandGroup(replacing: .saveItem) {
             Button("Save", systemImage: "square.and.arrow.down") { session?.saveProjectWithToast() }
                 .keyboardShortcut("s", modifiers: [.command])
                 .disabled(session == nil)
-            Button("Save as…", systemImage: "square.and.arrow.down") { workspace.saveActiveProjectAs() }
+            Button("Save as...", systemImage: "square.and.arrow.down") { workspace.saveActiveProjectAs() }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
                 .disabled(session == nil)
             Button("Show project in Finder", systemImage: "folder") {
@@ -123,7 +131,7 @@ struct AppMenuCommands: Commands {
 
         // MARK: Record
         CommandMenu("Record") {
-            Button("New recording…", systemImage: "record.circle") { recorder.showRecordingHUD() }
+            Button("New recording...", systemImage: "record.circle") { recorder.showRecordingHUD() }
                 .keyboardShortcut(.return, modifiers: [.command, .control])
                 .disabled(recorder.isRecording)
 
@@ -158,7 +166,7 @@ struct AppMenuCommands: Commands {
 
         // MARK: Export
         CommandMenu("Export") {
-            Button("Export…", systemImage: "square.and.arrow.up") { session?.pendingEditorCommand = .showExportSheet }
+            Button("Export...", systemImage: "square.and.arrow.up") { session?.pendingEditorCommand = .showExportSheet }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 .disabled(session == nil)
 
@@ -167,7 +175,7 @@ struct AppMenuCommands: Commands {
             Button("Quick export to clipboard", systemImage: "doc.on.clipboard") { session?.pendingEditorCommand = .quickExport(.clipboard) }
                 .keyboardShortcut("c", modifiers: [.command, .option])
                 .disabled(session == nil)
-            Button("Quick export to file…", systemImage: "square.and.arrow.up") { session?.pendingEditorCommand = .quickExport(.file) }
+            Button("Quick export to file...", systemImage: "square.and.arrow.up") { session?.pendingEditorCommand = .quickExport(.file) }
                 .keyboardShortcut("s", modifiers: [.command, .option])
                 .disabled(session == nil)
             Button("Show previous clipboard exports", systemImage: "folder") {
@@ -179,12 +187,12 @@ struct AppMenuCommands: Commands {
 
             Divider()
 
-            Button("Extract raw recording files…", systemImage: "square.and.arrow.down") { workspace.extractRawRecordingFiles() }
+            Button("Extract raw recording files...", systemImage: "square.and.arrow.down") { workspace.extractRawRecordingFiles() }
                 .disabled(session == nil)
 
             Divider()
 
-            Button("Export current frame as image…", systemImage: "photo") { session?.openStillFrameExportModal() }
+            Button("Export current frame as image...", systemImage: "photo") { session?.openStillFrameExportModal() }
                 .disabled(session == nil)
         }
 

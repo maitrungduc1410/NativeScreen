@@ -1,0 +1,11 @@
+[
+  {"op": "wait", "ms": 1200},
+  {"op": "click", "sel": "#new-release", "after": 700},
+  {"op": "type", "text": "Shared boards", "cps": 9},
+  {"op": "wait", "ms": 300},
+  {"op": "click", "sel": "#rel-notes", "fx": 0.3, "fy": 0.3, "after": 300},
+  {"op": "type", "text": "Boards can now be shared with anyone on the team.", "cps": 13},
+  {"op": "wait", "ms": 500},
+  {"op": "click", "sel": "#rel-publish", "after": 1000},
+  {"op": "click", "sel": ".nav-item[data-page=releases]", "after": 1800}
+]

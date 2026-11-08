@@ -8,44 +8,28 @@ import CoreGraphics
 public struct CanvasCoordinateTransform: Sendable {
     public let canvasSize: CGSize
     public let baseScreenRect: CGRect // Unzoomed screen rect in top-left canvas coordinates
+    public let cropRect01: Rect01
     public let cameraCenter01: Point01
     public let cameraScale: CGFloat
 
+    /// `screenRectBottomLeft` is `StageLayout.screenRect` for this canvas, so the handles sit on the frame the
+    /// compositor draws (padding, device mockup, split screen). Source rects are in full-frame coordinates, as masks are.
     public init(
         canvasSize: CGSize,
-        sourcePixelSize: CGSize,
-        paddingRatio: Double,
+        screenRectBottomLeft: CGRect,
         cropRect01: Rect01,
         cameraCenter01: Point01,
         cameraScale: Double
     ) {
         self.canvasSize = canvasSize
+        self.cropRect01 = cropRect01
         self.cameraCenter01 = cameraCenter01
         self.cameraScale = CGFloat(max(1.0, cameraScale))
-
-        let croppedSourceSize = CGSize(
-            width: max(16.0, sourcePixelSize.width * CGFloat(cropRect01.width)),
-            height: max(16.0, sourcePixelSize.height * CGFloat(cropRect01.height))
-        )
-
-        let pad = CGFloat(min(0.42, max(0.0, paddingRatio)))
-        let insetX = canvasSize.width * pad
-        let insetY = canvasSize.height * pad
-        let available = CGRect(origin: .zero, size: canvasSize).insetBy(dx: insetX, dy: insetY)
-
-        let aspect = max(0.1, croppedSourceSize.width / max(1.0, croppedSourceSize.height))
-        var w = available.width
-        var h = w / aspect
-        if h > available.height {
-            h = available.height
-            w = h * aspect
-        }
-
         self.baseScreenRect = CGRect(
-            x: (canvasSize.width - w) * 0.5,
-            y: (canvasSize.height - h) * 0.5,
-            width: max(1.0, w),
-            height: max(1.0, h)
+            x: screenRectBottomLeft.minX,
+            y: canvasSize.height - screenRectBottomLeft.maxY,
+            width: max(1.0, screenRectBottomLeft.width),
+            height: max(1.0, screenRectBottomLeft.height)
         )
     }
 
@@ -60,8 +44,10 @@ public struct CanvasCoordinateTransform: Sendable {
     /// Maps a source-clip normalized point `[0.0, 1.0]` (top-left origin) to top-left canvas coordinates,
     /// accounting for current Virtual Camera Zoom & Pan.
     public func canvasPoint(fromSource01 p01: Point01) -> CGPoint {
-        let unzoomedX = baseScreenRect.minX + CGFloat(p01.x) * baseScreenRect.width
-        let unzoomedY = baseScreenRect.minY + CGFloat(p01.y) * baseScreenRect.height
+        let cropX = (p01.x - cropRect01.x) / max(0.0001, cropRect01.width)
+        let cropY = (p01.y - cropRect01.y) / max(0.0001, cropRect01.height)
+        let unzoomedX = baseScreenRect.minX + CGFloat(cropX) * baseScreenRect.width
+        let unzoomedY = baseScreenRect.minY + CGFloat(cropY) * baseScreenRect.height
         guard cameraScale > 1.001 else {
             return CGPoint(x: unzoomedX, y: unzoomedY)
         }
@@ -102,7 +88,7 @@ public struct CanvasCoordinateTransform: Sendable {
         }
         let sx = Double((unzoomedX - baseScreenRect.minX) / max(1.0, baseScreenRect.width))
         let sy = Double((unzoomedY - baseScreenRect.minY) / max(1.0, baseScreenRect.height))
-        return Point01(x: sx, y: sy)
+        return Point01(x: cropRect01.x + sx * cropRect01.width, y: cropRect01.y + sy * cropRect01.height)
     }
 
     /// Converts a canvas drag delta `(dx, dy)` into source-clip normalized delta `(dx01, dy01)`.
@@ -110,8 +96,8 @@ public struct CanvasCoordinateTransform: Sendable {
         let effWidth = max(1.0, baseScreenRect.width * cameraScale)
         let effHeight = max(1.0, baseScreenRect.height * cameraScale)
         return Point01(
-            x: Double(delta.width / effWidth),
-            y: Double(delta.height / effHeight)
+            x: Double(delta.width / effWidth) * cropRect01.width,
+            y: Double(delta.height / effHeight) * cropRect01.height
         )
     }
 }

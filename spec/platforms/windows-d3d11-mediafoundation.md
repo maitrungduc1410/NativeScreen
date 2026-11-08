@@ -166,7 +166,7 @@ Rules:
 - **Coordinates:** process is per-monitor DPI aware v2. Normalize cursor positions by the captured monitor or window
   rect in physical pixels (top-left origin). Window capture: follow window moves/resizes and write `window.jsonl`.
 - **Cursor kind:** compare `CURSORINFO.hCursor` with the system cursors (`IDC_ARROW`, `IDC_HAND`, `IDC_IBEAM`, `IDC_CROSS`,
-  `IDC_SIZEALL`, …) and write the same kind names macOS writes.
+  `IDC_SIZEALL`, ...) and write the same kind names macOS writes.
 - **Pause / resume:** same pause-interval timeline as macOS (`ScreenCaptureEngine.pausedOffset(forHostPTS:)`): every
   track subtracts the accumulated paused time.
 - **Crash safety:** fragmented MP4 for video tracks; audio-only tracks flush regularly. A crash loses at most ~2 s.

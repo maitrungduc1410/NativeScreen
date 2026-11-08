@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Native Screen</title>
+  <meta name="description" content="Free, open source screen recorder for macOS and Windows. Multi-track timeline, automatic zooms, captions and export, all on your computer.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="Native Screen">
+  <meta property="og:description" content="Polished screen recordings and product demos, made on your computer. Free and open source for macOS and Windows.">
+  <meta property="og:image" content="assets/icon.png">
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Applied before first paint so a saved theme does not flash.
+    try { const t = localStorage.getItem("ns-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-row">
+    <a class="wordmark" href="#top" aria-label="Native Screen, home">
+      <img src="assets/icon.png" alt="" width="28" height="28">
+      <span>Native Screen</span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#timeline">Timeline</a>
+      <a href="#polish">Polish</a>
+      <a href="#agents">AI agents</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/maitrungduc1410/NativeScreen">GitHub</a>
+    </nav>
+    <div class="theme-switch" role="radiogroup" aria-label="Theme">
+      <button type="button" role="radio" data-theme-choice="system" aria-checked="true">Auto</button>
+      <button type="button" role="radio" data-theme-choice="light" aria-checked="false">Light</button>
+      <button type="button" role="radio" data-theme-choice="dark" aria-checked="false">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- Hero -->
+  <section class="hero wrap">
+    <p class="kicker">Screen recorder for macOS and Windows · Free and open source</p>
+    <h1>Record once.<br><em>It comes out edited.</em></h1>
+    <div class="hero-foot">
+      <p class="lede">Native Screen turns a plain screen recording into a polished demo: zooms that follow your clicks,
+        a cursor that glides, captions, backgrounds, and a real multi-track timeline when you want control.
+        Everything runs on your computer.</p>
+      <div class="cta">
+        <a class="button primary" data-download href="https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg">Download for Mac</a>
+        <a class="button" data-download-alt href="https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe">Windows</a>
+        <p class="fine">macOS 15 or later · Windows 10 or 11 · MIT license</p>
+      </div>
+    </div>
+
+    <figure class="demo demo-hero">
+      <video class="media" src="assets/demos/hero.mp4" muted loop playsinline autoplay preload="auto" data-autoplay
+        aria-label="A recording of a web app, polished by Native Screen: background, smooth cursor, click ripples and automatic zooms"></video>
+      <figcaption>One take of a demo web app, exported from Native Screen. The zooms came from the clicks on their own.</figcaption>
+    </figure>
+  </section>
+
+  <!-- Facts -->
+  <section class="facts wrap" aria-label="At a glance">
+    <dl>
+      <div><dt>0</dt><dd>uploads, accounts or watermarks</dd></div>
+      <div><dt>2</dt><dd>native apps, one project format</dd></div>
+      <div><dt>8</dt><dd>languages, light and dark</dd></div>
+      <div><dt>MIT</dt><dd>licensed, every line on GitHub</dd></div>
+    </dl>
+  </section>
+
+  <!-- 01 Timeline -->
+  <section class="chapter wrap" id="timeline">
+    <header class="chapter-head">
+      <span class="num">01</span>
+      <h2>A timeline with as many tracks as the story needs.</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>Most recorders give you one row for zooms and call it editing. Native Screen gives each kind of item its own
+          tracks, and lets you add more: two blurs that overlap, caption lines stacked for two speakers, shortcuts on
+          their own lane.</p>
+        <ul class="ticks">
+          <li>Drag items between tracks, trim, split and duplicate.</li>
+          <li>Everything snaps to edges, cuts and the playhead.</li>
+          <li>Hide a track while you work, or delete it with what is on it.</li>
+          <li>Every change is one undo step.</li>
+        </ul>
+      </div>
+      <figure class="col-figure">
+        <video class="media" src="assets/demos/blur.mp4" muted loop playsinline preload="none" data-autoplay aria-label="Email and phone blurred on one mask track, the API key pixelated on another"></video>
+        <figcaption>Two mask tracks: a blur over the email and phone, a pixelate over the new key.</figcaption>
+      </figure>
+    </div>
+    <figure class="demo">
+      <img class="media shot" src="assets/shots/timeline.jpg" width="2400" height="534" loading="lazy"
+        alt="The Native Screen timeline: a clip with a 2× part, a zoom track, two mask tracks, a shortcuts track and two caption tracks">
+      <figcaption>The timeline of the video at the top of this page, with masks, shortcuts and captions added.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 02 Polish -->
+  <section class="chapter wrap" id="polish">
+    <header class="chapter-head">
+      <span class="num">02</span>
+      <h2>The polish happens while you are still recording.</h2>
+    </header>
+    <div class="features">
+      <article class="feature">
+        <div class="feature-text">
+          <h3>Zooms that follow you</h3>
+          <p>Clicks and typing become zooms on their own. Move them, change the depth, or switch to a loupe that
+            magnifies one spot.</p>
+        </div>
+        <div class="feature-media">
+          <video class="media" src="assets/demos/auto-zoom.mp4" muted loop playsinline preload="none" data-autoplay aria-label="Typing in a dialog: the frame zooms in and holds while typing"></video>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-text">
+          <h3>A cursor that glides</h3>
+          <p>Shaky paths are smoothed, the cursor can be resized or restyled after recording, and clicks get a quiet
+            ripple.</p>
+          <div class="segmented swap" role="radiogroup" aria-label="Cursor" data-swap-for="swap-cursor">
+            <button type="button" role="radio" aria-checked="false" data-swap="before">As recorded</button>
+            <button type="button" role="radio" aria-checked="true" data-swap="after">Native Screen</button>
+          </div>
+        </div>
+        <div class="feature-media" id="swap-cursor">
+          <video class="media" src="assets/demos/cursor-before.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="before" aria-label="The recorded cursor as captured" hidden></video>
+          <video class="media" src="assets/demos/cursor-after.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="after" aria-label="The same cursor smoothed, larger, with click ripples"></video>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-text">
+          <h3>Movement that looks filmed</h3>
+          <p>Fast moves pick up a short motion blur, the way a camera would see them, so nothing jumps. Shown here at
+            half speed.</p>
+          <div class="segmented swap" role="radiogroup" aria-label="Motion blur" data-swap-for="swap-blur">
+            <button type="button" role="radio" aria-checked="false" data-swap="off">Off</button>
+            <button type="button" role="radio" aria-checked="true" data-swap="on">On</button>
+          </div>
+        </div>
+        <div class="feature-media" id="swap-blur">
+          <video class="media" src="assets/demos/motion-blur-off.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="off" aria-label="A zoom at half speed without motion blur" hidden></video>
+          <video class="media" src="assets/demos/motion-blur-on.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="on" aria-label="The same zoom with motion blur"></video>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-text">
+          <h3>Shortcuts people can follow</h3>
+          <p>Keyboard shortcuts you press appear as keycaps, on their own track, so viewers see how you got there.</p>
+        </div>
+        <div class="feature-media">
+          <video class="media" src="assets/demos/shortcuts.mp4" muted loop playsinline preload="none" data-autoplay aria-label="Keyboard shortcuts shown as keycaps while a command menu is used"></video>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- 03 Aspect ratios -->
+  <section class="chapter wrap" id="formats">
+    <header class="chapter-head">
+      <span class="num">03</span>
+      <h2>One recording, every shape.</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>Switch between wide, square and vertical at any time. Zooms re-aim and captions move to stay readable.
+          Reel mode lays the TikTok, Reels or Shorts interface over the preview so nothing important ends up under a
+          button.</p>
+        <div class="segmented" role="radiogroup" aria-label="Aspect ratio">
+          <button type="button" role="radio" aria-checked="true" data-ratio="16 / 9">Wide</button>
+          <button type="button" role="radio" aria-checked="false" data-ratio="1 / 1">Square</button>
+          <button type="button" role="radio" aria-checked="false" data-ratio="9 / 16">Vertical</button>
+        </div>
+      </div>
+      <figure class="col-figure ratio-stage">
+        <div class="ratio-frame" id="ratio-frame">
+          <video class="media fill" src="assets/demos/ratio-wide.mp4" muted loop playsinline preload="none" data-ratio-video="16 / 9" aria-label="The demo in 16:9"></video>
+          <video class="media fill" src="assets/demos/ratio-square.mp4" muted loop playsinline preload="none" data-ratio-video="1 / 1" aria-label="The same project in 1:1" hidden></video>
+          <video class="media fill" src="assets/demos/ratio-vertical.mp4" muted loop playsinline preload="none" data-ratio-video="9 / 16" aria-label="The same project in 9:16" hidden></video>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 04 Captions -->
+  <section class="chapter wrap" id="captions">
+    <header class="chapter-head">
+      <span class="num">04</span>
+      <h2>Edit the video by editing the words.</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>Captions are made on your computer, in your language. Then the transcript becomes an editor: delete a
+          sentence to cut it, or clear every filler word and long pause in one pass.</p>
+        <p class="note">Styles for line or word animation, per-caption colors, and <code>.srt</code> export.</p>
+      </div>
+      <figure class="col-figure">
+        <img class="media shot" src="assets/shots/transcript.jpg" width="2400" height="1478" loading="lazy"
+          alt="The transcript editor: filler words and pauses marked, with buttons to remove 4 filler words and tighten 4 pauses">
+        <figcaption>A recording of the demo app with a computer voice. The transcript was made on device.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 05 AI agents -->
+  <section class="chapter wrap" id="agents">
+    <header class="chapter-head">
+      <span class="num">05</span>
+      <h2>Or ask an agent to do the editing.</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>Native Screen speaks the Model Context Protocol. Claude, Codex, Cursor and other agents can record, cut,
+          zoom, caption, restyle and export, in the editor you are looking at. Every change can be undone, and the
+          connection is a local socket only your account can open.</p>
+      </div>
+      <ol class="steps">
+        <li>Turn on <strong>Settings › AI Agents</strong>.</li>
+        <li>Copy the command for your agent from that page.</li>
+        <li>Describe the video you want.</li>
+      </ol>
+    </div>
+    <figure class="demo">
+      <video class="media" src="assets/demos/agent.mp4" muted loop playsinline preload="none" data-autoplay aria-label="An agent in a terminal styles and exports a recording while the editor updates next to it"></video>
+      <figcaption>A real agent session, sped up.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 06 Yours -->
+  <section class="chapter wrap" id="yours">
+    <header class="chapter-head">
+      <span class="num">06</span>
+      <h2>Made to feel at home on your computer.</h2>
+    </header>
+    <div class="native">
+      <p class="native-lede">No web page in a window. Native Screen is written with each system’s own tools, so it
+        uses the windows, menus, shortcuts, text fields and accessibility you already know, and it stays out of the
+        way of your fans and your battery.</p>
+    </div>
+    <div class="grid-notes">
+      <div>
+        <h3>Native on both systems</h3>
+        <p>SwiftUI, AppKit and Metal on the Mac, WinUI 3 and Direct3D 11 on Windows. The GPU draws every frame and
+          the hardware encoder writes it. No FFmpeg, no browser engine.</p>
+      </div>
+      <div>
+        <h3>Private by design</h3>
+        <p>Recording, captions, sensitive data detection and export all run locally. No account, no upload, no
+          telemetry.</p>
+      </div>
+      <div>
+        <h3>Light and dark</h3>
+        <p>Follows your system, or pick one. The editor, the recording bar and this page all switch together.</p>
+      </div>
+      <div>
+        <h3>Your language</h3>
+        <p class="langs" lang="mul">English · Tiếng Việt · 简体中文 · 日本語 · Deutsch · Français · Español · Português (Brasil)</p>
+      </div>
+      <div>
+        <h3>Crash safe</h3>
+        <p>Recordings are written in small pieces as you go, so a crash or a dead battery does not lose the take.</p>
+      </div>
+      <div>
+        <h3>Open format</h3>
+        <p>Projects are folders with documented JSON. The same project opens on Mac and Windows.</p>
+      </div>
+    </div>
+    <div class="demo pair">
+      <figure>
+        <img class="media shot" src="assets/shots/editor-light.jpg" width="2400" height="1506" loading="lazy" alt="The Native Screen editor in light mode">
+        <figcaption>Light theme</figcaption>
+      </figure>
+      <figure>
+        <img class="media shot" src="assets/shots/editor-dark.jpg" width="2400" height="1506" loading="lazy" alt="The Native Screen editor in dark mode">
+        <figcaption>Dark theme</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section class="download wrap" id="download">
+    <h2>Free, for good.</h2>
+    <p class="lede">No trial, no plan, no watermark. If it helps you, star the repository or send a fix.</p>
+    <div class="dl-grid">
+      <div class="dl">
+        <img class="media shot dl-shot" src="assets/shots/editor-light.jpg" width="2400" height="1506" loading="lazy" alt="The Native Screen editor on macOS">
+        <h3>macOS</h3>
+        <p class="fine">macOS 15 or later · Apple silicon and Intel</p>
+        <a class="button primary" href="https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg">Download .dmg</a>
+        <p>Signed and notarized by Apple. Updates arrive inside the app.</p>
+      </div>
+      <div class="dl">
+        <div class="placeholder dl-shot" style="--ratio: 16 / 10">
+          <span class="ph-label">Screenshot · editor on Windows 11</span>
+          <p>Same project as the Mac shot, same frame, light theme, Mica title bar visible.</p>
+        </div>
+        <h3>Windows</h3>
+        <p class="fine">Windows 10 or 11 · x64</p>
+        <a class="button primary" href="https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe">Download installer</a>
+        <details>
+          <summary>Why Windows shows a blue warning</summary>
+          <p>Signing certificates for Windows cost money every year, and we have applied for free signing for open
+            source projects. Until that is approved, SmartScreen shows “Windows protected your PC” the first time. Click
+            <strong>More info</strong>, then <strong>Run anyway</strong>. You can compare the file with the SHA-256 on the
+            release page, or build it yourself from the source.</p>
+        </details>
+      </div>
+    </div>
+    <p class="fine">Older versions and release notes are on <a href="https://github.com/maitrungduc1410/NativeScreen/releases">GitHub Releases</a>.</p>
+  </section>
+
+</main>
+
+<footer class="footer wrap">
+  <p>Native Screen · MIT License · © Duc Trung Mai</p>
+  <p><a href="https://github.com/maitrungduc1410/NativeScreen">Source</a> · <a href="https://github.com/maitrungduc1410/NativeScreen/issues">Report an issue</a> · <a href="https://github.com/maitrungduc1410/NativeScreen/tree/master/spec">Specification</a></p>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>

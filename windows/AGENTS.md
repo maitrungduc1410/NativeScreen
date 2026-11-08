@@ -104,5 +104,5 @@ If a command changes, update this table in the same commit.
 - Comments explain why, briefly. Do not name other products.
 
 **Git**
-- Conventional Commits with the `win` scope (`feat(win): …`, `fix(win): …`), author `Duc Trung Mai <maitrungduc1410@gmail.com>`.
+- Conventional Commits with the `win` scope (`feat(win): ...`, `fix(win): ...`), author `Duc Trung Mai <maitrungduc1410@gmail.com>`.
 - Never push; the owner reviews and pushes.

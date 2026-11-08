@@ -13,7 +13,7 @@ Do not edit by hand. Regenerate after changing the macOS engines.
 ## Notes
 
 - Rects in `stage.json` are top-left origin, pixels. The macOS compositor works bottom-left; the generator converts.
-- `autozoom.json` ids are rewritten to `zoom-1`, `zoom-2`, … in start-time order. Compare every other field as produced by `AutoZoomClusterGenerator`.
+- `autozoom.json` ids are rewritten to `zoom-1`, `zoom-2`, ... in start-time order. Compare every other field as produced by `AutoZoomClusterGenerator`.
 - `estimates.json` stores the formatted size and duration strings plus the MP4 video bitrate in bits/second.
 - Default canvas is 1280×720. Aspect-ratio cases use a canvas with a 720 px short side (9:16 is 720×1280).
 - `shortcuts.json` includes `typingSuggestions` from the same keystrokes.

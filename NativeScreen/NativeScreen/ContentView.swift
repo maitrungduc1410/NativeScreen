@@ -84,7 +84,7 @@ struct ContentView: View {
                     } label: {
                         HStack {
                             Image(systemName: "folder")
-                            Text("Open .nativescreen Project…")
+                            Text("Open .nativescreen Project...")
                                 .font(.system(size: 12, weight: .medium))
                             Spacer()
                         }

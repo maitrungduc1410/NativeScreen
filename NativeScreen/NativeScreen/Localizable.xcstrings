@@ -50,1729 +50,6 @@
         }
       }
     },
-    "Add" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hinzufügen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añadir"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ajouter"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "追加"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Adicionar"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Thêm"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加"
-          }
-        }
-      }
-    },
-    "AI agent connected" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "KI-Agent verbunden"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agente de IA conectado"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agent IA connecté"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI エージェントが接続しました"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agente de IA conectado"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI agent đã kết nối"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 代理已连接"
-          }
-        }
-      }
-    },
-    "AI agent connected: %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "KI-Agent verbunden: %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agente de IA conectado: %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agent IA connecté : %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI エージェント接続中：%@"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agente de IA conectado: %@"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI agent đã kết nối: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 代理已连接：%@"
-          }
-        }
-      }
-    },
-    "AI Agents" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "KI-Agenten"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agentes de IA"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agents IA"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI エージェント"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agentes de IA"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI Agent"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 代理"
-          }
-        }
-      }
-    },
-    "Allow AI agents to control Native Screen" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "KI-Agenten erlauben, Native Screen zu steuern"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Permitir que agentes de IA controlen Native Screen"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autoriser les agents IA à contrôler Native Screen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI エージェントによる Native Screen の操作を許可"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Permitir que agentes de IA controlem o Native Screen"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cho phép AI agent điều khiển Native Screen"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "允许 AI 代理控制 Native Screen"
-          }
-        }
-      }
-    },
-    "Claude Desktop, Cursor and other apps" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude Desktop, Cursor und andere Apps"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude Desktop, Cursor y otras apps"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude Desktop, Cursor et autres apps"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude Desktop、Cursor など"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude Desktop, Cursor e outros apps"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude Desktop, Cursor và các app khác"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude Desktop、Cursor 和其他应用"
-          }
-        }
-      }
-    },
-    "Claude, Codex, Cursor and other MCP apps can record, edit, change settings and export for you. They connect on this Mac only." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude, Codex, Cursor und andere MCP-Apps können für dich aufnehmen, bearbeiten, Einstellungen ändern und exportieren. Sie verbinden sich nur auf diesem Mac."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude, Codex, Cursor y otras apps MCP pueden grabar, editar, cambiar ajustes y exportar por ti. Solo se conectan en este Mac."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude, Codex, Cursor et les autres apps MCP peuvent enregistrer, monter, modifier les réglages et exporter pour vous. Elles se connectent uniquement sur ce Mac."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude、Codex、Cursor などの MCP アプリが、収録、編集、設定の変更、書き出しを代わりに行えます。接続はこの Mac 上に限られます。"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude, Codex, Cursor e outros apps MCP podem gravar, editar, mudar ajustes e exportar por você. Eles se conectam apenas neste Mac."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude, Codex, Cursor và các app MCP khác có thể quay, chỉnh sửa, đổi cài đặt và xuất video giúp bạn. Chúng chỉ kết nối được trên máy Mac này."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude、Codex、Cursor 和其他 MCP 应用可以替你录制、编辑、更改设置和导出。它们只能在这台 Mac 上连接。"
-          }
-        }
-      }
-    },
-    "Clear search" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suche löschen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Borrar búsqueda"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Effacer la recherche"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "検索をクリア"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Limpar busca"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Xoá tìm kiếm"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除搜索"
-          }
-        }
-      }
-    },
-    "Collapsed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reduziert"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contraído"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réduit"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "折りたたみ"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recolhido"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang thu gọn"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已折叠"
-          }
-        }
-      }
-    },
-    "Connect an agent" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agenten verbinden"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conectar un agente"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connecter un agent"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "エージェントを接続"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conectar um agente"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kết nối agent"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "连接代理"
-          }
-        }
-      }
-    },
-    "Connected: %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbunden: %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conectado: %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connecté : %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "接続中：%@"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conectado: %@"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đã kết nối: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已连接：%@"
-          }
-        }
-      }
-    },
-    "Copied" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kopiert"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiado"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copié"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コピーしました"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiado"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đã chép"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已拷贝"
-          }
-        }
-      }
-    },
-    "Copy %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ kopieren"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copier %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ をコピー"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar %@"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chép %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拷贝 %@"
-          }
-        }
-      }
-    },
-    "Copy to clipboard" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In die Zwischenablage kopieren"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar al portapapeles"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copier dans le presse-papiers"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "クリップボードにコピー"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar para a área de transferência"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sao chép vào clipboard"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "复制到剪贴板"
-          }
-        }
-      }
-    },
-    "Current Desktop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktueller Schreibtisch"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Escritorio actual"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bureau actuel"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "現在のデスクトップ"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mesa atual"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hình nền hiện tại"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前桌面"
-          }
-        }
-      }
-    },
-    "Disabled" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deaktiviert"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Desactivado"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Désactivé"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "無効"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Desativado"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đã tắt"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已停用"
-          }
-        }
-      }
-    },
-    "Duration" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dauer"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Duración"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Durée"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "長さ"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Duração"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Thời lượng"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "时长"
-          }
-        }
-      }
-    },
-    "Edit caption" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Untertitel bearbeiten"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Editar subtítulo"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modifier le sous-titre"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "字幕を編集"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Editar legenda"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sửa phụ đề"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑字幕"
-          }
-        }
-      }
-    },
-    "Every edit an agent makes shows in the editor and can be undone with ⌘Z. Recording shows the recording bar and its countdown. A deleted project goes to the Trash." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jede Änderung eines Agenten erscheint im Editor und lässt sich mit ⌘Z widerrufen. Bei Aufnahmen erscheinen die Aufnahmeleiste und der Countdown. Ein gelöschtes Projekt landet im Papierkorb."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cada cambio de un agente se ve en el editor y se puede deshacer con ⌘Z. Al grabar se muestran la barra de grabación y su cuenta atrás. Un proyecto eliminado va a la papelera."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chaque modification d’un agent apparaît dans l’éditeur et peut être annulée avec ⌘Z. L’enregistrement affiche la barre d’enregistrement et son compte à rebours. Un projet supprimé va dans la corbeille."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "エージェントの編集はすべてエディタに表示され、⌘Z で取り消せます。収録中は収録バーとカウントダウンが表示されます。削除したプロジェクトはゴミ箱に入ります。"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cada edição de um agente aparece no editor e pode ser desfeita com ⌘Z. A gravação mostra a barra de gravação e a contagem regressiva. Um projeto apagado vai para o Lixo."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mọi thay đổi của agent đều hiện trong editor và hoàn tác được bằng ⌘Z. Khi quay, thanh quay và đếm ngược vẫn hiện. Project bị xoá sẽ vào Thùng rác."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "代理所做的每项编辑都会显示在编辑器中，并可用 ⌘Z 撤销。录制时会显示录制栏和倒计时。删除的项目会移到废纸篓。"
-          }
-        }
-      }
-    },
-    "Expanded" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erweitert"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Expandido"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Développé"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "展開"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Expandido"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang mở"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已展开"
-          }
-        }
-      }
-    },
-    "Export finished" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export abgeschlossen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportación terminada"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportation terminée"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "書き出しが完了しました"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportação concluída"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đã xuất xong"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导出完成"
-          }
-        }
-      }
-    },
-    "Export progress" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportfortschritt"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Progreso de la exportación"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Progression de l’exportation"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "書き出しの進行状況"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Progresso da exportação"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tiến độ xuất"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导出进度"
-          }
-        }
-      }
-    },
-    "Exporting video…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Video wird exportiert …"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportando vídeo…"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportation de la vidéo…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ビデオを書き出し中…"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportando vídeo…"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang xuất video…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在导出视频…"
-          }
-        }
-      }
-    },
-    "Favorite" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Favorit"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Favorito"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Favori"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "お気に入り"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Favorito"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Yêu thích"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "个人收藏"
-          }
-        }
-      }
-    },
-    "From %@ to %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Von %1$@ bis %2$@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "De %1$@ a %2$@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "De %1$@ à %2$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@から%2$@まで"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "De %1$@ a %2$@"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Từ %1$@ đến %2$@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 %1$@ 到 %2$@"
-          }
-        }
-      }
-    },
-    "Gradient %lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verlauf %lld"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Degradado %lld"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dégradé %lld"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "グラデーション %lld"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gradiente %lld"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gradient %lld"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "渐变 %lld"
-          }
-        }
-      }
-    },
-    "Opens the color picker" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffnet die Farbauswahl"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abre el selector de color"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ouvre le sélecteur de couleur"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "カラーピッカーを開きます"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abre o seletor de cores"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mở bảng chọn màu"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开颜色选择器"
-          }
-        }
-      }
-    },
-    "Paste this in the agent’s terminal or settings. The agent starts Native Screen when it needs it." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Füge dies im Terminal oder in den Einstellungen des Agenten ein. Der Agent startet Native Screen bei Bedarf."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pega esto en la terminal o los ajustes del agente. El agente abre Native Screen cuando lo necesita."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Collez ceci dans le terminal ou les réglages de l’agent. L’agent lance Native Screen quand il en a besoin."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "これをエージェントのターミナルまたは設定に貼り付けます。エージェントは必要なときに Native Screen を起動します。"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cole isto no terminal ou nos ajustes do agente. O agente abre o Native Screen quando precisar."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dán dòng này vào terminal hoặc phần cài đặt của agent. Agent sẽ tự mở Native Screen khi cần."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将此粘贴到代理的终端或设置中。代理会在需要时启动 Native Screen。"
-          }
-        }
-      }
-    },
-    "Pick a color from the screen" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Farbe vom Bildschirm aufnehmen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tomar un color de la pantalla"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prélever une couleur à l’écran"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "画面から色を取得"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Capturar uma cor da tela"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lấy màu trên màn hình"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从屏幕取色"
-          }
-        }
-      }
-    },
-    "Playhead" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abspielposition"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cabezal de reproducción"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tête de lecture"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "再生ヘッド"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Indicador de reprodução"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đầu phát"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "播放头"
-          }
-        }
-      }
-    },
-    "Preview" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vorschau"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vista previa"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aperçu"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プレビュー"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pré-visualização"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Xem trước"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "预览"
-          }
-        }
-      }
-    },
-    "Random color" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zufällige Farbe"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Color aleatorio"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couleur aléatoire"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ランダムな色"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cor aleatória"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Màu ngẫu nhiên"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "随机颜色"
-          }
-        }
-      }
-    },
-    "Reset %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ zurücksetzen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restablecer %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réinitialiser %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@をリセット"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Redefinir %@"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đặt lại %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重置%@"
-          }
-        }
-      }
-    },
-    "Shortcut" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tastenkürzel"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Atajo"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Raccourci"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ショートカット"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Atalho"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Phím tắt"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "快捷键"
-          }
-        }
-      }
-    },
-    "Status" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Status"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Estado"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "État"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "状態"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Status"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trạng thái"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "状态"
-          }
-        }
-      }
-    },
-    "Timeline zoom" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Timeline-Zoom"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zoom de la línea de tiempo"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zoom de la timeline"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "タイムラインの拡大率"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zoom da linha do tempo"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Thu phóng timeline"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "时间线缩放"
-          }
-        }
-      }
-    },
-    "Waiting for an agent to connect" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wartet auf die Verbindung eines Agenten"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esperando a que se conecte un agente"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "En attente de la connexion d’un agent"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "エージェントの接続を待っています"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aguardando a conexão de um agente"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đang chờ agent kết nối"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在等待代理连接"
-          }
-        }
-      }
-    },
     "“%@” already exists. Do you want to replace it?" : {
       "localizations" : {
         "de" : {
@@ -1919,7 +196,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ • Restzeit wird geschätzt …"
+            "value" : "%@ • Restzeit wird geschätzt ..."
           }
         },
         "es" : {
@@ -1931,7 +208,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ • Estimation du temps restant…"
+            "value" : "%@ • Estimation du temps restant..."
           }
         },
         "ja" : {
@@ -3035,6 +1312,52 @@
         }
       }
     },
+    "Add" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinzufügen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "追加"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adicionar"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thêm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
+        }
+      }
+    },
     "Add a color look" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3176,6 +1499,7 @@
       }
     },
     "Add caption track" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -3916,6 +2240,192 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "录制后"
+          }
+        }
+      }
+    },
+    "AI agent connected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KI-Agent verbunden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agente de IA conectado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent IA connecté"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI エージェントが接続しました"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agente de IA conectado"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI agent đã kết nối"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 代理已连接"
+          }
+        }
+      }
+    },
+    "AI agent connected: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KI-Agent verbunden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agente de IA conectado: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent IA connecté : %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI エージェント接続中：%@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agente de IA conectado: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI agent đã kết nối: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 代理已连接：%@"
+          }
+        }
+      }
+    },
+    "AI Agents" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KI-Agenten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agentes de IA"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agents IA"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI エージェント"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agentes de IA"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI Agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 代理"
+          }
+        }
+      }
+    },
+    "Allow AI agents to control Native Screen" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KI-Agenten erlauben, Native Screen zu steuern"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permitir que agentes de IA controlen Native Screen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autoriser les agents IA à contrôler Native Screen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI エージェントによる Native Screen の操作を許可"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permitir que agentes de IA controlem o Native Screen"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cho phép AI agent điều khiển Native Screen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许 AI 代理控制 Native Screen"
           }
         }
       }
@@ -7026,6 +5536,52 @@
         }
       }
     },
+    "Captions are off. Right-click a caption on the timeline to turn them back on." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel sind aus. Klicke mit der rechten Maustaste auf einen Untertitel in der Timeline, um sie wieder einzuschalten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los subtítulos están desactivados. Haz clic derecho en un subtítulo de la línea de tiempo para volver a activarlos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les sous-titres sont désactivés. Faites un clic droit sur un sous-titre dans la timeline pour les réactiver."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕はオフです。タイムラインの字幕を右クリックすると、もう一度オンにできます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "As legendas estão desativadas. Clique com o botão direito em uma legenda na linha do tempo para ativá-las de novo."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phụ đề đang tắt. Chuột phải vào một phụ đề trên timeline để bật lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕已关闭。在时间线上右键点按某条字幕即可重新打开。"
+          }
+        }
+      }
+    },
     "Center" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7119,48 +5675,48 @@
         }
       }
     },
-    "Change directory…" : {
+    "Change directory..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordner ändern …"
+            "value" : "Ordner ändern ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cambiar carpeta…"
+            "value" : "Cambiar carpeta..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Changer de dossier…"
+            "value" : "Changer de dossier..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "フォルダを変更…"
+            "value" : "フォルダを変更..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Alterar pasta…"
+            "value" : "Alterar pasta..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đổi thư mục…"
+            "value" : "Đổi thư mục..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "更改目录…"
+            "value" : "更改目录..."
           }
         }
       }
@@ -7255,6 +5811,99 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将遮罩类型改为敏感数据"
+          }
+        }
+      }
+    },
+    "Check for updates automatically" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch nach Updates suchen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar actualizaciones automáticamente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher automatiquement les mises à jour"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アップデートを自動で確認"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verificar atualizações automaticamente"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tự động kiểm tra cập nhật"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
+          }
+        }
+      }
+    },
+    "Check for Updates..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach Updates suchen ..."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar actualizaciones..."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher des mises à jour..."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アップデートを確認..."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verificar atualizações..."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kiểm tra cập nhật..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新..."
           }
         }
       }
@@ -7723,6 +6372,100 @@
         }
       }
     },
+    "Claude Desktop, Cursor and other apps" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Desktop, Cursor und andere Apps"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Desktop, Cursor y otras apps"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Desktop, Cursor et autres apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Desktop、Cursor など"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Desktop, Cursor e outros apps"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Desktop, Cursor và các app khác"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Desktop、Cursor 和其他应用"
+          }
+        }
+      }
+    },
+    "Claude, Codex, Cursor and other MCP apps can record, edit, change settings and export for you. They connect on this Mac only." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude, Codex, Cursor und andere MCP-Apps können für dich aufnehmen, bearbeiten, Einstellungen ändern und exportieren. Sie verbinden sich nur auf diesem Mac."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude, Codex, Cursor y otras apps MCP pueden grabar, editar, cambiar ajustes y exportar por ti. Solo se conectan en este Mac."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude, Codex, Cursor et les autres apps MCP peuvent enregistrer, monter, modifier les réglages et exporter pour vous. Elles se connectent uniquement sur ce Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude、Codex、Cursor などの MCP アプリが、収録、編集、設定の変更、書き出しを代わりに行えます。接続はこの Mac 上に限られます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude, Codex, Cursor e outros apps MCP podem gravar, editar, mudar ajustes e exportar por você. Eles se conectam apenas neste Mac."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude, Codex, Cursor và các app MCP khác có thể quay, chỉnh sửa, đổi cài đặt và xuất video giúp bạn. Chúng chỉ kết nối được trên máy Mac này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude、Codex、Cursor 和其他 MCP 应用可以替你录制、编辑、更改设置和导出。它们只能在这台 Mac 上连接。"
+          }
+        }
+      }
+    },
     "Clear menu" : {
       "localizations" : {
         "de" : {
@@ -7765,6 +6508,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除菜单"
+          }
+        }
+      }
+    },
+    "Clear search" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche löschen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Borrar búsqueda"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effacer la recherche"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検索をクリア"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpar busca"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xoá tìm kiếm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除搜索"
           }
         }
       }
@@ -7815,48 +6604,48 @@
         }
       }
     },
-    "Click any word to edit or cut — Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only." : {
+    "Click any word to edit or cut. Cut video removes the spoken segment from the timeline, Cut transcript hides it from captions only." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke auf ein Wort, um es zu bearbeiten oder zu schneiden — „Video schneiden“ entfernt die gesprochene Stelle aus der Timeline, „Transkript schneiden“ blendet sie nur in den Untertiteln aus."
+            "value" : "Klicke auf ein Wort, um es zu bearbeiten oder zu schneiden. „Video schneiden“ entfernt die gesprochene Stelle aus der Timeline, „Transkript schneiden“ blendet sie nur in den Untertiteln aus."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Haz clic en cualquier palabra para editarla o cortarla — Cortar vídeo quita ese fragmento de la línea de tiempo, Cortar transcripción solo lo oculta de los subtítulos."
+            "value" : "Haz clic en cualquier palabra para editarla o cortarla. Cortar vídeo quita ese fragmento de la línea de tiempo, Cortar transcripción solo lo oculta de los subtítulos."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cliquez sur un mot pour le modifier ou le couper — Couper la vidéo retire le passage de la timeline, Couper la transcription le masque seulement dans les sous-titres."
+            "value" : "Cliquez sur un mot pour le modifier ou le couper. Couper la vidéo retire le passage de la timeline, Couper la transcription le masque seulement dans les sous-titres."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "単語をクリックして編集またはカット — 「ビデオをカット」は話した部分をタイムラインから削除し、「文字起こしをカット」は字幕からのみ非表示にします。"
+            "value" : "単語をクリックして編集またはカット。「ビデオをカット」は話した部分をタイムラインから削除し、「文字起こしをカット」は字幕からのみ非表示にします。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Clique em qualquer palavra para editar ou cortar — Cortar vídeo remove o trecho falado da linha do tempo, Cortar transcrição só o oculta das legendas."
+            "value" : "Clique em qualquer palavra para editar ou cortar. Cortar vídeo remove o trecho falado da linha do tempo, Cortar transcrição só o oculta das legendas."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bấm vào từ bất kỳ để sửa hoặc cắt — Cắt video bỏ đoạn nói đó khỏi timeline, Cắt transcript chỉ ẩn nó khỏi phụ đề."
+            "value" : "Bấm vào từ bất kỳ để sửa hoặc cắt. Cắt video bỏ đoạn nói đó khỏi timeline, Cắt transcript chỉ ẩn nó khỏi phụ đề."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点按任意字词进行编辑或剪切 — “剪切视频”会从时间线中移除这段话，“剪切文字稿”只在字幕中隐藏它。"
+            "value" : "点按任意字词进行编辑或剪切。“剪切视频”会从时间线中移除这段话，“剪切文字稿”只在字幕中隐藏它。"
           }
         }
       }
@@ -8789,6 +7578,53 @@
         }
       }
     },
+    "Collapsed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reduziert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contraído"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réduit"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "折りたたみ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recolhido"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang thu gọn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已折叠"
+          }
+        }
+      }
+    },
     "Color" : {
       "localizations" : {
         "de" : {
@@ -9161,6 +7997,99 @@
         }
       }
     },
+    "Connect an agent" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agenten verbinden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectar un agente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecter un agent"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エージェントを接続"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectar um agente"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kết nối agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接代理"
+          }
+        }
+      }
+    },
+    "Connected: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbunden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectado: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecté : %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続中：%@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectado: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã kết nối: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接：%@"
+          }
+        }
+      }
+    },
     "Continue" : {
       "localizations" : {
         "de" : {
@@ -9300,6 +8229,53 @@
         }
       }
     },
+    "Copied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopiert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copié"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コピーしました"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiado"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã chép"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已拷贝"
+          }
+        }
+      }
+    },
     "Copy" : {
       "localizations" : {
         "de" : {
@@ -9393,6 +8369,53 @@
         }
       }
     },
+    "Copy %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kopieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copier %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ をコピー"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chép %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝 %@"
+          }
+        }
+      }
+    },
     "Copy mask" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9436,6 +8459,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拷贝遮罩"
+          }
+        }
+      }
+    },
+    "Copy to clipboard" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In die Zwischenablage kopieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar al portapapeles"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copier dans le presse-papiers"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クリップボードにコピー"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar para a área de transferência"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sao chép vào clipboard"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制到剪贴板"
           }
         }
       }
@@ -10090,48 +9159,48 @@
         }
       }
     },
-    "Create project from video…" : {
+    "Create project from video..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Projekt aus Video erstellen …"
+            "value" : "Projekt aus Video erstellen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Crear proyecto a partir de un vídeo…"
+            "value" : "Crear proyecto a partir de un vídeo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Créer un projet à partir d’une vidéo…"
+            "value" : "Créer un projet à partir d’une vidéo..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ビデオからプロジェクトを作成…"
+            "value" : "ビデオからプロジェクトを作成..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Criar projeto a partir de vídeo…"
+            "value" : "Criar projeto a partir de vídeo..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tạo dự án từ video…"
+            "value" : "Tạo dự án từ video..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从视频创建项目…"
+            "value" : "从视频创建项目..."
           }
         }
       }
@@ -10141,7 +9210,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eigenes Farb-Preset erstellen …"
+            "value" : "Eigenes Farb-Preset erstellen ..."
           }
         },
         "es" : {
@@ -10153,7 +9222,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Créer votre préréglage couleur…"
+            "value" : "Créer votre préréglage couleur..."
           }
         },
         "ja" : {
@@ -10322,52 +9391,6 @@
         }
       }
     },
-    "Crop — %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zuschneiden — %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recortar — %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recadrer — %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "切り取り — %@"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recortar — %@"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cắt khung — %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "裁剪 — %@"
-          }
-        }
-      }
-    },
     "Crop camera" : {
       "localizations" : {
         "de" : {
@@ -10414,48 +9437,48 @@
         }
       }
     },
-    "Crop camera — %@" : {
+    "Crop camera: %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kamera zuschneiden — %@"
+            "value" : "Kamera zuschneiden: %@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recortar cámara — %@"
+            "value" : "Recortar cámara: %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recadrer la caméra — %@"
+            "value" : "Recadrer la caméra: %@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "カメラを切り取り — %@"
+            "value" : "カメラを切り取り：%@"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recortar câmera — %@"
+            "value" : "Recortar câmera: %@"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cắt khung camera — %@"
+            "value" : "Cắt khung camera: %@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "裁剪摄像头 — %@"
+            "value" : "裁剪摄像头：%@"
           }
         }
       }
@@ -10503,6 +9526,99 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "裁剪录制"
+          }
+        }
+      }
+    },
+    "Crop: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuschneiden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recortar: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recadrer: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り取り：%@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recortar: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cắt khung: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裁剪：%@"
+          }
+        }
+      }
+    },
+    "Current Desktop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktueller Schreibtisch"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escritorio actual"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bureau actuel"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のデスクトップ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mesa atual"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hình nền hiện tại"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前桌面"
           }
         }
       }
@@ -11022,25 +10138,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Alle erkannten Füllpausen („äh“, „ähm“ …) aus dem Video schneiden"
+            "value" : "Alle erkannten Füllpausen („äh“, „ähm“ ...) aus dem Video schneiden"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cortar del vídeo todas las muletillas detectadas («eh», «em»…)"
+            "value" : "Cortar del vídeo todas las muletillas detectadas («eh», «em»...)"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Couper toutes les hésitations détectées (« euh », « hum »…) de la vidéo"
+            "value" : "Couper toutes les hésitations détectées (« euh », « hum »...) de la vidéo"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "検出されたフィラー（「えー」「あの」…）をビデオからすべてカット"
+            "value" : "検出されたフィラー（「えー」「あの」...）をビデオからすべてカット"
           }
         },
         "pt-BR" : {
@@ -11058,7 +10174,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从视频中剪掉所有检测到的填充停顿（“嗯”、“呃”…）"
+            "value" : "从视频中剪掉所有检测到的填充停顿（“嗯”、“呃”...）"
           }
         }
       }
@@ -11945,48 +11061,48 @@
         }
       }
     },
-    "Detecting faces in recording on device…" : {
+    "Detecting faces in recording on device..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gesichter in der Aufnahme werden auf dem Gerät erkannt …"
+            "value" : "Gesichter in der Aufnahme werden auf dem Gerät erkannt ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Detectando caras en la grabación en el dispositivo…"
+            "value" : "Detectando caras en la grabación en el dispositivo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Détection des visages dans l’enregistrement, sur l’appareil…"
+            "value" : "Détection des visages dans l’enregistrement, sur l’appareil..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "収録内の顔をデバイス上で検出中…"
+            "value" : "収録内の顔をデバイス上で検出中..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Detectando rostos na gravação, no dispositivo…"
+            "value" : "Detectando rostos na gravação, no dispositivo..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đang nhận diện khuôn mặt trong bản ghi ngay trên máy…"
+            "value" : "Đang nhận diện khuôn mặt trong bản ghi ngay trên máy..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在设备上检测录制中的人脸…"
+            "value" : "正在设备上检测录制中的人脸..."
           }
         }
       }
@@ -12829,6 +11945,53 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停用缩放"
+          }
+        }
+      }
+    },
+    "Disabled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deaktiviert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desactivado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactivé"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無効"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desativado"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã tắt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已停用"
           }
         }
       }
@@ -13758,6 +12921,52 @@
         }
       }
     },
+    "Duration" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dauer"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duración"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durée"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長さ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duração"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thời lượng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时长"
+          }
+        }
+      }
+    },
     "Earthy terracotta warmth and muted sage greens" : {
       "localizations" : {
         "de" : {
@@ -13989,6 +13198,53 @@
         }
       }
     },
+    "Edit caption" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel bearbeiten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editar subtítulo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier le sous-titre"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕を編集"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editar legenda"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sửa phụ đề"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑字幕"
+          }
+        }
+      }
+    },
     "Edit crop" : {
       "localizations" : {
         "de" : {
@@ -14082,49 +13338,49 @@
         }
       }
     },
-    "Edit shortcut…" : {
+    "Edit shortcut..." : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kurzbefehl bearbeiten …"
+            "value" : "Kurzbefehl bearbeiten ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editar atajo…"
+            "value" : "Editar atajo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modifier le raccourci…"
+            "value" : "Modifier le raccourci..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ショートカットを編集…"
+            "value" : "ショートカットを編集..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editar atalho…"
+            "value" : "Editar atalho..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sửa phím tắt…"
+            "value" : "Sửa phím tắt..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑快捷键…"
+            "value" : "编辑快捷键..."
           }
         }
       }
@@ -14454,6 +13710,53 @@
         }
       }
     },
+    "Enable captions" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel aktivieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activar subtítulos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activer les sous-titres"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕をオン"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ativar legendas"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bật phụ đề"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用字幕"
+          }
+        }
+      }
+    },
     "Enable single key shortcuts" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14595,48 +13898,48 @@
         }
       }
     },
-    "Estimation — Export time %@ — Output size %@" : {
+    "Estimation: Export time %@, Output size %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schätzung — Exportdauer %@ — Ausgabegröße %@"
+            "value" : "Schätzung: Exportdauer %@, Ausgabegröße %@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Estimación — Tiempo de exportación %@ — Tamaño de salida %@"
+            "value" : "Estimación: Tiempo de exportación %@, Tamaño de salida %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Estimation — Durée d’exportation %@ — Taille du fichier %@"
+            "value" : "Estimation: Durée d’exportation %@, Taille du fichier %@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "見積もり — 書き出し時間 %@ — 出力サイズ %@"
+            "value" : "見積もり：書き出し時間 %@、出力サイズ %@"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Estimativa — Tempo de exportação %@ — Tamanho de saída %@"
+            "value" : "Estimativa: Tempo de exportação %@, Tamanho de saída %@"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ước tính — Thời gian xuất %@ — Dung lượng %@"
+            "value" : "Ước tính: Thời gian xuất %@, Dung lượng %@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "预估 — 导出时间 %@ — 输出大小 %@"
+            "value" : "预估：导出时间 %@，输出大小 %@"
           }
         }
       }
@@ -14687,6 +13990,52 @@
         }
       }
     },
+    "Every edit an agent makes shows in the editor and can be undone with ⌘Z. Recording shows the recording bar and its countdown. A deleted project goes to the Trash." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Änderung eines Agenten erscheint im Editor und lässt sich mit ⌘Z widerrufen. Bei Aufnahmen erscheinen die Aufnahmeleiste und der Countdown. Ein gelöschtes Projekt landet im Papierkorb."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada cambio de un agente se ve en el editor y se puede deshacer con ⌘Z. Al grabar se muestran la barra de grabación y su cuenta atrás. Un proyecto eliminado va a la papelera."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaque modification d’un agent apparaît dans l’éditeur et peut être annulée avec ⌘Z. L’enregistrement affiche la barre d’enregistrement et son compte à rebours. Un projet supprimé va dans la corbeille."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エージェントの編集はすべてエディタに表示され、⌘Z で取り消せます。収録中は収録バーとカウントダウンが表示されます。削除したプロジェクトはゴミ箱に入ります。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada edição de um agente aparece no editor e pode ser desfeita com ⌘Z. A gravação mostra a barra de gravação e a contagem regressiva. Um projeto apagado vai para o Lixo."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mọi thay đổi của agent đều hiện trong editor và hoàn tác được bằng ⌘Z. Khi quay, thanh quay và đếm ngược vẫn hiện. Project bị xoá sẽ vào Thùng rác."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理所做的每项编辑都会显示在编辑器中，并可用 ⌘Z 撤销。录制时会显示录制栏和倒计时。删除的项目会移到废纸篓。"
+          }
+        }
+      }
+    },
     "Everything recorded so far will be deleted." : {
       "localizations" : {
         "de" : {
@@ -14729,6 +14078,53 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目前录制的所有内容都将被删除。"
+          }
+        }
+      }
+    },
+    "Expanded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erweitert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expandido"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Développé"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展開"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expandido"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang mở"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已展开"
           }
         }
       }
@@ -14970,7 +14366,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aktuelles Bild als Bild exportieren …"
+            "value" : "Aktuelles Bild als Bild exportieren ..."
           }
         },
         "es" : {
@@ -14982,7 +14378,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exporter l’image actuelle…"
+            "value" : "Exporter l’image actuelle..."
           }
         },
         "ja" : {
@@ -15011,48 +14407,49 @@
         }
       }
     },
-    "Export current frame as image…" : {
+    "Export finished" : {
+      "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aktuelles Bild als Bild exportieren …"
+            "value" : "Export abgeschlossen"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportar fotograma actual como imagen…"
+            "value" : "Exportación terminada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exporter l’image actuelle…"
+            "value" : "Exportation terminée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在のフレームを画像として書き出す…"
+            "value" : "書き出しが完了しました"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportar quadro atual como imagem…"
+            "value" : "Exportação concluída"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Xuất khung hình hiện tại thành ảnh…"
+            "value" : "Đã xuất xong"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将当前帧导出为图像…"
+            "value" : "导出完成"
           }
         }
       }
@@ -15099,6 +14496,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导出帧"
+          }
+        }
+      }
+    },
+    "Export progress" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportfortschritt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Progreso de la exportación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Progression de l’exportation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出しの進行状況"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Progresso da exportação"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiến độ xuất"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出进度"
           }
         }
       }
@@ -15340,7 +14783,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In Datei exportieren …"
+            "value" : "In Datei exportieren ..."
           }
         },
         "es" : {
@@ -15352,7 +14795,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exporter vers un fichier…"
+            "value" : "Exporter vers un fichier..."
           }
         },
         "ja" : {
@@ -15526,7 +14969,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Video exportieren …"
+            "value" : "Video exportieren ..."
           }
         },
         "es" : {
@@ -15538,7 +14981,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exporter la vidéo…"
+            "value" : "Exporter la vidéo..."
           }
         },
         "ja" : {
@@ -15567,48 +15010,48 @@
         }
       }
     },
-    "Export…" : {
+    "Export..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportieren …"
+            "value" : "Exportieren ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportar…"
+            "value" : "Exportar..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exporter…"
+            "value" : "Exporter..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "書き出す…"
+            "value" : "書き出す..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportar…"
+            "value" : "Exportar..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Xuất…"
+            "value" : "Xuất..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出…"
+            "value" : "导出..."
           }
         }
       }
@@ -15705,48 +15148,95 @@
         }
       }
     },
-    "Exporting…" : {
+    "Exporting video..." : {
+      "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wird exportiert …"
+            "value" : "Video wird exportiert ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportando…"
+            "value" : "Exportando vídeo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportation…"
+            "value" : "Exportation de la vidéo..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "書き出し中…"
+            "value" : "ビデオを書き出し中..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportando…"
+            "value" : "Exportando vídeo..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đang xuất…"
+            "value" : "Đang xuất video..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在导出…"
+            "value" : "正在导出视频..."
+          }
+        }
+      }
+    },
+    "Exporting..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird exportiert ..."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportando..."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportation..."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き出し中..."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportando..."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang xuất..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在导出..."
           }
         }
       }
@@ -15797,48 +15287,48 @@
         }
       }
     },
-    "Extract raw recording files…" : {
+    "Extract raw recording files..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Originale Aufnahmedateien extrahieren …"
+            "value" : "Originale Aufnahmedateien extrahieren ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Extraer archivos de grabación originales…"
+            "value" : "Extraer archivos de grabación originales..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Extraire les fichiers d’enregistrement bruts…"
+            "value" : "Extraire les fichiers d’enregistrement bruts..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "収録の元ファイルを取り出す…"
+            "value" : "収録の元ファイルを取り出す..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Extrair arquivos brutos da gravação…"
+            "value" : "Extrair arquivos brutos da gravação..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Trích xuất file bản ghi gốc…"
+            "value" : "Trích xuất file bản ghi gốc..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "提取原始录制文件…"
+            "value" : "提取原始录制文件..."
           }
         }
       }
@@ -15932,6 +15422,53 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "淡入"
+          }
+        }
+      }
+    },
+    "Favorite" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favorit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favorito"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favori"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お気に入り"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favorito"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yêu thích"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人收藏"
           }
         }
       }
@@ -16677,6 +16214,53 @@
         }
       }
     },
+    "From %@ to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von %1$@ bis %2$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De %1$@ a %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De %1$@ à %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@から%2$@まで"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De %1$@ a %2$@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Từ %1$@ đến %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 %1$@ 到 %2$@"
+          }
+        }
+      }
+    },
     "From all apps" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17138,48 +16722,48 @@
         }
       }
     },
-    "Generating on device…" : {
+    "Generating on device..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wird auf dem Gerät erstellt …"
+            "value" : "Wird auf dem Gerät erstellt ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Generando en el dispositivo…"
+            "value" : "Generando en el dispositivo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Génération sur l’appareil…"
+            "value" : "Génération sur l’appareil..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "デバイス上で生成中…"
+            "value" : "デバイス上で生成中..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gerando no dispositivo…"
+            "value" : "Gerando no dispositivo..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đang tạo trên máy…"
+            "value" : "Đang tạo trên máy..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在设备上生成…"
+            "value" : "正在设备上生成..."
           }
         }
       }
@@ -17829,6 +17413,53 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "渐变"
+          }
+        }
+      }
+    },
+    "Gradient %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verlauf %lld"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Degradado %lld"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dégradé %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "グラデーション %lld"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gradiente %lld"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gradient %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "渐变 %lld"
           }
         }
       }
@@ -19979,48 +19610,48 @@
         }
       }
     },
-    "Import preset…" : {
+    "Import preset..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preset importieren …"
+            "value" : "Preset importieren ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importar preajuste…"
+            "value" : "Importar preajuste..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importer un préréglage…"
+            "value" : "Importer un préréglage..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プリセットを読み込む…"
+            "value" : "プリセットを読み込む..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importar predefinição…"
+            "value" : "Importar predefinição..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nhập preset…"
+            "value" : "Nhập preset..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导入预设…"
+            "value" : "导入预设..."
           }
         }
       }
@@ -21515,7 +21146,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eigene LUT-Datei laden …"
+            "value" : "Eigene LUT-Datei laden ..."
           }
         },
         "es" : {
@@ -21527,7 +21158,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Charger votre fichier LUT…"
+            "value" : "Charger votre fichier LUT..."
           }
         },
         "ja" : {
@@ -23790,6 +23421,53 @@
         }
       }
     },
+    "Native Screen checks GitHub for a new version once a day and asks before installing it." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen sucht einmal am Tag auf GitHub nach einer neuen Version und fragt vor der Installation."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen busca una versión nueva en GitHub una vez al día y pregunta antes de instalarla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen cherche une nouvelle version sur GitHub une fois par jour et demande avant de l’installer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen は 1 日に 1 回 GitHub で新しいバージョンを確認し、インストールする前に確認します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Native Screen procura uma nova versão no GitHub uma vez por dia e pergunta antes de instalá-la."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen kiểm tra phiên bản mới trên GitHub mỗi ngày một lần và hỏi bạn trước khi cài."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 每天在 GitHub 上检查一次新版本，安装前会先询问你。"
+          }
+        }
+      }
+    },
     "nativescreen" : {
       "localizations" : {
         "de" : {
@@ -24028,7 +23706,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Name des neuen Presets …"
+            "value" : "Name des neuen Presets ..."
           }
         },
         "es" : {
@@ -24040,7 +23718,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nom du nouveau préréglage…"
+            "value" : "Nom du nouveau préréglage..."
           }
         },
         "ja" : {
@@ -24163,48 +23841,48 @@
         }
       }
     },
-    "New recording…" : {
+    "New recording..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Neue Aufnahme …"
+            "value" : "Neue Aufnahme ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nueva grabación…"
+            "value" : "Nueva grabación..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nouvel enregistrement…"
+            "value" : "Nouvel enregistrement..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新規収録…"
+            "value" : "新規収録..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nova gravação…"
+            "value" : "Nova gravação..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bản quay mới…"
+            "value" : "Bản quay mới..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新录制…"
+            "value" : "新录制..."
           }
         }
       }
@@ -24810,6 +24488,52 @@
         }
       }
     },
+    "Nothing could be saved." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es konnte nichts gespeichert werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar nada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rien n’a pu être enregistré."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "何も保存できませんでした。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nada pôde ser salvo."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không lưu được gì."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能保存任何内容。"
+          }
+        }
+      }
+    },
     "Off" : {
       "localizations" : {
         "de" : {
@@ -24948,48 +24672,48 @@
         }
       }
     },
-    "Open .nativescreen Project…" : {
+    "Open .nativescreen Project..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : ".nativescreen-Projekt öffnen …"
+            "value" : ".nativescreen-Projekt öffnen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir proyecto .nativescreen…"
+            "value" : "Abrir proyecto .nativescreen..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ouvrir un projet .nativescreen…"
+            "value" : "Ouvrir un projet .nativescreen..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : ".nativescreen プロジェクトを開く…"
+            "value" : ".nativescreen プロジェクトを開く..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir projeto .nativescreen…"
+            "value" : "Abrir projeto .nativescreen..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mở dự án .nativescreen…"
+            "value" : "Mở dự án .nativescreen..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开 .nativescreen 项目…"
+            "value" : "打开 .nativescreen 项目..."
           }
         }
       }
@@ -25178,48 +24902,48 @@
         }
       }
     },
-    "Open project…" : {
+    "Open project..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Projekt öffnen …"
+            "value" : "Projekt öffnen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir proyecto…"
+            "value" : "Abrir proyecto..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ouvrir un projet…"
+            "value" : "Ouvrir un projet..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロジェクトを開く…"
+            "value" : "プロジェクトを開く..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir projeto…"
+            "value" : "Abrir projeto..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mở dự án…"
+            "value" : "Mở dự án..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开项目…"
+            "value" : "打开项目..."
           }
         }
       }
@@ -25312,6 +25036,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开最近使用"
+          }
+        }
+      }
+    },
+    "Opens the color picker" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet die Farbauswahl"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre el selector de color"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvre le sélecteur de couleur"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カラーピッカーを開きます"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre o seletor de cores"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mở bảng chọn màu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开颜色选择器"
           }
         }
       }
@@ -25409,48 +25179,48 @@
         }
       }
     },
-    "original sound — Native Screen" : {
+    "original sound · Native Screen" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Originalton — Native Screen"
+            "value" : "Originalton · Native Screen"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "sonido original — Native Screen"
+            "value" : "sonido original · Native Screen"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "son original — Native Screen"
+            "value" : "son original · Native Screen"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オリジナル音源 — Native Screen"
+            "value" : "オリジナル音源 · Native Screen"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "som original — Native Screen"
+            "value" : "som original · Native Screen"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "âm thanh gốc — Native Screen"
+            "value" : "âm thanh gốc · Native Screen"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "原声 — Native Screen"
+            "value" : "原声 · Native Screen"
           }
         }
       }
@@ -25919,6 +25689,52 @@
         }
       }
     },
+    "Paste this in the agent’s terminal or settings. The agent starts Native Screen when it needs it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge dies im Terminal oder in den Einstellungen des Agenten ein. Der Agent startet Native Screen bei Bedarf."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pega esto en la terminal o los ajustes del agente. El agente abre Native Screen cuando lo necesita."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collez ceci dans le terminal ou les réglages de l’agent. L’agent lance Native Screen quand il en a besoin."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これをエージェントのターミナルまたは設定に貼り付けます。エージェントは必要なときに Native Screen を起動します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cole isto no terminal ou nos ajustes do agente. O agente abre o Native Screen quando precisar."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dán dòng này vào terminal hoặc phần cài đặt của agent. Agent sẽ tự mở Native Screen khi cần."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此粘贴到代理的终端或设置中。代理会在需要时启动 Native Screen。"
+          }
+        }
+      }
+    },
     "Pause" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -25962,52 +25778,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "暂停"
-          }
-        }
-      }
-    },
-    "Pause — click to tighten to a natural breath" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pause — klicken, um sie auf einen natürlichen Atemzug zu kürzen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pausa — haz clic para acortarla a una respiración natural"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pause — cliquez pour la réduire à une respiration naturelle"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "間 — クリックして自然な息継ぎまで短縮"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pausa — clique para encurtar até uma respiração natural"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Khoảng lặng — bấm để rút về một nhịp thở tự nhiên"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "停顿 — 点按以缩短为自然的换气"
           }
         }
       }
@@ -26106,6 +25876,52 @@
         }
       }
     },
+    "Pause: click to tighten to a natural breath" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause: klicken, um sie auf einen natürlichen Atemzug zu kürzen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausa: haz clic para acortarla a una respiración natural"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause: cliquez pour la réduire à une respiration naturelle"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "間：クリックして自然な息継ぎまで短縮"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausa: clique para encurtar até uma respiração natural"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khoảng lặng: bấm để rút về một nhịp thở tự nhiên"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停顿：点按以缩短为自然的换气"
+          }
+        }
+      }
+    },
     "Perfect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -26149,6 +25965,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "精确"
+          }
+        }
+      }
+    },
+    "Pick a color from the screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Farbe vom Bildschirm aufnehmen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomar un color de la pantalla"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prélever une couleur à l’écran"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面から色を取得"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capturar uma cor da tela"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lấy màu trên màn hình"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从屏幕取色"
           }
         }
       }
@@ -26803,6 +26665,52 @@
         }
       }
     },
+    "Playhead" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abspielposition"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cabezal de reproducción"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tête de lecture"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生ヘッド"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indicador de reprodução"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đầu phát"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放头"
+          }
+        }
+      }
+    },
     "Plays your microphone as recorded." : {
       "localizations" : {
         "de" : {
@@ -27038,7 +26946,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export wird vorbereitet …"
+            "value" : "Export wird vorbereitet ..."
           }
         },
         "es" : {
@@ -27050,7 +26958,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Préparation de l’exportation…"
+            "value" : "Préparation de l’exportation..."
           }
         },
         "ja" : {
@@ -27224,7 +27132,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preset-Optionen …"
+            "value" : "Preset-Optionen ..."
           }
         },
         "es" : {
@@ -27236,7 +27144,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Options du préréglage…"
+            "value" : "Options du préréglage..."
           }
         },
         "ja" : {
@@ -27450,48 +27358,94 @@
         }
       }
     },
-    "Press any shortcut on keyboard… (ESC to cancel)" : {
+    "Press any shortcut on keyboard... (ESC to cancel)" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beliebigen Kurzbefehl auf der Tastatur drücken … (ESC zum Abbrechen)"
+            "value" : "Beliebigen Kurzbefehl auf der Tastatur drücken ... (ESC zum Abbrechen)"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pulsa cualquier atajo en el teclado… (Esc para cancelar)"
+            "value" : "Pulsa cualquier atajo en el teclado... (Esc para cancelar)"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Appuyez sur un raccourci clavier… (Échap pour annuler)"
+            "value" : "Appuyez sur un raccourci clavier... (Échap pour annuler)"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "キーボードでショートカットを押してください…（ESC でキャンセル）"
+            "value" : "キーボードでショートカットを押してください...（ESC でキャンセル）"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pressione qualquer atalho no teclado… (ESC para cancelar)"
+            "value" : "Pressione qualquer atalho no teclado... (ESC para cancelar)"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nhấn phím tắt bất kỳ… (ESC để hủy)"
+            "value" : "Nhấn phím tắt bất kỳ... (ESC để hủy)"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在键盘上按下任意快捷键…（按 ESC 取消）"
+            "value" : "在键盘上按下任意快捷键...（按 ESC 取消）"
+          }
+        }
+      }
+    },
+    "Preview" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschau"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista previa"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aperçu"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビュー"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pré-visualização"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xem trước"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览"
           }
         }
       }
@@ -28147,48 +28101,48 @@
         }
       }
     },
-    "Quick export to file…" : {
+    "Quick export to file..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schnellexport in Datei …"
+            "value" : "Schnellexport in Datei ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportación rápida a archivo…"
+            "value" : "Exportación rápida a archivo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportation rapide vers un fichier…"
+            "value" : "Exportation rapide vers un fichier..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ファイルにクイック書き出し…"
+            "value" : "ファイルにクイック書き出し..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportação rápida para arquivo…"
+            "value" : "Exportação rápida para arquivo..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Xuất nhanh ra file…"
+            "value" : "Xuất nhanh ra file..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "快速导出到文件…"
+            "value" : "快速导出到文件..."
           }
         }
       }
@@ -28235,6 +28189,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出 Native Screen"
+          }
+        }
+      }
+    },
+    "Random color" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zufällige Farbe"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color aleatorio"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couleur aléatoire"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ランダムな色"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cor aleatória"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Màu ngẫu nhiên"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "随机颜色"
           }
         }
       }
@@ -28610,95 +28610,95 @@
         }
       }
     },
-    "Record new voiceover…" : {
+    "Record new voiceover..." : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Neues Voiceover aufnehmen …"
+            "value" : "Neues Voiceover aufnehmen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Grabar nueva voz en off…"
+            "value" : "Grabar nueva voz en off..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enregistrer une nouvelle voix off…"
+            "value" : "Enregistrer une nouvelle voix off..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新しいナレーションを収録…"
+            "value" : "新しいナレーションを収録..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gravar nova narração…"
+            "value" : "Gravar nova narração..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ghi thuyết minh mới…"
+            "value" : "Ghi thuyết minh mới..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "录制新旁白…"
+            "value" : "录制新旁白..."
           }
         }
       }
     },
-    "Record shortcut keys…" : {
+    "Record shortcut keys..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tastenkombination aufnehmen …"
+            "value" : "Tastenkombination aufnehmen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Grabar teclas del atajo…"
+            "value" : "Grabar teclas del atajo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enregistrer les touches du raccourci…"
+            "value" : "Enregistrer les touches du raccourci..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ショートカットキーを記録…"
+            "value" : "ショートカットキーを記録..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gravar teclas do atalho…"
+            "value" : "Gravar teclas do atalho..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ghi tổ hợp phím…"
+            "value" : "Ghi tổ hợp phím..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "录制快捷键按键…"
+            "value" : "录制快捷键按键..."
           }
         }
       }
@@ -28941,7 +28941,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Voiceover aufnehmen …"
+            "value" : "Voiceover aufnehmen ..."
           }
         },
         "es" : {
@@ -28953,7 +28953,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enregistrer une voix off…"
+            "value" : "Enregistrer une voix off..."
           }
         },
         "ja" : {
@@ -29213,48 +29213,94 @@
         }
       }
     },
-    "Recording voiceover…" : {
+    "Recording stopped" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Voiceover wird aufgenommen …"
+            "value" : "Aufnahme beendet"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Grabando voz en off…"
+            "value" : "La grabación se detuvo"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enregistrement de la voix off…"
+            "value" : "L’enregistrement s’est arrêté"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ナレーションを収録中…"
+            "value" : "収録が停止しました"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gravando narração…"
+            "value" : "A gravação parou"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đang ghi thuyết minh…"
+            "value" : "Đã dừng quay"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在录制旁白…"
+            "value" : "录制已停止"
+          }
+        }
+      }
+    },
+    "Recording voiceover..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voiceover wird aufgenommen ..."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grabando voz en off..."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrement de la voix off..."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ナレーションを収録中..."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gravando narração..."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang ghi thuyết minh..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在录制旁白..."
           }
         }
       }
@@ -30518,7 +30564,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Entfernen …"
+            "value" : "Entfernen ..."
           }
         },
         "es" : {
@@ -30530,7 +30576,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Supprimer…"
+            "value" : "Supprimer..."
           }
         },
         "ja" : {
@@ -30658,7 +30704,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Umbenennen …"
+            "value" : "Umbenennen ..."
           }
         },
         "es" : {
@@ -30670,7 +30716,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Renommer…"
+            "value" : "Renommer..."
           }
         },
         "ja" : {
@@ -30787,6 +30833,53 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重置"
+          }
+        }
+      }
+    },
+    "Reset %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zurücksetzen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restablecer %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réinitialiser %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@をリセット"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Redefinir %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đặt lại %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置%@"
           }
         }
       }
@@ -31859,48 +31952,48 @@
         }
       }
     },
-    "Save as…" : {
+    "Save as..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sichern unter …"
+            "value" : "Sichern unter ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Guardar como…"
+            "value" : "Guardar como..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enregistrer sous…"
+            "value" : "Enregistrer sous..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "別名で保存…"
+            "value" : "別名で保存..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Salvar como…"
+            "value" : "Salvar como..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lưu thành…"
+            "value" : "Lưu thành..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "另存为…"
+            "value" : "另存为..."
           }
         }
       }
@@ -32233,48 +32326,48 @@
         }
       }
     },
-    "Scanning recording for sensitive data on device…" : {
+    "Scanning recording for sensitive data on device..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aufnahme wird auf dem Gerät nach vertraulichen Daten durchsucht …"
+            "value" : "Aufnahme wird auf dem Gerät nach vertraulichen Daten durchsucht ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Buscando datos sensibles en la grabación en el dispositivo…"
+            "value" : "Buscando datos sensibles en la grabación en el dispositivo..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recherche de données sensibles dans l’enregistrement, sur l’appareil…"
+            "value" : "Recherche de données sensibles dans l’enregistrement, sur l’appareil..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "収録内の機密データをデバイス上でスキャン中…"
+            "value" : "収録内の機密データをデバイス上でスキャン中..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Procurando dados sensíveis na gravação, no dispositivo…"
+            "value" : "Procurando dados sensíveis na gravação, no dispositivo..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đang quét dữ liệu nhạy cảm trong bản ghi ngay trên máy…"
+            "value" : "Đang quét dữ liệu nhạy cảm trong bản ghi ngay trên máy..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在设备上扫描录制中的敏感数据…"
+            "value" : "正在设备上扫描录制中的敏感数据..."
           }
         }
       }
@@ -32556,48 +32649,48 @@
         }
       }
     },
-    "Select…" : {
+    "Select..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Auswählen …"
+            "value" : "Auswählen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Seleccionar…"
+            "value" : "Seleccionar..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choisir…"
+            "value" : "Choisir..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選択…"
+            "value" : "選択..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Selecionar…"
+            "value" : "Selecionar..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Chọn…"
+            "value" : "Chọn..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择…"
+            "value" : "选择..."
           }
         }
       }
@@ -33254,6 +33347,53 @@
         }
       }
     },
+    "Shortcut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastenkürzel"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atajo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Raccourci"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカット"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atalho"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phím tắt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键"
+          }
+        }
+      }
+    },
     "Shortcut Context Menu" : {
       "localizations" : {
         "de" : {
@@ -33770,7 +33910,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Befehlsmenü einblenden …"
+            "value" : "Befehlsmenü einblenden ..."
           }
         },
         "es" : {
@@ -33782,7 +33922,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Afficher le menu des commandes…"
+            "value" : "Afficher le menu des commandes..."
           }
         },
         "ja" : {
@@ -33817,31 +33957,31 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Befehlsmenü anzeigen … (Strg+K)"
+            "value" : "Befehlsmenü anzeigen ... (Strg+K)"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mostrar menú de comandos… (Ctrl+K)"
+            "value" : "Mostrar menú de comandos... (Ctrl+K)"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Afficher le menu des commandes… (Ctrl+K)"
+            "value" : "Afficher le menu des commandes... (Ctrl+K)"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "コマンドメニューを表示…（Ctrl+K）"
+            "value" : "コマンドメニューを表示...（Ctrl+K）"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mostrar menu de comandos… (Ctrl+K)"
+            "value" : "Mostrar menu de comandos... (Ctrl+K)"
           }
         },
         "vi" : {
@@ -33853,7 +33993,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "显示命令菜单…（Ctrl+K）"
+            "value" : "显示命令菜单...（Ctrl+K）"
           }
         }
       }
@@ -37113,6 +37253,53 @@
         }
       }
     },
+    "Status" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "État"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状態"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trạng thái"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态"
+          }
+        }
+      }
+    },
     "Stop" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -38039,6 +38226,98 @@
         }
       }
     },
+    "The camera video could not be written." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Kameravideo konnte nicht geschrieben werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo escribir el vídeo de la cámara."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La vidéo de la caméra n’a pas pu être écrite."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラのビデオを書き込めませんでした。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível gravar o vídeo da câmera."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không ghi được video camera."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法写入摄像头视频。"
+          }
+        }
+      }
+    },
+    "The first %@ was saved and opened in the editor." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die ersten %@ wurden gespeichert und im Editor geöffnet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se guardaron los primeros %@ y se abrieron en el editor."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les %@ du début ont été enregistrées et ouvertes dans l’éditeur."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の %@ を保存し、エディタで開きました。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Os primeiros %@ foram salvos e abertos no editor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã lưu %@ đầu tiên và mở trong trình chỉnh sửa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存前 %@，并在编辑器中打开。"
+          }
+        }
+      }
+    },
     "The line box appears at its full size right away." : {
       "localizations" : {
         "de" : {
@@ -38177,6 +38456,52 @@
         }
       }
     },
+    "The microphone audio could not be written." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Mikrofonton konnte nicht geschrieben werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo escribir el audio del micrófono."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le son du micro n’a pas pu être écrit."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクの音声を書き込めませんでした。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível gravar o áudio do microfone."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không ghi được âm thanh micro."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法写入麦克风音频。"
+          }
+        }
+      }
+    },
     "The part of the screen that is not being recorded is slightly dimmed." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -38267,6 +38592,98 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该项目及其录制内容将移到回收站。"
+          }
+        }
+      }
+    },
+    "The recorded window or display is no longer available." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das aufgenommene Fenster oder der Bildschirm ist nicht mehr verfügbar."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La ventana o pantalla que se grababa ya no está disponible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La fenêtre ou l’écran enregistré n’est plus disponible."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "収録中のウインドウまたはディスプレイが利用できなくなりました。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A janela ou tela gravada não está mais disponível."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cửa sổ hoặc màn hình đang quay không còn nữa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在录制的窗口或显示器已不可用。"
+          }
+        }
+      }
+    },
+    "The screen video could not be written." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Bildschirmvideo konnte nicht geschrieben werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo escribir el vídeo de la pantalla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La vidéo de l’écran n’a pas pu être écrite."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面のビデオを書き込めませんでした。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível gravar o vídeo da tela."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không ghi được video màn hình."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法写入屏幕视频。"
           }
         }
       }
@@ -38501,48 +38918,48 @@
         }
       }
     },
-    "Tightened pause — click to restore" : {
+    "Tightened pause: click to restore" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gekürzte Pause — klicken, um sie wiederherzustellen"
+            "value" : "Gekürzte Pause: klicken, um sie wiederherzustellen"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pausa acortada — haz clic para restaurarla"
+            "value" : "Pausa acortada: haz clic para restaurarla"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pause raccourcie — cliquez pour la restaurer"
+            "value" : "Pause raccourcie: cliquez pour la restaurer"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "短縮した間 — クリックして元に戻す"
+            "value" : "短縮した間：クリックして元に戻す"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pausa encurtada — clique para restaurar"
+            "value" : "Pausa encurtada: clique para restaurar"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Khoảng lặng đã rút gọn — bấm để khôi phục"
+            "value" : "Khoảng lặng đã rút gọn: bấm để khôi phục"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已缩短的停顿 — 点按以恢复"
+            "value" : "已缩短的停顿：点按以恢复"
           }
         }
       }
@@ -38729,6 +39146,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "录制开始前的等待时间。"
+          }
+        }
+      }
+    },
+    "Timeline zoom" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timeline-Zoom"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom de la línea de tiempo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom de la timeline"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイムラインの拡大率"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom da linha do tempo"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thu phóng timeline"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时间线缩放"
           }
         }
       }
@@ -39428,48 +39891,48 @@
         }
       }
     },
-    "Upload audio…" : {
+    "Upload audio..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Audio hochladen …"
+            "value" : "Audio hochladen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Subir audio…"
+            "value" : "Subir audio..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importer un audio…"
+            "value" : "Importer un audio..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オーディオをアップロード…"
+            "value" : "オーディオをアップロード..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enviar áudio…"
+            "value" : "Enviar áudio..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tải âm thanh lên…"
+            "value" : "Tải âm thanh lên..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "上传音频…"
+            "value" : "上传音频..."
           }
         }
       }
@@ -39527,90 +39990,43 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Voiceover-Audiodatei hochladen …"
+            "value" : "Voiceover-Audiodatei hochladen ..."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Subir archivo de audio de locución…"
+            "value" : "Subir archivo de audio de voz en off..."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importer un fichier audio de voix off…"
+            "value" : "Importer un fichier audio de voix off..."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ナレーション音声ファイルをアップロード…"
+            "value" : "ナレーションのオーディオファイルをアップロード..."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enviar arquivo de áudio de narração…"
+            "value" : "Enviar arquivo de áudio da narração..."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tải lên tệp âm thanh lồng tiếng..."
+            "value" : "Tải file âm thanh thuyết minh lên..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "上传旁白音频文件…"
-          }
-        }
-      }
-    },
-    "Upload voiceover audio file…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voiceover-Audiodatei hochladen …"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Subir archivo de audio de voz en off…"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Importer un fichier audio de voix off…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ナレーションのオーディオファイルをアップロード…"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enviar arquivo de áudio da narração…"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tải file âm thanh thuyết minh lên…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上传旁白音频文件…"
+            "value" : "上传旁白音频文件..."
           }
         }
       }
@@ -40587,6 +41003,53 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "音量已应用到所有旁白"
+          }
+        }
+      }
+    },
+    "Waiting for an agent to connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wartet auf die Verbindung eines Agenten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando a que se conecte un agente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente de la connexion d’un agent"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エージェントの接続を待っています"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aguardando a conexão de um agente"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang chờ agent kết nối"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待代理连接"
           }
         }
       }

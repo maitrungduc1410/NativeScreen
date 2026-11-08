@@ -6,6 +6,10 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2BB19C70308CE110008F49EA /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 2BB19C71308CE110008F49EA /* Sparkle */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		2BB19C5E308CE10F008F49EA /* NativeScreen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = NativeScreen.app; path = "Native Screen.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -22,6 +26,7 @@
 		2BB19C5B308CE10F008F49EA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				2BB19C70308CE110008F49EA /* Sparkle in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -60,6 +65,9 @@
 				2BB19C60308CE10F008F49EA /* NativeScreen */,
 			);
 			name = NativeScreen;
+			packageProductDependencies = (
+				2BB19C71308CE110008F49EA /* Sparkle */,
+			);
 			productName = NativeScreen;
 			productReference = 2BB19C5E308CE10F008F49EA /* NativeScreen.app */;
 			productType = "com.apple.product-type.application";
@@ -95,6 +103,9 @@
 			);
 			mainGroup = 2BB19C55308CE10F008F49EA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2BB19C72308CE110008F49EA /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2BB19C5F308CE10F008F49EA /* Products */;
 			projectDirPath = "";
@@ -272,6 +283,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.dmai.NativeScreen;
 				PRODUCT_NAME = "Native Screen";
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_KEY = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -292,7 +304,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C9FU286T96;
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -311,6 +323,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.dmai.NativeScreen;
 				PRODUCT_NAME = "Native Screen";
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_KEY = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -340,6 +353,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2BB19C72308CE110008F49EA /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2BB19C71308CE110008F49EA /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2BB19C72308CE110008F49EA /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2BB19C56308CE10F008F49EA /* Project object */;
 	validationLevel = 1;

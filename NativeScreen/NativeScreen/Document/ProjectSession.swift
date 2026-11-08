@@ -1971,7 +1971,7 @@ public final class ProjectSession: Identifiable {
     public func setSliceSpeed(id: String, speed: Double) {
         mutate { doc in
             if let idx = doc.timeline.slices.firstIndex(where: { $0.id == id }) {
-                doc.timeline.slices[idx].speed = max(0.25, min(8.0, speed))
+                doc.timeline.slices[idx].speed = max(0.25, min(10.0, speed))
             }
         }
     }
@@ -4168,7 +4168,7 @@ public final class ProjectSession: Identifiable {
         if !isPlaying {
             isPlaying = true
         }
-        showToast("Recording voiceover… Click again to finish")
+        showToast("Recording voiceover... Click again to finish")
     }
 
     public func stopVoiceoverRecording() {

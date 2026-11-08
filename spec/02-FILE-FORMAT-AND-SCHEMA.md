@@ -1,4 +1,4 @@
-# NativeScreen — File Format & Cross-Platform Data Schema (`.nativescreen`)
+# NativeScreen: File Format & Cross-Platform Data Schema (`.nativescreen`)
 
 ## 1. Package Structure (`.nativescreen`)
 
@@ -25,7 +25,7 @@ MyDemo.nativescreen/
         └── window.jsonl          # Target window resize/move bounds changes during capture
 ```
 
-**Projects created from an existing video** (`File > Create project from video…`) use the same layout: the movie is copied
+**Projects created from an existing video** (`File > Create project from video...`) use the same layout: the movie is copied
 unchanged to `recording/display.<original extension>` (`tracks.displayVideo`, also `tracks.systemAudio` when the movie has
 audio), `captureTarget.mode` is `display` with the movie's pixel size and `scaleFactor: 1`, `tracks.windowTelemetry` is
 `null`, and `cursor.jsonl` / `clicks.jsonl` / `keys.jsonl` are empty files. Readers must treat an empty `cursor.jsonl` as

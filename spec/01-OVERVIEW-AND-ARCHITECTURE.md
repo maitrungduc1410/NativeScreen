@@ -1,4 +1,4 @@
-# NativeScreen — Overview & System Architecture
+# NativeScreen: Overview & System Architecture
 
 > **Tagline:** Beautiful, cinematic screen recordings and product demos at native speed. 100% Native UI & GPU Pipeline for macOS (SwiftUI + Metal) and Windows (WinUI 3 + Direct3D 11/12). Zero Electron, Zero WebView, Zero FFmpeg dependency required.
 
@@ -89,7 +89,7 @@ Both macOS and Windows implementations share the same logical 5-layer architectu
 
 ### 4.1. Strict Non-Destructive Principle
 - Raw recorded files inside `project.nativescreen/recording/` (`display.mp4`, `webcam.mp4`, `microphone.m4a`, `cursor.jsonl`, `clicks.jsonl`, `keys.jsonl`) are **strictly read-only and immutable** once recording finishes.
-- Splitting a clip, trimming dead air, changing playback speed (`0.25x` – `8.0x`), adding zooms, or adding multiple blur masks **never modifies the underlying video or telemetry files**.
+- Splitting a clip, trimming dead air, changing playback speed (`0.25x` – `10.0x`), adding zooms, or adding multiple blur masks **never modifies the underlying video or telemetry files**.
 - All edits only mutate the in-memory `ProjectDocument` struct, which serializes to `project.json`.
 
 ### 4.2. Timeline Time vs. Source Time Mapping

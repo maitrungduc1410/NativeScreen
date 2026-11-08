@@ -1304,7 +1304,7 @@ internal sealed class McpToolbox
         var exportId = Guid.NewGuid().ToString();
         exports[exportId] = (session.Document.Name, 0);
         editor.McpPause();
-        editor.McpToast("Exporting video…");
+        editor.McpToast("Exporting video...");
         var started = DateTime.UtcNow;
         var lastReported = -1.0;
         try
