@@ -278,13 +278,18 @@ public sealed class CanvasCoordinateTransform(double canvasWidth, double canvasH
 
     private double FocusY => screen.Y + cameraCenter01.Y * screen.Height;
 
+    // Where the focus lands: the compositor blends from the screen's center to the canvas center over the first 0.5 of zoom.
+    private double AnchorBlend => Math.Clamp((scale - 1) / 0.5, 0, 1);
+
+    private double AnchorX => screen.X + screen.Width * 0.5 + (canvasWidth * 0.5 - (screen.X + screen.Width * 0.5)) * AnchorBlend;
+
+    private double AnchorY => screen.Y + screen.Height * 0.5 + (canvasHeight * 0.5 - (screen.Y + screen.Height * 0.5)) * AnchorBlend;
+
     public (double X, double Y) ToCanvas(double x01, double y01)
     {
         var x = screen.X + (x01 - crop.X) / Math.Max(0.0001, crop.Width) * screen.Width;
         var y = screen.Y + (y01 - crop.Y) / Math.Max(0.0001, crop.Height) * screen.Height;
-        return scale <= 1.001
-            ? (x, y)
-            : (canvasWidth * 0.5 + (x - FocusX) * scale, canvasHeight * 0.5 + (y - FocusY) * scale);
+        return (AnchorX + (x - FocusX) * scale, AnchorY + (y - FocusY) * scale);
     }
 
     public (double X, double Y, double Width, double Height) ToCanvas(Rect01 rect)
@@ -296,8 +301,8 @@ public sealed class CanvasCoordinateTransform(double canvasWidth, double canvasH
 
     public (double X, double Y) ToSource(double canvasX, double canvasY)
     {
-        var x = scale > 1.001 ? FocusX + (canvasX - canvasWidth * 0.5) / scale : canvasX;
-        var y = scale > 1.001 ? FocusY + (canvasY - canvasHeight * 0.5) / scale : canvasY;
+        var x = FocusX + (canvasX - AnchorX) / scale;
+        var y = FocusY + (canvasY - AnchorY) / scale;
         return (crop.X + (x - screen.X) / Math.Max(1, screen.Width) * crop.Width, crop.Y + (y - screen.Y) / Math.Max(1, screen.Height) * crop.Height);
     }
 

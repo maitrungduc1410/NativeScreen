@@ -200,6 +200,7 @@ Rules:
 | Hybrid GPU laptops | Create the D3D11 device on the adapter that drives the captured monitor; WGC frames from another adapter need a copy. |
 | A handler on a `Window` event that captures the window leaks the window and everything it holds | `Window` is outside XAML reference tracking. Use a named handler and remove it in `Closed`, or a static one (`spec/06` ADR-48). Check with `NS_MEMORY_STATS`. |
 | PowerShell drops a bare `--` before it reaches a `.ps1` script, which is how npm installs `claude` and `codex` | A command line shown for the user to paste quotes it (`'--'`), or `claude mcp add nativescreen -- "<exe>" --mcp` fails with `unknown option '--mcp'`. |
+| Moving or fading many small labels | Set `Opacity` and `Translation` with `OpacityTransition` and `TranslationTransition`. They run on the compositor, need no layout pass, and are created only when a label first changes. |
 | `MF_MT_DEFAULT_STRIDE` does not include a hardware decoder's row padding | Derive the pitch from the locked buffer's length (`spec/06` ADR-56). Test widths that are not a multiple of 16. |
 | `GraphicsCaptureItem.Closed` may not fire when the captured window closes | Check `IsWindow` in the capture loop too (`spec/06` ADR-54). |
 | A `TextBox` given `Text` before `AcceptsReturn` keeps only the first line | Set `AcceptsReturn` first. |

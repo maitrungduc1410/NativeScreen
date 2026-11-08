@@ -257,6 +257,10 @@ public sealed class MaskItem
     public MaskType Type { get; set; } = MaskType.Blur;
     public MaskStyle Style { get; set; } = MaskStyle.Gaussian;
     public double Intensity { get; set; } = 36;
+
+    /// <summary>Fill of a solid mask, #RRGGBB. Null means the default dark fill.</summary>
+    public string? SolidColor { get; set; }
+
     public double CornerRadius { get; set; } = 10;
     public List<MaskKeyframe> Keyframes { get; set; } = [];
     public bool Disabled { get; set; }

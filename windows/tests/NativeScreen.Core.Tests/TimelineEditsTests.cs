@@ -161,6 +161,18 @@ public sealed class TimelineEditsTests
     }
 
     [Fact]
+    public void CanvasMappingUsesTheCompositorsAnchorUnderASmallZoom()
+    {
+        // Split-screen style: the screen is off the canvas center, and at 1.25x the focus is halfway to it.
+        var map = new CanvasCoordinateTransform(1000, 500, new PixelRect(100, 50, 600, 300), new Rect01(0, 0, 1, 1), Point01.Center, 1.25);
+        Assert.Equal((450.0, 225.0), map.ToCanvas(0.5, 0.5));
+        var (x, y) = map.ToCanvas(0.2, 0.7);
+        var (backX, backY) = map.ToSource(x, y);
+        Assert.Equal(0.2, backX, 6);
+        Assert.Equal(0.7, backY, 6);
+    }
+
+    [Fact]
     public void CanvasMappingUsesFullFrameCoordinatesUnderACrop()
     {
         // The screen rect shows only the right half of the frame.

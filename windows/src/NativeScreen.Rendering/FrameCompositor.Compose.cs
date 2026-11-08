@@ -384,7 +384,7 @@ public sealed partial class FrameCompositor
                 context.OMSetBlendState(null);
                 DrawQuad(current.View, Identity(width, height), default, 0, 1);
                 context.OMSetBlendState(_sourceOver);
-                DrawBox(rect, corner, 0, new Vector4(0.08f, 0.08f, 0.11f, 1));
+                DrawBox(rect, corner, 0, mask.SolidColor is { } fill ? Hex(fill) : new Vector4(0.08f, 0.08f, 0.11f, 1));
             }
             else
             {

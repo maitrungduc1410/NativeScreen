@@ -371,7 +371,7 @@ Menu bar items are app-wide, but almost every action belongs to one project wind
   - **`SettingsNavigation.shared.tab`** holds the selected tab, so other code can open Settings on a given tab.
 - **Document icon**: `CFBundleTypeIconSystemGenerated` plus `UTTypeIcons` (`UTTypeIconBadgeName = AppIcon`, `UTTypeIconText`) let macOS draw `.nativescreen` packages as a page with the app icon.
 - **Verification**: the editor, Settings tabs, Export modal and command menu were rendered offscreen in both appearances (`NSView.cacheDisplay`) and checked visually.
-- **Windows:** timeline segments use the same light palettes, the selected outline comes from the palette instead of white, and cursor tiles use the same light grays. Dialogs already followed the theme and the preview has no shadow to shrink. Settings has `SlidingSegmentedControl`: the segments are radio buttons, so Narrator announces options, and it reacts to `Checked` because automation raises no click. The window height eases over 280 ms with its top edge fixed (measured from 540 to 999 px over 16 steps); with animations off it jumps.
+- **Windows:** timeline segments use the same light palettes, the selected outline comes from the palette instead of white, and cursor tiles use the same light grays. Dialogs already followed the theme and the preview has no shadow to shrink. Settings keeps its plain option buttons: WinUI 3 has no built-in segmented control, and a hand-made sliding one and an eased window height looked out of place on Windows, so the window takes each tab's height at once, with its top edge fixed.
 
 
 ---
@@ -1178,7 +1178,7 @@ The overlay zoomed out to 1x while a mask was being added or was selected, but t
 Verified at a 1.8x zoom: a mask added by clicking on a field stays centered on the click, with the handles on its corners, and the preview stays zoomed.
 
 ### Windows
-The overlay already used `stage.ScreenRect`. `CanvasCoordinateTransform` now takes the crop like the macOS one, and the new-mask layer covers the crop. Unit test: `CanvasMappingUsesFullFrameCoordinatesUnderACrop`.
+The overlay already used `stage.ScreenRect`. `CanvasCoordinateTransform` now takes the crop like the macOS one, and the new-mask layer covers the crop. Unit test: `CanvasMappingUsesFullFrameCoordinatesUnderACrop`. It also uses the compositor's anchor (`ZoomedRect`: the screen's center blending to the canvas center over the first 0.5 of zoom), which only differs under 1.5x or when the screen is off-center. Unit test: `CanvasMappingUsesTheCompositorsAnchorUnderASmallZoom`.
 
 ## 56. ADR-56: Decoder Row Pitch on Windows
 

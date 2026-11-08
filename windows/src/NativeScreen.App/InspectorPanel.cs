@@ -1274,7 +1274,15 @@ internal sealed class InspectorPanel
                 ("Gaussian", mask.Style == MaskStyle.Gaussian, () => Edit(d => Find(d).Style = MaskStyle.Gaussian)),
                 ("Pixelate", mask.Style == MaskStyle.Pixelate, () => Edit(d => Find(d).Style = MaskStyle.Pixelate)),
                 ("Solid", mask.Style == MaskStyle.Solid, () => Edit(d => Find(d).Style = MaskStyle.Solid)))));
-            Add(Slider("Blur intensity", () => Live()?.Intensity ?? 36, (d, v) => Find(d).Intensity = v, 4, 160, 36));
+            if (mask.Style == MaskStyle.Solid)
+            {
+                // The stored intensity stays, so switching the style back restores it.
+                Add(Labeled("Color", 10, ColorField.Create("Color", mask.SolidColor ?? "#14141C", hex => session.Mutate(d => Find(d).SolidColor = hex, "mask-solid-color", structural: false), hex => Edit(d => Find(d).SolidColor = hex))));
+            }
+            else
+            {
+                Add(Slider("Blur intensity", () => Live()?.Intensity ?? 36, (d, v) => Find(d).Intensity = v, 4, 160, 36));
+            }
         }
         else
         {

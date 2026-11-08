@@ -156,23 +156,6 @@
                 <Setter Property="FontSize" Value="12.5" />
             </Style>
 
-            <Style x:Key="NsSegmentRadio" TargetType="RadioButton">
-                <Setter Property="MinWidth" Value="0" />
-                <Setter Property="Height" Value="30" />
-                <Setter Property="Padding" Value="14,0" />
-                <Setter Property="FontSize" Value="13" />
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="UseSystemFocusVisuals" Value="True" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="RadioButton">
-                            <Grid Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="6">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" />
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
             <Style x:Key="NsOptionButton" TargetType="Button" BasedOn="{StaticResource NsIconButton}">
                 <Setter Property="local:HoverMagnet.IsEnabled" Value="False" />
                 <Setter Property="Width" Value="NaN" />

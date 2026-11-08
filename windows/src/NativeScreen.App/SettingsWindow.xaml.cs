@@ -23,10 +23,8 @@ public sealed partial class SettingsWindow : Window
     ];
 
     private const double MinimumClientHeight = 320;
-    private const double HeightAnimationMs = 280;
 
     private string tab = TabTitles[0];
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? heightAnimation;
 
     /// <summary>The language this run started with, to tell whether a restart is needed.</summary>
     private static readonly string startLanguage = AppSettings.Shared.Language;
@@ -51,7 +49,6 @@ public sealed partial class SettingsWindow : Window
         Closed -= WindowClosed;
         McpServer.Shared.Changed -= RefreshAgentStatus;
         AppUpdater.Shared.Changed -= RefreshUpdates;
-        heightAnimation?.Stop();
     }
 
     private void Refresh()
@@ -84,9 +81,9 @@ public sealed partial class SettingsWindow : Window
     private void General()
     {
         Heading("Appearance");
-        Segmented(
-            ("Dark", AppTheme.Current == ElementTheme.Dark, () => SetAppearance(ElementTheme.Dark)),
-            ("Light", AppTheme.Current == ElementTheme.Light, () => SetAppearance(ElementTheme.Light)));
+        Options(
+            ("Dark", AppTheme.Current == ElementTheme.Dark, () => AppTheme.Set(ElementTheme.Dark)),
+            ("Light", AppTheme.Current == ElementTheme.Light, () => AppTheme.Set(ElementTheme.Light)));
         Heading("Language");
         var languages = new ComboBox { MinWidth = 220 };
         A11y.Name(languages, "Language");
@@ -126,7 +123,7 @@ public sealed partial class SettingsWindow : Window
 
         Heading("Check for updates automatically");
         Body.Children.Add(Ui.Text("Native Screen checks GitHub for a new version once a day and asks before installing it.", 12, "Ink60"));
-        Segmented(
+        Options(
             ("On", AppSettings.Shared.CheckForUpdatesAutomatically, () => SetAutomaticUpdates(true)),
             ("Off", !AppSettings.Shared.CheckForUpdatesAutomatically, () => SetAutomaticUpdates(false)));
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
@@ -160,18 +157,7 @@ public sealed partial class SettingsWindow : Window
         AppSettings.Shared.Save();
     }
 
-    private void SetAppearance(ElementTheme theme)
-    {
-        AppTheme.Set(theme);
-        // Text on this page takes its color when it is built. The new page comes once the pill has finished sliding.
-        DispatcherQueue.TryEnqueue(async () =>
-        {
-            await Task.Delay(320);
-            Refresh();
-        });
-    }
-
-    /// <summary>Eases the window to the height of the tab now showing, keeping its top edge in place. Animations off: it jumps.</summary>
+    /// <summary>Sets the window to the height of the tab now showing, keeping its top edge in place.</summary>
     private void FitHeightToTab()
     {
         Root.UpdateLayout();
@@ -181,29 +167,7 @@ public sealed partial class SettingsWindow : Window
         var chrome = Root.ActualHeight - ((FrameworkElement)Body.Parent).ActualHeight;
         var workArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Nearest).WorkArea;
         var target = (int)Math.Clamp((chrome + Body.DesiredSize.Height) * scale, MinimumClientHeight * scale, Math.Max(MinimumClientHeight * scale, workArea.Y + workArea.Height - AppWindow.Position.Y - (AppWindow.Size.Height - client.Height)));
-        heightAnimation?.Stop();
-        if (A11y.ReduceMotion || target == client.Height)
-        {
-            AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(client.Width, target));
-            return;
-        }
-
-        var from = client.Height;
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        var timer = DispatcherQueue.CreateTimer();
-        heightAnimation = timer;
-        timer.Interval = TimeSpan.FromMilliseconds(8);
-        timer.Tick += (_, _) =>
-        {
-            var progress = Math.Min(1, clock.Elapsed.TotalMilliseconds / HeightAnimationMs);
-            var eased = 1 - Math.Pow(1 - progress, 3);
-            AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(AppWindow.ClientSize.Width, (int)Math.Round(from + (target - from) * eased)));
-            if (progress >= 1)
-            {
-                timer.Stop();
-            }
-        };
-        timer.Start();
+        AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(client.Width, target));
     }
 
     private async Task ChooseProjectsFolder()
@@ -223,13 +187,13 @@ public sealed partial class SettingsWindow : Window
     {
         var settings = AppSettings.Shared;
         Heading("Countdown");
-        Segmented(
+        Options(
             ("Off", settings.CountdownSeconds == 0, () => SetCountdown(0)),
             ("3s", settings.CountdownSeconds == 3, () => SetCountdown(3)),
             ("5s", settings.CountdownSeconds == 5, () => SetCountdown(5)),
             ("10s", settings.CountdownSeconds == 10, () => SetCountdown(10)));
         Heading("Automatically create zooms");
-        Segmented(
+        Options(
             ("On", settings.AutoCreateZooms, () => SetAutoZoom(true)),
             ("Off", !settings.AutoCreateZooms, () => SetAutoZoom(false)));
     }
@@ -250,7 +214,7 @@ public sealed partial class SettingsWindow : Window
     {
         Heading("Save automatically");
         Body.Children.Add(Ui.Text("When off, edits are saved with Ctrl+S.", 12, "Ink60"));
-        Segmented(
+        Options(
             ("On", AppSettings.Shared.AutosaveEnabled, () => SetAutosave(true)),
             ("Off", !AppSettings.Shared.AutosaveEnabled, () => SetAutosave(false)));
     }
@@ -283,8 +247,6 @@ public sealed partial class SettingsWindow : Window
     }
 
     private void Heading(string text) => Body.Children.Add(Ui.Text(text, 13, "Ink95", true));
-
-    private void Segmented(params (string Title, bool Selected, Action Change)[] options) => Body.Children.Add(new SlidingSegmentedControl(options));
 
     private void Options(params (string Title, bool Selected, Action Change)[] options)
     {

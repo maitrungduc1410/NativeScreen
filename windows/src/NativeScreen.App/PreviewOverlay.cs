@@ -152,8 +152,9 @@ internal sealed class PreviewOverlay
         };
         hint.Loaded += (_, _) =>
         {
-            Canvas.SetLeft(hint, (videoWidth - hint.ActualWidth) / 2);
-            Canvas.SetTop(hint, videoHeight - hint.ActualHeight - 16);
+            var (visibleLeft, visibleRight) = (Math.Max(0, x), Math.Min(width, x + videoWidth));
+            Canvas.SetLeft(hint, (visibleLeft + visibleRight - hint.ActualWidth) / 2 - x);
+            Canvas.SetTop(hint, Math.Min(height, y + videoHeight) - hint.ActualHeight - 16 - y);
         };
         layer.Children.Add(hint);
 

@@ -27,6 +27,22 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-08, Windows port: solid mask color, segment labels; Settings back to plain options
+
+### Verifier
+- **Result:** PASS, except for the items under **Not checked**.
+- **Build and tests:** the solution builds in Release (x64) with 0 warnings. Core 274, Rendering 21 and Media 21 pass.
+- **Settings (owner's request, Windows only):** the sliding segmented control and the eased tab height are gone. WinUI 3 has no built-in segmented control (`SelectorBar` is an underlined tab strip, and `Segmented` is in the Community Toolkit), so the plain option buttons are back. The window takes each tab's height at once. The macOS entry below stays as it is for macOS.
+- **Ported:**
+  - **Solid mask:** `MaskItem.SolidColor`, the compositor fill, and a `Color` field that replaces `Blur intensity` for Solid.
+  - **Segment labels:** `BlockGrid.FitLabels` measures only below 220 pt and uses compositor transitions (0.18 s, none with Reduce Motion). Masks and captions keep details until 44 pt.
+  - **Camera anchor:** `CanvasCoordinateTransform` now matches the compositor's `ZoomedRect`, so it differs from before under 1.5x. The draw-a-mask hint stays on the visible part of the canvas.
+- **Checked in the app:**
+  - `#E11D48` shows in the preview and an exported frame, and `project.json` has `solidColor`.
+  - A zoom shows both lines, a centered `Zoom`, or a bare block as it narrows.
+  - At 1.2x, the handles of a selected mask sit on its corners.
+- **Not checked:** dragging a mask by hand under a zoom, a long-title language, the fade during a real edge drag, and a project saved on macOS with a color.
+
 ## 2026-11-08, Timeline segment labels collapse as a segment narrows (macOS done, Windows port pending)
 
 ### Writer

@@ -1237,6 +1237,7 @@ internal sealed class TimelineView
                     Loc.T(mask.Type == MaskType.Spotlight ? "Highlight" : "Sensitive data"),
                     mask.Id == session.SelectedMaskId,
                     mask.Disabled || track.IsHidden);
+                block.SubtitleTruncates = true;
                 Follow(block, mask.SourceStartMs, mask.SourceEndMs);
                 var id = mask.Id;
                 block.SplitAt = time => session.SplitMask(id, session.Mapper.SourceTime(time).SourceMs);
@@ -1360,6 +1361,7 @@ internal sealed class TimelineView
             {
                 var (left, width) = Place(item.SourceStartMs, item.SourceEndMs);
                 var block = Block(left, y, width, MaskRowHeight, Palette.Caption, "Caption", CaptionLineLayout.DisplayText(item, captions), item.Id == session.SelectedCaptionId, hidden);
+                block.SubtitleTruncates = true;
                 Follow(block, item.SourceStartMs, item.SourceEndMs);
                 var id = item.Id;
                 block.SplitAt = time => session.SplitCaption(id, session.Mapper.SourceTime(time).SourceMs);
@@ -1612,12 +1614,14 @@ internal sealed class TimelineView
             BorderThickness = new Thickness(selected ? 2 : 1),
             Opacity = dimmed ? 0.35 : 1
         };
-        var text = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
-        text.Children.Add(new TextBlock
+        // Both lines are centered and offset by Translation, so a label that collapses moves without a layout pass.
+        var text = new Grid { Margin = new Thickness(BlockGrid.LabelInset - 1, 0, BlockGrid.LabelInset - 1, 0), IsHitTestVisible = false };
+        text.Children.Add(block.Title = new TextBlock
         {
             Text = title,
             FontSize = 11,
             HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Foreground = new SolidColorBrush(Color.FromArgb(170, 255, 255, 255)),
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxLines = 1
@@ -1630,13 +1634,16 @@ internal sealed class TimelineView
                 FontSize = 11.5,
                 FontWeight = FontWeights.Medium,
                 HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
                 Foreground = new SolidColorBrush(Colors.White),
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxLines = 1
+                MaxLines = 1,
+                Translation = new System.Numerics.Vector3(0, (float)BlockGrid.LineOffset, 0)
             });
         }
 
         block.Children.Add(text);
+        block.FitLabels(animated: false);
         block.IsSelectedBlock = selected;
         block.AccessibleName = () =>
         {
@@ -2154,7 +2161,94 @@ internal sealed class TimelineView
         /// <summary>What a click does in split mode, given the timeline time. Null for what cannot be cut.</summary>
         public Action<double>? SplitAt { get; set; }
 
+        public const double LabelInset = 6;
+        public const double LineOffset = 7.5;
+
+        /// <summary>Every label fits at this width, so wide blocks skip measuring text: a project can have hundreds of captions.</summary>
+        private const double AlwaysFitsWidth = 220;
+
+        /// <summary>Text that can be cut off (captions, mask names) is still worth showing with this much room.</summary>
+        private const double ShortestTruncatedWidth = 44;
+
+        private static readonly TimeSpan LabelFade = TimeSpan.FromMilliseconds(180);
+
+        [ThreadStatic]
+        private static TextBlock? measuring;
+
+        private bool? showsTitle;
+        private bool? showsSubtitle;
+        private bool subtitleTruncates;
+
+        public BlockGrid()
+        {
+            SizeChanged += (_, _) => FitLabels(animated: true);
+        }
+
+        public TextBlock? Title { get; set; }
+
         public TextBlock? Subtitle { get; set; }
+
+        public bool SubtitleTruncates
+        {
+            get => subtitleTruncates;
+            set
+            {
+                subtitleTruncates = value;
+                FitLabels(animated: false);
+            }
+        }
+
+        /// <summary>The details go first and the title slides to the middle, then the title goes too, judged by measured text.</summary>
+        public void FitLabels(bool animated)
+        {
+            if (Title is not { } title)
+            {
+                return;
+            }
+
+            var room = Width - LabelInset * 2;
+            var showTitle = room >= AlwaysFitsWidth || room >= Measure(title);
+            var showSubtitle = showTitle && Subtitle is { } line
+                && (room >= AlwaysFitsWidth || room >= (SubtitleTruncates ? Math.Min(Measure(line), ShortestTruncatedWidth) : Measure(line)));
+            if (showTitle == showsTitle && showSubtitle == showsSubtitle)
+            {
+                return;
+            }
+
+            if (animated)
+            {
+                SetTransitions(A11y.ReduceMotion ? null : new ScalarTransition { Duration = LabelFade }, A11y.ReduceMotion ? null : new Vector3Transition { Duration = LabelFade });
+            }
+
+            showsTitle = showTitle;
+            showsSubtitle = showSubtitle;
+            title.Opacity = showTitle ? 1 : 0;
+            title.Translation = new System.Numerics.Vector3(0, showSubtitle ? (float)-LineOffset : 0, 0);
+            if (Subtitle is { } details)
+            {
+                details.Opacity = showSubtitle ? 1 : 0;
+            }
+        }
+
+        private void SetTransitions(ScalarTransition? fade, Vector3Transition? slide)
+        {
+            Title!.OpacityTransition = fade;
+            Title.TranslationTransition = slide;
+            if (Subtitle is { } details)
+            {
+                details.OpacityTransition = fade is null ? null : new ScalarTransition { Duration = LabelFade };
+            }
+        }
+
+        private static double Measure(TextBlock text)
+        {
+            var probe = measuring ??= new TextBlock();
+            probe.FontSize = text.FontSize;
+            probe.FontWeight = text.FontWeight;
+            probe.Text = text.Text;
+            probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            return Math.Ceiling(probe.DesiredSize.Width);
+        }
 
         /// <summary>Read before the title when the title alone does not say what the block is ("Shortcut").</summary>
         public string? KindName { get; set; }
