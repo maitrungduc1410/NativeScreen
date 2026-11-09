@@ -218,6 +218,7 @@ internal sealed class SegmentMenu
         var menu = new SegmentMenu();
         menu.Slider("Voiceover volume", voiceover.Volume, 0, 1, value => $"{Math.Round(value * 100)}%", value => session.SetVoiceoverVolume(id, value), 0.01);
         menu.Separator();
+        menu.Command("Split at current time", "C", () => session.SplitVoiceover(id, session.SourceAtPlayhead));
         menu.Command(voiceover.Disabled ? "Enable" : "Disable", "D", () => session.ToggleVoiceoverDisabled(id));
         menu.Command("Upload voiceover audio file", null, tools.UploadVoiceover);
         menu.Separator();

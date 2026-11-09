@@ -102,6 +102,10 @@ public sealed class CameraEffectsRealModelTests
             Render("image", 4000, c => { c.BackgroundMode = CameraBackgroundMode.Image; c.BackgroundImagePath = "assets/bg.jpg"; });
             Render("cutout", 4000, c => { c.LayoutMode = CameraLayoutMode.Cutout; c.StickerId = "top-hat"; });
             Render("tracking", 4000, c => { c.EnableFaceTracking = true; c.FaceTrackingZoom = 1.7; });
+            foreach (var sticker in CameraStickerCatalog.All)
+            {
+                Render("s-" + sticker.Id, 4000, c => c.StickerId = sticker.Id);
+            }
         }
 
         foreach (var cpu in new[] { false, true })

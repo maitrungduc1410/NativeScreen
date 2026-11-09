@@ -54,6 +54,8 @@ public sealed class AudioFileReader : IDisposable
         }
     }
 
+    public double DurationMs => Convert.ToInt64(reader.GetPresentationAttribute(SourceReaderIndex.MediaSource, PresentationDescriptionAttributeKeys.Duration).Value) / 10_000.0;
+
     public void Seek(double positionMs)
     {
         reader.Flush(SourceReaderIndex.FirstAudioStream);

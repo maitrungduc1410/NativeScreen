@@ -336,6 +336,13 @@ public sealed class VoiceoverSegment
     public bool Disabled { get; set; }
     public int TrackIndex { get; set; }
 
+    /// <summary>Where in the audio file this segment starts playing. Above 0 after a cut; both halves share one file.</summary>
+    public double FileOffsetMs
+    {
+        get;
+        set => field = Math.Max(0, value);
+    }
+
     [JsonIgnore]
     public double SourceEndMs => SourceStartMs + Math.Max(200, DurationMs);
 }

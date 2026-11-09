@@ -123,12 +123,12 @@ public sealed class AudioMixer : IDisposable
                     // In preview a synchronized voiceover follows the recording through speed changes and cuts.
                     if (slice is not null && sourceMs >= segment.SourceStartMs && sourceMs < segment.SourceEndMs)
                     {
-                        Add(cursor, sourceMs - segment.SourceStartMs, (float)AudioMix.VoiceoverGain(segment, master, false), ref left, ref right);
+                        Add(cursor, segment.FileOffsetMs + sourceMs - segment.SourceStartMs, (float)AudioMix.VoiceoverGain(segment, master, false), ref left, ref right);
                     }
                 }
                 else if (timelineMs >= start && timelineMs < start + segment.DurationMs)
                 {
-                    Add(cursor, timelineMs - start, (float)AudioMix.VoiceoverGain(segment, master, false), ref left, ref right);
+                    Add(cursor, segment.FileOffsetMs + timelineMs - start, (float)AudioMix.VoiceoverGain(segment, master, false), ref left, ref right);
                 }
             }
 

@@ -176,6 +176,8 @@ internal sealed class TimelineView
     /// <summary>Hover rows and prompts that span the whole track, widened by a zoom step.</summary>
     private readonly List<FrameworkElement> fullWidthRows = [];
     private readonly Dictionary<string, WaveformEnvelope> voiceoverWaves = [];
+    private readonly Dictionary<string, double> voiceoverFileMs = [];
+    private readonly Dictionary<BlockGrid, string> voiceoverWaveIds = [];
     private WaveformEnvelope? systemWave;
     private WaveformEnvelope? microphoneWave;
     private Border? recordingVoiceoverBlock;
@@ -209,8 +211,22 @@ internal sealed class TimelineView
         Rebuild();
     }
 
-    public void SetVoiceoverWaveform(string id, float[] samples)
+    /// <summary>False when the original's samples have not been read yet; the new ids are then read like any other.</summary>
+    public bool CopyVoiceoverWaveform(string original, string first, string second)
     {
+        if (!voiceoverWaves.TryGetValue(original, out var wave))
+        {
+            return false;
+        }
+
+        voiceoverWaves[first] = voiceoverWaves[second] = wave;
+        voiceoverFileMs[first] = voiceoverFileMs[second] = voiceoverFileMs[original];
+        return true;
+    }
+
+    public void SetVoiceoverWaveform(string id, float[] samples, double fileMs)
+    {
+        voiceoverFileMs[id] = fileMs;
         voiceoverWaves[id] = new WaveformEnvelope(samples);
         Rebuild();
     }
@@ -415,6 +431,7 @@ internal sealed class TimelineView
         ruler.Children.Clear();
         wigglingBlocks.Clear();
         waveImages.Clear();
+        voiceoverWaveIds.Clear();
         fullWidthRows.Clear();
         followers.Clear();
         clipBlocks.Clear();
@@ -1012,18 +1029,21 @@ internal sealed class TimelineView
             foreach (var voiceover in timeline.Voiceovers.Where(item => item.TrackIndex == row))
             {
                 var (left, width) = Place(voiceover.SourceStartMs, voiceover.SourceEndMs);
-                var block = Block(left, y, width, MaskRowHeight, Palette.Mask, "Voiceover", $"{Math.Round(voiceover.Volume * 100):0}%", false, voiceover.Disabled || hidden || voiceover.Volume <= 0.001);
+                var block = Block(left, y, width, MaskRowHeight, Palette.Mask, "Voiceover", $"{Math.Round(voiceover.Volume * 100):0}%", voiceover.Id == session.SelectedVoiceoverId, voiceover.Disabled || hidden || voiceover.Volume <= 0.001);
                 Follow(block, voiceover.SourceStartMs, voiceover.SourceEndMs);
                 var id = voiceover.Id;
+                block.SplitAt = time => session.SplitVoiceover(id, session.Mapper.SourceTime(time).SourceMs);
                 if (voiceoverWaves.TryGetValue(id, out var voiceoverWave))
                 {
-                    AddWave(block, width, MaskRowHeight, "voiceover:" + id, 0, 1, () =>
+                    var (waveStart, waveEnd) = VoiceoverWaveRange(voiceover);
+                    AddWave(block, width, MaskRowHeight, "voiceover:" + id, waveStart, waveEnd, () =>
                     {
                         var timelineNow = session.Document.Timeline;
                         var current = timelineNow.Voiceovers.Find(other => other.Id == id);
                         var volume = current is null || current.Disabled || VoiceoverTrackLayout.IsTrackHidden(timelineNow, current.TrackIndex) ? 0 : current.Volume;
                         return [new WaveformRasterLayer(voiceoverWave, volume, 1, 1, 1, 0.35)];
                     });
+                    voiceoverWaveIds[block] = id;
                 }
 
                 Ui.Tip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
@@ -1035,9 +1055,18 @@ internal sealed class TimelineView
                         SegmentMenu.ForVoiceover(session, tools, id, canvas, args.GetPosition(canvas));
                     }
                 };
-                Draggable(block, width, id, () => session.SelectTab(InspectorTab.Audio), (start, end) =>
+                Draggable(block, width, id, () => session.SelectVoiceover(id), (start, end) =>
                 {
-                    session.Mutate(document => document.Timeline.Voiceovers.First(other => other.Id == id).SourceStartMs = start, structural: false);
+                    var current = session.Document.Timeline.Voiceovers.First(other => other.Id == id);
+                    // Moving keeps the length and the place in the file; only a trim changes them.
+                    if (Math.Abs(end - start - current.DurationMs) < 1e-6)
+                    {
+                        session.Mutate(document => document.Timeline.Voiceovers.First(other => other.Id == id).SourceStartMs = start, structural: false);
+                    }
+                    else
+                    {
+                        session.ResizeVoiceover(id, start, end);
+                    }
                 }, () =>
                 {
                     // Dragging along a track stops at its neighbors.
@@ -1048,7 +1077,12 @@ internal sealed class TimelineView
                     return (current.SourceStartMs, current.SourceEndMs, low, high);
                 },
                 movedRows: rows => session.MoveVoiceoverToTrack(id, row + rows),
-                resizable: false);
+                minimumMs: SegmentEdits.MinimumVoiceoverMs,
+                startEdgeLow: () =>
+                {
+                    var current = session.Document.Timeline.Voiceovers.First(other => other.Id == id);
+                    return current.SourceStartMs - current.FileOffsetMs;
+                });
             }
 
             y += MaskRowHeight + RowSpacing;
@@ -1058,6 +1092,17 @@ internal sealed class TimelineView
     }
 
     /// <summary>Grows with the playhead while a take is running.</summary>
+    /// <summary>The part of the whole-file samples this segment plays, as fractions of the file.</summary>
+    private (double Start, double End) VoiceoverWaveRange(VoiceoverSegment voiceover)
+    {
+        if (!voiceoverFileMs.TryGetValue(voiceover.Id, out var fileMs) || fileMs <= 0)
+        {
+            return (0, 1);
+        }
+
+        return (Math.Clamp(voiceover.FileOffsetMs / fileMs, 0, 1), Math.Clamp((voiceover.FileOffsetMs + voiceover.DurationMs) / fileMs, 0, 1));
+    }
+
     private void AddRecordingVoiceoverBlock(double y)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
@@ -1696,7 +1741,9 @@ internal sealed class TimelineView
         bool canMove = true,
         Action<int>? movedRows = null,
         bool resizable = true,
-        bool keycapHandles = false)
+        bool keycapHandles = false,
+        double minimumMs = MinBlockMs,
+        Func<double>? startEdgeLow = null)
     {
         // Even the narrowest block keeps a part in the middle to move it by. Read at each event: a zoom step widens the block.
         double EdgeWidth() => Math.Min(EdgeHitWidth, Math.Max(5.5, block.Width * 0.34));
@@ -1773,9 +1820,14 @@ internal sealed class TimelineView
             var x = args.GetCurrentPoint(block).Position.X;
             var mode = x < EdgeWidth() ? DragMode.Start : x > block.Width - EdgeWidth() ? DragMode.End : canMove ? DragMode.Move : DragMode.None;
             var (start, end, low, high) = bounds();
+            if (mode == DragMode.Start && startEdgeLow is not null)
+            {
+                low = Math.Max(low, startEdgeLow());
+            }
+
             session.BeginInteractiveEdit();
             var press = args.GetCurrentPoint(canvas).Position;
-            drag = new Drag(block, press.X, press.Y, Canvas.GetTop(block), mode, start, end, low, high, apply, select, movedRows, snapId);
+            drag = new Drag(block, press.X, press.Y, Canvas.GetTop(block), mode, start, end, low, high, apply, select, movedRows, snapId, minimumMs);
             if (snapId is not null && AppSettings.Shared.SnapToSegments && mode != DragMode.None)
             {
                 snap.Begin(TimelineSnapTargets.Collect(session, snapId), TrackWidth / session.TimelineScaleDurationMs);
@@ -1945,7 +1997,7 @@ internal sealed class TimelineView
                         trimmedStart = SourceAfterShift(trimmedStart, snap.SnapEdge(timelineStart) - timelineStart);
                     }
 
-                    start = Math.Clamp(trimmedStart, active.Low, active.End - MinBlockMs);
+                    start = Math.Clamp(trimmedStart, active.Low, active.End - active.MinimumMs);
                     break;
                 case DragMode.End:
                     var trimmedEnd = active.End + delta;
@@ -1955,7 +2007,7 @@ internal sealed class TimelineView
                         trimmedEnd = SourceAfterShift(trimmedEnd, snap.SnapEdge(timelineEnd) - timelineEnd);
                     }
 
-                    end = Math.Clamp(trimmedEnd, active.Start + MinBlockMs, active.High);
+                    end = Math.Clamp(trimmedEnd, active.Start + active.MinimumMs, active.High);
                     break;
             }
 
@@ -1970,6 +2022,7 @@ internal sealed class TimelineView
                 var left = X(TimelineOf(start));
                 Canvas.SetLeft(active.Block, left);
                 active.Block.Width = Math.Max(6, X(TimelineOf(end)) - left);
+                FollowVoiceoverWave(active.Block);
             }
 
             UpdatePlayhead();
@@ -1983,6 +2036,25 @@ internal sealed class TimelineView
         else
         {
             Skim(x);
+        }
+    }
+
+    // A trim shows a different part of the same samples, so it is right while dragging and after undo with no new read.
+    private void FollowVoiceoverWave(BlockGrid block)
+    {
+        if (!voiceoverWaveIds.TryGetValue(block, out var id) || session.Document.Timeline.Voiceovers.Find(item => item.Id == id) is not { } voiceover)
+        {
+            return;
+        }
+
+        foreach (var wave in waveImages)
+        {
+            if (wave.Owner == block)
+            {
+                (wave.Start, wave.End) = VoiceoverWaveRange(voiceover);
+                wave.Width = block.Width - block.BorderThickness.Left * 2;
+                UpdateWave(wave);
+            }
         }
     }
 
@@ -2020,7 +2092,7 @@ internal sealed class TimelineView
         End
     }
 
-    private sealed record Drag(BlockGrid Block, double PressX, double PressY, double BlockY, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select, Action<int>? MovedRows, string? SnapId);
+    private sealed record Drag(BlockGrid Block, double PressX, double PressY, double BlockY, DragMode Mode, double Start, double End, double Low, double High, Action<double, double> Apply, Action Select, Action<int>? MovedRows, string? SnapId, double MinimumMs);
 
     /// <summary>A source time moved by a timeline distance, at the speed of the slice it lands in.</summary>
     private double SourceAfterShift(double sourceMs, double timelineShiftMs)
@@ -2161,14 +2233,14 @@ internal sealed class TimelineView
         /// <summary>What a click does in split mode, given the timeline time. Null for what cannot be cut.</summary>
         public Action<double>? SplitAt { get; set; }
 
-        public const double LabelInset = 6;
+        public const double LabelInset = 16;
         public const double LineOffset = 7.5;
 
         /// <summary>Every label fits at this width, so wide blocks skip measuring text: a project can have hundreds of captions.</summary>
         private const double AlwaysFitsWidth = 220;
 
         /// <summary>Text that can be cut off (captions, mask names) is still worth showing with this much room.</summary>
-        private const double ShortestTruncatedWidth = 44;
+        private const double ShortestTruncatedWidth = 96;
 
         private static readonly TimeSpan LabelFade = TimeSpan.FromMilliseconds(180);
 

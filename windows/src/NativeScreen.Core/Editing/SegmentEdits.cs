@@ -6,6 +6,7 @@ public static class SegmentEdits
     private const double MinimumSplitSideMs = 200;
     private const double MinimumMaskSplitSideMs = 180;
     private const double MinimumDuplicateGapMs = 300;
+    public const double MinimumVoiceoverMs = 250;
     private const double MinimumHalvableMs = 500;
     private const double TrackOverlapToleranceMs = 20;
 
@@ -73,6 +74,60 @@ public static class SegmentEdits
         zooms[index].SourceEndMs = sourceMs;
         zooms.Insert(index + 1, second);
         return second.Id;
+    }
+
+    public static bool CanSplitVoiceover(VoiceoverSegment voiceover, double sourceMs) =>
+        sourceMs > voiceover.SourceStartMs + MinimumSplitSideMs && sourceMs < voiceover.SourceEndMs - MinimumSplitSideMs;
+
+    /// <summary>Both halves share the original's audio file (spec/06 ADR-59).</summary>
+    public static void SplitVoiceover(ProjectDocument document, string id, double sourceMs, string firstId, string secondId)
+    {
+        var voiceovers = document.Timeline.Voiceovers;
+        var index = voiceovers.FindIndex(item => item.Id == id);
+        if (index < 0 || !CanSplitVoiceover(voiceovers[index], sourceMs))
+        {
+            return;
+        }
+
+        var original = voiceovers[index];
+        var first = ProjectJson.Clone(original);
+        first.Id = firstId;
+        first.DurationMs = sourceMs - original.SourceStartMs;
+        var second = ProjectJson.Clone(original);
+        second.Id = secondId;
+        // Exactly at the first half's end: a rounding gap the other way would count as an overlap and move it to a new track.
+        second.SourceStartMs = first.SourceEndMs;
+        second.DurationMs = original.SourceEndMs - second.SourceStartMs;
+        second.FileOffsetMs = original.FileOffsetMs + first.DurationMs;
+        voiceovers[index] = first;
+        voiceovers.Insert(index + 1, second);
+    }
+
+    /// <summary>Trims by either edge. The audio stays where it is on the timeline, so the left edge moves the start point in the file and stops where the file begins.</summary>
+    public static void ResizeVoiceover(ProjectDocument document, string id, double newStartMs, double newEndMs, double sourceDurationMs)
+    {
+        var voiceovers = document.Timeline.Voiceovers;
+        if (voiceovers.Find(item => item.Id == id) is not { } current)
+        {
+            return;
+        }
+
+        var slices = document.Timeline.Slices;
+        var earliest = slices.Count == 0 ? 0 : slices.Min(slice => slice.SourceStartMs);
+        var latest = slices.Count == 0 ? sourceDurationMs : slices.Max(slice => slice.SourceEndMs);
+        var others = voiceovers.Where(item => item.TrackIndex == current.TrackIndex && item.Id != id).ToList();
+        var previousEnd = others.Where(item => item.SourceStartMs < current.SourceStartMs).Select(item => item.SourceEndMs).DefaultIfEmpty(earliest).Max();
+        var nextStart = others.Where(item => item.SourceStartMs > current.SourceStartMs).Select(item => item.SourceStartMs).DefaultIfEmpty(latest).Min();
+        var start = Math.Max(Math.Max(earliest, previousEnd), Math.Max(current.SourceStartMs - current.FileOffsetMs, newStartMs));
+        var end = Math.Min(Math.Min(latest, nextStart), newEndMs);
+        if (end - start < MinimumVoiceoverMs)
+        {
+            return;
+        }
+
+        current.FileOffsetMs = current.FileOffsetMs + start - current.SourceStartMs;
+        current.SourceStartMs = start;
+        current.DurationMs = end - start;
     }
 
     public static string? SplitMask(ProjectDocument document, string id, double sourceMs)

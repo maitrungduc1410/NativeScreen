@@ -177,7 +177,11 @@ public sealed partial class EditorSession
     public void SplitAtCurrentTime()
     {
         var at = SourceAtPlayhead;
-        if (SelectedCaptionId is { } caption)
+        if (SelectedVoiceoverId is { } voiceover)
+        {
+            SplitVoiceover(voiceover, at);
+        }
+        else if (SelectedCaptionId is { } caption)
         {
             SplitCaption(caption, at);
         }
@@ -212,6 +216,31 @@ public sealed partial class EditorSession
             SelectZoom(second);
         }
     }
+
+    /// <summary>A voiceover is about to become two: the original id, then the new ones. Raised first, so the rebuild that follows can already draw their waves.</summary>
+    public event Action<string, string, string>? VoiceoverSplitting;
+
+    public void SplitVoiceover(string id, double sourceMs)
+    {
+        if (Document.Timeline.Voiceovers.Find(item => item.Id == id) is not { } original)
+        {
+            return;
+        }
+
+        if (!SegmentEdits.CanSplitVoiceover(original, sourceMs))
+        {
+            ToastRequested?.Invoke(TooShortToCut);
+            return;
+        }
+
+        var (first, second) = (NewId(), NewId());
+        VoiceoverSplitting?.Invoke(id, first, second);
+        Mutate(document => SegmentEdits.SplitVoiceover(document, id, sourceMs, first, second));
+        SelectVoiceover(second);
+    }
+
+    public void ResizeVoiceover(string id, double newStartMs, double newEndMs) =>
+        Mutate(document => SegmentEdits.ResizeVoiceover(document, id, newStartMs, newEndMs, SourceDurationMs), structural: false);
 
     public void SplitMask(string id, double sourceMs)
     {
@@ -454,7 +483,11 @@ public sealed partial class EditorSession
     /// <summary>D: disables whatever is selected.</summary>
     public void ToggleDisableSelected()
     {
-        if (SelectedLayoutId is { } layout)
+        if (SelectedVoiceoverId is { } voiceover)
+        {
+            ToggleVoiceoverDisabled(voiceover);
+        }
+        else if (SelectedLayoutId is { } layout)
         {
             ToggleLayoutDisabled(layout);
         }

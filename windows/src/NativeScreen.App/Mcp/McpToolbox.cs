@@ -660,6 +660,7 @@ internal sealed class McpToolbox
             case "mask": session.SplitMask(id, sourceMs); break;
             case "caption": session.SplitCaption(id, sourceMs); break;
             case "camera_layout": session.SplitLayout(id, sourceMs); break;
+            case "voiceover": session.SplitVoiceover(id, sourceMs); break;
             default: throw new McpToolException("Unknown kind: " + kind);
         }
 

@@ -110,6 +110,7 @@ public sealed partial class EditorSession
     public string? SelectedSliceId { get; private set; }
     public string? SelectedZoomId { get; private set; }
     public string? SelectedMaskId { get; private set; }
+    public string? SelectedVoiceoverId { get; private set; }
     public string? SelectedLayoutId { get; private set; }
     public string? SelectedShortcutId { get; private set; }
     public bool IsSplitModeActive { get; set; }
@@ -380,6 +381,14 @@ public sealed partial class EditorSession
         SelectionChanged?.Invoke();
     }
 
+    public void SelectVoiceover(string? id)
+    {
+        ClearSelectionState();
+        SelectedVoiceoverId = id;
+        SelectedTab = id is null ? SelectedTab : InspectorTab.Audio;
+        SelectionChanged?.Invoke();
+    }
+
     public void SelectLayout(string? id)
     {
         ClearSelectionState();
@@ -620,6 +629,11 @@ public sealed partial class EditorSession
         {
             DeleteCaption(captionId);
         }
+        else if (SelectedVoiceoverId is { } voiceoverId)
+        {
+            DeleteVoiceover(voiceoverId);
+            SelectVoiceover(null);
+        }
         else if (SelectedZoomId is { } zoomId)
         {
             Mutate(document => document.Timeline.Zooms.RemoveAll(zoom => zoom.Id == zoomId));
@@ -719,5 +733,6 @@ public sealed partial class EditorSession
         SelectedMaskId = null;
         SelectedLayoutId = null;
         SelectedShortcutId = null;
+        SelectedVoiceoverId = null;
     }
 }

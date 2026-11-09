@@ -27,6 +27,18 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Windows port: voiceover cuts, label insets; 30 stickers on both systems
+
+### Verifier
+- **Result:** PASS, except for the items under **Not checked**.
+- **Build and tests:** see `verify.ps1`: Debug and Release x64, shaders, Core 294, Rendering 23, Media 21.
+- **Ported (`spec/06` ADR-59):** `fileOffsetMs` (load, save, merge patch), `SplitVoiceover` with split mode, `C` and the menu, selection of a voiceover (`Delete` and `D` work on it too), trimming by both edges, preview and export from the offset, whole-file waveforms, `split_item`.
+- **Labels:** `LabelInset` is 16 and `ShortestTruncatedWidth` 96. Shortcuts go through `FitLabels`. The track area was already as tall as the pane, so nothing changed for dragging below the last track.
+- **Checked in the app** (no microphone or camera): a cut at 3 s gave offsets 0 and 2000 with the right part of the wave on each half; a 1 s left-edge trim by mouse gave start 3998 and offset 2998; undo gave the whole segment back.
+- **Stickers (owner's request, shared with macOS):** 17 added from the same Noto Emoji commit, so there are 30: sun-hat, cap, helmet, goggles, light-bulb, rainbow, hearts, kiss, dog, fox, tiger, lion, frog, robot, alien, ghost, clown. PNGs in `Stickers.bundle`, entries in `stickers.json`, names in the catalog. Placed by eye on one recording in the Windows compositor.
+- **Next (writer):** build macOS and look at the 17 new stickers there. Vision's landmarks differ from YuNet's, so a value in `stickers.json` may want a nudge. No Swift changed.
+- **Not checked:** the `Split at current time` menu item and `C` by hand (both call the tested `SplitVoiceover`), a long-title language with the new inset, a project cut on macOS, and dragging a mask below the last track by hand.
+
 ## 2026-11-09, Timeline: labels clear the handles, dragging below the last track (macOS done, Windows port pending)
 
 ### Writer

@@ -134,12 +134,19 @@ public sealed partial class EditorWindow
                 continue;
             }
 
+            // Samples always cover the whole file; a segment draws the part it plays (spec/06 ADR-59).
             var path = Path.Combine(package, voiceover.RelativePath);
-            var bins = Waveform.VoiceoverBinCount(voiceover.DurationMs);
+            var known = voiceover.FileOffsetMs + voiceover.DurationMs;
+            var fileMs = await Task.Run(() =>
+            {
+                using var reader = AudioFileReader.TryOpen(path);
+                return reader?.DurationMs is > 0 and var length ? length : known;
+            });
+            var bins = Waveform.VoiceoverBinCount(fileMs);
             var samples = await Task.Run(() => MediaAssets.ReadWaveform(path, bins, CancellationToken.None));
             if (!closed)
             {
-                timeline.SetVoiceoverWaveform(voiceover.Id, samples ?? Waveform.Procedural(voiceover.DurationMs, Math.Max(96, bins)));
+                timeline.SetVoiceoverWaveform(voiceover.Id, samples ?? Waveform.Procedural(fileMs, Math.Max(96, bins)), fileMs);
             }
         }
     }

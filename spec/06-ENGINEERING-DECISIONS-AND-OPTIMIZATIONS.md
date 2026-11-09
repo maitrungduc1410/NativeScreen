@@ -1213,7 +1213,7 @@ These are applied after recording, so the camera file stays untouched and every 
 - **A camera picture is segmented once.** A 30 fps camera in a 60 fps export shows each picture twice, and Vision used to run on both, about 55 s of a 72 s export of a 22 s recording. The compositor keeps the last two masks, compared by decoded frame identity plus crop and mirror: two because the H.264 lanes take turns on different GOPs, each with its own frame reader. Masks are copied out of Vision's buffer, since the other lane's request runs before a kept mask is used again.
 - **Background files are named after the source bytes**, so picking an image again reuses its file. Replaced files are not deleted, because undo can restore them.
 - **Order:** person mask, grade, composite on the background, sticker. Grading neither tints the background image nor the sticker.
-- **Assets:** 13 Noto Emoji stickers, cropped to their artwork because the sizes in `stickers.json` assume that. The Noto headphones are drawn at an angle and cover the face, so they are left out. Camera backgrounds are nine interior photos; the self-drawn wallpapers suit the canvas behind the video, not a room behind a person.
+- **Assets:** 30 Noto Emoji stickers (13 at first), cropped to their artwork because the sizes in `stickers.json` assume that. The Noto headphones are drawn at an angle and cover the face, so they are left out. Camera backgrounds are nine interior photos; the self-drawn wallpapers suit the canvas behind the video, not a room behind a person.
 - **Blur without a halo:** the person is removed before blurring, then alpha is raised so the hole fills from the surrounding background.
 
 ### Verified
@@ -1228,6 +1228,9 @@ A cut does not write new audio. `fileOffsetMs` says where in the file a segment 
 - **Trimming the left edge moves `fileOffsetMs` by the same amount**, so the words stay where they are on the timeline. The edge stops where the file begins.
 - **Waveform samples always cover the whole file.** A segment draws the part from `fileOffsetMs` to `fileOffsetMs + durationMs`, so a trim is right while dragging and after undo, with no new extraction.
 - **Agents can cut too:** `split_item` takes `voiceover`, through the same `splitVoiceover`.
+
+### Windows
+The same rules, in `SegmentEdits` and `AudioMixer`. A left-edge trim gets its limit (`SourceStartMs - FileOffsetMs`) at the press, so the block stops at the start of the file while dragging; moves keep the plain neighbor limits. `VoiceoverSplitting` is raised before the edit so the rebuild right after it can draw the waves of the new ids. Verified: `VoiceoverCutMixTests` plays a two-tone file cut in two and moved apart, each half has its own tone and stops on time; in the app, a 1 s left-edge trim moved `fileOffsetMs` by the same amount and undo restored the whole wave.
 
 ## 60. ADR-60: Camera Effects on Windows
 

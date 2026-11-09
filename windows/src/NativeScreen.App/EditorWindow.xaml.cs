@@ -143,6 +143,7 @@ public sealed partial class EditorWindow : Window
         inspector.Rebuild();
 
         session.DocumentChanged += DocumentChanged;
+        session.VoiceoverSplitting += VoiceoverSplitting;
         tools.FaceTrackChanged += FaceEffectsChanged;
         tools.PreviewMasks.MaskUpdated += PersonMaskUpdated;
         tools.EnsureFaceTrack();
@@ -647,6 +648,16 @@ public sealed partial class EditorWindow : Window
         }
     });
 
+    // Undo brings the original id back, so its samples stay too.
+    private void VoiceoverSplitting(string original, string first, string second)
+    {
+        if (timeline.CopyVoiceoverWaveform(original, first, second))
+        {
+            requestedVoiceoverWaveforms.Add(first);
+            requestedVoiceoverWaveforms.Add(second);
+        }
+    }
+
     private void SelectionChanged()
     {
         RefreshTabRail();
@@ -845,6 +856,7 @@ public sealed partial class EditorWindow : Window
         saveTimer.Tick -= SaveTick;
         timeline.Detach();
         session.DocumentChanged -= DocumentChanged;
+        session.VoiceoverSplitting -= VoiceoverSplitting;
         session.SelectionChanged -= SelectionChanged;
         tools.Changed -= inspector.Rebuild;
         tools.FaceTrackChanged -= FaceEffectsChanged;
