@@ -91,7 +91,7 @@ In H.264/HEVC recordings with a 60-frame GOP (`keyFrameInterval = 60`), using a 
 
 ### Decision
 - Use a stateful **Sequential Video Frame Reader** (`AVAssetReader` + `AVAssetReaderTrackOutput` on macOS; `IMFSourceReader` on Windows) that decodes the video stream forward in a single pass (`copyNextSampleBuffer()`).
-- Retain only the previous and current decoded `CVPixelBuffer`-backed `CIImage` in memory so timeline speed changes (`0.25x–8.0x`) pick the nearest presentation timestamp without re-decoding.
+- Retain only the previous and current decoded `CVPixelBuffer`-backed `CIImage` in memory so timeline speed changes (`0.25x–8.0x`) pick the frame at or before the target time without re-decoding (ADR-63).
 - Only reset the sequential reader if a timeline cut (`ClipSlice`) jumps backward in source time or jumps forward by more than `3.5 seconds`.
 - Sequential hardware decoding into `420v` Metal-compatible pixel buffers takes **`~1.2 ms/frame`** (over **35× faster**).
 
@@ -1272,3 +1272,11 @@ On a macOS 14 machine the background showed two layers: the right mesh in a box 
 Every baked texture now starts with a clear pass, which covers any baked image smaller than its canvas. Preview and export both use this path. The fix was not run on the machine that showed the bug when this was written.
 
 The recording bar on macOS 14 and 15 uses `NSVisualEffectView`, and was see-through with `alphaValue = 0.80` and a rounded layer mask. It now stays at full alpha and is rounded with `maskImage`. macOS 26 and later keep `NSGlassEffectView`.
+
+## 63. ADR-63: Export Holds the Last Frame
+
+A window recording of a mostly still app showed each click's result before the cursor got there, in the export only. A capture writes a frame only when the screen changes, so that file had 12 frames in 12 seconds, up to 3 s apart.
+
+The export reader chose whichever of its two decoded frames was nearest the target time, so a new frame appeared up to half a gap early. The preview was right because the player shows the frame on screen at that time. Export lanes start their own readers at different times, so the early jump also moved around within one export.
+
+The reader now returns the last frame at or before the target, with 0.5 ms for rounding, which is what the preview and the Windows `SequentialVideoSource` do. The cursor and telemetry were never late, so nothing changed in the solver. A reader that starts between two frames gets the held frame stamped with its start time, so a cut lands on the right image too.

@@ -512,9 +512,10 @@ public final class HardwareVideoExporter {
             }
 
             guard let curr = currImage else { return prevImage }
-            guard let prev = prevImage, prevMs >= 0.0 else { return curr }
 
-            if abs(targetMs - prevMs) < abs(currMs - targetMs) {
+            // Hold the last frame at or before the target, like the preview (ADR-63). A capture only writes frames when
+            // the screen changes, so `curr` can be seconds ahead and must not be shown early. 0.5 ms absorbs rounding.
+            if currMs > targetMs + 0.5, let prev = prevImage {
                 return prev
             }
             return curr
