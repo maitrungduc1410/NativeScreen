@@ -65,7 +65,7 @@ recording reaches the end of the take (`spec/06` ADR-54).
 ## Website exports
 
 The site uses these export settings (why: `spec/06` ADR-53): MP4 H.264, 60 fps, Social Media compression, 2160p for
-`hero.mp4` and 1080p for the rest. Files go in `site/assets/demos/`.
+`hero.mp4` and 1080p for the rest. Files go in `site/public/assets/demos/`.
 
 | File | Take | Notes |
 | :-- | :-- | :-- |

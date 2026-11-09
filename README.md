@@ -14,7 +14,7 @@ Free and open source. Native on macOS and Windows.
 
 </div>
 
-![The Native Screen editor](site/assets/shots/editor-light.jpg)
+![The Native Screen editor](site/public/assets/shots/editor-light.jpg)
 
 See it move on the [website](https://nativescreen.app/).
 
@@ -35,7 +35,7 @@ See it move on the [website](https://nativescreen.app/).
 - **Light and dark**, and **eight languages**: English, Tiếng Việt, 简体中文, 日本語, Deutsch, Français, Español and
   Português (Brasil).
 
-![A timeline with zoom, mask, shortcut and caption tracks](site/assets/shots/timeline.jpg)
+![A timeline with zoom, mask, shortcut and caption tracks](site/public/assets/shots/timeline.jpg)
 
 ## Features
 
