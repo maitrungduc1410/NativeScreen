@@ -244,6 +244,7 @@ jobs:
             --packAuthors "Duc Trung Mai" `
             --icon windows/src/NativeScreen.App/Assets/app.ico `
             --channel win `
+            --runtime win-x64 `
             --outputDir releases
           if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
           Get-ChildItem releases
