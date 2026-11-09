@@ -1283,7 +1283,7 @@ The reader now returns the last frame at or before the target, with 0.5 ms for r
 
 ## 64. ADR-64: Export Falls Back to the Software Encoder
 
-MP4 export required the hardware encoder, and a 4158x2160 export failed on a macOS 14 machine in both codecs. The H.264 hardware encoder stops at 4096 wide: measured on an M4 Pro, 4096 works and 4098 refuses the session (`-12903`), so wider H.264 exports failed on every Mac. HEVC on that M4 Pro encodes up to 8192 wide, but on the macOS 14 machine it got a session and no frame came out.
+MP4 export required the hardware encoder, and a 4158x2160 export failed on a macOS 14 machine in both codecs. Apple does not publish the size limits of these encoders, and they can differ by machine, so they are measured. On an M4 Pro the H.264 hardware encoder works at 4096 wide and refuses a session at 4098 (`kVTInvalidSessionErr`, `-12903`), and HEVC works up to 8192 wide. On the macOS 14 machine HEVC got a session and no frame came out. The app must not hard-code a width, which is why it tests the encoder.
 
 A session can be created and still fail every frame, so checking creation is not enough. Before each MP4 export, one throwaway frame goes through a separate hardware session. If no sample comes back, the export uses one software lane, in the chosen codec, at the target bitrate. The probe session is discarded because its frame would clash with the real frame 0.
 
