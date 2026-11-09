@@ -27,6 +27,34 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Timeline: labels clear the handles, dragging below the last track (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** `spec/04` "Timeline segment labels". macOS: `labelInset` and `shortestTruncatedTextWidth` in `MultiTrackTimelineView.swift`. Windows: `BlockGrid.LabelInset` (6 now) and `ShortestTruncatedWidth` (44 now) in `TimelineView.cs`.
+  - The inset is now 16 pt on each side, so a label fades out before a resize handle reaches it. It is used both for the "fits" test and as the text margin, so truncated text does not reach a handle either.
+  - Captions and mask names shorter than 96 pt show in full or not at all, with no stub like `New ca...`. Longer ones truncate until 96 pt of text is left, then fade out.
+  - Shortcut segments follow the same rule, by measured width with the 0.18 s fade (instant with Reduce Motion). On Windows they are built with `Block` and `shortcut.Label`, so `FitLabels` should cover them; check it.
+  - The track area is as tall as the timeline pane, so a mask, caption or voiceover dragged below the last track is not clipped. Empty space there must stay non-interactive, and no vertical scrolling may appear when the tracks fit.
+- **Built on macOS:** macOS builds. Label behavior on mask and caption was checked by hand. Dragging below the last track was not reported back yet.
+- **How to verify on Windows:** narrow each kind of segment: its text is gone before the handle touches it, and `New caption` never shows as `New ca...`. A long caption still truncates while wide. With three tracks, drag a mask down: it stays visible to the bottom of the pane.
+
+## 2026-11-09, Voiceover segments can be cut (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** ADR-59 in `spec/06`. macOS: `splitVoiceover` and `resizeVoiceover` in `ProjectSession.swift`. New project field on a voiceover: `fileOffsetMs` (default 0), where in the audio file the segment starts. Both halves of a cut share one file; no audio is written.
+  - **Load and save `fileOffsetMs` first** (`VoiceoverSegment` in `CaptionsAndTimeline.cs`). Until then, a project cut on macOS loses it when saved on Windows, and the second half plays from the start of the file. A voiceover `update_item` patch needs the field too.
+  - **Preview:** the position in the file is `fileOffsetMs + sourceMs - sourceStartMs`.
+  - **Export** (`AudioMixer.cs`): take `durationMs` of audio starting at `fileOffsetMs`, and never more, or the first half plays on over the second. This also makes a shortened voiceover stop where it ends on the timeline.
+  - **Cutting:** add `SplitVoiceover` next to `SplitMask` in `EditorSession.Segments.cs`, a `block.SplitAt` for split mode, `C` when a voiceover is selected (it comes first, before captions and the rest), and `Split at current time` in `SegmentMenu.ForVoiceover` (the string is in the catalog). Each half must be at least 0.2 s, otherwise show the existing `Can't cut item shorter than 0.2s`. Both halves get new ids and the second is selected.
+  - The second half starts exactly at the first half's computed end, not at the cut time, otherwise a rounding error counts as an overlap and moves it to another track.
+  - **Trimming:** Windows passes `resizable: false` for voiceovers in `TimelineView.cs`. Turn resizing on. The left edge moves `fileOffsetMs` by the same amount, so the words stay in place on the timeline, and stops where the file begins (`sourceStartMs - fileOffsetMs`). Both edges stop at the neighboring segments and the clip bounds; the shortest segment is 250 ms. Moving the whole segment does not change `fileOffsetMs`.
+  - **Waveform:** keep samples for the whole file and draw `fileOffsetMs` to `fileOffsetMs + durationMs` out of the file's length. `EditorWindow.Tools.cs` sizes the bins from `DurationMs` and `AddWave` draws 0 to 1 today. Copy the stored samples to both new ids on a cut, and keep the original's, so undo is right with no new read.
+  - In split mode the segment shows the same cursor as the rest of the timeline, with no flicker.
+  - **MCP:** the shared `MCPTools.json` now lists `voiceover` for `split_item`. `SplitItem` in `McpToolbox.cs` needs that case, or agents get "Unknown kind".
+- **Built on macOS:** macOS builds. Export of cut segments matched the source audio (correlation 1.0 on each half, silence between them). `split_item` was run through MCP: offsets, track and undo are right. The cursor, the click in split mode and dragging the left edge were not tried by hand.
+- **How to verify on Windows:** cut a voiceover in the middle, move the halves apart, then play and export: each half plays its own words. Save, reopen: same result. Drag the left edge inward: the remaining words do not shift. Undo: the waveform is whole again. Open a project cut on macOS and save it on Windows: `fileOffsetMs` is still there.
+- **Risks / unsure:** on a sped-up clip the macOS preview plays a voiceover at the clip's speed but export plays it at 1x, so the halves of a cut can overlap in the file. This was already so before cutting; do not treat it as the target behavior.
+
 ## 2026-11-09, Repo layout: the macOS app moved to `macos/` (Windows build check pending)
 
 ### Writer

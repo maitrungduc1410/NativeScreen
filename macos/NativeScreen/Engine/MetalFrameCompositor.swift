@@ -2296,7 +2296,7 @@ public nonisolated final class AsyncPersonSegmenter: @unchecked Sendable {
     private var isBusy = false
     private var lastSubmittedFrame: ObjectIdentifier?
     private let context = CIContext(options: [.useSoftwareRenderer: false])
-    private lazy var request: VNGeneratePersonSegmentationRequest = {
+    private let request: VNGeneratePersonSegmentationRequest = {
         let request = VNGeneratePersonSegmentationRequest()
         request.qualityLevel = .balanced
         request.outputPixelFormat = kCVPixelFormatType_OneComponent8
@@ -2318,11 +2318,10 @@ public nonisolated final class AsyncPersonSegmenter: @unchecked Sendable {
         lock.unlock()
 
         if shouldSubmit {
-            nonisolated(unsafe) let frame = image
             queue.async { [weak self] in
                 guard let self else { return }
                 var copied: CIImage?
-                if let raw = LocalOnDeviceMediaIntelligence.personSegmentationMask(for: frame, reusing: self.request),
+                if let raw = LocalOnDeviceMediaIntelligence.personSegmentationMask(for: image, reusing: self.request),
                    let cg = self.context.createCGImage(raw, from: raw.extent) {
                     copied = CIImage(cgImage: cg)
                 }
@@ -2342,4 +2341,3 @@ public nonisolated final class AsyncPersonSegmenter: @unchecked Sendable {
         return current
     }
 }
-

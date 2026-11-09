@@ -2008,6 +2008,8 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
     public var hideRecording: Bool
     public var disabled: Bool
     public var trackIndex: Int
+    /// Where in the audio file this segment starts playing. Above 0 after a cut; both halves share one file.
+    public var fileOffsetMs: Double
 
     public var sourceEndMs: Double {
         sourceStartMs + max(200.0, durationMs)
@@ -2022,8 +2024,10 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
         attachMode: VoiceoverAttachMode = .synchronized,
         hideRecording: Bool = false,
         disabled: Bool = false,
-        trackIndex: Int = 0
+        trackIndex: Int = 0,
+        fileOffsetMs: Double = 0.0
     ) {
+        self.fileOffsetMs = max(0.0, fileOffsetMs)
         self.id = id
         self.sourceStartMs = sourceStartMs
         self.durationMs = max(200.0, durationMs)
@@ -2036,7 +2040,7 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, sourceStartMs, durationMs, relativePath, volume, attachMode, hideRecording, disabled, trackIndex
+        case id, sourceStartMs, durationMs, relativePath, volume, attachMode, hideRecording, disabled, trackIndex, fileOffsetMs
     }
 
     public init(from decoder: Decoder) throws {
@@ -2050,6 +2054,7 @@ public struct VoiceoverSegment: Codable, Equatable, Hashable, Identifiable, Send
         self.hideRecording = try container.decodeIfPresent(Bool.self, forKey: .hideRecording) ?? false
         self.disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
         self.trackIndex = max(0, try container.decodeIfPresent(Int.self, forKey: .trackIndex) ?? 0)
+        self.fileOffsetMs = max(0.0, try container.decodeIfPresent(Double.self, forKey: .fileOffsetMs) ?? 0.0)
     }
 }
 

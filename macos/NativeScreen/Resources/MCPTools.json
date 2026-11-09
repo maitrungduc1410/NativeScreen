@@ -130,7 +130,7 @@
     },
     {
       "name": "update_item",
-      "description": "Changes one timeline item or track with a JSON Merge Patch against its JSON in get_project. Kinds: slice (timeline.slices: speed, volumes, muted, hideCursor, source range), zoom (timeline.zooms), mask (items inside timeline.maskTracks), camera_layout (timeline.cameraLayouts), voiceover (timeline.voiceovers), caption (captions.captionBlocks; {\"text\": \"...\"} sets the caption text), caption_track, mask_track, shortcut_track, custom_shortcut (captions.customShortcuts). One undo step.",
+      "description": "Changes one timeline item or track with a JSON Merge Patch against its JSON in get_project. Kinds: slice (timeline.slices: speed, volumes, muted, hideCursor, source range), zoom (timeline.zooms), mask (items inside timeline.maskTracks), camera_layout (timeline.cameraLayouts), voiceover (timeline.voiceovers; fileOffsetMs is where it starts in its audio file), caption (captions.captionBlocks; {\"text\": \"...\"} sets the caption text), caption_track, mask_track, shortcut_track, custom_shortcut (captions.customShortcuts). One undo step.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -158,12 +158,12 @@
     },
     {
       "name": "split_item",
-      "description": "Splits a clip, zoom, mask, caption or camera layout in two at a timeline time. Splitting a slice and deleting one half is how to cut a part of the recording.",
+      "description": "Splits a clip, zoom, mask, caption, camera layout or voiceover in two at a timeline time. Splitting a slice and deleting one half is how to cut a part of the recording.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "project": { "$ref": "#/definitions/project" },
-          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "caption", "camera_layout"] },
+          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "caption", "camera_layout", "voiceover"] },
           "id": { "type": "string" },
           "atTimelineMs": { "type": "number" }
         },

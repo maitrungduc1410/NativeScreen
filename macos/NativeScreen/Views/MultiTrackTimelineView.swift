@@ -516,6 +516,8 @@ public struct MultiTrackTimelineView: View {
                                             )
                                         }
                                         .frame(width: totalDocumentWidth)
+                                        // As tall as the whole pane, so a segment dragged below the last track is not cut off.
+                                        .frame(minHeight: max(0.0, outerGeo.size.height - rulerHeight), alignment: .topLeading)
                                         .coordinateSpace(name: "timelineContentSpace")
                                         .onContinuousHover(coordinateSpace: .named("timelineContentSpace")) { phase in
                                             switch phase {
@@ -1806,7 +1808,7 @@ public struct MultiTrackTimelineView: View {
                         isPlayed: isPlayedNow,
                         isDimmed: isHidden || vo.disabled || vo.volume <= 0.001,
                         isDimmedBySelection: isOtherSelected,
-                        isSplitMode: false,
+                        isSplitMode: session.isSplitModeActive,
                         xOffset: xStart,
                         width: blockW,
                         height: maskRowHeight,
@@ -1822,9 +1824,9 @@ public struct MultiTrackTimelineView: View {
                             timelineEndMs: tEndMs,
                             totalTimelineMs: totalTimelineMs,
                             minorTickStepSec: 0.0,
-                            sourceStartMs: 0.0,
-                            sourceEndMs: max(1.0, vo.durationMs),
-                            totalSourceMs: max(1.0, vo.durationMs),
+                            sourceStartMs: vo.fileOffsetMs,
+                            sourceEndMs: vo.fileOffsetMs + max(1.0, vo.durationMs),
+                            totalSourceMs: session.voiceoverFileDurationMsByID[vo.id] ?? (vo.fileOffsetMs + max(1.0, vo.durationMs)),
                             volumeScale: 0.0,
                             waveformSamples: [],
                             microphoneVolumeScale: (isHidden || vo.disabled) ? 0.0 : vo.volume,
@@ -1836,7 +1838,12 @@ public struct MultiTrackTimelineView: View {
                                 ?? (tStartMs + frac * (tEndMs - tStartMs))
                             session.isPlaying = false
                             session.seek(toTimelineMs: clickedTimelineMs)
-                            session.selectVoiceover(vo.id)
+                            if session.isSplitModeActive {
+                                let splitSourceMs = session.timeMapper.sourceTime(forTimelineMs: clickedTimelineMs).sourceMs
+                                session.splitVoiceover(id: vo.id, atSourceMs: splitSourceMs)
+                            } else {
+                                session.selectVoiceover(vo.id)
+                            }
                         },
                         onRightClick: { pointInView, parentView in
                             session.selectVoiceover(vo.id)
@@ -1862,7 +1869,7 @@ public struct MultiTrackTimelineView: View {
                         onResizeRange: { newTimelineStart, newTimelineEnd in
                             let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs
                             let newSrcEnd = max(newSrcStart + 300.0, session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs)
-                            session.moveVoiceover(id: vo.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
+                            session.resizeVoiceover(id: vo.id, newStartMs: newSrcStart, newEndMs: newSrcEnd)
                         },
                         onMoveVerticalTracks: { trackDelta in
                             session.moveVoiceoverToTrack(id: vo.id, targetTrackIndex: trackIndex + trackDelta)
@@ -2900,11 +2907,13 @@ private struct TimelineInteractiveSegmentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let edgeHandleHitWidth: CGFloat = 13.0
-    private let labelInset: CGFloat = 6.0
+    /// Clears the resize handles (they reach about 10 pt in), so a label goes before a handle touches it.
+    private let labelInset: CGFloat = 16.0
     /// Every label fits at this width, so wide segments skip measuring text.
     private let alwaysFitsLabelWidth: CGFloat = 220.0
-    /// Text that may truncate (captions, mask names) still needs this much room to be worth showing.
-    private let shortestTruncatedTextWidth: CGFloat = 44.0
+    /// Captions and mask names shorter than this show in full or not at all. Longer ones truncate down to this width,
+    /// so a long caption stays readable without a stub like "New ca...".
+    private let shortestTruncatedTextWidth: CGFloat = 96.0
 
     var body: some View {
         // 1px visual gap between adjacent touching segments
@@ -3840,8 +3849,11 @@ private struct ShortcutTimelineSegmentView: View {
     @State private var hasExceededClickSlop = false
     @State private var pressLocalX: CGFloat = 0.0
     @State private var verticalDragOffset: CGFloat = 0.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let edgeHitWidth: CGFloat = 9.0
+    /// Matches `TimelineInteractiveSegmentView.labelInset`.
+    private let labelInset: CGFloat = 16.0
 
     private var segmentColor: Color {
         let style = session.effectiveShortcutStyle(for: cluster)
@@ -3869,6 +3881,10 @@ private struct ShortcutTimelineSegmentView: View {
         let showHandles = (isHovered || activeDragMode == .resizeLeft || activeDragMode == .resizeRight) && segWidth >= 10
         let handleBarWidth: CGFloat = segWidth < 24 ? 2.2 : 3.0
         let handleHorizontalInset: CGFloat = min(5.0, max(2.0, (segWidth - handleBarWidth * 2.0 - 3.0) * 0.5))
+        let labelWidth = ceil((cluster.compactTimelineLabel as NSString).size(
+            withAttributes: [.font: NSFont.systemFont(ofSize: 12.0, weight: .semibold)]
+        ).width)
+        let showsLabel = segWidth - labelInset * 2.0 >= labelWidth
 
         ZStack {
             // 1. Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
@@ -3909,13 +3925,14 @@ private struct ShortcutTimelineSegmentView: View {
                 )
 
             // 4. Centered Shortcut Label (`⌥ ⌃ Space`, `⌘ A`, `⌫`, `⌘ →`, `D`)
-            if segWidth >= 22 {
+            if showsLabel {
                 Text(cluster.compactTimelineLabel)
                     .font(.system(size: 12.0, weight: .semibold))
                     .foregroundStyle(.white.opacity(isHidden ? 0.38 : 0.96))
                     .lineLimit(1)
-                    .padding(.horizontal, 6)
+                    .fixedSize()
                     .allowsHitTesting(false)
+                    .transition(.opacity)
             }
 
             // 5. Left & Right Resize Handles on Hover
@@ -3934,6 +3951,7 @@ private struct ShortcutTimelineSegmentView: View {
                 .allowsHitTesting(false)
             }
         }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: showsLabel)
         .frame(width: segWidth, height: height)
         .shadow(
             color: isHidden ? .clear : segmentColor.opacity(isSelected ? 0.40 : (isHovered ? 0.32 : 0.18)),

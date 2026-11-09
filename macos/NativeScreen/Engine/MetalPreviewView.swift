@@ -650,7 +650,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                             voPlayer = AVPlayer(url: voURL)
                             voiceoverPlayersByID[vo.id] = voPlayer
                         }
-                        let voOffsetSec = max(0.0, (sourceMs - vo.sourceStartMs) / 1000.0)
+                        let voOffsetSec = max(0.0, (vo.fileOffsetMs + sourceMs - vo.sourceStartMs) / 1000.0)
                         let voRate = Float(session.previewPlaybackRate * (vo.attachMode == .synchronized ? sliceSpeed : 1.0))
                         let voVol = Float(min(1.0, max(0.0, vo.volume * masterVol)))
                         voPlayer.isMuted = (voVol <= 0.001)

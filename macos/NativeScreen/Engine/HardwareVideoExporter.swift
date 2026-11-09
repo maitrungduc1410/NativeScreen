@@ -1645,12 +1645,21 @@ public final class HardwareVideoExporter {
             let assetDur = (try? await voAsset.load(.duration)) ?? CMTime(seconds: vo.durationMs / 1000.0, preferredTimescale: 600)
             let startTimelineMs = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs) ?? vo.sourceStartMs
             let destStartCM = CMTime(seconds: max(0.0, startTimelineMs / 1000.0), preferredTimescale: 600)
-            let clipDurSec = min(CMTimeGetSeconds(assetDur), max(0.1, totalTimelineSec - CMTimeGetSeconds(destStartCM)))
+            let fileOffsetSec = vo.fileOffsetMs / 1000.0
+            // Bounded by the segment's own length, or the first half of a cut would play on over the second.
+            let clipDurSec = min(
+                vo.durationMs / 1000.0,
+                CMTimeGetSeconds(assetDur) - fileOffsetSec,
+                max(0.1, totalTimelineSec - CMTimeGetSeconds(destStartCM))
+            )
             guard clipDurSec > 0.05 else {
                 composition.removeTrack(compVOTrack)
                 continue
             }
-            let insertRange = CMTimeRange(start: .zero, duration: CMTime(seconds: clipDurSec, preferredTimescale: 600))
+            let insertRange = CMTimeRange(
+                start: CMTime(seconds: fileOffsetSec, preferredTimescale: 600),
+                duration: CMTime(seconds: clipDurSec, preferredTimescale: 600)
+            )
             if (try? compVOTrack.insertTimeRange(insertRange, of: srcVOTrack, at: destStartCM)) != nil {
                 let params = AVMutableAudioMixInputParameters(track: compVOTrack)
                 params.setVolume(Float(min(1.0, max(0.0, vo.volume * Double(masterVol)))), at: destStartCM)

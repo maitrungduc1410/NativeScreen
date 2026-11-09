@@ -579,6 +579,10 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
 
         menu.addItem(.separator())
 
+        menu.addItem(makeCommandItem(title: "Split at current time", keyEquivalent: "c", modifiers: []) {
+            session.splitVoiceover(id: voiceoverId, atSourceMs: session.currentSourceTimeMs)
+        })
+
         menu.addItem(makeCommandItem(title: vo.disabled ? "Enable" : "Disable", keyEquivalent: "d", modifiers: []) {
             session.toggleVoiceoverDisabled(id: voiceoverId)
         })

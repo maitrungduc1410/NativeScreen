@@ -93,6 +93,7 @@
   - [x] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
   - [x] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
   - [x] Post-recording Voiceover recording & audio file upload directly onto the timeline (multiple `Voiceovers` tracks with no overlap inside a track + `Close Voiceover editor` with `Independent` / `Synchronized` attach modes and `Hide & Mute original recording`).
+  - [x] Cut a voiceover segment in split mode, with `C`, or from its right-click menu; both halves share one file (`spec/06` ADR-59). macOS only for now.
 - [x] **Canvas Crop Tool:** Interactive crop modal & overlay to trim unwanted margins of the recorded screen/window.
 - [x] **Reel Mode Safe-Zone Overlay:** Interactive TikTok, Instagram Reels & YouTube Shorts safe-zone preview overlay.
 - [x] **Extract Current Frame:** Dedicated `Export still frames` modal (`PNG` / `JPEG` squircle toggles, resolution up to `4K`, live preview) and instant `Copy current frame to clipboard`.
