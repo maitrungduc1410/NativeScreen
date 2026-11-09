@@ -30,6 +30,11 @@ Before implementing features or modifying data structures, consult the specifica
 4. **Privacy & Security Hygiene:**
    - Never commit machine-specific paths, local usernames, `xcuserdata`, or proprietary third-party assets.
    - Use Conventional Commits (`feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`) with author `Duc Trung Mai <maitrungduc1410@gmail.com>`.
+5. **Shared String Catalog (`macos/NativeScreen/Localizable.xcstrings`):** macOS and Windows both use this file, and Xcode rewrites it when it builds (details in `spec/06` ADR-44).
+   - A key the Swift compiler cannot see (Windows-only text, a name from a JSON file, a plain `String` passed to `localizedUI`) MUST have `"extractionState" : "manual"`.
+   - Never use Xcode's "Remove Stale" or delete a `stale` key without searching `windows/src` and the JSON resources first.
+   - Edit only the lines you need, keeping the ` : ` spacing. Do not re-serialize the file with a script.
+   - After adding keys outside Xcode, build once on a Mac. If only the key order changed, commit that alone as `chore(mac): let Xcode normalize the string catalog`.
 
 ## 3. Platform-Specific Agent Guides
 
