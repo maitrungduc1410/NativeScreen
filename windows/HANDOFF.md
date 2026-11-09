@@ -27,24 +27,22 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Settings: show the app version (Windows only)
+
+### Writer
+- **Scope:** the Windows app shows its version nowhere a user can see it. macOS has the standard About panel, which reads `Version 1.2.0 (57)` from the build. No macOS change. The `Release` workflow already sets the numbers: `-p:Version=<version>` and `-p:FileVersion=<numeric version>.<run number>`.
+  - Add a small `Ink60` line at the bottom of `Settings > General`: `Version 1.2.0 (57)`, with the run number in brackets. It must not be inside `Updates()`, which returns early when the updater is not available, as in a build run from Visual Studio.
+  - Take the version from Velopack's current version when installed, so a pre-release keeps its `-beta.1`. `McpServer.AppVersion` uses `ToString(3)` and drops the suffix, so it is only the fallback for a dev build. Take the run number from the fourth part of the exe's file version. Show no brackets if it is 0.
+  - The label goes through the catalog with all translations. Only the word `Version` is translated.
+- **Built on macOS:** nothing changed in code, this entry only describes the work.
+- **How to verify on Windows:** a dev build shows `Version 1.0.0`. Publish with `-p:Version=1.2.3-beta.1 -p:FileVersion=1.2.3.57`, pack and install it: Settings shows `Version 1.2.3-beta.1 (57)`.
+
 ## 2026-11-09, Windows fix: recording with the camera preview failed at start
 
 ### Verifier
 - **Result:** the fix builds and the existing tests pass. No test covers it: a file-based media source accepts a second `Shutdown`, so only a real camera reproduces this. An agent never ran it with a camera (`spec/06` ADR-23, ADR-61); **the owner ran it with a camera and microphone and it works.**
 - **Cause:** `MF_E_SHUTDOWN` from a second `Shutdown` on the camera source, seen in the owner's run and in the event log's stack.
 - **Changes:** `WebcamRecorder.Release`, used by the recorder and the preview. The start of a recording ignores a failure while closing devices. Start errors use a message box, because the dialog was cut off by the bar's window.
-
-## 2026-11-09, Windows port: voiceover cuts, label insets; 30 stickers on both systems
-
-### Verifier
-- **Result:** PASS, except for the items under **Not checked**.
-- **Build and tests:** see `verify.ps1`: Debug and Release x64, shaders, Core 294, Rendering 23, Media 21.
-- **Ported (`spec/06` ADR-59):** `fileOffsetMs` (load, save, merge patch), `SplitVoiceover` with split mode, `C` and the menu, selection of a voiceover (`Delete` and `D` work on it too), trimming by both edges, preview and export from the offset, whole-file waveforms, `split_item`.
-- **Labels:** `LabelInset` is 16 and `ShortestTruncatedWidth` 96. Shortcuts go through `FitLabels`. The track area was already as tall as the pane, so nothing changed for dragging below the last track.
-- **Checked in the app** (no microphone or camera): a cut at 3 s gave offsets 0 and 2000 with the right part of the wave on each half; a 1 s left-edge trim by mouse gave start 3998 and offset 2998; undo gave the whole segment back.
-- **Stickers (owner's request, shared with macOS):** 17 added from the same Noto Emoji commit, so there are 30: sun-hat, cap, helmet, goggles, light-bulb, rainbow, hearts, kiss, dog, fox, tiger, lion, frog, robot, alien, ghost, clown. PNGs in `Stickers.bundle`, entries in `stickers.json`, names in the catalog. Placed by eye on one recording in the Windows compositor.
-- **Next (writer):** build macOS and look at the 17 new stickers there. Vision's landmarks differ from YuNet's, so a value in `stickers.json` may want a nudge. No Swift changed.
-- **Not checked:** the `Split at current time` menu item and `C` by hand (both call the tested `SplitVoiceover`), a long-title language with the new inset, a project cut on macOS, and dragging a mask below the last track by hand.
 
 ## 2026-11-09, Timeline: labels clear the handles, dragging below the last track (macOS done, Windows port pending)
 
@@ -73,28 +71,6 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Built on macOS:** macOS builds. Export of cut segments matched the source audio (correlation 1.0 on each half, silence between them). `split_item` was run through MCP: offsets, track and undo are right. The cursor, the click in split mode and dragging the left edge were not tried by hand.
 - **How to verify on Windows:** cut a voiceover in the middle, move the halves apart, then play and export: each half plays its own words. Save, reopen: same result. Drag the left edge inward: the remaining words do not shift. Undo: the waveform is whole again. Open a project cut on macOS and save it on Windows: `fileOffsetMs` is still there.
 - **Risks / unsure:** on a sped-up clip the macOS preview plays a voiceover at the clip's speed but export plays it at 1x, so the halves of a cut can overlap in the file. This was already so before cutting; do not treat it as the target behavior.
-
-## 2026-11-09, Windows port: camera backgrounds, stickers, face tracking, Ctrl+W, repo layout
-
-### Verifier
-- **Result:** PASS, except for the items under **Not checked**.
-- **Build and tests:** `verify.ps1` passes: Debug and Release x64, 14 shaders, Core 286, Rendering 22, Media 21. The conformance fixtures predate `faceTrackingZoom` and `backgroundMode`, so `ConformanceTests.Compare` tolerates those two at their defaults.
-- **Next (writer):** regenerate the conformance fixtures on macOS and remove that tolerance.
-- **Package size:** the app gains about 42 MB of native files (`onnxruntime.dll`, `DirectML.dll`). Their debug files are removed at publish.
-- **Repo layout:** `macos/` links resolve. After a build the output has translations, `MCPTools.json`, cursors, wallpapers and the new stickers and backgrounds.
-- **Ported (`spec/06` ADR-60):**
-  - **Project fields:** `backgroundMode`, `backgroundImagePath`, `backgroundImageName`, `stickerId`, `faceTrackingZoom`.
-  - **Core:** `FaceTrack` and `CameraEffects`, with the constants of the Swift code. Unit tests: `CameraEffectsTests`.
-  - **Models:** YuNet for faces ships with the app; MODNet for the person mask is a 26 MB download behind a button, pinned and hash-checked (`spec/04`).
-  - **Compositor:** `FrameCompositor.Camera.cs` and `PersonComposite.hlsl`. Face tracking replaces the old fixed 1.16x. The cutout layout now really cuts out, with a shadow that follows the person.
-  - **UI:** Background, Sticker, the Zoom slider, the scan status, and a Download row when the model is missing.
-- **Ctrl+W** closes the focused editor and leaves others open (checked with two projects). **There is no save prompt:** Windows saves on close, from the title bar too.
-- **Checked** on the website's 7 s camera clip, with no camera or microphone opened: crown, sunglasses, cat with mirror, lips, top hat on cutout, blur, photo background and face tracking at 1.7x, in the app and in exports. A second pick of the same image adds no file, `project.json` has the new fields, and an export started during the scan waits and has the sticker on frame 0. Numbers are in ADR-60.
-- **Not checked:**
-  - A project made on macOS with a sticker, read without a rescan. The file format is covered by a unit test only.
-  - Sticker placement against a macOS export of the same recording. Landmarks differ from Vision: the nose is the tip and the mouth is the middle of its corners. Tell the writer if a value in `stickers.json` must change.
-  - Playback while a real user moves around; the mask is at most one job old, but no one watched it.
-  - Windows 11, other GPUs, and the Setup.exe with the larger native files.
 
 ## 2026-11-09, Repo layout: the macOS app moved to `macos/` (Windows build check pending)
 
