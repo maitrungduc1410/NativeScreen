@@ -41,7 +41,7 @@ NativeScreen/
 │   │   └── windows-d3d11-mediafoundation.md
 │   └── schemas/
 │       └── project.schema.json
-├── NativeScreen/                   # macOS Native App (Swift, SwiftUI, AppKit, Metal, ScreenCaptureKit)
+├── macos/                          # macOS Native App (Swift, SwiftUI, AppKit, Metal, ScreenCaptureKit)
 │   ├── NativeScreen.xcodeproj
 │   └── NativeScreen/
 └── NativeScreenWindows/            # (Planned Phase 5) Windows Native App (C#, WinUI 3, Direct3D 11, WGC)

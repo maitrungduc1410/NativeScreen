@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-ROOT = Path(__file__).resolve().parent.parent / "NativeScreen" / "NativeScreen" / "Resources" / "Wallpapers.bundle"
+ROOT = Path(__file__).resolve().parent.parent / "macos" / "NativeScreen" / "Resources" / "Wallpapers.bundle"
 FULL_SIZE = (2560, 1600)  # Matches the compositor's 2560 px decode limit.
 THUMB_SIZE = (192, 120)
 JPEG_QUALITY = 86

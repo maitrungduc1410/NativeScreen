@@ -93,7 +93,10 @@ To keep **NativeScreen** distributable under its open-source license (MIT) on Gi
    - 8 Mesh Gradient presets rendered by the compositor at any resolution with zero file size. Color hex palettes are not copyrightable.
 3. **Native System Cursors:**
    - Capture the active system cursor image directly from macOS (`NSCursor` / CoreGraphics cursor APIs) during recording, or render clean vector cursor SVGs/PDFs designed specifically for NativeScreen.
-4. **Synthesized / Royalty-Free Click Sounds:**
+4. **Camera Stickers:**
+   - `Resources/Stickers.bundle` is original Noto Emoji artwork (Apache 2.0), only cropped. Keep its `LICENSE` and `NOTICE.txt` next to it.
+   - `Resources/CameraBackgrounds.bundle` holds photos from Pexels and Pixabay under their own licenses, not this project's MIT license (`NOTICE.txt`).
+5. **Synthesized / Royalty-Free Click Sounds:**
    - Generate crisp mechanical & capacitive mouse click audio (`down.wav`, `up.wav`) procedurally via DSP synthesis (or CC0 Public Domain recordings).
 
 ### Timeline snapping
@@ -103,6 +106,15 @@ The snap button sits right after the split button and uses the same lit style: p
 ### Timeline zoom
 
 Hold `⌘` (`Ctrl` on Windows) and scroll over the ruler, the track labels or the lanes to zoom the timeline. The time under the cursor stays where it is (`spec/06` ADR-45). The zoom buttons and `⌘+` / `⌘-` keep the playhead in place.
+
+### Camera background, sticker and face tracking
+
+These live in the Camera style tab, above Color grading, and apply to the whole video.
+
+- **Background:** `None`, `Blur` or `Image` (a few built-in images, or `Choose image...`), with `Edge softness` and `Edge inset`. Hidden for the cutout layout, which has no background.
+- **Sticker:** one at a time, or none, in every layout.
+- **Face tracking:** the camera zooms in (`Zoom`) and follows the face within the crop.
+- Choosing a sticker or face tracking the first time scans the webcam once, with `Finding your face...` and a progress bar. `No face found in this recording.` is shown if there is none.
 
 ### Timeline segment labels
 

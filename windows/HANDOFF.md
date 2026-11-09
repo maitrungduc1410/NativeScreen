@@ -27,6 +27,41 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Repo layout: the macOS app moved to `macos/` (Windows build check pending)
+
+### Writer
+- **Scope:** `NativeScreen/` is now `macos/`. Inside it, `NativeScreen.xcodeproj` and the `NativeScreen/` source folder keep their names. Updated for Windows: the content links in `NativeScreen.App.csproj` and `NativeScreen.Rendering.csproj`, `McpDocumentTests.cs`, `tools/generate_*.py`, `windows/AGENTS.md` and the paths in this log.
+- **Built on macOS:** macOS builds. There is no `dotnet` on this machine, so Windows was not built. Every `..\..\..\macos\...` include was resolved by script and finds its files (1 catalog, 1 `MCPTools.json`, 86 cursors, 6 sounds, 216 wallpapers).
+- **How to verify on Windows:** `pwsh windows/scripts/verify.ps1`, then check that translations, cursors and wallpapers still reach the output folder.
+- **Risks / unsure:** do a clean build. Old `bin` and `obj` folders can hide a broken link.
+
+## 2026-11-09, Close the current window with the standard shortcut (macOS done, Windows check pending)
+
+### Writer
+- **Scope:** on macOS, ⌘W did nothing, because replacing the File menu's save group also removed the system Close item. It is back, and closes the focused window through the normal close path, so an editor with unsaved changes still asks to save.
+- **Windows:** no Ctrl+W accelerator was found in `windows/src`. Add one that closes the focused editor through the same path as the title bar button, including the save prompt, and leaves other project windows open.
+- **Built on macOS:** macOS builds. Tested by hand with several projects open.
+- **How to verify on Windows:** open two projects, press Ctrl+W: only the focused one closes. Make an edit with autosave off, press Ctrl+W: the save prompt appears.
+
+## 2026-11-09, Camera backgrounds, stickers and face tracking (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** ADR-58 in `spec/06`, `spec/07` §7.2b and §7.3, `spec/02` (camera fields and face track), `spec/04` (asset licenses). macOS: `Engine/FaceTrack.swift`, `Engine/CameraEffects.swift`, `prepareRecordedWebcamFrame` in `MetalFrameCompositor.swift`, `ensureFaceTrack` and `selectCameraBackgroundImage` in `ProjectSession.swift`, the camera sections of `InspectorSidebarView.swift`. All of it is applied in the editor, after recording. The website already shows this feature for both systems, so it has to land before the next Windows release.
+  - **Project fields** on `camera`: `backgroundMode` (`original`, `blur`, `image`), `backgroundImagePath`, `backgroundImageName` (the built-in id, empty for a user's own picture), `stickerId`, `faceTrackingZoom` (default 1.3). `enableFaceTracking` already existed but now really follows the face. Load and save these first, so a project edited on Windows does not lose them.
+  - **Chosen background:** copied to `assets/camera-bg-<16 hex>.jpg`, where the hex is the first 8 bytes of the SHA-256 of the source file. Longest side 2560, JPEG 0.90. If the file exists, reuse it. Never delete a replaced file: undo can restore it.
+  - **Assets:** ship `macos/NativeScreen/Resources/Stickers.bundle` (13 PNGs, `stickers.json`, `LICENSE`, `NOTICE.txt`) and `CameraBackgrounds.bundle` (`1.jpg` to `9.jpg`, `thumbs/`, `NOTICE.txt`) as content, like the wallpapers. Built-in ids are `background-1` to `background-9`. The photos are not under MIT, so `NOTICE.txt` must ship with them.
+  - **Face track:** `assets/face-track.json`, format in `spec/02`. Scan `webcam.mp4` once, every other frame, the largest face, the first time a sticker or face tracking is on. Exports wait for the scan. Read a file written by macOS as is. Show "Finding your face..." with progress and "No face found in this recording.".
+  - **Smoothing (match the constants in `FaceTrack.swift`):** stickers use a centered 5-tap binomial filter over unbroken runs, gaps up to 500 ms are bridged, longer gaps fade over 150 ms. Framing is separate: 100 ms grid, 5% dead zone, Gaussian sigma of 7 steps (0.7 s).
+  - **Order:** person mask, grade, composite over the background, sticker last. Grading must not tint the background or the sticker. The cutout layout ignores `backgroundMode`. Blur removes the person first, so there is no halo around them (§7.2b).
+  - **Performance rule:** preview segments off the render thread and uses the newest mask. Export must segment once per decoded camera picture, not once per output frame: a 30 fps camera in a 60 fps export shows each picture twice. On macOS this took a 22 s, 4K60 export with a background from 72 s to about 30 s (13.8 s with no background). If encoding runs in parallel lanes on different GOPs, keep one mask per lane. A kept mask must own its pixels, and the key needs the crop and mirror too.
+  - **UI:** Camera tab: Background (Original, Blur with its amount, the image grid, "Choose image..."), Sticker grid, and a Zoom slider under Face tracking. The strings are in the shared catalog.
+- **Built on macOS:** macOS builds. All 13 stickers were rendered on a real recording, and exports were measured with each background mode.
+- **How to verify on Windows:** open a real project with a webcam, made on macOS with a sticker and a photo: the sticker sits on the same spot of the face as in the macOS export, with no rescan. Delete `face-track.json` and reopen: it rescans and looks the same. Move your head: the sticker has no visible lag. Turn on Blur, then an image: no halo at the hair. Picking the same image twice adds no new file to `assets/`. Check that playback never waits on inference.
+- **Open VERIFY items:**
+  - Windows has no person segmentation yet. `spec/07` §7.3 plans ONNX Runtime with DirectML and a portrait model downloaded on demand. Pick one whose license allows redistribution and record it in `spec/04`. The existing camera cutout needs the same model.
+  - `Windows.Media.FaceAnalysis.FaceDetector`, used by `OnDeviceMaskScanner`, returns boxes only. Stickers need both eyes, the nose and the mouth, so this needs a landmark model as well.
+- **Risks / unsure:** there are no conformance fixtures for these effects, so compare against a macOS export by eye. Landmarks from another model will not land on the same points as Vision. Check the placement of every sticker in `stickers.json`, and keep that file shared: if a value must change, tell the writer.
+
 ## 2026-11-08, Timeline segment labels collapse as a segment narrows (macOS done, Windows port pending)
 
 ### Writer
@@ -202,7 +237,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 ## 2026-11-08, AI agents through MCP (macOS done, Windows port pending)
 
 ### Writer
-- **Scope:** rules are in `spec/06` ADR-52. The tool list is `NativeScreen/NativeScreen/Resources/MCPTools.json`: link it into the Windows app as content, like `Localizable.xcstrings`, and do not fork it. A tool Windows cannot support yet should still be listed and return `isError` with a sentence.
+- **Scope:** rules are in `spec/06` ADR-52. The tool list is `macos/NativeScreen/Resources/MCPTools.json`: link it into the Windows app as content, like `Localizable.xcstrings`, and do not fork it. A tool Windows cannot support yet should still be listed and return `isError` with a sentence.
   - **macOS files:** `MCP/MCPServer.swift` (socket, JSON-RPC, connections), `MCP/MCPStdioBridge.swift` (`--mcp`), `MCP/MCPToolbox.swift` (the 28 tools), `MCP/MCPJSON.swift` (merge patch, argument reads), `NativeScreenApp.swift` (`NativeScreenMain` checks `--mcp` before AppKit starts), `Views/SettingsView.swift` (`AIAgentsSettingsTab`). Small additions: `ProjectSession.startNewUndoStep()`, `RecordingCoordinator.discardCurrentRecording()`, `ProjectWorkspaceStore.closeEditorWindow(for:)`, `VideoProjectImporter.buildPackage` no longer private, `AppSettings.aiAgentsEnabled`.
 - **Built on macOS:** the app builds. Tested with a scripted client through the bridge and with a real Claude Code session (ADR-52, "Checked"). Codex not tried. The tests changed the recording bar's choices on this Mac to no camera, no microphone and no system audio.
 - **What to port:**
@@ -433,7 +468,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **To port on Windows:**
   - **Waveforms (ADR-39 changes).** Colors and opacities: microphone white at 0.35, system audio `#4D2FF5` at 0.5, drawn in that order. Behind each, the full-volume wave in the same color at 0.10, only while the volume is below 0.999, and also when muted. Opacity in each column goes from half at the bottom to full at that column's crest, which one polygon gradient cannot do. Rasterize per device pixel into a bitmap, or draw it in a pixel shader. The formulas are in ADR-42.
   - **Snapping.** Port `snapTargetsTimelineMs` and `TimelineSnapController` to Core with tests. Hook it in every segment drag and trim except clip slices: collect targets when the click slop is passed, use an 8-point threshold, and clamp afterwards as today. Add a 1 px guide line in `#704DFF` at 90% (`0.44, 0.30, 1.0`) over the tracks. Add the toggle next to the split button, lit like it, plus `View > Snap timeline items`, on by default, stored in settings.
-  - **Localization.** Use `NativeScreen/NativeScreen/Localizable.xcstrings` as the source of truth, so both apps share one set of translations: ship it as content and look strings up by their English key, falling back to the key. A Windows-only string becomes a new key with `"extractionState": "manual"`, so Xcode keeps it.
+  - **Localization.** Use `macos/NativeScreen/Localizable.xcstrings` as the source of truth, so both apps share one set of translations: ship it as content and look strings up by their English key, falling back to the key. A Windows-only string becomes a new key with `"extractionState": "manual"`, so Xcode keeps it.
     - Convert the specifiers in order: `%lld`, `%d` and `%@` become `{0}`, `{1}` and so on, and `%%` becomes `%`.
     - Same 8 languages. Add `Settings > General > Language` with the same list and `Restart Now`. Store the choice in `settings.json` and also set `ApplicationLanguages.PrimaryLanguageOverride`, so system-drawn text follows.
     - Keys mention macOS keys (`⌘`, `⌥`) and Finder. Where Windows shows different text, give it its own key; do not edit a shared value.
@@ -476,7 +511,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Scope:** macOS only. Rules: `spec/06` ADR-32, `spec/07` Pass 1. All frame fixtures are regenerated, and most fail on Windows until the flip below is removed.
 - **To port on Windows:**
   - Rendering, do this first: remove `VerticallyFlipped` and draw with `Identity` at its 3 call sites: `FrameCompositor.Compose.cs` (background, shadow) and `FrameCompositor.Overlays.cs` (bezel). Check the bezel rasterizer's own orientation, the notch must end up at the top.
-  - Assets: ship `NativeScreen/NativeScreen/Resources/Wallpapers.bundle/**/*.jpg` as content, like the cursors in `NativeScreen.Rendering.csproj`.
+  - Assets: ship `macos/NativeScreen/Resources/Wallpapers.bundle/**/*.jpg` as content, like the cursors in `NativeScreen.Rendering.csproj`.
   - App: category pills `★`, the system wallpapers, `Mesh`, then `Spring, Sunset, Radiant, Energy, Iridescent, Midnight, Glassmorphism`. Grid previews come from `thumbs/`, sorted by file name. A pill only browses. `Pick random wallpaper` draws from the current pill. Opening a project selects the pill holding its wallpaper or mesh.
   - Core: picking a bundled wallpaper copies it byte for byte to `assets/background-<id>.jpg`, with `systemWallpaperName` set to the id.
 - **How to verify:** `verify.ps1` frame fixtures pass again. Pick `spring-01`: the image is upright during and after the crossfade, and the copied file hashes the same as the bundled one. In `device-mockup` the notch is at the top; in `basic` the shadow falls downward.
@@ -506,7 +541,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 ### Writer
 - **Scope:** `spec/06` ADR-31. macOS: new `Engine/CubeLUTFile.swift`, `applyCameraGradeAndSharpen(customLUT:)`, `packageURL` passed down the compositor, `loadLUTFile` and `Remove LUT` in the inspector. Windows: `CubeLut.TryParse`, `FileLookTable`, per-table LUT size, the `+` menu.
-- **Built on macOS:** No. **The Swift changes were written on Windows and have never been compiled.** This breaks the `NativeScreen/AGENTS.md` rule to build after a Swift change, so build before anything else.
+- **Built on macOS:** No. **The Swift changes were written on Windows and have never been compiled.** This breaks the `macos/AGENTS.md` rule to build after a Swift change, so build before anything else.
 - **How to verify on macOS:** build; load a 33-point `.cube` on a project with a camera; confirm the camera changes in preview and export, the file is at `assets/lut-*.cube`, the intensity slider fades it, and a cutout camera keeps its transparency. Then open the same project on Windows and compare.
 - **Open VERIFY items:** `CubeLUTFile.apply`: `CIColorCubeWithColorSpace` with a 33 size, and alpha on a cutout camera. `CubeLUTCache` uses `nonisolated(unsafe)`; adjust if the project's concurrency settings refuse it.
 - **Risks / unsure:** No LUT fixture exists, so matching output between platforms is by design, not measured.

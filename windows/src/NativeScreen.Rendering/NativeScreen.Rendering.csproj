@@ -15,8 +15,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Shaders\*.hlsl" />
     <Content Include="..\..\..\conformance\looks\*.cube" Link="Assets\Looks\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\..\NativeScreen\NativeScreen\Resources\Cursors.bundle\sets\**\*.svg" Link="Assets\Cursors\sets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\..\NativeScreen\NativeScreen\Resources\Cursors.bundle\sounds\**\*.wav" Link="Assets\Cursors\sounds\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\..\NativeScreen\NativeScreen\Resources\Wallpapers.bundle\**\*.jpg" Link="Assets\Wallpapers\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\macos\NativeScreen\Resources\Cursors.bundle\sets\**\*.svg" Link="Assets\Cursors\sets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\macos\NativeScreen\Resources\Cursors.bundle\sounds\**\*.wav" Link="Assets\Cursors\sounds\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\macos\NativeScreen\Resources\Wallpapers.bundle\**\*.jpg" Link="Assets\Wallpapers\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

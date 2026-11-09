@@ -1,0 +1,4 @@
+Photos from Pexels (https://www.pexels.com) and Pixabay (https://pixabay.com),
+under the Pexels license (https://www.pexels.com/license/) and the Pixabay
+Content License (https://pixabay.com/service/license-summary/).
+These photos are not covered by this project's MIT license.

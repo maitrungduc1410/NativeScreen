@@ -20,7 +20,7 @@ import struct
 import wave
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "NativeScreen" / "NativeScreen" / "Resources" / "Cursors.bundle"
+ROOT = Path(__file__).resolve().parent.parent / "macos" / "NativeScreen" / "Resources" / "Cursors.bundle"
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Cursors

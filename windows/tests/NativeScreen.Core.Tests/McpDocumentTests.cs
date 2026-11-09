@@ -100,13 +100,13 @@ public sealed class McpDocumentTests
     {
         // Found by walking up from the test output, whatever the configuration and platform folders are.
         var folder = new DirectoryInfo(AppContext.BaseDirectory);
-        while (folder is not null && !File.Exists(Path.Combine(folder.FullName, "NativeScreen", "NativeScreen", "Resources", "MCPTools.json")))
+        while (folder is not null && !File.Exists(Path.Combine(folder.FullName, "macos", "NativeScreen", "Resources", "MCPTools.json")))
         {
             folder = folder.Parent;
         }
 
         Assert.NotNull(folder);
-        var path = Path.Combine(folder.FullName, "NativeScreen", "NativeScreen", "Resources", "MCPTools.json");
+        var path = Path.Combine(folder.FullName, "macos", "NativeScreen", "Resources", "MCPTools.json");
         var (instructions, tools) = McpDocument.LoadTools(File.ReadAllText(path));
         Assert.NotEmpty(instructions);
         Assert.Equal(28, tools.Count);

@@ -1190,3 +1190,31 @@ A hardware decoder pads rows to its macroblock width (1904), while `MF_MT_DEFAUL
 
 ### Solution
 A locked NV12 buffer is pitch x padded height x 3/2. `VideoFileReader.MeasureStride` tries the width aligned to 1, 2, 4 ... 128 on the first frame and takes the first pitch that divides the luma size into a height just above the video's. Regression test: `UnalignedWidthRoundTripTests`, which fails without the fix.
+
+## 57. ADR-57: Minimum macOS Is 14
+
+macOS 14 is the floor because the app is built on the Observation framework (`@Observable`, `@Bindable`). Going to macOS 13 would mean moving every model to `ObservableObject`, which invalidates every observing view on any change and would redraw the timeline and inspector with the playhead.
+
+The only macOS 15 API in use was `onScrollGeometryChange`, for the timeline's scroll offsets. `onTimelineScrollChange` keeps it on macOS 15 and later; on macOS 14, `TimelineScrollObserver` reads the same values from the `NSScrollView` (bounds and document frame notifications).
+
+### Verified
+The project builds with a macOS 14 target. In a scratch build with the macOS 14 path forced on macOS 27, a horizontal and vertical scroll moved the ruler, track labels and scroll thumb with the tracks. It has not been run on a real macOS 14 machine: check capture, microphone, preview, export and timeline scrolling there before a release.
+
+## 58. ADR-58: Camera Background, Stickers and Face Tracking in the Editor
+
+These are applied after recording, so the camera file stays untouched and every choice can be changed.
+
+- **One person mask.** Cutout and backgrounds share the same Vision mask and edge settings. Cutout is a layout (no background at all), so `backgroundMode` is ignored there.
+- **Faces are scanned once, not during playback.** `FaceTrackScanner` reads every other frame of `webcam.mp4` the first time a sticker or face tracking is used and saves `assets/face-track.json` (30 KB for a 22 s recording, about 7 s to scan). Editing never needs a rescan, because samples use webcam time and raw frame coordinates.
+- **Smoothing needs no lag.** With the whole recording available, stickers use a centered 5-tap filter over unbroken runs, gaps up to 500 ms are bridged, and longer ones fade over 150 ms. A live filter would trail the head.
+- **Framing is a separate, slower path.** A 5% dead zone ignores small head movements, then a Gaussian with a 0.7 s sigma. It replaces the old fixed 1.16x zoom, which never looked at the face.
+- **Exports wait for the scan**, so a sticker is not missing from the start of a video.
+- **Exports use `.accurate` masks** (49.5 ms per 1080p frame, mask 2016x1512) for hair edges, the preview `.balanced` (11.5 ms, 512x384). This also applies to cutout exports.
+- **A camera picture is segmented once.** A 30 fps camera in a 60 fps export shows each picture twice, and Vision used to run on both, about 55 s of a 72 s export of a 22 s recording. The compositor keeps the last two masks, compared by decoded frame identity plus crop and mirror: two because the H.264 lanes take turns on different GOPs, each with its own frame reader. Masks are copied out of Vision's buffer, since the other lane's request runs before a kept mask is used again.
+- **Background files are named after the source bytes**, so picking an image again reuses its file. Replaced files are not deleted, because undo can restore them.
+- **Order:** person mask, grade, composite on the background, sticker. Grading neither tints the background image nor the sticker.
+- **Assets:** 13 Noto Emoji stickers, cropped to their artwork because the sizes in `stickers.json` assume that. The Noto headphones are drawn at an angle and cover the face, so they are left out. Camera backgrounds are nine interior photos; the self-drawn wallpapers suit the canvas behind the video, not a room behind a person.
+- **Blur without a halo:** the person is removed before blurring, then alpha is raised so the hole fills from the surrounding background.
+
+### Verified
+On a 22 s 1080p recording: crown, sunglasses with blur, cat with an image, top hat on cutout, bow with mirror on, and face tracking at 1.7x all rendered correctly. A 1080p30 export with blur and sticker took 27 s, and the sticker was present from the first frames.

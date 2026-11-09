@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="NativeScreen/NativeScreen/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="96" alt="Native Screen icon">
+<img src="macos/NativeScreen/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="96" alt="Native Screen icon">
 
 # Native Screen
 
@@ -67,7 +67,7 @@ See it move on the [website](https://maitrungduc1410.github.io/NativeScreen/).
 
 | | Requirement | Download |
 | :-- | :-- | :-- |
-| macOS | macOS 15 or later, Apple silicon or Intel | [NativeScreen.dmg](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg) |
+| macOS | macOS 14 or later, Apple silicon or Intel | [NativeScreen.dmg](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg) |
 | Windows | Windows 10 or 11, x64 | [NativeScreen-win-Setup.exe](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe) |
 
 **macOS.** Open the DMG and drag Native Screen to Applications. The app is signed and notarized by Apple. On first
@@ -98,7 +98,7 @@ Then ask things like *"record my browser window for 20 seconds, zoom in on every
 **macOS:** Xcode 27 or later.
 
 ```bash
-open NativeScreen/NativeScreen.xcodeproj
+open macos/NativeScreen.xcodeproj
 ```
 
 Run the `NativeScreen` scheme. Local builds have no updater, so they never replace themselves with a release.
@@ -115,7 +115,7 @@ dotnet run --project windows/src/NativeScreen.App -c Debug -p:Platform=x64
 
 | Path | What is there |
 | :-- | :-- |
-| [`NativeScreen/`](NativeScreen/) | macOS app (SwiftUI, Metal, ScreenCaptureKit) |
+| [`macos/`](macos/) | macOS app (SwiftUI, Metal, ScreenCaptureKit) |
 | [`windows/`](windows/) | Windows app (WinUI 3, Direct3D 11, Media Foundation) |
 | [`spec/`](spec/README.md) | File format, rendering math, engineering decisions and the feature checklist |
 | [`conformance/`](conformance/) | Reference projects and frames both apps must match |
@@ -129,6 +129,11 @@ so the same project opens on both platforms.
 
 Issues and pull requests are welcome. Read [`AGENTS.md`](AGENTS.md) and the relevant part of [`spec/`](spec/README.md)
 first: behavior is specified there before it is written.
+
+## Credits
+
+- Stickers are [Noto Emoji](https://github.com/googlefonts/noto-emoji) artwork (Apache License 2.0).
+- Camera background photos come from [Pexels](https://www.pexels.com) and [Pixabay](https://pixabay.com/), under the [Pexels license](https://www.pexels.com/license/) and the [Pixabay Content License](https://pixabay.com/service/license-summary/). They are not covered by the MIT license below.
 
 ## License
 

@@ -1,4 +1,4 @@
-# Shared by every platform. Platform-specific rules live next to each app (e.g. NativeScreen/.gitignore).
+# Shared by every platform. Platform-specific rules live next to each app (e.g. macos/.gitignore).
 
 # OS files
 .DS_Store

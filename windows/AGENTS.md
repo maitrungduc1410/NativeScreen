@@ -1,7 +1,7 @@
 # AGENTS.md: NativeScreen for Windows (`windows/`)
 
 C# implementation of NativeScreen for Windows 11: WinUI 3, Direct3D 11, HLSL, Media Foundation, Windows.Graphics.Capture.
-It must open, edit, play, export and record `.nativescreen` projects exactly like the macOS app (`NativeScreen/`, Swift),
+It must open, edit, play, export and record `.nativescreen` projects exactly like the macOS app (`macos/`, Swift),
 which is finished and is the reference for every behavior.
 
 ## 1. Read Before Writing Code
@@ -41,7 +41,7 @@ Work is split between two agents on two machines. Know which one you are.
    `Rendering.Tests`; each new media path gets a smoke test in `Media.Tests`.
 6. Append an entry to [`HANDOFF.md`](./HANDOFF.md) (template there): what was done, files, how to verify, open `VERIFY` items, known risks.
 7. macOS code may change only for the conformance generator (phase 0). Build the macOS app after any Swift change
-   (`NativeScreen/AGENTS.md` §1).
+   (`macos/AGENTS.md` §1).
 
 ### Verifier rules
 1. Pull, then run `pwsh windows/scripts/verify.ps1`. It builds the whole solution (x64, Debug and Release), runs all test
