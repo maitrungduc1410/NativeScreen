@@ -12,7 +12,7 @@ rules for agents in `windows/AGENTS.md`.
 writing the C#, keep the same names for types, members and constants (C# casing), and copy every constant and formula.
 Where the Swift code and a spec disagree, the Swift code wins.
 
-| Swift (macOS, `NativeScreen/NativeScreen/`) | C# (Windows, `windows/src/`) | Notes |
+| Swift (macOS, `macos/NativeScreen/`) | C# (Windows, `windows/src/`) | Notes |
 | :--- | :--- | :--- |
 | `Models/ProjectDocument.swift` | `Core/Models/*` | Every `init(from:)` default for missing keys must be reproduced (old projects omit fields). Enum raw values are the JSON strings. |
 | `Models/RecordingMetadata.swift` | `Core/Models/RecordingMetadata.cs` | `platform = "windows"` when written by Windows. |

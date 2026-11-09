@@ -33,9 +33,9 @@
   <ItemGroup>
     <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
     <!-- One catalog for both apps (spec/06 ADR-44): the macOS file is the source of truth. -->
-    <Content Include="..\..\..\NativeScreen\NativeScreen\Localizable.xcstrings" Link="Localization\Localizable.xcstrings" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\macos\NativeScreen\Localizable.xcstrings" Link="Localization\Localizable.xcstrings" CopyToOutputDirectory="PreserveNewest" />
     <!-- One MCP tool list for both apps (spec/06 ADR-52): names, descriptions and schemas are not forked. -->
-    <Content Include="..\..\..\NativeScreen\NativeScreen\Resources\MCPTools.json" Link="Mcp\MCPTools.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\macos\NativeScreen\Resources\MCPTools.json" Link="Mcp\MCPTools.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Vortice.Direct2D1" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Velopack" />

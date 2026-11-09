@@ -225,7 +225,12 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
     "borderRadiusRatio": 0.20,
     "shadowIntensity": 0.3,
     "backgroundBlur": 0.0,
-    "aiPersonCutout": false
+    "aiPersonCutout": false,
+    "backgroundMode": "original",
+    "backgroundImagePath": "assets/camera-bg-1a2b3c4d.jpg",
+    "stickerId": "crown",
+    "enableFaceTracking": false,
+    "faceTrackingZoom": 1.3
   },
   "motion": {
     "cameraSpring": {
@@ -389,6 +394,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
 
 ### Key Architectural Advantages:
 1. **`timeline.maskTracks` (Multi-Track Masks with Keyframes):** Instead of a flat single-track array where masks cannot overlap comfortably, `maskTracks` allows **unlimited parallel tracks of Blur / Pixelate / Spotlight regions**, and each mask item supports `keyframes` so a blur box can smoothly move when the user scrolls the page!
+2. **Face track:** `assets/face-track.json` holds where the largest face is in `webcam.mp4`, written once when a sticker or face tracking is first used and safe to delete (it is scanned again). `{"version": 1, "webcamDurationMs": n, "samples": [[timeMs, faceX, faceY, faceW, faceH, eyeAx, eyeAy, eyeBx, eyeBy, noseX, noseY, mouthX, mouthY], ...]}`, normalized to the raw webcam frame, top-left origin, every other frame; moments with no face have no sample.
 2. **Self-Contained `assets/` Directory:** Copying the active wallpaper (`assets/background.jpg`) into the `.nativescreen` bundle ensures 100% cross-platform visual parity when opening a Mac project on Windows.
 
 ### Caption tracks

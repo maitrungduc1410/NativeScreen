@@ -33,5 +33,5 @@ Before implementing features or modifying data structures, consult the specifica
 
 ## 3. Platform-Specific Agent Guides
 
-- **macOS App (`NativeScreen/`):** Read [`NativeScreen/AGENTS.md`](./NativeScreen/AGENTS.md) before editing Swift/macOS code.
+- **macOS App (`macos/`):** Read [`macos/AGENTS.md`](./macos/AGENTS.md) before editing Swift/macOS code.
 - **Windows App (`windows/`):** Read [`windows/AGENTS.md`](./windows/AGENTS.md) before editing C#/Windows code. It defines the writer (macOS) and verifier (Windows) roles.

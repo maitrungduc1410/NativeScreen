@@ -53,7 +53,7 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 75
     env:
-      PROJECT: NativeScreen/NativeScreen.xcodeproj
+      PROJECT: macos/NativeScreen.xcodeproj
       APP: Native Screen.app
       TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
@@ -178,7 +178,7 @@ jobs:
           SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           # Same Sparkle version as the app (Package.resolved).
-          sparkle=$(python3 -c "import json;d=json.load(open('NativeScreen/NativeScreen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'));print(next(p['state']['version'] for p in d['pins'] if p['identity']=='sparkle'))")
+          sparkle=$(python3 -c "import json;d=json.load(open('macos/NativeScreen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'));print(next(p['state']['version'] for p in d['pins'] if p['identity']=='sparkle'))")
           curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" "https://github.com/sparkle-project/Sparkle/releases/download/$sparkle/Sparkle-$sparkle.tar.xz"
           mkdir -p "$RUNNER_TEMP/sparkle" && tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
           base="https://github.com/${{ github.repository }}/releases"

@@ -212,8 +212,13 @@ LUT with a 3D texture and trilinear sampling, then blends with the original by `
   `sat = max(r,g,b) - min(r,g,b); k = v * (1 - sat); out = lerp(luma, color, 1 + k)`.
 - Sharpen: unsharp mask on luma, radius 1.6 px, amount `sharpen01 * 1.15`.
 
+### 7.2b. Background, sticker and face tracking
+After grading, when the layout is not cutout and `backgroundMode` is not `original`, the graded person (through the §7.3 mask) goes over the background. `image`: the picture scaled to cover. `blur`: Gaussian with sigma `height * 0.06 * backgroundBlur`, with the person removed first (mask dilated by `max(2, height * 0.008)` px) so no halo surrounds them; holes are filled with the plain blur.
+
+The sticker is drawn last, in camera image space, so it is cropped and mirrored with the picture. Placement: see `CameraEffects.place`. `faceTrackingZoom` multiplies the aspect-fill scale and the picture is offset to center the framing point, clamped so it always covers the camera rect.
+
 ### 7.3. Person cutout
-macOS uses Vision person segmentation (`.balanced`). Windows: ONNX Runtime (DirectML) with a portrait segmentation model
+macOS uses Vision person segmentation (`.balanced` in the preview, `.accurate` in exports). Windows: ONNX Runtime (DirectML) with a portrait segmentation model
 downloaded on demand (pick a model whose license allows redistribution; record it in `spec/04`). Post-process exactly
 like `applyPersonCutout`: stretch the mask to the frame, erode by `clamp(edgeInset * 10, 1, 12)` px when `edgeInset > 0.01`,
 blur with `sigma = clamp(edgeSoftness * 10, 0.5, 14)` when `edgeSoftness > 0.01`, then use it as alpha. In the live preview,

@@ -189,7 +189,12 @@
         "borderRadiusRatio": { "type": "number", "minimum": 0, "maximum": 0.5 },
         "shadowIntensity": { "type": "number", "minimum": 0, "maximum": 1 },
         "backgroundBlur": { "type": "number", "minimum": 0, "maximum": 1 },
-        "aiPersonCutout": { "type": "boolean" }
+        "aiPersonCutout": { "type": "boolean" },
+        "backgroundMode": { "type": "string", "enum": ["original", "blur", "image"] },
+        "backgroundImagePath": { "type": "string" },
+        "backgroundImageName": { "type": "string" },
+        "stickerId": { "type": "string" },
+        "faceTrackingZoom": { "type": "number", "minimum": 1, "maximum": 2 }
       }
     },
     "motion": {

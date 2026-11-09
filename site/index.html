@@ -30,6 +30,7 @@
     <nav class="nav" aria-label="Sections">
       <a href="#timeline">Timeline</a>
       <a href="#polish">Polish</a>
+      <a href="#camera">Camera</a>
       <a href="#agents">AI agents</a>
       <a href="#download">Download</a>
       <a href="https://github.com/maitrungduc1410/NativeScreen">GitHub</a>
@@ -55,14 +56,14 @@
       <div class="cta">
         <a class="button primary" data-download href="https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg">Download for Mac</a>
         <a class="button" data-download-alt href="https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe">Windows</a>
-        <p class="fine">macOS 15 or later · Windows 10 or 11 · MIT license</p>
+        <p class="fine">macOS 14 or later · Windows 10 or 11 · MIT license</p>
       </div>
     </div>
 
     <figure class="demo demo-hero">
       <video class="media" src="assets/demos/hero.mp4" muted loop playsinline autoplay preload="auto" data-autoplay
-        aria-label="A recording of a web app, polished by Native Screen: background, smooth cursor, click ripples and automatic zooms"></video>
-      <figcaption>One take of a demo web app, exported from Native Screen. The zooms came from the clicks on their own.</figcaption>
+        aria-label="A recording of a web app, polished by Native Screen: background, smooth cursor, click ripples, automatic zooms and a camera bubble with a photo background and a sticker"></video>
+      <figcaption>A demo web app, exported from Native Screen. The zooms came from the clicks on their own.</figcaption>
     </figure>
   </section>
 
@@ -165,10 +166,37 @@
     </div>
   </section>
 
-  <!-- 03 Aspect ratios -->
-  <section class="chapter wrap" id="formats">
+  <!-- 03 Camera -->
+  <section class="chapter wrap" id="camera">
     <header class="chapter-head">
       <span class="num">03</span>
+      <h2>Change the room after you've left it.</h2>
+    </header>
+    <div class="features">
+      <article class="feature">
+        <div class="feature-text">
+          <h3>A new background, and a sticker that follows you</h3>
+          <p>Blur the room or swap it for a photo, then add a sticker that stays on your face as you move. It all
+            runs on your computer, and you can change it any time.</p>
+          <div class="segmented swap" role="radiogroup" aria-label="Camera look" data-swap-for="swap-camera">
+            <button type="button" role="radio" aria-checked="false" data-swap="original">Original</button>
+            <button type="button" role="radio" aria-checked="false" data-swap="blur">Blur</button>
+            <button type="button" role="radio" aria-checked="true" data-swap="sticker">Photo</button>
+          </div>
+        </div>
+        <div class="feature-media" id="swap-camera">
+          <video class="media" src="assets/demos/camera-original.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="original" aria-label="A person talking to the camera in their real room" hidden></video>
+          <video class="media" src="assets/demos/camera-blur.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="blur" aria-label="The same person with the room blurred behind them" hidden></video>
+          <video class="media" src="assets/demos/camera-sticker.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="sticker" aria-label="The same person in front of a photo of a bright interior, wearing sunglasses that follow their face"></video>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- 04 Aspect ratios -->
+  <section class="chapter wrap" id="formats">
+    <header class="chapter-head">
+      <span class="num">04</span>
       <h2>One recording, every shape.</h2>
     </header>
     <div class="cols">
@@ -192,10 +220,10 @@
     </div>
   </section>
 
-  <!-- 04 Captions -->
+  <!-- 05 Captions -->
   <section class="chapter wrap" id="captions">
     <header class="chapter-head">
-      <span class="num">04</span>
+      <span class="num">05</span>
       <h2>Edit the video by editing the words.</h2>
     </header>
     <div class="cols">
@@ -212,10 +240,10 @@
     </div>
   </section>
 
-  <!-- 05 AI agents -->
+  <!-- 06 AI agents -->
   <section class="chapter wrap" id="agents">
     <header class="chapter-head">
-      <span class="num">05</span>
+      <span class="num">06</span>
       <h2>Or ask an agent to do the editing.</h2>
     </header>
     <div class="cols">
@@ -236,10 +264,10 @@
     </figure>
   </section>
 
-  <!-- 06 Yours -->
+  <!-- 07 Yours -->
   <section class="chapter wrap" id="yours">
     <header class="chapter-head">
-      <span class="num">06</span>
+      <span class="num">07</span>
       <h2>Made to feel at home on your computer.</h2>
     </header>
     <div class="native">
@@ -295,7 +323,7 @@
       <div class="dl">
         <img class="media shot dl-shot" src="assets/shots/editor-light.jpg" width="2400" height="1506" loading="lazy" alt="The Native Screen editor on macOS">
         <h3>macOS</h3>
-        <p class="fine">macOS 15 or later · Apple silicon and Intel</p>
+        <p class="fine">macOS 14 or later · Apple silicon and Intel</p>
         <a class="button primary" href="https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg">Download .dmg</a>
         <p>Signed and notarized by Apple. Updates arrive inside the app.</p>
       </div>

@@ -80,7 +80,12 @@
       videos.forEach((v) => {
         const on = v.dataset.swapVideo === b.dataset.swap;
         v.hidden = !on;
-        if (on) { try { v.currentTime = t; } catch (e) {} if (!reduceMotion) v.play().catch(() => {}); } else v.pause();
+        if (on) {
+          // A take that has not loaded yet ignores the seek, so it waits for its metadata.
+          const seek = () => { try { v.currentTime = t; } catch (e) {} };
+          if (v.readyState >= 1) seek(); else v.addEventListener("loadedmetadata", seek, { once: true });
+          if (!reduceMotion) v.play().catch(() => {});
+        } else v.pause();
       });
     });
   });
@@ -110,7 +115,12 @@
       videos.forEach((v) => {
         const on = v.dataset.ratioVideo === b.dataset.ratio;
         v.hidden = !on;
-        if (on) { try { v.currentTime = t; } catch (e) {} if (!reduceMotion) v.play().catch(() => {}); } else v.pause();
+        if (on) {
+          // A take that has not loaded yet ignores the seek, so it waits for its metadata.
+          const seek = () => { try { v.currentTime = t; } catch (e) {} };
+          if (v.readyState >= 1) seek(); else v.addEventListener("loadedmetadata", seek, { once: true });
+          if (!reduceMotion) v.play().catch(() => {});
+        } else v.pause();
       });
     });
   }
