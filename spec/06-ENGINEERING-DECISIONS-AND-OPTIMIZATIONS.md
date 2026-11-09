@@ -1219,7 +1219,17 @@ These are applied after recording, so the camera file stays untouched and every 
 ### Verified
 On a 22 s 1080p recording: crown, sunglasses with blur, cat with an image, top hat on cutout, bow with mirror on, and face tracking at 1.7x all rendered correctly. A 1080p30 export with blur and sticker took 27 s, and the sticker was present from the first frames.
 
-## 59. ADR-59: Camera Effects on Windows
+## 59. ADR-59: Voiceover Cuts Share One File
+
+A cut does not write new audio. `fileOffsetMs` says where in the file a segment starts, so a cut stays undoable and costs nothing.
+
+- **Export is bounded by the segment.** It used to insert the whole file, which is harmless for one segment but would play the first half of a cut over the second.
+- **The second half starts at the first half's computed end**, not at the cut time. A rounding difference would otherwise read as an overlap and move it to a new track.
+- **Trimming the left edge moves `fileOffsetMs` by the same amount**, so the words stay where they are on the timeline. The edge stops where the file begins.
+- **Waveform samples always cover the whole file.** A segment draws the part from `fileOffsetMs` to `fileOffsetMs + durationMs`, so a trim is right while dragging and after undo, with no new extraction.
+- **Agents can cut too:** `split_item` takes `voiceover`, through the same `splitVoiceover`.
+
+## 60. ADR-60: Camera Effects on Windows
 
 ADR-58 is the behavior. Windows has no equivalent of Vision, so this records what replaces it.
 

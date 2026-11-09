@@ -116,6 +116,8 @@ public final class ProjectSession: Identifiable {
     public var audioWaveformSamples: [Float] = []
     public var microphoneWaveformSamples: [Float] = []
     public var voiceoverWaveformSamplesByID: [String: [Float]] = [:]
+    /// Length of the audio file behind each segment. Waveform samples cover the whole file; a segment draws its own part.
+    public var voiceoverFileDurationMsByID: [String: Double] = [:]
 
     // Clipboard for Zoom / Mask Copy & Cut (`⌘C` / `⌘X`)
     public var copiedZoomBlock: ZoomBlock?
@@ -2319,6 +2321,10 @@ public final class ProjectSession: Identifiable {
     /// Splits whichever item is currently selected at `currentSourceTimeMs` (or splits the Clip at Playhead) when pressing `C`.
     public func splitAtCurrentTimeShortcut() {
         let srcMs = currentSourceTimeMs
+        if let voiceoverId = selectedVoiceoverId {
+            splitVoiceover(id: voiceoverId, atSourceMs: srcMs)
+            return
+        }
         if let captionId = selectedCaptionId {
             splitCaption(id: captionId, atSourceMs: srcMs)
             return
@@ -2407,7 +2413,10 @@ public final class ProjectSession: Identifiable {
 
     public func loadVoiceoverWaveform(for vo: VoiceoverSegment) async {
         let voURL = packageURL.appendingPathComponent(vo.relativePath)
-        let bins = max(128, min(4096, Int((vo.durationMs / 1000.0) * 240.0)))
+        let fileSeconds = (try? await AVURLAsset(url: voURL).load(.duration).seconds) ?? 0.0
+        let fileMs = fileSeconds.isFinite && fileSeconds > 0.0 ? fileSeconds * 1000.0 : vo.fileOffsetMs + vo.durationMs
+        let bins = max(128, min(4096, Int((fileMs / 1000.0) * 240.0)))
+        self.voiceoverFileDurationMsByID[vo.id] = fileMs
         if FileManager.default.fileExists(atPath: voURL.path),
            let extracted = await Self.extractNormalizedAudioWaveform(from: voURL, targetBinCount: bins) {
             self.voiceoverWaveformSamplesByID[vo.id] = extracted
@@ -4386,6 +4395,57 @@ public final class ProjectSession: Identifiable {
                 doc.timeline.voiceovers[realIdx].durationMs = span
             }
             doc.timeline.voiceovers.sort { $0.sourceStartMs < $1.sourceStartMs }
+        }
+    }
+
+    public func splitVoiceover(id: String, atSourceMs sourceMs: Double) {
+        guard let index = document.timeline.voiceovers.firstIndex(where: { $0.id == id }) else { return }
+        let original = document.timeline.voiceovers[index]
+        guard sourceMs > original.sourceStartMs + 200.0 && sourceMs < original.sourceEndMs - 200.0 else {
+            showToast("Can't cut item shorter than 0.2s", durationMs: 2000)
+            return
+        }
+
+        var firstHalf = original
+        firstHalf.id = UUID().uuidString
+        firstHalf.durationMs = sourceMs - original.sourceStartMs
+        var secondHalf = original
+        secondHalf.id = UUID().uuidString
+        // Starts exactly at the first half's end: a rounding gap the other way would count as an overlap and move it to a new track.
+        secondHalf.sourceStartMs = firstHalf.sourceEndMs
+        secondHalf.durationMs = original.sourceEndMs - secondHalf.sourceStartMs
+        secondHalf.fileOffsetMs = original.fileOffsetMs + firstHalf.durationMs
+
+        for halfId in [firstHalf.id, secondHalf.id] {
+            voiceoverWaveformSamplesByID[halfId] = voiceoverWaveformSamplesByID[id]
+            voiceoverFileDurationMsByID[halfId] = voiceoverFileDurationMsByID[id]
+        }
+        mutate { doc in
+            doc.timeline.voiceovers.replaceSubrange(index...index, with: [firstHalf, secondHalf])
+        }
+        selectedVoiceoverId = secondHalf.id
+    }
+
+    /// Trims by either edge. The audio stays where it is on the timeline, so moving the left edge moves the start point
+    /// in the file, and that edge stops where the file begins.
+    public func resizeVoiceover(id: String, newStartMs: Double, newEndMs: Double) {
+        let earliestSourceMs = document.timeline.slices.map(\.sourceStartMs).min() ?? 0.0
+        let latestSourceMs = document.timeline.slices.map(\.sourceEndMs).max() ?? metadata.durationMs
+
+        mutate { doc in
+            guard let index = doc.timeline.voiceovers.firstIndex(where: { $0.id == id }) else { return }
+            let current = doc.timeline.voiceovers[index]
+            let others = doc.timeline.voiceovers.filter { $0.trackIndex == current.trackIndex && $0.id != id }
+            let previousEnd = others.filter { $0.sourceStartMs < current.sourceStartMs }.map(\.sourceEndMs).max() ?? earliestSourceMs
+            let nextStart = others.filter { $0.sourceStartMs > current.sourceStartMs }.map(\.sourceStartMs).min() ?? latestSourceMs
+
+            let start = max(earliestSourceMs, previousEnd, current.sourceStartMs - current.fileOffsetMs, newStartMs)
+            let end = min(latestSourceMs, nextStart, newEndMs)
+            guard end - start >= 250.0 else { return }
+
+            doc.timeline.voiceovers[index].fileOffsetMs = max(0.0, current.fileOffsetMs + start - current.sourceStartMs)
+            doc.timeline.voiceovers[index].sourceStartMs = start
+            doc.timeline.voiceovers[index].durationMs = end - start
         }
     }
 

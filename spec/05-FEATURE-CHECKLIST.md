@@ -93,6 +93,7 @@
   - [x] Built-in royalty-free / procedural background music tracks + custom `.mp3`/`.m4a` import with auto-ducking during voiceover.
   - [x] Voice enhancement (noise reduction & auto-gain control via Apple `AudioUnit` / `AVAudioEngine`).
   - [x] Post-recording Voiceover recording & audio file upload directly onto the timeline (multiple `Voiceovers` tracks with no overlap inside a track + `Close Voiceover editor` with `Independent` / `Synchronized` attach modes and `Hide & Mute original recording`).
+  - [x] Cut a voiceover segment in split mode, with `C`, or from its right-click menu; both halves share one file (`spec/06` ADR-59). macOS only for now.
 - [x] **Canvas Crop Tool:** Interactive crop modal & overlay to trim unwanted margins of the recorded screen/window.
 - [x] **Reel Mode Safe-Zone Overlay:** Interactive TikTok, Instagram Reels & YouTube Shorts safe-zone preview overlay.
 - [x] **Extract Current Frame:** Dedicated `Export still frames` modal (`PNG` / `JPEG` squircle toggles, resolution up to `4K`, live preview) and instant `Copy current frame to clipboard`.
@@ -125,7 +126,7 @@
 - [x] **Fix:** a mask added inside a zoom appeared away from the drag; masks are now created and edited under the zoom on screen (`spec/06` ADR-55).
 - [x] Solid masks have a color: swatch picker and hex field in the mask inspector (`solidColor`, optional).
 - [x] Timeline segment labels collapse as a segment narrows: details, then title, animated (`spec/04`).
-- [x] Camera background (blur, image) and face stickers, applied in the editor; real face tracking (`spec/06` ADR-58, on Windows ADR-59).
+- [x] Camera background (blur, image) and face stickers, applied in the editor; real face tracking (`spec/06` ADR-58, on Windows ADR-60).
 - [x] Minimum macOS is 14 (`spec/06` ADR-57). Not yet run on a real macOS 14 machine.
 - [x] Clip speed menu goes up to 10x (6x, 8x, 10x added).
 - [x] **Fix:** mask handles matched the drawn mask only without padding; they now use the compositor's stage rect and the crop (`spec/06` ADR-55).

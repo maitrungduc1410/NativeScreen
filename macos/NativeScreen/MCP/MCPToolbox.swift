@@ -652,6 +652,7 @@ final class MCPToolbox {
         case "mask": session.splitMask(id: id, atSourceMs: sourceMs)
         case "caption": session.splitCaption(id: id, atSourceMs: sourceMs)
         case "camera_layout": session.splitCameraLayout(id: id, atSourceMs: sourceMs)
+        case "voiceover": session.splitVoiceover(id: id, atSourceMs: sourceMs)
         default: throw MCPToolError("Unknown kind: \(kind)")
         }
         guard session.document != before else {

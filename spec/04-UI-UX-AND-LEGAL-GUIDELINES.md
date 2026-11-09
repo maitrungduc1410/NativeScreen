@@ -119,7 +119,7 @@ These live in the Camera style tab, above Color grading, and apply to the whole 
 
 ### Timeline segment labels
 
-A segment shows its title and, under it, its details (`Zoom` over `1.8× Auto`). As it narrows, the details fade out once they no longer fit in full and the title slides to the vertical center over 0.18 s (instant with Reduce Motion). When the title no longer fits it fades out too, leaving the bare segment. Text that can truncate (captions, mask names) stays until about 44 pt of it is left. The smallest segment is set by time (200 to 250 ms depending on the track), not by its label.
+A segment shows its title and, under it, its details (`Zoom` over `1.8× Auto`). As it narrows, the details fade out once they no longer fit in full and the title slides to the vertical center over 0.18 s (instant with Reduce Motion). When the title no longer fits it fades out too, leaving the bare segment. "Fits" means inside the segment minus 16 pt on each side, so text is gone before a resize handle reaches it. Shortcut segments follow the same rule with their single label. Captions and mask names shorter than 96 pt show in full or not at all, so there is no stub like `New ca...`. Longer ones truncate until 96 pt of text is left, then fade out. The smallest segment is set by time (200 to 250 ms depending on the track), not by its label.
 
 ### Language
 

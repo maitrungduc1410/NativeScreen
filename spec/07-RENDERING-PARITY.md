@@ -219,7 +219,7 @@ The sticker is drawn last, in camera image space, so it is cropped and mirrored 
 
 ### 7.3. Person cutout
 macOS uses Vision person segmentation (`.balanced` in the preview, `.accurate` in exports). Windows: ONNX Runtime (DirectML, CPU as a fallback) with MODNet,
-downloaded on demand (`spec/04`, `spec/06` ADR-59), 320 px on the long side in the preview and 672 px in exports. Post-process exactly
+downloaded on demand (`spec/04`, `spec/06` ADR-60), 320 px on the long side in the preview and 672 px in exports. Post-process exactly
 like `applyPersonCutout`: stretch the mask to the frame, erode by `clamp(edgeInset * 10, 1, 12)` px when `edgeInset > 0.01`,
 blur with `sigma = clamp(edgeSoftness * 10, 0.5, 14)` when `edgeSoftness > 0.01`, then use it as alpha. In the live preview,
 segment asynchronously and use the newest mask (never block the render thread); exports segment every frame.

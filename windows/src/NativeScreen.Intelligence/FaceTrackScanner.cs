@@ -5,7 +5,7 @@ using NativeScreen.Media;
 
 namespace NativeScreen.Intelligence;
 
-/// <summary>Finds the largest face and its landmarks in the webcam video once, on device (spec/06 ADR-58, ADR-59).</summary>
+/// <summary>Finds the largest face and its landmarks in the webcam video once, on device (spec/06 ADR-58, ADR-60).</summary>
 public static class FaceTrackScanner
 {
     /// <summary>Scanning every other frame and interpolating is smooth enough and halves the time.</summary>

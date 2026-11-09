@@ -28,7 +28,7 @@ nonisolated enum CameraStickerCatalog {
         return file.stickers
     }()
 
-    private nonisolated(unsafe) static let images: [String: CIImage] = {
+    private static let images: [String: CIImage] = {
         var result: [String: CIImage] = [:]
         for sticker in all {
             if let url = imageURL(for: sticker), let image = CIImage(contentsOf: url) { result[sticker.id] = image }

@@ -5,7 +5,7 @@ using NativeScreen.Core;
 
 namespace NativeScreen.Intelligence;
 
-/// <summary>The portrait matting network, downloaded once on request (spec/04, spec/06 ADR-59).</summary>
+/// <summary>The portrait matting network, downloaded once on request (spec/04, spec/06 ADR-60).</summary>
 public static class PersonSegmentationModel
 {
     private const long Bytes = 25_888_640;
