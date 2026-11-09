@@ -1261,3 +1261,13 @@ Stickers were placed on one person by eye. Landmarks from another model do not l
 Errors at the start of a recording go to a message box: a dialog cannot fit in the recording bar's window and was cut off.
 
 No agent has run this with a camera (ADR-23). The error text and stack come from the owner's run and the Windows event log, and the owner confirmed the fix with a camera and microphone.
+
+## 62. ADR-62: Baked Textures Start Cleared
+
+On a macOS 14 machine the background showed two layers: the right mesh in a box around the screen, and other colors outside it. The box was the extent of the blurred shadow, which is smaller than the canvas.
+
+`materializeToGPUTexture` renders a `CIImage` into a new private texture. CoreImage writes only inside the image's extent, and a new private texture holds whatever was in that memory. Apple GPUs happened to give zeros, so the bug never showed on them. On the other machine the old pixels stayed around the shadow, opaque, and covered the background. A test that filled the texture with magenta before the bake kept magenta outside the shadow's extent, and a clear pass in the same command buffer removed it.
+
+Every baked texture now starts with a clear pass, which covers any baked image smaller than its canvas. Preview and export both use this path. The fix was not run on the machine that showed the bug when this was written.
+
+The recording bar on macOS 14 and 15 uses `NSVisualEffectView`, and was see-through with `alphaValue = 0.80` and a rounded layer mask. It now stays at full alpha and is rounded with `maskImage`. macOS 26 and later keep `NSGlassEffectView`.

@@ -127,7 +127,7 @@
 - [x] Solid masks have a color: swatch picker and hex field in the mask inspector (`solidColor`, optional).
 - [x] Timeline segment labels collapse as a segment narrows: details, then title, animated (`spec/04`).
 - [x] Camera background (blur, image) and face stickers, applied in the editor; real face tracking (`spec/06` ADR-58, on Windows ADR-60).
-- [x] Minimum macOS is 14 (`spec/06` ADR-57). Not yet run on a real macOS 14 machine.
+- [x] Minimum macOS is 14 (`spec/06` ADR-57). Run on a real macOS 14 machine: preview background and recording bar fixes in ADR-62.
 - [x] Clip speed menu goes up to 10x (6x, 8x, 10x added).
 - [x] **Fix:** mask handles matched the drawn mask only without padding; they now use the compositor's stage rect and the crop (`spec/06` ADR-55).
 - [x] Auto zooms closer than 1.5 s merge into one (`spec/03` §3.1), on macOS and in the Windows port.

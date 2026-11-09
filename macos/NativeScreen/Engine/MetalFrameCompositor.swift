@@ -703,6 +703,16 @@ public final class MetalFrameCompositor {
             return nil
         }
 
+        // CoreImage only writes inside the image's own extent, and a new private texture holds whatever was in that
+        // memory (zeros on Apple GPUs, old pixels on others). Clear it, or a shadow smaller than the canvas leaves
+        // those old pixels around it (ADR-62).
+        let clearPass = MTLRenderPassDescriptor()
+        clearPass.colorAttachments[0].texture = tex
+        clearPass.colorAttachments[0].loadAction = .clear
+        clearPass.colorAttachments[0].storeAction = .store
+        clearPass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        cmdBuf.makeRenderCommandEncoder(descriptor: clearPass)?.endEncoding()
+
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         let shifted = image.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
         ciContext.render(

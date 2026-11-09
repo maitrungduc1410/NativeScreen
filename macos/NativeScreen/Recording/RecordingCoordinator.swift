@@ -2560,15 +2560,7 @@ private struct HUDLiquidGlassBackgroundView: NSViewRepresentable {
             return glass
         } else {
             let v = NSVisualEffectView()
-            v.material = .hudWindow
-            v.blendingMode = .behindWindow
-            v.state = .active
-            v.isEmphasized = false
-            v.alphaValue = 0.80
-            v.wantsLayer = true
-            v.layer?.cornerRadius = cornerRadius
-            v.layer?.cornerCurve = .continuous
-            v.layer?.masksToBounds = true
+            configureBlur(v)
             return v
         }
     }
@@ -2579,13 +2571,30 @@ private struct HUDLiquidGlassBackgroundView: NSViewRepresentable {
             glass.cornerRadius = cornerRadius
             glass.tintColor = NSColor(red: 0.06, green: 0.06, blue: 0.09, alpha: 0.34)
         } else if let v = nsView as? NSVisualEffectView {
-            v.material = .hudWindow
-            v.blendingMode = .behindWindow
-            v.state = .active
-            v.isEmphasized = false
-            v.alphaValue = 0.80
-            v.layer?.cornerRadius = cornerRadius
+            configureBlur(v)
         }
+    }
+
+    /// macOS 14 and 15. Rounded with `maskImage`, at full alpha: a behind-window blur left the bar see-through
+    /// with `alphaValue` below 1 and a rounded layer mask (ADR-62).
+    private func configureBlur(_ view: NSVisualEffectView) {
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.isEmphasized = false
+        view.maskImage = Self.roundedMask(cornerRadius: cornerRadius)
+    }
+
+    private static func roundedMask(cornerRadius: CGFloat) -> NSImage {
+        let side = cornerRadius * 2 + 1
+        let mask = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
+            return true
+        }
+        mask.capInsets = NSEdgeInsets(top: cornerRadius, left: cornerRadius, bottom: cornerRadius, right: cornerRadius)
+        mask.resizingMode = .stretch
+        return mask
     }
 }
 
