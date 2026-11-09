@@ -15,6 +15,7 @@
     <PackageVersion Include="Vortice.MediaFoundation" Version="3.8.3" />
     <PackageVersion Include="NAudio.Wasapi" Version="2.2.1" />
     <PackageVersion Include="Velopack" Version="1.2.161" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
     <PackageVersion Include="Whisper.net" Version="1.9.1" />
     <PackageVersion Include="Whisper.net.Runtime" Version="1.9.1" />
   </ItemGroup>

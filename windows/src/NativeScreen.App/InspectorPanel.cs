@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using NativeScreen.Core;
+using NativeScreen.Intelligence;
 using ZoomMode = NativeScreen.Core.ZoomMode;
 
 namespace NativeScreen.App;
@@ -47,6 +48,7 @@ internal sealed class InspectorPanel
 
     public InspectorPanel(EditorSession session, ScrollViewer scroller, StackPanel body, bool hasCamera, EditorTools tools)
     {
+        tools.FaceScanProgressChanged += ShowFaceScanProgress;
         this.session = session;
         this.scroller = scroller;
         this.body = body;
@@ -468,6 +470,7 @@ internal sealed class InspectorPanel
 
         if (camera.LayoutMode == CameraLayoutMode.Cutout)
         {
+            PersonModelRow();
             Add(Slider("Edge softness", () => Doc.Camera.CutoutEdgeSoftness, (d, v) => d.Camera.CutoutEdgeSoftness = v, 0, 1, 0.2));
             Add(Slider("Edge inset", () => Doc.Camera.CutoutEdgeInset, (d, v) => d.Camera.CutoutEdgeInset = v, 0, 1, 0));
             Add(Toggle("Avoid empty area", "Will try to avoid showing too much empty space around the recording", () => Doc.Camera.CutoutAvoidEmptyArea, (d, v) => d.Camera.CutoutAvoidEmptyArea = v));
@@ -481,6 +484,15 @@ internal sealed class InspectorPanel
             Add(Note("This recording has no camera video."));
             return;
         }
+
+        if (Doc.Camera.LayoutMode != CameraLayoutMode.Cutout)
+        {
+            CameraBackgroundSection();
+            AddDivider();
+        }
+
+        CameraStickerSection();
+        AddDivider();
 
         var looks = Doc.Camera.ColorGradePreset;
         var wrap = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 92, ItemHeight = 44 };
@@ -546,7 +558,137 @@ internal sealed class InspectorPanel
         AddDivider();
         Add(Toggle("Mirror horizontally", null, () => Doc.Camera.Mirror, (d, v) => d.Camera.Mirror = v));
         Add(Toggle("Face tracking", null, () => Doc.Camera.EnableFaceTracking, (d, v) => d.Camera.EnableFaceTracking = v));
+        if (Doc.Camera.EnableFaceTracking)
+        {
+            Add(Slider("Zoom", () => Doc.Camera.FaceTrackingZoom, (d, v) => d.Camera.FaceTrackingZoom = v, 1, 2, 1.3));
+            if (Doc.Camera.StickerId is null)
+            {
+                FaceScanStatus();
+            }
+        }
+
         Add(Collapsible("Advanced", () => Slider("Camera delay", () => Doc.Camera.DelayAdjustmentMs, (d, v) => d.Camera.DelayAdjustmentMs = v, -200, 200, 0)));
+    }
+
+    private void CameraBackgroundSection()
+    {
+        var mode = Doc.Camera.BackgroundMode;
+        Add(Labeled("Background", 10, Options(
+            ("None", mode == CameraBackgroundMode.Original, () => Edit(d => d.Camera.BackgroundMode = CameraBackgroundMode.Original)),
+            ("Blur", mode == CameraBackgroundMode.Blur, () => Edit(d =>
+            {
+                d.Camera.BackgroundMode = CameraBackgroundMode.Blur;
+                if (d.Camera.BackgroundBlur <= 0)
+                {
+                    d.Camera.BackgroundBlur = 0.5;
+                }
+            })),
+            ("Image", mode == CameraBackgroundMode.Image, () => Edit(d => d.Camera.BackgroundMode = CameraBackgroundMode.Image)))));
+        if (mode == CameraBackgroundMode.Original)
+        {
+            return;
+        }
+
+        PersonModelRow();
+        if (mode == CameraBackgroundMode.Blur)
+        {
+            Add(Slider("Blur intensity", () => Doc.Camera.BackgroundBlur, (d, v) => d.Camera.BackgroundBlur = v, 0.1, 1, 0.5));
+        }
+        else
+        {
+            var grid = EffectGrid();
+            var isCustom = Doc.Camera.BackgroundImagePath is not null && Doc.Camera.BackgroundImageName is null;
+            grid.Children.Add(EffectTile("Choose image...", Ui.Icon("\uE8B9", 14), isCustom, () => _ = tools.ChooseCameraBackgroundImage()));
+            foreach (var item in CameraBackgroundCatalog.Items)
+            {
+                var selected = Doc.Camera.BackgroundImageName == item.Id && Doc.Camera.BackgroundImagePath is not null;
+                var built = item;
+                grid.Children.Add(EffectTile(item.Id, EffectImage(item.ThumbnailPath, 92, Stretch.UniformToFill), selected, () => _ = tools.SelectCameraBackgroundImage(built.FullImagePath, built.Id)));
+            }
+
+            Add(grid);
+        }
+
+        Add(Slider("Edge softness", () => Doc.Camera.CutoutEdgeSoftness, (d, v) => d.Camera.CutoutEdgeSoftness = v, 0, 1, 0.2));
+        Add(Slider("Edge inset", () => Doc.Camera.CutoutEdgeInset, (d, v) => d.Camera.CutoutEdgeInset = v, 0, 1, 0));
+    }
+
+    private void PersonModelRow()
+    {
+        if (PersonSegmentationModel.IsInstalled)
+        {
+            return;
+        }
+
+        Add(Note("Separating you from the background needs a model, downloaded once from huggingface.co. Your video stays on this device."));
+        Add(tools.IsDownloadingPersonModel
+            ? Note("Downloading...")
+            : Action(Loc.T("Download (%@)").Replace("%@", PersonSegmentationModel.SizeText, StringComparison.Ordinal), () => _ = tools.DownloadPersonModel()));
+    }
+
+    private void CameraStickerSection()
+    {
+        var grid = EffectGrid();
+        grid.Children.Add(EffectTile("None", Ui.Icon("\uE711", 14), Doc.Camera.StickerId is null, () => Edit(d => d.Camera.StickerId = null)));
+        foreach (var sticker in CameraStickerCatalog.All)
+        {
+            var id = sticker.Id;
+            var image = EffectImage(CameraStickerCatalog.ImagePath(sticker), 64, Stretch.Uniform);
+            image.Margin = new Thickness(5);
+            grid.Children.Add(EffectTile(sticker.Name, image, Doc.Camera.StickerId == id, () => Edit(d => d.Camera.StickerId = id)));
+        }
+
+        Add(Labeled("Sticker", 10, grid));
+        if (Doc.Camera.StickerId is not null)
+        {
+            FaceScanStatus();
+        }
+    }
+
+    private ProgressBar? faceScanBar;
+
+    // Updated in place: rebuilding the inspector for each step would interrupt a slider being dragged.
+    private void ShowFaceScanProgress()
+    {
+        if (faceScanBar is not null && tools.FaceScanProgress is { } progress)
+        {
+            faceScanBar.Value = progress;
+        }
+    }
+
+    private void FaceScanStatus()
+    {
+        if (tools.FaceScanProgress is { } progress)
+        {
+            faceScanBar = new ProgressBar { Minimum = 0, Maximum = 1, Value = progress };
+            Add(Stack(6, Note("Finding your face..."), faceScanBar));
+        }
+        else if (tools.FaceScanFoundNoFace)
+        {
+            Add(Note("No face found in this recording."));
+        }
+    }
+
+    private static VariableSizedWrapGrid EffectGrid() => new() { Orientation = Orientation.Horizontal, ItemWidth = 46, ItemHeight = 46 };
+
+    private static Image EffectImage(string path, int decodeWidth, Stretch stretch) => new()
+    {
+        Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path)) { DecodePixelWidth = decodeWidth },
+        Stretch = stretch
+    };
+
+    private static Button EffectTile(string title, UIElement content, bool selected, Action click)
+    {
+        var tile = Ui.Option(string.Empty, selected, click);
+        tile.Content = content;
+        tile.Padding = new Thickness(selected ? 1 : 0);
+        tile.Width = 40;
+        tile.Height = 40;
+        tile.MinWidth = 40;
+        tile.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        tile.VerticalContentAlignment = VerticalAlignment.Stretch;
+        Ui.Tip(tile, Loc.T(title));
+        return tile;
     }
 
     private string? captionInspectorTrackId;

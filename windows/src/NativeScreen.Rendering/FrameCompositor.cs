@@ -18,6 +18,7 @@ public sealed partial class FrameCompositor : IDisposable
         ("GaussianBlur", "ps_5_0"),
         ("MaskEffect", "ps_5_0"),
         ("LanczosScale", "ps_5_0"),
+        ("PersonComposite", "ps_5_0"),
         ("MagnifierLens", "cs_5_0"),
         ("ClickRipple", "cs_5_0"),
         ("CameraMotionBlur", "cs_5_0"),
@@ -37,6 +38,7 @@ public sealed partial class FrameCompositor : IDisposable
     private readonly ID3D11PixelShader _maskEffect;
     private readonly ID3D11PixelShader _lanczos;
     private readonly ID3D11PixelShader _nv12;
+    private readonly ID3D11PixelShader _personComposite;
     private readonly ID3D11ComputeShader _motionBlur;
     private readonly ID3D11ComputeShader _lens;
     private readonly ID3D11ComputeShader _clickRipple;
@@ -73,6 +75,7 @@ public sealed partial class FrameCompositor : IDisposable
         _maskEffect = (ID3D11PixelShader)shaders["MaskEffect"];
         _lanczos = (ID3D11PixelShader)shaders["LanczosScale"];
         _nv12 = (ID3D11PixelShader)shaders["Nv12ToRgb"];
+        _personComposite = (ID3D11PixelShader)shaders["PersonComposite"];
         _motionBlur = (ID3D11ComputeShader)shaders["CameraMotionBlur"];
         _lens = (ID3D11ComputeShader)shaders["MagnifierLens"];
         _clickRipple = (ID3D11ComputeShader)shaders["ClickRipple"];
@@ -134,6 +137,7 @@ public sealed partial class FrameCompositor : IDisposable
         }
 
         overlays?.Dispose();
+        DisposeCameraEffects();
         foreach (var view in lutViews.Values)
         {
             view.Dispose();

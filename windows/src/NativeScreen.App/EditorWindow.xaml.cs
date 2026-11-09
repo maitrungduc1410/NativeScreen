@@ -143,6 +143,9 @@ public sealed partial class EditorWindow : Window
         inspector.Rebuild();
 
         session.DocumentChanged += DocumentChanged;
+        tools.FaceTrackChanged += FaceEffectsChanged;
+        tools.PreviewMasks.MaskUpdated += PersonMaskUpdated;
+        tools.EnsureFaceTrack();
         session.SelectionChanged += SelectionChanged;
         Activated += WindowActivated;
         AppTheme.Changed += ThemeChanged;
@@ -251,6 +254,8 @@ public sealed partial class EditorWindow : Window
         file.Items.Add(Menu("Save as", source.PackagePath is null ? null : SaveAsCommand));
         file.Items.Add(new MenuFlyoutSeparator());
         file.Items.Add(Menu("Settings", OpenSettings, "Ctrl+,"));
+        file.Items.Add(new MenuFlyoutSeparator());
+        file.Items.Add(Menu("Close", Close, "Ctrl+W"));
         var edit = new MenuFlyoutSubItem { Text = Loc.T("Edit") };
         edit.Items.Add(Menu("Undo", session.Undo, "Ctrl+Z"));
         edit.Items.Add(Menu("Redo", session.Redo, "Ctrl+Shift+Z"));
@@ -606,6 +611,7 @@ public sealed partial class EditorWindow : Window
     private void DocumentChanged(bool structural)
     {
         ScheduleSave();
+        tools.EnsureFaceTrack();
         if (CurrentTabAvailability() != railAvailability)
         {
             RefreshTabRail();
@@ -625,6 +631,21 @@ public sealed partial class EditorWindow : Window
             DrawPreview();
         }
     }
+
+    private void FaceEffectsChanged()
+    {
+        inspector.Rebuild();
+        DrawPreview();
+    }
+
+    // Comes from a background thread. While playing, the next frame picks the mask up anyway.
+    private void PersonMaskUpdated() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (!closed && !session.IsPlaying)
+        {
+            DrawPreview();
+        }
+    });
 
     private void SelectionChanged()
     {
@@ -743,7 +764,9 @@ public sealed partial class EditorWindow : Window
             ScreenWidth = (int)source.SourceWidth,
             ScreenHeight = (int)source.SourceHeight,
             HasCamera = source.HasCamera,
-            PackageDirectory = source.PackagePath
+            PackageDirectory = source.PackagePath,
+            FaceTrack = tools.FaceTrack,
+            PersonMasks = tools.PreviewMasks
         };
         renderer.Submit(request, width, height, Preview.CompositionScaleX, session.LiveSourceClock());
     }
@@ -782,6 +805,7 @@ public sealed partial class EditorWindow : Window
         Activated -= WindowActivated;
         tools.FinishVoiceoverRecordingForClose();
         tools.CancelTranscript();
+        tools.CancelFaceScan();
         tools.StopMusicPreview();
         tools.Dispose();
         clickSounds.Dispose();
@@ -823,6 +847,8 @@ public sealed partial class EditorWindow : Window
         session.DocumentChanged -= DocumentChanged;
         session.SelectionChanged -= SelectionChanged;
         tools.Changed -= inspector.Rebuild;
+        tools.FaceTrackChanged -= FaceEffectsChanged;
+        tools.PreviewMasks.MaskUpdated -= PersonMaskUpdated;
         Root.PreviewKeyDown -= RootKeyDown;
         Root.PreviewKeyUp -= RootKeyUp;
         Content = null;
@@ -1129,6 +1155,10 @@ public sealed partial class EditorWindow : Window
         {
             case VirtualKey.K:
                 ToggleCommandMenu();
+                return true;
+            case VirtualKey.W:
+                // The same path as the title bar's button, which saves the project before the window goes away.
+                Close();
                 return true;
             case VirtualKey.S:
                 SaveCommand();

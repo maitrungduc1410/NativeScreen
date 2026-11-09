@@ -36,6 +36,193 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     public bool IsScanningFaces { get; private set; }
     public XamlRoot? XamlRoot { get; set; }
 
+    // MARK: Camera effects
+
+    private Task<FaceTrack?>? faceScan;
+    private CancellationTokenSource? faceScanCancel;
+
+    /// <summary>The face positions for stickers and face tracking; null until scanned or loaded.</summary>
+    public FaceTrack? FaceTrack { get; private set; }
+
+    /// <summary>0 to 1 while the webcam is being scanned, null otherwise.</summary>
+    public double? FaceScanProgress { get; private set; }
+
+    public bool FaceScanFoundNoFace => FaceTrack is { HasFaces: false };
+
+    public PreviewPersonMasks PreviewMasks { get; } = new();
+
+    public bool IsDownloadingPersonModel { get; private set; }
+
+    public event Action? FaceTrackChanged;
+
+    public event Action? FaceScanProgressChanged;
+
+    private bool NeedsFaceTrack => session.HasRecordedCamera && session.Document.Camera.Enabled
+        && (session.Document.Camera.StickerId is not null || session.Document.Camera.EnableFaceTracking);
+
+    private string? WebcamPath => source.PackagePath is { } package && source.Project?.Metadata.Tracks.WebcamVideo is { } webcam
+        ? Path.Combine(package, "recording", webcam)
+        : null;
+
+    /// <summary>Loads the saved face track, or scans the webcam once. Does nothing until a feature needs it.</summary>
+    public void EnsureFaceTrack()
+    {
+        if (NeedsFaceTrack && FaceTrack is null && faceScan is null && WebcamPath is not null)
+        {
+            faceScan = RunFaceScan();
+        }
+    }
+
+    /// <summary>The track an export should use, scanning first if a feature needs it. UI thread.</summary>
+    public Task<FaceTrack?> WaitForFaceTrack()
+    {
+        EnsureFaceTrack();
+        return faceScan ?? Task.FromResult(FaceTrack);
+    }
+
+    public void CancelFaceScan() => faceScanCancel?.Cancel();
+
+    private async Task<FaceTrack?> RunFaceScan()
+    {
+        var webcam = WebcamPath!;
+        var file = Path.Combine(source.PackagePath!, "assets", "face-track.json");
+        faceScanCancel = new CancellationTokenSource();
+        var cancel = faceScanCancel.Token;
+        FaceScanProgress = 0;
+        Changed?.Invoke();
+        var progress = new Progress<double>(fraction =>
+        {
+            FaceScanProgress = fraction;
+            FaceScanProgressChanged?.Invoke();
+        });
+        try
+        {
+            var stored = await Task.Run(
+                () =>
+                {
+                    var loaded = LoadFaceTrack(file);
+                    if (loaded is not null)
+                    {
+                        return loaded;
+                    }
+
+                    var scanned = FaceTrackScanner.Scan(webcam, progress, cancel);
+                    if (scanned is not null)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                        var partial = file + ".part";
+                        File.WriteAllText(partial, System.Text.Json.JsonSerializer.Serialize(scanned));
+                        File.Move(partial, file, overwrite: true);
+                    }
+
+                    return scanned;
+                },
+                cancel);
+            FaceTrack = stored is null ? null : new FaceTrack(stored);
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException or System.Runtime.InteropServices.COMException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
+        {
+            FaceTrack = null;
+        }
+
+        FaceScanProgress = null;
+        faceScan = null;
+        FaceTrackChanged?.Invoke();
+        return FaceTrack;
+    }
+
+    private static StoredFaceTrack? LoadFaceTrack(string file)
+    {
+        try
+        {
+            return File.Exists(file) && System.Text.Json.JsonSerializer.Deserialize<StoredFaceTrack>(File.ReadAllText(file)) is { Version: 1 } stored ? stored : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Copies an image into the package and uses it behind the person. A name marks a built-in image as selected.</summary>
+    public async Task SelectCameraBackgroundImage(string file, string? name)
+    {
+        if (source.PackagePath is not { } package)
+        {
+            toast("Open a saved project first");
+            return;
+        }
+
+        try
+        {
+            var relative = await Task.Run(() =>
+            {
+                // Named after the source bytes, so the same image reuses its file. Old files stay: undo can point at them.
+                var fileName = CameraEffects.BackgroundFileName(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(file)));
+                var assets = Path.Combine(package, "assets");
+                Directory.CreateDirectory(assets);
+                var target = Path.Combine(assets, fileName);
+                if (!File.Exists(target))
+                {
+                    var image = NativeScreen.Rendering.ImageTexture.Load(file, 2560);
+                    var partial = target + ".part.jpg";
+                    NativeScreen.Rendering.ImageTexture.Save(image.Pixels, image.Width, image.Height, partial, jpeg: true, jpegQuality: 0.90f);
+                    File.Move(partial, target, overwrite: true);
+                }
+
+                return "assets/" + fileName;
+            });
+            session.Mutate(document =>
+            {
+                document.Camera.BackgroundMode = CameraBackgroundMode.Image;
+                document.Camera.BackgroundImagePath = relative;
+                document.Camera.BackgroundImageName = name;
+            });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException or System.Runtime.InteropServices.COMException)
+        {
+            toast($"Could not use this image: {exception.Message}");
+        }
+    }
+
+    public async Task ChooseCameraBackgroundImage()
+    {
+        var picker = new FileOpenPicker();
+        foreach (var type in ImageTypes)
+        {
+            picker.FileTypeFilter.Add(type);
+        }
+
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+        if (await picker.PickSingleFileAsync() is { } file)
+        {
+            await SelectCameraBackgroundImage(file.Path, null);
+        }
+    }
+
+    /// <summary>Runs only when the person pressed Download.</summary>
+    public async Task DownloadPersonModel()
+    {
+        if (IsDownloadingPersonModel)
+        {
+            return;
+        }
+
+        IsDownloadingPersonModel = true;
+        Report("Downloading...");
+        try
+        {
+            await PersonSegmentationModel.DownloadAsync(null, CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is IOException or HttpRequestException or UnauthorizedAccessException)
+        {
+            toast($"Download failed: {exception.Message}");
+        }
+
+        IsDownloadingPersonModel = false;
+        Report(null);
+        FaceTrackChanged?.Invoke();
+    }
+
     public static string PresetsDirectory { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "Presets");
 
     public ProjectPresetStore Presets { get; } = new(PresetsDirectory);
@@ -389,6 +576,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     /// <summary>The editor closed: nothing may keep playing after the window is gone.</summary>
     public void Dispose()
     {
+        PreviewMasks.Dispose();
         StopMusicPreview();
         previewSounds.Dispose();
     }

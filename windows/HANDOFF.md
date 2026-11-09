@@ -27,6 +27,28 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Windows port: camera backgrounds, stickers, face tracking, Ctrl+W, repo layout
+
+### Verifier
+- **Result:** PASS, except for the items under **Not checked**.
+- **Build and tests:** `verify.ps1` passes: Debug and Release x64, 14 shaders, Core 286, Rendering 22, Media 21. The conformance fixtures predate `faceTrackingZoom` and `backgroundMode`, so `ConformanceTests.Compare` tolerates those two at their defaults.
+- **Next (writer):** regenerate the conformance fixtures on macOS and remove that tolerance.
+- **Package size:** the app gains about 42 MB of native files (`onnxruntime.dll`, `DirectML.dll`). Their debug files are removed at publish.
+- **Repo layout:** `macos/` links resolve. After a build the output has translations, `MCPTools.json`, cursors, wallpapers and the new stickers and backgrounds.
+- **Ported (`spec/06` ADR-59):**
+  - **Project fields:** `backgroundMode`, `backgroundImagePath`, `backgroundImageName`, `stickerId`, `faceTrackingZoom`.
+  - **Core:** `FaceTrack` and `CameraEffects`, with the constants of the Swift code. Unit tests: `CameraEffectsTests`.
+  - **Models:** YuNet for faces ships with the app; MODNet for the person mask is a 26 MB download behind a button, pinned and hash-checked (`spec/04`).
+  - **Compositor:** `FrameCompositor.Camera.cs` and `PersonComposite.hlsl`. Face tracking replaces the old fixed 1.16x. The cutout layout now really cuts out, with a shadow that follows the person.
+  - **UI:** Background, Sticker, the Zoom slider, the scan status, and a Download row when the model is missing.
+- **Ctrl+W** closes the focused editor and leaves others open (checked with two projects). **There is no save prompt:** Windows saves on close, from the title bar too.
+- **Checked** on the website's 7 s camera clip, with no camera or microphone opened: crown, sunglasses, cat with mirror, lips, top hat on cutout, blur, photo background and face tracking at 1.7x, in the app and in exports. A second pick of the same image adds no file, `project.json` has the new fields, and an export started during the scan waits and has the sticker on frame 0. Numbers are in ADR-59.
+- **Not checked:**
+  - A project made on macOS with a sticker, read without a rescan. The file format is covered by a unit test only.
+  - Sticker placement against a macOS export of the same recording. Landmarks differ from Vision: the nose is the tip and the mouth is the middle of its corners. Tell the writer if a value in `stickers.json` must change.
+  - Playback while a real user moves around; the mask is at most one job old, but no one watched it.
+  - Windows 11, other GPUs, and the Setup.exe with the larger native files.
+
 ## 2026-11-09, Repo layout: the macOS app moved to `macos/` (Windows build check pending)
 
 ### Writer

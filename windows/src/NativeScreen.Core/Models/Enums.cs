@@ -56,6 +56,13 @@ public enum CursorRotationMode
     [JsonStringEnumMemberName("directional")] Follow
 }
 
+public enum CameraBackgroundMode
+{
+    [JsonStringEnumMemberName("original")] Original,
+    [JsonStringEnumMemberName("blur")] Blur,
+    [JsonStringEnumMemberName("image")] Image
+}
+
 public enum CameraLayoutMode
 {
     [JsonStringEnumMemberName("overlay")] Overlay,

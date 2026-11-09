@@ -26,6 +26,9 @@ public sealed class ComposeRequest
     public int WebcamWidth { get; init; }
     public int WebcamHeight { get; init; }
     public IReadOnlyList<ShortcutCluster>? Shortcuts { get; init; }
+    public VideoFrame? WebcamFrame { get; init; }
+    public FaceTrack? FaceTrack { get; init; }
+    public IPersonMaskSource? PersonMasks { get; init; }
 
     public ComposeRequest At(double sourceMs) => new()
     {
@@ -43,7 +46,10 @@ public sealed class ComposeRequest
         Webcam = Webcam,
         WebcamWidth = WebcamWidth,
         WebcamHeight = WebcamHeight,
-        Shortcuts = Shortcuts
+        Shortcuts = Shortcuts,
+        WebcamFrame = WebcamFrame,
+        FaceTrack = FaceTrack,
+        PersonMasks = PersonMasks
     };
 }
 
@@ -150,6 +156,9 @@ public sealed partial class FrameCompositor
             ExportQuality = request.ExportQuality,
             PackageDirectory = request.PackageDirectory,
             Shortcuts = request.Shortcuts,
+            FaceTrack = request.FaceTrack,
+            PersonMasks = request.PersonMasks,
+            WebcamFrame = webcam ?? request.WebcamFrame,
             Screen = screen is null ? request.Screen : Nv12View("video-screen", screen),
             ScreenWidth = screen?.Width ?? request.ScreenWidth,
             ScreenHeight = screen?.Height ?? request.ScreenHeight,
@@ -751,12 +760,12 @@ public sealed partial class FrameCompositor
         return output;
     }
 
-    private void DrawQuad(ID3D11ShaderResourceView view, QuadMap map, Vector4 clip, float clipRadius, float opacity)
+    private void DrawQuad(ID3D11ShaderResourceView view, QuadMap map, Vector4 clip, float clipRadius, float opacity, bool blackSilhouette = false)
     {
         var context = _graphics.Context;
         context.PSSetShader(_quad);
         context.PSSetShaderResource(0, view);
-        context.UpdateSubresource(new QuadConstants(map.U, map.V, clip, clipRadius, opacity, Vector2.Zero), quadConstants!);
+        context.UpdateSubresource(new QuadConstants(map.U, map.V, clip, clipRadius, opacity, new Vector2(blackSilhouette ? 1 : 0, 0)), quadConstants!);
         context.PSSetConstantBuffer(0, quadConstants);
         context.Draw(3, 0);
         context.PSSetShaderResource(0, null!);

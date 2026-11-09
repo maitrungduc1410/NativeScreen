@@ -265,6 +265,20 @@ public sealed class ConformanceTests
                     Compare(prop.Value, actualProps.Count >= 0 ? actual.GetProperty(prop.Name) : default, $"{path}.{prop.Name}");
                 }
 
+                // The fixtures predate these two camera fields. Remove this once they are regenerated on macOS (windows/HANDOFF.md).
+                if (path.EndsWith(".camera", StringComparison.Ordinal))
+                {
+                    if (actualProps.TryGetValue("faceTrackingZoom", out var zoom) && zoom.GetDouble() == 1.3)
+                    {
+                        actualProps.Remove("faceTrackingZoom");
+                    }
+
+                    if (actualProps.TryGetValue("backgroundMode", out var mode) && mode.GetString() == "original")
+                    {
+                        actualProps.Remove("backgroundMode");
+                    }
+                }
+
                 Assert.True(actualProps.Count == 0, $"{path} extra {string.Join(',', actualProps.Keys)}");
                 break;
             case JsonValueKind.Array:

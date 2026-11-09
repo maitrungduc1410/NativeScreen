@@ -1218,3 +1218,23 @@ These are applied after recording, so the camera file stays untouched and every 
 
 ### Verified
 On a 22 s 1080p recording: crown, sunglasses with blur, cat with an image, top hat on cutout, bow with mirror on, and face tracking at 1.7x all rendered correctly. A 1080p30 export with blur and sticker took 27 s, and the sticker was present from the first frames.
+
+## 59. ADR-59: Camera Effects on Windows
+
+ADR-58 is the behavior. Windows has no equivalent of Vision, so this records what replaces it.
+
+- **Face landmarks: YuNet, 232 KB, on the CPU.** One small network gives the box and five points of each face, which are exactly what stickers need: both eyes, the nose tip, and the mouth as the middle of its two corners. `Windows.Media.FaceAnalysis.FaceDetector` returns boxes only. The model ships with the app, so stickers and face tracking need no download. It stays off the GPU so a scan does not compete with the preview.
+- **Person mask: MODNet through ONNX Runtime.** It outputs a soft matte, which keeps hair edges, and it accepts any size that is a multiple of 32, so one model serves both the preview (320 px on the long side) and exports (672 px). It runs on DirectML and falls back to the CPU. `NS_MODEL_CPU=1` forces the CPU.
+- **The input is sampled from the decoded NV12 on the render thread** before inference starts, because the frame's buffer goes back to its pool as soon as the decoder moves on. Four luma taps per pixel keep thin hair from flickering.
+- **One mask per picture.** An export compares the `VideoFrame` object plus crop and mirror. Windows encodes on one lane, so one remembered mask is enough where macOS keeps two. The preview runs one job at a time and always draws the newest finished mask.
+- **Grading happens before the cutout.** macOS grades an image that already has alpha. The Windows LUT and sharpen passes assume opaque input, so the mask is applied after them. The order against the background (ADR-58) is unchanged.
+- **Closing saves.** Windows saves the project when an editor closes and has never asked, so Ctrl+W closes through `Window.Close` with no prompt. A macOS-style prompt would be a new behavior for the title bar's button too.
+
+### Verified
+One machine (i9-9880H, Radeon Pro 5500M, Windows 10 19045), the website's 7 s 1080p30 camera clip used as `webcam.mp4`. No camera or microphone was opened.
+- Scan: 2.1 s for 105 samples, on the CPU.
+- Mask, per picture: 12.7 ms on the GPU and 27.7 ms on the CPU at 320 px; 68.6 and 150.9 ms at 672 px.
+- A 1080p export with a photo background and a sticker took 17.7 s at 30 fps and 20.8 s at 60 fps, against 9.5 s at 60 fps with no background. The small rise from 30 to 60 fps shows each picture is segmented once.
+- An export started while the scan was running waited, and its first frame has the sticker.
+
+Stickers were placed on one person by eye. Landmarks from another model do not land on the same points as Vision, so check each sticker against a macOS export of the same recording.

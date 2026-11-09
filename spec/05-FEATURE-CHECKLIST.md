@@ -125,7 +125,7 @@
 - [x] **Fix:** a mask added inside a zoom appeared away from the drag; masks are now created and edited under the zoom on screen (`spec/06` ADR-55).
 - [x] Solid masks have a color: swatch picker and hex field in the mask inspector (`solidColor`, optional).
 - [x] Timeline segment labels collapse as a segment narrows: details, then title, animated (`spec/04`).
-- [x] Camera background (blur, image) and face stickers, applied in the editor; real face tracking (`spec/06` ADR-58). macOS only so far.
+- [x] Camera background (blur, image) and face stickers, applied in the editor; real face tracking (`spec/06` ADR-58, on Windows ADR-59).
 - [x] Minimum macOS is 14 (`spec/06` ADR-57). Not yet run on a real macOS 14 machine.
 - [x] Clip speed menu goes up to 10x (6x, 8x, 10x added).
 - [x] **Fix:** mask handles matched the drawn mask only without padding; they now use the compositor's stage rect and the crop (`spec/06` ADR-55).

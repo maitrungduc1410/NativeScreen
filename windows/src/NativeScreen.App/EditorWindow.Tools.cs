@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using NativeScreen.Core;
 using NativeScreen.Export;
+using NativeScreen.Intelligence;
 using NativeScreen.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
@@ -339,7 +340,9 @@ public sealed partial class EditorWindow
             source.HasCamera,
             session.CursorEvents,
             session.ClickEvents,
-            session.Shortcuts());
+            session.Shortcuts(),
+            tools.WaitForFaceTrack(),
+            ExportPersonMasks.TryCreate);
     }
 
     // MARK: Crop

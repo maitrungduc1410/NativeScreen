@@ -4,9 +4,11 @@
     <RootNamespace>NativeScreen.Intelligence</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" />
     <PackageReference Include="Whisper.net" />
     <PackageReference Include="Whisper.net.Runtime" />
     <ProjectReference Include="..\NativeScreen.Core\NativeScreen.Core.csproj" />
     <ProjectReference Include="..\NativeScreen.Media\NativeScreen.Media.csproj" />
+    <Content Include="Models\*" Link="Assets\Models\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

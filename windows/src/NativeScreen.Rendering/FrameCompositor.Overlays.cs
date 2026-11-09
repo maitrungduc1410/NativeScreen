@@ -59,11 +59,21 @@ public sealed partial class FrameCompositor
         var rect = stage.CameraRect;
         var baseSize = Math.Min(width, height);
         var clip = new Vector4((float)rect.X, (float)rect.Y, (float)rect.Width, (float)rect.Height);
+        var prepared = default(ID3D11ShaderResourceView);
+        var sourceWidth = 0;
+        var sourceHeight = 0;
+        var isCutOut = false;
+        if (request.Webcam is { } webcam)
+        {
+            prepared = PreparedCamera(webcam, request, stage.IsCutout, out sourceWidth, out sourceHeight, out isCutOut);
+        }
+
         var layer = Layer("camera", width, height);
         context.ClearRenderTargetView(layer.Target, new Color4(0, 0, 0, 0));
-        if (stage.ShadowOpacity > 0.004)
+        // A person cut out casts their own shadow, placed with the picture below.
+        if (stage.ShadowOpacity > 0.004 && !isCutOut)
         {
-            // The shadow follows the rounded rect, so it stays baked until the placement changes. Cutout needs the mask pass.
+            // The shadow follows the rounded rect, so it stays baked until the placement changes.
             var baked = Layer("camera-shadow", width, height);
             var key = FormattableString.Invariant($"{rect}|{stage.CornerRadius}|{stage.ShadowOpacity}|{width}x{height}");
             if (key != cameraShadowKey)
@@ -87,25 +97,37 @@ public sealed partial class FrameCompositor
 
         BindTarget(layer);
         context.OMSetBlendState(_sourceOver);
-        if (request.Webcam is { } webcam)
+        if (prepared is not null)
         {
-            var graded = GradedCamera(webcam, request, out var sourceWidth, out var sourceHeight);
-            BindTarget(layer);
-            context.OMSetBlendState(_sourceOver);
-            var faceZoom = config.EnableFaceTracking ? 1.16 : 1.0;
+            // Face tracking zooms in and keeps the steady face position centered, never showing past the picture's edges.
+            FacePoint? tracked = null;
+            if (config.EnableFaceTracking && request.FaceTrack?.FramingCenterAt(Math.Max(0, request.SourceMs + config.DelayAdjustmentMs)) is { } center)
+            {
+                tracked = CameraEffects.Mapped(center, config.CropRect01, !config.Mirror);
+            }
+
+            var faceZoom = tracked is null ? 1.0 : Math.Max(1.0, config.FaceTrackingZoom);
             var scale = Math.Max(rect.Width / sourceWidth, rect.Height / sourceHeight) * faceZoom;
             var drawnWidth = sourceWidth * scale;
             var drawnHeight = sourceHeight * scale;
             var left = rect.X + (rect.Width - drawnWidth) / 2;
             var top = rect.Y + (rect.Height - drawnHeight) / 2;
-            DrawQuad(
-                graded,
-                new QuadMap(
-                    new Vector4((float)(1 / drawnWidth), 0, (float)(-left / drawnWidth), 0),
-                    new Vector4(0, (float)(1 / drawnHeight), (float)(-top / drawnHeight), 0)),
-                clip,
-                (float)stage.CornerRadius,
-                1);
+            if (tracked is { } point)
+            {
+                left = Math.Min(rect.X, Math.Max(rect.X + rect.Width - drawnWidth, rect.X + rect.Width / 2 - point.X * drawnWidth));
+                top = Math.Min(rect.Y, Math.Max(rect.Y + rect.Height - drawnHeight, rect.Y + rect.Height / 2 - point.Y * drawnHeight));
+            }
+
+            if (isCutOut && stage.ShadowOpacity > 0.004)
+            {
+                var drop = baseSize * 0.008;
+                DrawBlurred(layer, rect.X, rect.Y + drop, rect.Width, rect.Height, baseSize * 0.011, default, (float)stage.ShadowOpacity, (x, y) =>
+                    DrawQuad(prepared, PlacedAt(x + left - rect.X, y + top - rect.Y, drawnWidth, drawnHeight), new Vector4((float)x, (float)y, clip.Z, clip.W), (float)stage.CornerRadius, 1, blackSilhouette: true));
+                BindTarget(layer);
+                context.OMSetBlendState(_sourceOver);
+            }
+
+            DrawQuad(prepared, PlacedAt(left, top, drawnWidth, drawnHeight), clip, (float)stage.CornerRadius, 1);
         }
         else
         {

@@ -17,6 +17,8 @@
     <Content Include="..\..\..\conformance\looks\*.cube" Link="Assets\Looks\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\macos\NativeScreen\Resources\Cursors.bundle\sets\**\*.svg" Link="Assets\Cursors\sets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\macos\NativeScreen\Resources\Cursors.bundle\sounds\**\*.wav" Link="Assets\Cursors\sounds\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\macos\NativeScreen\Resources\Stickers.bundle\*" Link="Assets\Stickers\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\macos\NativeScreen\Resources\CameraBackgrounds.bundle\**\*" Link="Assets\CameraBackgrounds\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\macos\NativeScreen\Resources\Wallpapers.bundle\**\*.jpg" Link="Assets\Wallpapers\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

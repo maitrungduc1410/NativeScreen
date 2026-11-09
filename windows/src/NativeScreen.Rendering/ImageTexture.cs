@@ -13,7 +13,7 @@ public sealed class ImageTexture
     public required int Height { get; init; }
 
     /// <summary>Writes top-down opaque BGRA as PNG or JPEG.</summary>
-    public static unsafe void Save(byte[] bgra, int width, int height, string path, bool jpeg)
+    public static unsafe void Save(byte[] bgra, int width, int height, string path, bool jpeg, float? jpegQuality = null)
     {
         using var factory = new IWICImagingFactory();
         using var stream = factory.CreateStream();
@@ -25,6 +25,11 @@ public sealed class ImageTexture
             using var frame = encoder.CreateNewFrame(out var options);
             using (options)
             {
+                if (jpegQuality is { } quality)
+                {
+                    options!.Set("ImageQuality", quality);
+                }
+
                 frame.Initialize(options!);
                 frame.SetSize((uint)width, (uint)height);
                 frame.WriteSource(source);

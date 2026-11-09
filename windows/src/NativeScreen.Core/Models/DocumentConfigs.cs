@@ -219,6 +219,11 @@ public sealed class CameraConfig
     public double Sharpen01 { get; set; }
     public Rect01 CropRect01 { get; set; } = Rect01.Full;
     public bool EnableFaceTracking { get; set; }
+    public double FaceTrackingZoom { get; set; } = 1.3;
+    public CameraBackgroundMode BackgroundMode { get; set; } = CameraBackgroundMode.Original;
+    public string? BackgroundImagePath { get; set; }
+    public string? BackgroundImageName { get; set; }
+    public string? StickerId { get; set; }
     public double DelayAdjustmentMs { get; set; }
 
     [JsonExtensionData]

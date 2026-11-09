@@ -51,6 +51,10 @@
     <Content Include="Assets\StoreLogo.png;Assets\Square44x44Logo.png;Assets\Square150x150Logo.png" />
   </ItemGroup>
   <!-- Publishing an unpackaged app leaves out its compiled XAML and resource index, and WinUI then fails at startup. -->
+  <!-- Debug layers and link libraries of the inference packages, tens of MB that an installed app never loads. -->
+  <Target Name="NsTrimInferenceFromPublish" AfterTargets="Publish">
+    <Delete Files="$(PublishDir)DirectML.Debug.dll;$(PublishDir)DirectML.Debug.pdb;$(PublishDir)DirectML.pdb;$(PublishDir)onnxruntime.lib" />
+  </Target>
   <Target Name="NsCopyXamlToPublish" AfterTargets="Publish" Condition="'$(NsPackage)' != 'true'">
     <ItemGroup>
       <NsXamlOutput Include="$(OutDir)*.xbf;$(OutDir)NativeScreen.App.pri" />

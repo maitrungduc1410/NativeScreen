@@ -7,7 +7,8 @@ cbuffer Quad : register(b0)
     float4 clipRect;
     float clipRadius;
     float opacity;
-    float2 pad;
+    float blackSilhouette;
+    float pad;
 };
 
 Texture2D<float4> image : register(t0);
@@ -35,5 +36,11 @@ float4 main(float4 position : SV_Position) : SV_Target
         coverage = saturate(0.5 - sdRoundRect(position.xy - center, clipRect.zw * 0.5, clipRadius));
     }
 
-    return image.Sample(linearClamp, uv) * coverage * opacity;
+    float4 color = image.Sample(linearClamp, uv);
+    if (blackSilhouette > 0.5)
+    {
+        color.rgb = 0.0;
+    }
+
+    return color * coverage * opacity;
 }

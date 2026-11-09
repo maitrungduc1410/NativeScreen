@@ -658,6 +658,52 @@
         }
       }
     },
+    "Separating you from the background needs a model, downloaded once from huggingface.co. Your video stays on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zum Trennen vom Hintergrund wird ein Modell benötigt, das einmalig von huggingface.co geladen wird. Dein Video bleibt auf diesem Gerät."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para separarte del fondo hace falta un modelo, que se descarga una vez de huggingface.co. Tu video se queda en este dispositivo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pour vous séparer de l'arrière-plan, un modèle est téléchargé une seule fois depuis huggingface.co. Votre vidéo reste sur cet appareil."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景と人物を分離するにはモデルが必要で、huggingface.co から一度だけダウンロードします。ビデオはこのデバイスから送信されません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para separar você do fundo é preciso um modelo, baixado uma vez de huggingface.co. Seu vídeo fica neste dispositivo."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Để tách bạn khỏi nền cần một model, chỉ tải một lần từ huggingface.co. Video của bạn vẫn ở trên máy này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将你与背景分离需要一个模型，只需从 huggingface.co 下载一次。你的视频会保留在此设备上。"
+          }
+        }
+      }
+    },
     "Sticker" : {
       "localizations" : {
         "de" : {

@@ -96,6 +96,7 @@ To keep **NativeScreen** distributable under its open-source license (MIT) on Gi
 4. **Camera Stickers:**
    - `Resources/Stickers.bundle` is original Noto Emoji artwork (Apache 2.0), only cropped. Keep its `LICENSE` and `NOTICE.txt` next to it.
    - `Resources/CameraBackgrounds.bundle` holds photos from Pexels and Pixabay under their own licenses, not this project's MIT license (`NOTICE.txt`).
+   - Windows has no system person segmentation or face landmarks, so it uses two models. **YuNet** (MIT, `windows/src/NativeScreen.Intelligence/Models`, 232 KB) ships with the app, with its `NOTICE.txt`. **MODNet** (Apache 2.0, the `Xenova/modnet` ONNX export, 26 MB) is downloaded once when someone presses Download, from a pinned revision and checked against its SHA-256.
 5. **Synthesized / Royalty-Free Click Sounds:**
    - Generate crisp mechanical & capacitive mouse click audio (`down.wav`, `up.wav`) procedurally via DSP synthesis (or CC0 Public Domain recordings).
 

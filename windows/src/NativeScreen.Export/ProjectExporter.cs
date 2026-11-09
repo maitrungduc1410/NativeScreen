@@ -17,7 +17,9 @@ public sealed record ExportSource(
     bool HasCamera,
     IReadOnlyList<CursorSampleEvent> CursorEvents,
     IReadOnlyList<ClickEvent> ClickEvents,
-    IReadOnlyList<ShortcutCluster> Shortcuts);
+    IReadOnlyList<ShortcutCluster> Shortcuts,
+    Task<FaceTrack?>? FaceTrack = null,
+    Func<IPersonMaskSource?>? PersonMasks = null);
 
 /// <summary>
 /// Sequential decode, compose, encode on its own thread and its own compositor, so a running export never touches the
@@ -37,6 +39,9 @@ public sealed class ProjectExporter(ExportSource source)
         using var compositor = new FrameCompositor();
         using var screen = OpenSequential(source.Tracks.DisplayVideo);
         using var webcam = OpenSequential(source.Tracks.WebcamVideo);
+        var faceTrack = WaitForFaceTrack();
+        var masks = source.PersonMasks?.Invoke();
+        using var ownedMasks = masks as IDisposable;
         var layer = compositor.Compose(
             new ComposeRequest
             {
@@ -50,7 +55,9 @@ public sealed class ProjectExporter(ExportSource source)
                 HasCamera = source.HasCamera,
                 ExportQuality = true,
                 PackageDirectory = source.PackageDirectory,
-                Shortcuts = source.Shortcuts
+                Shortcuts = source.Shortcuts,
+                FaceTrack = faceTrack,
+                PersonMasks = masks
             },
             width,
             height);
@@ -70,6 +77,9 @@ public sealed class ProjectExporter(ExportSource source)
         using var compositor = new FrameCompositor();
         using var screen = OpenSequential(source.Tracks.DisplayVideo);
         using var webcam = OpenSequential(source.Tracks.WebcamVideo);
+        var faceTrack = WaitForFaceTrack();
+        var masks = source.PersonMasks?.Invoke();
+        using var ownedMasks = masks as IDisposable;
         var audio = settings.Format == ExportFormat.Gif ? null : OpenAudio(mapper);
         var bitrate = ExportEstimator.TargetMp4Bitrate(settings.Compression, settings.Mp4Codec, width, height, settings.Fps);
         var writer = settings.Format == ExportFormat.Gif
@@ -97,7 +107,9 @@ public sealed class ProjectExporter(ExportSource source)
                         HasCamera = source.HasCamera,
                         ExportQuality = true,
                         PackageDirectory = source.PackageDirectory,
-                        Shortcuts = source.Shortcuts
+                        Shortcuts = source.Shortcuts,
+                        FaceTrack = faceTrack,
+                        PersonMasks = masks
                     },
                     width,
                     height);
@@ -131,6 +143,9 @@ public sealed class ProjectExporter(ExportSource source)
             audio?.Dispose();
         }
     }
+
+    // Exports wait for the scan, so a sticker is not missing from the start of the video.
+    private FaceTrack? WaitForFaceTrack() => source.FaceTrack?.GetAwaiter().GetResult();
 
     private AudioMixer? OpenAudio(NLETimeMapper mapper)
     {
