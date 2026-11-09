@@ -18,6 +18,7 @@ public sealed partial class FrameCompositor
 
     private readonly Dictionary<string, (ID3D11ShaderResourceView View, int Width, int Height)> stickerArt = [];
     private (string Path, ID3D11ShaderResourceView View, int Width, int Height)? cameraBackground;
+    private (VideoFrame Frame, CameraConfig Config, PersonMask? Mask, bool Cutout, ID3D11ShaderResourceView View, int Width, int Height, bool IsCutOut)? preparedCamera;
     private ID3D11Buffer? compositeConstants;
     private ID3D11Texture2D? personMaskTexture;
     private ID3D11ShaderResourceView? personMaskView;
@@ -29,13 +30,24 @@ public sealed partial class FrameCompositor
     /// <summary>The graded camera with its background and sticker. <paramref name="isCutOut"/> tells whether it now has transparent parts.</summary>
     private ID3D11ShaderResourceView PreparedCamera(ID3D11ShaderResourceView webcam, ComposeRequest request, bool cutoutLayout, out int width, out int height, out bool isCutOut)
     {
-        var view = GradedCamera(webcam, request, out width, out height);
         var config = request.Document.Camera;
-        isCutOut = false;
         var wantsBackground = !cutoutLayout && config.BackgroundMode != CameraBackgroundMode.Original;
+        // Asked on every frame: this is also what starts the next picture's segmentation.
         var mask = (cutoutLayout || wantsBackground) && request.WebcamFrame is { } frame
             ? request.PersonMasks?.MaskFor(frame, config.CropRect01, config.Mirror)
             : null;
+
+        // The camera runs far below the display rate, and a frame's document is a snapshot, so the same three objects mean the same picture (spec/06 ADR-66).
+        if (preparedCamera is { } known && ReferenceEquals(known.Frame, request.WebcamFrame) && ReferenceEquals(known.Config, config) && ReferenceEquals(known.Mask, mask) && known.Cutout == cutoutLayout)
+        {
+            width = known.Width;
+            height = known.Height;
+            isCutOut = known.IsCutOut;
+            return DrawnSticker(known.View, request, width, height);
+        }
+
+        var view = GradedCamera(webcam, request, out width, out height);
+        isCutOut = false;
         if (mask is not null)
         {
             var soft = SoftPersonMask(mask, config, width, height);
@@ -54,6 +66,7 @@ public sealed partial class FrameCompositor
             }
         }
 
+        preparedCamera = request.WebcamFrame is { } shown ? (shown, config, mask, cutoutLayout, view, width, height, isCutOut) : null;
         return DrawnSticker(view, request, width, height);
     }
 
@@ -174,7 +187,7 @@ public sealed partial class FrameCompositor
 
     private void Morph(RenderLayer layer, int radius, bool dilate)
     {
-        var scratch = Layer($"blur{layer.Width}x{layer.Height}", layer.Width, layer.Height);
+        var scratch = ScratchLayer(layer.Width, layer.Height);
         var size = new Vector2(layer.Width, layer.Height);
         _graphics.Context.OMSetBlendState(null);
         DrawFullTarget(scratch, layer.View, null, new CompositeConstants(size, new Vector2(1f / layer.Width, 0), Morphology, radius, dilate ? 1 : 0, 0));

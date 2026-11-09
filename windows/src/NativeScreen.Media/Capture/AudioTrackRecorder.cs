@@ -30,6 +30,7 @@ public sealed class AudioTrackRecorder : IRecordedAudioTrack
     private byte[] bytes = new byte[32768];
     private readonly byte[] silence;
     private long writtenFrames;
+    private bool stopped;
     private readonly Timer silenceTimer;
 
     /// <summary>Output level of the last buffer, 0 to 1, for the recording bar's meter.</summary>
@@ -100,6 +101,8 @@ public sealed class AudioTrackRecorder : IRecordedAudioTrack
         {
             FillUntil(durationMs);
             finish?.Invoke();
+            // Disposing the timer does not wait for a callback already running, and neither does removing a handler.
+            stopped = true;
         }
     }
 
@@ -124,7 +127,7 @@ public sealed class AudioTrackRecorder : IRecordedAudioTrack
         Level = peak / 32768.0;
         lock (capture)
         {
-            if (elapsed(now - bufferMs) is not { } expectedMs)
+            if (stopped || elapsed(now - bufferMs) is not { } expectedMs)
             {
                 return;
             }
@@ -156,7 +159,7 @@ public sealed class AudioTrackRecorder : IRecordedAudioTrack
         lock (capture)
         {
             var now = Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
-            if (elapsed(now) is { } expectedMs && expectedMs - writtenFrames * 1000.0 / SampleRate > SilenceAfterMs)
+            if (!stopped && elapsed(now) is { } expectedMs && expectedMs - writtenFrames * 1000.0 / SampleRate > SilenceAfterMs)
             {
                 FillUntil(expectedMs - SilenceAfterMs / 2);
             }

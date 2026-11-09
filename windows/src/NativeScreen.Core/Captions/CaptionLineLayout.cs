@@ -87,7 +87,10 @@ public static class CaptionLineLayout
     }
 
     /// <summary>The caption's text as shown on the timeline and in the inspector.</summary>
-    public static string DisplayText(CaptionBlock block, CaptionsConfig config)
+    public static string DisplayText(CaptionBlock block, CaptionsConfig config) => DisplayText(block, WordsById(config));
+
+    /// <summary>For showing many captions at once: looking each word up in the list is quadratic in the length of the transcript.</summary>
+    public static string DisplayText(CaptionBlock block, IReadOnlyDictionary<string, CaptionSegment> words)
     {
         if (block.CustomText is { } custom)
         {
@@ -97,13 +100,25 @@ public static class CaptionLineLayout
         var parts = new List<string>();
         foreach (var id in block.WordIds)
         {
-            if (config.Segments.Find(word => word.Id == id) is { IsHidden: false } word)
+            if (words.TryGetValue(id, out var word) && !word.IsHidden)
             {
                 parts.Add(word.Text);
             }
         }
 
         return string.Join(' ', parts);
+    }
+
+    /// <summary>Each word of the transcript by id. When an id repeats, the first one counts.</summary>
+    public static Dictionary<string, CaptionSegment> WordsById(CaptionsConfig config)
+    {
+        var words = new Dictionary<string, CaptionSegment>(config.Segments.Count);
+        foreach (var segment in config.Segments)
+        {
+            words.TryAdd(segment.Id, segment);
+        }
+
+        return words;
     }
 
     /// <summary>The lines of each track that is not hidden. Rebuilt only for a new config, which the render thread gets as a frozen copy.</summary>
@@ -116,12 +131,7 @@ public static class CaptionLineLayout
                 return cachedLines;
             }
 
-            var words = new Dictionary<string, CaptionSegment>();
-            foreach (var segment in config.Segments)
-            {
-                words.TryAdd(segment.Id, segment);
-            }
-
+            var words = WordsById(config);
             var result = new List<(CaptionTrack, List<Line>)>();
             foreach (var track in config.CaptionTracks)
             {

@@ -33,6 +33,11 @@ public sealed partial class EditorWindow
 
     private void ShowExportOverlay()
     {
+        if (session.IsExportRunning)
+        {
+            return;
+        }
+
         exportSettings.Normalize();
         ExportCard.Width = 740;
         ExportCard.Height = double.NaN;
@@ -335,37 +340,19 @@ public sealed partial class EditorWindow
 
     private async Task RunExport(string filePath, string fileName, bool toClipboard = false)
     {
+        if (session.IsExportRunning)
+        {
+            return;
+        }
+
         var cancel = new CancellationTokenSource();
-        exportCancel = cancel;
-        var started = DateTime.UtcNow;
-        ExportBody.Children.Clear();
-        ExportBody.Spacing = 14;
-        var title = Ui.Text("Exporting video • 0%", 19, "Ink95", true);
-        title.HorizontalAlignment = HorizontalAlignment.Center;
-        var bar = new ProgressBar { Minimum = 0, Maximum = 1, Value = 0, Width = 320, Height = 6, HorizontalAlignment = HorizontalAlignment.Center };
-        var time = Ui.Text("Preparing export...", 13.5, "Ink60");
-        time.HorizontalAlignment = HorizontalAlignment.Center;
-        var stop = Ui.Option("Stop export", false, cancel.Cancel);
-        stop.HorizontalAlignment = HorizontalAlignment.Center;
-        ExportBody.Children.Add(title);
-        ExportBody.Children.Add(bar);
-        ExportBody.Children.Add(time);
-        ExportBody.Children.Add(stop);
-        ExportOverlay.Visibility = Visibility.Visible;
+        var showShare = BeginExportOverlay(cancel);
 
         // Both codecs write <name>.mp4 and <name>-hevc.mp4 one after the other; progress covers the pair.
         var both = exportSettings.Format == ExportFormat.Mp4 && exportSettings.Mp4Codec == Mp4CodecOption.Both;
         var passes = both ? 2 : 1;
         var pass = 0;
-        var progress = new Progress<ExportProgress>(update =>
-        {
-            var share = (pass + update.Encoded / (double)Math.Max(1, update.Total)) / passes;
-            bar.Value = share;
-            title.Text = $"Exporting video • {share:P0}";
-            var elapsed = DateTime.UtcNow - started;
-            var left = share > 0 ? elapsed * (1 / share - 1) : TimeSpan.Zero;
-            time.Text = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00} • {(int)left.TotalMinutes:00}:{left.Seconds:00} left";
-        });
+        var progress = new Progress<ExportProgress>(update => showShare((pass + update.Encoded / (double)Math.Max(1, update.Total)) / passes));
         var exporter = new ProjectExporter(CurrentExportSource());
         try
         {
@@ -403,10 +390,49 @@ public sealed partial class EditorWindow
         }
         finally
         {
-            exportCancel = null;
+            EndExportOverlay();
             cancel.Dispose();
-            ExportOverlay.Visibility = Visibility.Collapsed;
         }
+    }
+
+    /// <summary>Freezes the project and shows the progress card, for an export started here or by an agent. Returns what shows a new share.</summary>
+    private Action<double> BeginExportOverlay(CancellationTokenSource cancel)
+    {
+        exportCancel = cancel;
+        session.BeginExport();
+        var started = DateTime.UtcNow;
+        ExportCard.Width = 740;
+        ExportCard.Height = double.NaN;
+        ExportCard.Padding = new Thickness(28, 26, 28, 26);
+        ExportBody.Children.Clear();
+        ExportBody.Spacing = 14;
+        var title = Ui.Text("Exporting video • 0%", 19, "Ink95", true);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        var bar = new ProgressBar { Minimum = 0, Maximum = 1, Value = 0, Width = 320, Height = 6, HorizontalAlignment = HorizontalAlignment.Center };
+        var time = Ui.Text("Preparing export...", 13.5, "Ink60");
+        time.HorizontalAlignment = HorizontalAlignment.Center;
+        var stop = Ui.Option("Stop export", false, cancel.Cancel);
+        stop.HorizontalAlignment = HorizontalAlignment.Center;
+        ExportBody.Children.Add(title);
+        ExportBody.Children.Add(bar);
+        ExportBody.Children.Add(time);
+        ExportBody.Children.Add(stop);
+        ExportOverlay.Visibility = Visibility.Visible;
+        return share =>
+        {
+            bar.Value = share;
+            title.Text = $"Exporting video • {share:P0}";
+            var elapsed = DateTime.UtcNow - started;
+            var left = share > 0 ? elapsed * (1 / share - 1) : TimeSpan.Zero;
+            time.Text = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00} • {(int)left.TotalMinutes:00}:{left.Seconds:00} left";
+        };
+    }
+
+    private void EndExportOverlay()
+    {
+        exportCancel = null;
+        session.EndExport();
+        ExportOverlay.Visibility = Visibility.Collapsed;
     }
 
     private ExportSettings CopySettings(Mp4CodecOption codec) => new()

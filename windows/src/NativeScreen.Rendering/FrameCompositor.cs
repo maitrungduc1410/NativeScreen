@@ -126,6 +126,11 @@ public sealed partial class FrameCompositor : IDisposable
             layer.Dispose();
         }
 
+        foreach (var (scratch, _) in scratchLayers)
+        {
+            scratch.Dispose();
+        }
+
         foreach (var upload in nv12Uploads.Values)
         {
             upload.Dispose();

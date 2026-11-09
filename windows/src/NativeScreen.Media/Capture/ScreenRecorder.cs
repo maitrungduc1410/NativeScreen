@@ -84,6 +84,7 @@ public sealed class ScreenRecorder : IDisposable
     private int disposed;
     private CaptureFailure? failure;
     private readonly nint recordedWindow;
+    private readonly FramePacer pacer = new(1000.0 / MaxFps, 2);
 
     public ScreenRecorder(RecordingOptions options)
     {
@@ -389,8 +390,9 @@ public sealed class ScreenRecorder : IDisposable
         }
 
         var pts = Math.Max(0, host - originMs - offset);
-        // WGC can run at the display rate; the file is capped like the macOS stream. Half a millisecond of slack keeps 60 Hz whole.
-        if (pts - lastPtsMs < 1000.0 / MaxFps - 2)
+        // WGC can run at the display rate; the file is capped like the macOS stream. An encoder that cannot keep up loses frames
+        // rather than letting memory grow. A kept-alive repeat can already have written past this frame's time.
+        if (pts <= lastPtsMs || !pacer.Accept(pts) || writer.IsVideoBacklogged)
         {
             framesDropped++;
             return;

@@ -25,12 +25,24 @@ internal sealed class McpToolbox
 
     public JsonArray Definitions { get; }
 
+    /// <summary>Tools that change the project, its playhead or its window (spec/06 ADR-65).</summary>
+    private static readonly HashSet<string> BlockedDuringExport =
+    [
+        "close_project", "delete_project", "rename_project", "update_project", "add_item", "update_item", "delete_item",
+        "split_item", "undo", "redo", "render_frame", "run_action", "set_background", "apply_preset", "export_video"
+    ];
+
     public async Task<JsonObject> Call(string name, JsonObject raw, Action<double, string>? progress, CancellationToken cancel)
     {
         var args = new McpArgs(raw);
         try
         {
             McpDocument.ValidateArguments(Definitions, name, raw);
+            if (BlockedDuringExport.Contains(name) && Editor(args).McpSession.IsExportRunning)
+            {
+                throw new McpToolException($"This project is exporting. Wait for the export to finish before calling {name}.");
+            }
+
             return name switch
             {
                 "get_status" => Ok(Status()),
@@ -1313,6 +1325,9 @@ internal sealed class McpToolbox
         var exportId = Guid.NewGuid().ToString();
         exports[exportId] = (session.Document.Name, 0);
         editor.McpPause();
+        // Stop in the editor and the client's cancel request both end the export.
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        var showShare = editor.McpBeginExport(stop);
         editor.McpToast("Exporting video...");
         var started = DateTime.UtcNow;
         var lastReported = -1.0;
@@ -1325,6 +1340,7 @@ internal sealed class McpToolbox
             {
                 var share = (pass + update.Encoded / (double)Math.Max(1, update.Total)) / passes;
                 exports[exportId] = (session.Document.Name, share);
+                showShare(share);
                 if (share - lastReported >= 0.02 || share >= 1)
                 {
                     lastReported = share;
@@ -1334,19 +1350,25 @@ internal sealed class McpToolbox
             var exporter = new ProjectExporter(editor.McpExportSource());
             if (both)
             {
-                await exporter.RunAsync(path, Codec(settings, Mp4CodecOption.H264), reporter, cancel);
+                await exporter.RunAsync(path, Codec(settings, Mp4CodecOption.H264), reporter, stop.Token);
                 pass = 1;
                 var hevc = Path.Combine(Path.GetDirectoryName(path) ?? "", Path.GetFileNameWithoutExtension(path) + "-hevc.mp4");
-                await exporter.RunAsync(hevc, Codec(settings, Mp4CodecOption.H265), reporter, cancel);
+                await exporter.RunAsync(hevc, Codec(settings, Mp4CodecOption.H265), reporter, stop.Token);
             }
             else
             {
-                await exporter.RunAsync(path, settings, reporter, cancel);
+                await exporter.RunAsync(path, settings, reporter, stop.Token);
             }
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+        {
+            // The client did not ask for this, so it still needs an answer.
+            throw new McpToolException("The export was stopped in the editor.");
         }
         finally
         {
             exports.Remove(exportId);
+            editor.McpEndExport();
         }
 
         cancel.ThrowIfCancellationRequested();

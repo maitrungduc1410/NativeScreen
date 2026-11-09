@@ -113,7 +113,7 @@
   - [ ] Moving and resizing segments, drawing masks and picking a window or area without a pointer.
 - [x] **AI agents (MCP):** `Settings > AI Agents` lets Claude Code, Claude Desktop, Codex, Cursor and other MCP clients record, edit (whole document as JSON merge patches plus timeline item tools, each one undo step), render frames to check their work, change settings and export with progress. Clients run the app's own executable with `--mcp`, which opens the app when needed (`spec/06` ADR-52).
   - [x] **macOS:** a project is frozen while it exports, for the user and for agents (`spec/06` ADR-65).
-  - [ ] **Windows:** the same freeze, with the export overlay for exports started by an agent.
+  - [x] **Windows:** the same freeze, with the export overlay for exports started by an agent.
   - [ ] A command line (`nativescreen export ...`) on the same tools.
 - [x] **Releases and updates:** manual GitHub Actions release (`docs/releasing.md`, ADR-53) builds a signed, notarized DMG and a Sparkle appcast for macOS and a Velopack installer for Windows, as a draft release. `Check for Updates...` in the app menu and menu bar menu, `Check for updates automatically` in Settings > General (release builds only).
   - [x] Windows: Velopack startup hook and update check in the app (see `windows/HANDOFF.md`).

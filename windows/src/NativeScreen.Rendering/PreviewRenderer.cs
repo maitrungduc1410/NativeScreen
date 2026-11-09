@@ -32,6 +32,9 @@ public sealed class PreviewRenderer : IDisposable
         thread.Start();
     }
 
+    /// <summary>The GPU was lost or something could not be read, on the render thread. Nothing more is drawn.</summary>
+    public event Action? Failed;
+
     /// <summary>The newest request wins; the document inside must be a snapshot the UI thread no longer mutates.</summary>
     /// <summary>With a clock, the render thread keeps drawing at the display rate, reading the time itself for each frame.</summary>
     public void Submit(ComposeRequest next, int width, int height, float rasterScale, Func<double>? clock = null)
@@ -102,7 +105,21 @@ public sealed class PreviewRenderer : IDisposable
         }
     }
 
-    private void Run()    {
+    // An exception left on this thread would end the process, with every open editor and any recording in it.
+    private void Run()
+    {
+        try
+        {
+            RenderLoop();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            Failed?.Invoke();
+        }
+    }
+
+    private void RenderLoop()
+    {
         while (true)
         {
             wake.WaitOne();

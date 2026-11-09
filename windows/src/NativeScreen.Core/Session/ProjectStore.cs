@@ -25,6 +25,21 @@ public static class ProjectStore
         File.Move(temporary, target, overwrite: true);
     }
 
+    /// <summary>Runs a write after the one before it. That one's failure was reported to its own caller and must not stop this write.</summary>
+    public static Task WriteAfter(Task previous, Action write) => Task.Run(async () =>
+    {
+        try
+        {
+            await previous;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A locked file a moment ago says nothing about now.
+        }
+
+        write();
+    });
+
     /// <summary>A name free in the directory: "Name", then "Name 2", "Name 3".</summary>
     public static string UniquePackagePath(string directory, string name)
     {

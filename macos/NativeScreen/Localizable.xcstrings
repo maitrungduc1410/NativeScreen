@@ -40472,6 +40472,53 @@
         }
       }
     },
+    "The preview stopped after a graphics or file error. Reopen the project to continue." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Vorschau wurde nach einem Grafik- oder Dateifehler angehalten. Öffne das Projekt erneut, um fortzufahren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La vista previa se detuvo por un error de gráficos o de archivo. Vuelve a abrir el proyecto para continuar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’aperçu s’est arrêté à la suite d’une erreur graphique ou de fichier. Rouvrez le projet pour continuer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "グラフィックまたはファイルのエラーによりプレビューが停止しました。続けるにはプロジェクトを開き直してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A pré-visualização parou devido a um erro gráfico ou de arquivo. Reabra o projeto para continuar."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bản xem trước đã dừng do lỗi đồ họa hoặc lỗi tệp. Hãy mở lại dự án để tiếp tục."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由于图形或文件错误，预览已停止。请重新打开项目以继续。"
+          }
+        }
+      }
+    },
     "The project moves to the Recycle Bin, together with its recording." : {
       "extractionState" : "manual",
       "localizations" : {

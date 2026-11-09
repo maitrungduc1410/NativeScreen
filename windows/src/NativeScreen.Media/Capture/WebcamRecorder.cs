@@ -196,7 +196,7 @@ public sealed class WebcamRecorder : IDisposable
             writer.WriteFrame(nv12, 0, frameMs);
         }
 
-        if (pts > lastPts)
+        if (pts > lastPts && !writer.IsVideoBacklogged)
         {
             writer.WriteFrame(nv12, pts, frameMs);
             lastPts = pts;

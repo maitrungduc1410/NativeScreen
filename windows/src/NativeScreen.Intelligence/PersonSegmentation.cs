@@ -71,8 +71,8 @@ public sealed class PersonSegmenter : IDisposable
 
     public void Dispose() => session.Dispose();
 
-    /// <summary>Samples the frame into the network's input, so the frame's buffer can go back to its pool before inference.</summary>
-    public static DenseTensor<float> Prepare(VideoFrame frame, Rect01 crop, bool mirror, int longSide)
+    /// <summary>Samples the frame into the network's input, so the frame's buffer can go back to its pool before inference. <paramref name="reuse"/> is filled when it has the right size.</summary>
+    public static DenseTensor<float> Prepare(VideoFrame frame, Rect01 crop, bool mirror, int longSide, DenseTensor<float>? reuse = null)
     {
         var cropWidth = Math.Max(0.25, crop.Width) * frame.Width;
         var cropHeight = Math.Max(0.25, crop.Height) * frame.Height;
@@ -80,7 +80,7 @@ public sealed class PersonSegmenter : IDisposable
         // The network halves its input five times, so sides must be multiples of 32.
         var width = Math.Max(32, (int)Math.Round(cropWidth * shrink / 32) * 32);
         var height = Math.Max(32, (int)Math.Round(cropHeight * shrink / 32) * 32);
-        var input = new DenseTensor<float>([1, 3, height, width]);
+        var input = reuse is not null && reuse.Dimensions[2] == height && reuse.Dimensions[3] == width ? reuse : new DenseTensor<float>([1, 3, height, width]);
         var span = input.Buffer.Span;
         var flip = !mirror;
         var originX = crop.X * frame.Width;
@@ -145,6 +145,7 @@ public sealed class ExportPersonMasks : IPersonMaskSource, IDisposable
     private Rect01 lastCrop = Rect01.Full;
     private bool lastMirror;
     private PersonMask? lastMask;
+    private DenseTensor<float>? tensor;
 
     private ExportPersonMasks(PersonSegmenter segmenter) => this.segmenter = segmenter;
 
@@ -176,7 +177,8 @@ public sealed class ExportPersonMasks : IPersonMaskSource, IDisposable
         lastFrame = frame;
         lastCrop = crop;
         lastMirror = mirror;
-        lastMask = segmenter.Run(PersonSegmenter.Prepare(frame, crop, mirror, LongSide), lastMask?.Pixels);
+        tensor = PersonSegmenter.Prepare(frame, crop, mirror, LongSide, tensor);
+        lastMask = segmenter.Run(tensor, lastMask?.Pixels);
         return lastMask;
     }
 
@@ -200,12 +202,17 @@ public sealed class PreviewPersonMasks : IPersonMaskSource, IDisposable
     private long modelCheckedAt = -ModelCheckIntervalMs;
     private bool modelInstalled;
 
+    // One job runs at a time, so these are only touched by it. Two masks take turns: a new job starts from a render call, after
+    // the last frame that could still be reading the one it fills has finished.
+    private byte[] picture = [];
+    private DenseTensor<float>? tensor;
+    private byte[]? spareMask;
+
     /// <summary>A new mask is ready, on a background thread. A paused preview redraws only on demand.</summary>
     public event Action? MaskUpdated;
 
     public PersonMask? MaskFor(VideoFrame frame, Rect01 crop, bool mirror)
     {
-        DenseTensor<float>? input = null;
         PersonMask? current;
         lock (gate)
         {
@@ -221,10 +228,16 @@ public sealed class PreviewPersonMasks : IPersonMaskSource, IDisposable
             lastMirror = mirror;
         }
 
-        // Taken here because the frame's buffer goes back to its pool once the decoder moves on.
-        input = PersonSegmenter.Prepare(frame, crop, mirror, LongSide);
-        var job = input;
-        _ = Task.Run(() => Segment(job));
+        // Copied here because the frame's buffer goes back to its pool once the decoder moves on. Sampling it takes
+        // milliseconds per picture, so that part stays off this thread (spec/06 ADR-66).
+        if (picture.Length != frame.Nv12.Length)
+        {
+            picture = new byte[frame.Nv12.Length];
+        }
+
+        Buffer.BlockCopy(frame.Nv12, 0, picture, 0, picture.Length);
+        var job = frame with { Nv12 = picture };
+        _ = Task.Run(() => Segment(job, crop, mirror));
         return current;
     }
 
@@ -254,13 +267,14 @@ public sealed class PreviewPersonMasks : IPersonMaskSource, IDisposable
         return modelInstalled;
     }
 
-    private void Segment(DenseTensor<float> input)
+    private void Segment(VideoFrame job, Rect01 crop, bool mirror)
     {
         PersonMask? result = null;
         try
         {
             segmenter ??= new PersonSegmenter();
-            result = segmenter.Run(input);
+            tensor = PersonSegmenter.Prepare(job, crop, mirror, LongSide, tensor);
+            result = segmenter.Run(tensor, spareMask);
         }
         catch (OnnxRuntimeException)
         {
@@ -283,6 +297,7 @@ public sealed class PreviewPersonMasks : IPersonMaskSource, IDisposable
 
             if (result is not null)
             {
+                spareMask = mask?.Pixels;
                 mask = result;
             }
 

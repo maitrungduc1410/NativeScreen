@@ -41,6 +41,9 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
     /// <summary>Raised on the decode thread when a seek has covered the newest request.</summary>
     public event Action? FrameDecoded;
 
+    /// <summary>The file or the decoder failed, on the decode thread. The frame on screen stays.</summary>
+    public event Action? Failed;
+
     public VideoFrame? FrameAt(double sourceMs)
     {
         lock (gate)
@@ -113,7 +116,27 @@ public sealed class VideoPlaybackSource : IVideoFrameSource, IDisposable
         reader.Dispose();
     }
 
+    // An exception left on this thread would end the process, with every open editor and any recording in it.
     private void Run()
+    {
+        try
+        {
+            DecodeLoop();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            lock (gate)
+            {
+                endOfStream = true;
+                seekPending = false;
+                seeking = false;
+            }
+
+            Failed?.Invoke();
+        }
+    }
+
+    private void DecodeLoop()
     {
         while (!stopping)
         {

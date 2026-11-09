@@ -15,6 +15,7 @@ public sealed class VideoFileWriter : IDisposable
     private const uint NominalRange16To235 = 2;
     private const double GopSeconds = 2;
     private const uint H264BaselineProfile = 66;
+    private const int MaximumVideoBacklog = 30;
 
     private readonly IMFSinkWriter writer;
     private readonly DecodeAccelerator? accelerator;
@@ -103,6 +104,39 @@ public sealed class VideoFileWriter : IDisposable
 
         writer.BeginWriting();
     }
+
+    /// <summary>Video samples given to the writer and not yet encoded. Null when the writer cannot say.</summary>
+    public long? VideoBacklog
+    {
+        get
+        {
+            lock (writer)
+            {
+                if (finished || failed)
+                {
+                    return 0;
+                }
+
+                return ReadBacklog();
+            }
+        }
+    }
+
+    // The wrapper leaves the structure's size at zero, which the call refuses. GetStatistics is the 14th entry of IMFSinkWriter.
+    private unsafe long? ReadBacklog()
+    {
+        var statistics = new SinkWriterStatistics { Cb = sizeof(SinkWriterStatistics) };
+        var getStatistics = (delegate* unmanaged[Stdcall]<nint, int, SinkWriterStatistics*, int>)(*(nint**)writer.NativePointer)[13];
+        if (getStatistics(writer.NativePointer, videoStream, &statistics) < 0)
+        {
+            return null;
+        }
+
+        return (long)statistics.NumSamplesReceived - (long)statistics.NumSamplesEncoded;
+    }
+
+    /// <summary>A live recording turns throttling off, so nothing else bounds the encoder's queue, at up to 12 MB a frame.</summary>
+    public bool IsVideoBacklogged => VideoBacklog > MaximumVideoBacklog;
 
     /// <summary>Tightly packed NV12: width × height luma, then interleaved chroma.</summary>
     public void WriteFrame(ReadOnlySpan<byte> nv12, double presentationMs, double durationMs)

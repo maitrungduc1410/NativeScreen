@@ -144,6 +144,7 @@ public sealed partial class EditorWindow : Window
 
         session.DocumentChanged += DocumentChanged;
         session.VoiceoverSplitting += VoiceoverSplitting;
+        session.TrajectorySolved += TrajectorySolved;
         tools.FaceTrackChanged += FaceEffectsChanged;
         tools.PreviewMasks.MaskUpdated += PersonMaskUpdated;
         tools.EnsureFaceTrack();
@@ -570,29 +571,33 @@ public sealed partial class EditorWindow : Window
     }
 
     /// <summary>Serializes here so the snapshot is consistent; the file write never blocks the UI thread.</summary>
-    private void SaveNow(bool waitForDisk = false)
+    private bool SaveNow(bool waitForDisk = false)
     {
         saveTimer.Stop();
         if (source.PackagePath is not { } path || !hasUnsavedChanges)
         {
-            return;
+            return true;
         }
 
         hasUnsavedChanges = false;
         var json = ProjectStore.Serialize(session.Document, DateTimeOffset.UtcNow);
-        var previous = pendingWrite;
-        pendingWrite = Task.Run(async () =>
-        {
-            await previous;
-            ProjectStore.WriteProjectJson(path, json);
-        });
-        if (waitForDisk)
-        {
-            pendingWrite.Wait();
-        }
-        else
+        pendingWrite = ProjectStore.WriteAfter(pendingWrite, () => ProjectStore.WriteProjectJson(path, json));
+        if (!waitForDisk)
         {
             _ = ReportSaveFailure(pendingWrite);
+            return true;
+        }
+
+        try
+        {
+            pendingWrite.Wait();
+            return true;
+        }
+        catch (AggregateException exception) when (exception.InnerException is IOException or UnauthorizedAccessException)
+        {
+            hasUnsavedChanges = true;
+            ShowToast($"Could not save the project: {exception.InnerException.Message}");
+            return false;
         }
     }
 
@@ -632,6 +637,24 @@ public sealed partial class EditorWindow : Window
             DrawPreview();
         }
     }
+
+    // Comes from a background thread, after a long recording's motion was solved again.
+    private void TrajectorySolved() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (!closed)
+        {
+            DrawPreview();
+        }
+    });
+
+    // Comes from the render or decode thread. The picture stays as it is and the project can still be saved.
+    private void PreviewFailed() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (!closed)
+        {
+            ShowToast("The preview stopped after a graphics or file error. Reopen the project to continue.");
+        }
+    });
 
     private void FaceEffectsChanged()
     {
@@ -691,6 +714,7 @@ public sealed partial class EditorWindow : Window
         swapChain = compositor.CreateSwapChain(width, height);
         SwapChainPanelInterop.SetSwapChain(Preview, swapChain.SwapChain.NativePointer);
         renderer = new PreviewRenderer(compositor, swapChain, width, height);
+        renderer.Failed += PreviewFailed;
         MemoryStats.Track(compositor, swapChain, renderer);
         overlay.ShortcutHits = () => compositor.ShortcutHitRects01;
         overlay.CaptionHits = () => compositor.CaptionHitRects01;
@@ -718,6 +742,7 @@ public sealed partial class EditorWindow : Window
             var playback = new VideoPlaybackSource(path);
             // A seek finishes after the render thread already drew; show its frame as soon as it exists.
             playback.FrameDecoded += () => DispatcherQueue.TryEnqueue(DrawPreview);
+            playback.Failed += PreviewFailed;
             return playback;
         }
         catch (SharpGen.Runtime.SharpGenException exception)
@@ -752,6 +777,12 @@ public sealed partial class EditorWindow : Window
 
     private void DrawPreview()
     {
+        // A decode finishing during the close queues this after the renderer is gone.
+        if (closed)
+        {
+            return;
+        }
+
         if (!session.IsPlaying)
         {
             overlay.Refresh();
@@ -834,6 +865,7 @@ public sealed partial class EditorWindow : Window
         toastTimer.Stop();
         AppTheme.Changed -= ThemeChanged;
         renderer?.Dispose();
+        renderer = null;
         if (audio is { } player)
         {
             audio = null;
@@ -857,6 +889,7 @@ public sealed partial class EditorWindow : Window
         timeline.Detach();
         session.DocumentChanged -= DocumentChanged;
         session.VoiceoverSplitting -= VoiceoverSplitting;
+        session.TrajectorySolved -= TrajectorySolved;
         session.SelectionChanged -= SelectionChanged;
         tools.Changed -= inspector.Rebuild;
         tools.FaceTrackChanged -= FaceEffectsChanged;
@@ -904,6 +937,12 @@ public sealed partial class EditorWindow : Window
             next?.Prime(start);
             return next;
         });
+        // A second press during priming built its own player; only the newest stays.
+        if (audio is { } replaced && !ReferenceEquals(replaced, ready))
+        {
+            _ = Task.Run(replaced.Dispose);
+        }
+
         audio = ready;
         if (closed)
         {
@@ -914,6 +953,8 @@ public sealed partial class EditorWindow : Window
 
         if (request != playRequest)
         {
+            // Primed for a play that was called off: its pump must not keep running while paused.
+            StopAudio();
             return;
         }
 
@@ -1060,6 +1101,18 @@ public sealed partial class EditorWindow : Window
 
     private void RootKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // The project is frozen while it exports, and the keys must not reach what is behind the card (spec/06 ADR-65).
+        if (session.IsExportRunning)
+        {
+            if (e.Key == VirtualKey.Escape)
+            {
+                exportCancel?.Cancel();
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         // Holding Alt alone is the temporary split tool; any other key makes it a shortcut instead.
         if (e.Key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu)
         {

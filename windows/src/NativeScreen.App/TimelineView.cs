@@ -170,8 +170,10 @@ internal sealed class TimelineView
     private readonly Dictionary<string, WaveCache> waveCache = [];
     private DispatcherQueueTimer? sharpenTimer;
     private readonly List<(BlockGrid Block, double SourceStart, double SourceEnd)> followers = [];
-    private readonly List<(BlockGrid Block, string SliceId, Canvas Ticks)> clipBlocks = [];
-    private readonly List<UIElement> trimBadges = [];
+    private readonly Dictionary<string, (BlockGrid Block, Canvas Ticks)> clipBlocks = [];
+    private readonly HashSet<BlockGrid> clipOwners = [];
+    private readonly List<TrimBadgeView> trimBadges = [];
+    private int trimBadgesUsed;
 
     /// <summary>Hover rows and prompts that span the whole track, widened by a zoom step.</summary>
     private readonly List<FrameworkElement> fullWidthRows = [];
@@ -411,7 +413,11 @@ internal sealed class TimelineView
 
         rulerStepSeconds = TimelineRuler.StepSeconds(session.TimelineScaleDurationMs, TrackWidth);
         ruler.Children.Clear();
-        trimBadges.Clear();
+        foreach (var badge in trimBadges)
+        {
+            ruler.Children.Add(badge.Button);
+        }
+
         DrawRuler();
         FollowClipEdit(null);
         foreach (var row in fullWidthRows)
@@ -435,6 +441,7 @@ internal sealed class TimelineView
         fullWidthRows.Clear();
         followers.Clear();
         clipBlocks.Clear();
+        clipOwners.Clear();
         trimBadges.Clear();
         blockRows.Clear();
         labels.Children.Clear();
@@ -564,8 +571,7 @@ internal sealed class TimelineView
     {
         foreach (var mapped in session.Mapper.MappedSlices)
         {
-            var entry = clipBlocks.Find(item => item.SliceId == mapped.Slice.Id);
-            if (entry.Block is null)
+            if (!clipBlocks.TryGetValue(mapped.Slice.Id, out var entry))
             {
                 continue;
             }
@@ -602,19 +608,13 @@ internal sealed class TimelineView
         foreach (var wave in waveImages)
         {
             var innerWidth = wave.Owner.Width - wave.Owner.BorderThickness.Left * 2;
-            if (!clipBlocks.Exists(item => item.Block == wave.Owner) && Math.Abs(innerWidth - wave.Width) > 0.5)
+            if (!clipOwners.Contains(wave.Owner) && Math.Abs(innerWidth - wave.Width) > 0.5)
             {
                 wave.Width = innerWidth;
                 UpdateWave(wave);
             }
         }
 
-        foreach (var badge in trimBadges)
-        {
-            ruler.Children.Remove(badge);
-        }
-
-        trimBadges.Clear();
         DrawTrimBadges();
     }
 
@@ -660,7 +660,8 @@ internal sealed class TimelineView
             AddClipWaveforms(block, slice, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
             var id = slice.Id;
             var ticks = AddRulerTicks(block, mapped.TimelineStartMs, mapped.TimelineEndMs, X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs));
-            clipBlocks.Add((block, id, ticks));
+            clipBlocks[id] = (block, ticks);
+            clipOwners.Add(block);
             var blockWidth = X(mapped.TimelineEndMs) - X(mapped.TimelineStartMs);
             block.SplitAt = time => session.SplitSlice(time);
             Draggable(
@@ -687,8 +688,20 @@ internal sealed class TimelineView
         return y + ClipRowHeight + RowSpacing;
     }
 
-    /// <summary>Gold teardrops on the ruler for what was trimmed or cut; a click restores it.</summary>
+    /// <summary>Runs on every move of a clip drag, so the buttons already there are moved and only the difference is added or removed.</summary>
     private void DrawTrimBadges()
+    {
+        trimBadgesUsed = 0;
+        PlaceTrimBadges();
+        while (trimBadges.Count > trimBadgesUsed)
+        {
+            ruler.Children.Remove(trimBadges[^1].Button);
+            trimBadges.RemoveAt(trimBadges.Count - 1);
+        }
+    }
+
+    /// <summary>Gold teardrops on the ruler for what was trimmed or cut; a click restores it.</summary>
+    private void PlaceTrimBadges()
     {
         var cuts = session.Mapper.MappedSlices;
         if (cuts.Count == 0)
@@ -740,23 +753,43 @@ internal sealed class TimelineView
     private void TrimBadge(double timelineMs, string? label, string tooltip, Action click)
     {
         tooltip = Loc.T(tooltip);
+        if (trimBadgesUsed == trimBadges.Count)
+        {
+            trimBadges.Add(NewTrimBadge());
+        }
+
+        var badge = trimBadges[trimBadgesUsed++];
+        badge.Click = click;
+        badge.Label.Text = label ?? "";
+        badge.Label.Visibility = label is null ? Visibility.Collapsed : Visibility.Visible;
+        badge.Icon.Visibility = label is null ? Visibility.Visible : Visibility.Collapsed;
+        if (badge.Tooltip != tooltip)
+        {
+            badge.Tooltip = tooltip;
+            Ui.Tip(badge.Button, tooltip);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(badge.Button, tooltip);
+        }
+
+        Canvas.SetLeft(badge.Button, X(timelineMs) - 15);
+    }
+
+    private TrimBadgeView NewTrimBadge()
+    {
         var content = new Grid { Width = 30, Height = 28 };
         content.Children.Add(Ui.Shape("M0,0 A7,7 0 0 1 14,0 C14,6 9,11 7,16 C5,11 0,6 0,0 Z", 26, new SolidColorBrush(Palette.Clip.Ring)));
         var ink = new SolidColorBrush(Color.FromArgb(255, 60, 40, 5));
-        UIElement mark = label is null
-            ? Ui.Icon("", 9, ink)
-            : new TextBlock { Text = label, FontSize = 8, FontWeight = FontWeights.Bold, Foreground = ink, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        ((FrameworkElement)mark).Margin = new Thickness(0, 0, 0, 7);
-        content.Children.Add(mark);
-        var badge = new Button { Style = Ui.StyleOf("NsIconButton"), Content = content, Width = 30, Height = 28, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        Ui.Tip(badge, tooltip);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(badge, tooltip);
-        badge.Click += (_, _) => click();
-        Canvas.SetLeft(badge, X(timelineMs) - 15);
-        Canvas.SetTop(badge, RulerHeight - 28);
-        Canvas.SetZIndex(badge, 5);
-        ruler.Children.Add(badge);
-        trimBadges.Add(badge);
+        var icon = Ui.Icon("", 9, ink);
+        var label = new TextBlock { FontSize = 8, FontWeight = FontWeights.Bold, Foreground = ink, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        icon.Margin = label.Margin = new Thickness(0, 0, 0, 7);
+        content.Children.Add(icon);
+        content.Children.Add(label);
+        var button = new Button { Style = Ui.StyleOf("NsIconButton"), Content = content, Width = 30, Height = 28, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        var badge = new TrimBadgeView(button, label, icon);
+        button.Click += (_, _) => badge.Click?.Invoke();
+        Canvas.SetTop(button, RulerHeight - 28);
+        Canvas.SetZIndex(button, 5);
+        ruler.Children.Add(button);
+        return badge;
     }
 
     /// <summary>Faint lines down from the top of a clip, under each ruler mark.</summary>
@@ -770,17 +803,33 @@ internal sealed class TimelineView
 
     private void FillRulerTicks(Canvas ticks, double timelineStart, double timelineEnd, double width)
     {
-        ticks.Children.Clear();
+        // Runs on every move of a clip drag: the lines already there are moved, not made again.
+        var used = 0;
         var stepMs = rulerStepSeconds * 1000;
         for (var ms = Math.Ceiling(timelineStart / stepMs) * stepMs; ms < timelineEnd; ms += stepMs)
         {
             var x = (ms - timelineStart) / Math.Max(1, timelineEnd - timelineStart) * width;
             if (x > 4 && x < width - 4)
             {
-                var tick = new Rectangle { Width = 1, Height = ClipRowHeight * 0.65, Fill = clipTick };
+                Rectangle tick;
+                if (used < ticks.Children.Count)
+                {
+                    tick = (Rectangle)ticks.Children[used];
+                }
+                else
+                {
+                    tick = new Rectangle { Width = 1, Height = ClipRowHeight * 0.65, Fill = clipTick };
+                    ticks.Children.Add(tick);
+                }
+
                 Canvas.SetLeft(tick, x - 0.5);
-                ticks.Children.Add(tick);
+                used++;
             }
+        }
+
+        while (ticks.Children.Count > used)
+        {
+            ticks.Children.RemoveAt(ticks.Children.Count - 1);
         }
     }
 
@@ -1386,6 +1435,7 @@ internal sealed class TimelineView
     private double DrawCaptions(double y)
     {
         var captions = session.Document.Captions;
+        var words = CaptionLineLayout.WordsById(captions);
         for (var index = 0; index < captions.CaptionTracks.Count; index++)
         {
             var track = captions.CaptionTracks[index];
@@ -1405,7 +1455,7 @@ internal sealed class TimelineView
             foreach (var item in captions.CaptionBlocks.Where(item => item.TrackId == trackId))
             {
                 var (left, width) = Place(item.SourceStartMs, item.SourceEndMs);
-                var block = Block(left, y, width, MaskRowHeight, Palette.Caption, "Caption", CaptionLineLayout.DisplayText(item, captions), item.Id == session.SelectedCaptionId, hidden);
+                var block = Block(left, y, width, MaskRowHeight, Palette.Caption, "Caption", CaptionLineLayout.DisplayText(item, words), item.Id == session.SelectedCaptionId, hidden);
                 block.SubtitleTruncates = true;
                 Follow(block, item.SourceStartMs, item.SourceEndMs);
                 var id = item.Id;
@@ -2013,7 +2063,7 @@ internal sealed class TimelineView
 
             ShowSnapGuide();
             active.Apply(start, end);
-            if (clipBlocks.Exists(item => item.Block == active.Block))
+            if (clipOwners.Contains(active.Block))
             {
                 FollowClipEdit(active.Block);
             }
@@ -2121,6 +2171,15 @@ internal sealed class TimelineView
         {
             snapGuide.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private sealed class TrimBadgeView(Button button, TextBlock label, FontIcon icon)
+    {
+        public Button Button { get; } = button;
+        public TextBlock Label { get; } = label;
+        public FontIcon Icon { get; } = icon;
+        public Action? Click { get; set; }
+        public string? Tooltip { get; set; }
     }
 
     private sealed class WaveImage(BlockGrid owner, Image image, string cacheId, Func<List<WaveformRasterLayer>> layers, double start, double end, double width, double height, double radius)

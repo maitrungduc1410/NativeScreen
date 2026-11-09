@@ -20,6 +20,7 @@ public sealed class PreviewAudioPlayer : IDisposable
     private readonly WasapiOut output;
     private readonly byte[] block = new byte[PumpFrames * 4];
     private readonly ManualResetEventSlim primed = new(false);
+    private readonly object control = new();
     private Thread? pump;
     private volatile bool stopping;
     private volatile bool deviceFailed;
@@ -83,17 +84,20 @@ public sealed class PreviewAudioPlayer : IDisposable
     /// <summary>Decodes the start of the sound first; a slow disk delays the first frame instead of causing a hitch after it.</summary>
     public void Prime(double timelineMs)
     {
-        output.Stop();
-        StopPump();
-        startTimelineMs = timelineMs;
-        startDeviceBytes = 0;
-        mixer.Seek(timelineMs);
-        buffer.ClearBuffer();
-        primed.Reset();
-        stopping = false;
-        pump = new Thread(Pump) { IsBackground = true, Name = "NativeScreen preview audio" };
-        pump.Start();
-        primed.Wait(TimeSpan.FromSeconds(2));
+        lock (control)
+        {
+            output.Stop();
+            StopPump();
+            startTimelineMs = timelineMs;
+            startDeviceBytes = 0;
+            mixer.Seek(timelineMs);
+            buffer.ClearBuffer();
+            primed.Reset();
+            stopping = false;
+            pump = new Thread(Pump) { IsBackground = true, Name = "NativeScreen preview audio" };
+            pump.Start();
+            primed.Wait(TimeSpan.FromSeconds(2));
+        }
     }
 
     public void Start()
@@ -106,16 +110,22 @@ public sealed class PreviewAudioPlayer : IDisposable
 
     public void Pause()
     {
-        output.Stop();
-        StopPump();
+        lock (control)
+        {
+            output.Stop();
+            StopPump();
+        }
     }
 
     public void Dispose()
     {
-        output.Dispose();
-        StopPump();
-        primed.Dispose();
-        mixer.Dispose();
+        lock (control)
+        {
+            output.Dispose();
+            StopPump();
+            primed.Dispose();
+            mixer.Dispose();
+        }
     }
 
     private void StopPump()
@@ -125,7 +135,22 @@ public sealed class PreviewAudioPlayer : IDisposable
         pump = null;
     }
 
+    // An unreadable file ends the sound only: the clock falls back to QPC and the picture goes on.
     private void Pump()
+    {
+        try
+        {
+            FillBuffer();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            deviceFailed = true;
+        }
+
+        primed.Set();
+    }
+
+    private void FillBuffer()
     {
         var prebufferBytes = PrebufferMs * buffer.WaveFormat.AverageBytesPerSecond / 1000;
         var aheadBytes = AheadMs * buffer.WaveFormat.AverageBytesPerSecond / 1000;
@@ -145,7 +170,5 @@ public sealed class PreviewAudioPlayer : IDisposable
                 primed.Set();
             }
         }
-
-        primed.Set();
     }
 }

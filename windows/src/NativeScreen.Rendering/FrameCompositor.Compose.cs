@@ -27,6 +27,7 @@ public sealed class ComposeRequest
     public int WebcamHeight { get; init; }
     public IReadOnlyList<ShortcutCluster>? Shortcuts { get; init; }
     public VideoFrame? WebcamFrame { get; init; }
+    public VideoFrame? ScreenFrame { get; init; }
     public FaceTrack? FaceTrack { get; init; }
     public IPersonMaskSource? PersonMasks { get; init; }
 
@@ -48,6 +49,7 @@ public sealed class ComposeRequest
         WebcamHeight = WebcamHeight,
         Shortcuts = Shortcuts,
         WebcamFrame = WebcamFrame,
+        ScreenFrame = ScreenFrame,
         FaceTrack = FaceTrack,
         PersonMasks = PersonMasks
     };
@@ -62,7 +64,13 @@ public sealed partial class FrameCompositor
     private (int Width, int Height) backgroundSize;
 
     private static readonly Vector4 SyntheticScreen = new(0.06f, 0.06f, 0.08f, 1);
+    private const int MaximumScratchLayers = 12;
+    private const int ScratchLifetimeComposes = 8;
     private readonly Dictionary<string, RenderLayer> layers = [];
+    private readonly List<(RenderLayer Layer, long LastUsed)> scratchLayers = [];
+    private long composeCount;
+    private VideoFrame? downscaledFrame;
+    private double downscaledRatio;
     private ID3D11SamplerState? linearClamp;
     private ID3D11Buffer? quadConstants;
     private ID3D11Buffer? blurConstants;
@@ -78,6 +86,7 @@ public sealed partial class FrameCompositor
     public RenderLayer Compose(ComposeRequest request, int width, int height)
     {
         EnsureComposeResources();
+        composeCount++;
         var context = _graphics.Context;
         context.ClearState();
         context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
@@ -134,6 +143,7 @@ public sealed partial class FrameCompositor
         var lensed = Lens(output, state.Camera, screen, width, height);
         DrawOverlays(lensed, request, stage, width, height);
         context.UnsetRenderTargets();
+        RetireScratchLayers();
         return lensed;
     }
 
@@ -159,6 +169,7 @@ public sealed partial class FrameCompositor
             FaceTrack = request.FaceTrack,
             PersonMasks = request.PersonMasks,
             WebcamFrame = webcam ?? request.WebcamFrame,
+            ScreenFrame = screen ?? request.ScreenFrame,
             Screen = screen is null ? request.Screen : Nv12View("video-screen", screen),
             ScreenWidth = screen?.Width ?? request.ScreenWidth,
             ScreenHeight = screen?.Height ?? request.ScreenHeight,
@@ -208,6 +219,51 @@ public sealed partial class FrameCompositor
         layers[name] = created;
         return created;
     }
+
+    /// <summary>Scratch space of a given size for one pass. Every size stays only while it is in use, so resizing a window frees the old ones.</summary>
+    private RenderLayer ScratchLayer(int width, int height)
+    {
+        var oldest = 0;
+        for (var index = 0; index < scratchLayers.Count; index++)
+        {
+            var (layer, _) = scratchLayers[index];
+            if (layer.Width == width && layer.Height == height)
+            {
+                scratchLayers[index] = (layer, composeCount);
+                return layer;
+            }
+
+            if (scratchLayers[index].LastUsed < scratchLayers[oldest].LastUsed)
+            {
+                oldest = index;
+            }
+        }
+
+        if (scratchLayers.Count >= MaximumScratchLayers)
+        {
+            scratchLayers[oldest].Layer.Dispose();
+            scratchLayers.RemoveAt(oldest);
+        }
+
+        var created = new RenderLayer(_graphics.Device, width, height);
+        scratchLayers.Add((created, composeCount));
+        return created;
+    }
+
+    private void RetireScratchLayers()
+    {
+        for (var index = scratchLayers.Count - 1; index >= 0; index--)
+        {
+            if (composeCount - scratchLayers[index].LastUsed > ScratchLifetimeComposes)
+            {
+                scratchLayers[index].Layer.Dispose();
+                scratchLayers.RemoveAt(index);
+            }
+        }
+    }
+
+    /// <summary>How many scratch textures are held right now.</summary>
+    public int ScratchLayerCount => scratchLayers.Count;
 
     private void Viewport(RenderLayer layer)
     {
@@ -311,7 +367,7 @@ public sealed partial class FrameCompositor
     private void Blur(RenderLayer layer, double sigma)
     {
         var context = _graphics.Context;
-        var scratch = Layer($"blur{layer.Width}x{layer.Height}", layer.Width, layer.Height);
+        var scratch = ScratchLayer(layer.Width, layer.Height);
         context.OMSetBlendState(null);
         context.PSSetShader(_gaussian);
         BindTarget(scratch);
@@ -549,7 +605,8 @@ public sealed partial class FrameCompositor
         var scaleY = screen.Height / Math.Max(1, height * crop.Height);
         if (Math.Abs(scaleX - scaleY) < 0.002 && scaleX < 0.99 && crop is { X: 0, Y: 0, Width: 1, Height: 1 })
         {
-            view = Downscaled(view, width, height, scaleX);
+            // Only the plain recording can be reused: masks change with the time, not with the video frame.
+            view = Downscaled(view, width, height, scaleX, ReferenceEquals(view, request.Screen) ? request.ScreenFrame : null);
             RebindPipeline(target);
         }
         var map = new QuadMap(
@@ -560,12 +617,20 @@ public sealed partial class FrameCompositor
     }
 
     // Separable Lanczos into a layer of the scaled size. The shader reads whole texels, so the quad after it maps 1:1 in uv.
-    private ID3D11ShaderResourceView Downscaled(ID3D11ShaderResourceView view, int width, int height, double ratio)
+    // A display can draw several times per video frame, and a still screen has seconds between frames (spec/06 ADR-66).
+    private ID3D11ShaderResourceView Downscaled(ID3D11ShaderResourceView view, int width, int height, double ratio, VideoFrame? frame)
     {
         var scaledWidth = Math.Max(1, (int)Math.Round(width * ratio));
         var scaledHeight = Math.Max(1, (int)Math.Round(height * ratio));
         var horizontal = Layer("lanczos-h", scaledWidth, height);
         var vertical = Layer("lanczos-v", scaledWidth, scaledHeight);
+        if (frame is not null && ReferenceEquals(frame, downscaledFrame) && ratio == downscaledRatio)
+        {
+            return vertical.View;
+        }
+
+        downscaledFrame = frame;
+        downscaledRatio = ratio;
         var context = _graphics.Context;
         context.OMSetBlendState(null);
         context.PSSetShader(_lanczos);

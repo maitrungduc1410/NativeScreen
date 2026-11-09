@@ -54,6 +54,9 @@ public static class InspectorCatalog
 public sealed partial class EditorSession
 {
     private const double CoalesceWindowMs = 700;
+
+    /// <summary>From this length a solve takes long enough to be felt, so it leaves the UI thread (spec/06 ADR-66).</summary>
+    private const double BackgroundSolveMinimumMs = 60_000;
     private readonly PlaybackClock clock;
     private string? coalesceKey;
     private long coalesceAt;
@@ -62,6 +65,10 @@ public sealed partial class EditorSession
     private ProjectDocument? renderDocument;
     private SpringTrajectorySolver? trajectory;
     private string? trajectoryKey;
+    private readonly object solveGate = new();
+    private string? wantedTrajectoryKey;
+    private (string Key, ProjectDocument Document)? pendingSolve;
+    private bool solving;
     private ProjectDocument? shortcutsDocument;
     private IReadOnlyList<ShortcutCluster> shortcuts = [];
 
@@ -92,6 +99,9 @@ public sealed partial class EditorSession
     public event Action<bool>? DocumentChanged;
 
     public event Action? SelectionChanged;
+
+    /// <summary>A long recording's motion was solved again, on a background thread. The preview should draw with it.</summary>
+    public event Action? TrajectorySolved;
 
     public UndoStack History { get; }
     public ProjectDocument Document => History.Current;
@@ -199,18 +209,90 @@ public sealed partial class EditorSession
         return shortcuts;
     }
 
-    /// <summary>A frozen copy for the render thread, rebuilt only after an edit.</summary>
+    /// <summary>A frozen copy for the render thread, rebuilt only after an edit. On a long recording the motion can lag an edit by one solve.</summary>
     public (ProjectDocument Document, SpringTrajectorySolver Trajectory) RenderSnapshot()
     {
-        renderDocument ??= ProjectJson.Clone(Document);
-        var key = ProjectJson.Serialize(new object[] { renderDocument.Cursor, renderDocument.Motion, renderDocument.Timeline.Zooms, renderDocument.Timeline.Slices });
-        if (trajectory is null || key != trajectoryKey)
+        if (renderDocument is null)
         {
-            trajectoryKey = key;
-            trajectory = new SpringTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, renderDocument);
+            renderDocument = ProjectJson.Clone(Document);
+            RequestTrajectory(renderDocument);
         }
 
-        return (renderDocument, trajectory);
+        lock (solveGate)
+        {
+            return (renderDocument, trajectory!);
+        }
+    }
+
+    // Everything the solver reads from the document, and nothing else: a clip drag must not solve again.
+    private void RequestTrajectory(ProjectDocument document)
+    {
+        var key = ProjectJson.Serialize(new object[] { document.Cursor, document.Motion, document.Timeline.Zooms, document.Timeline.IsZoomTrackHidden });
+        lock (solveGate)
+        {
+            wantedTrajectoryKey = key;
+            pendingSolve = null;
+            if (trajectory is not null && key == trajectoryKey)
+            {
+                return;
+            }
+
+            if (trajectory is not null && SourceDurationMs >= BackgroundSolveMinimumMs)
+            {
+                pendingSolve = (key, document);
+                if (!solving)
+                {
+                    solving = true;
+                    _ = Task.Run(SolvePending);
+                }
+
+                return;
+            }
+        }
+
+        var solved = new SpringTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, document);
+        lock (solveGate)
+        {
+            trajectory = solved;
+            trajectoryKey = key;
+        }
+    }
+
+    // One worker that always takes the newest edit, so a drag never queues solves behind itself.
+    private void SolvePending()
+    {
+        while (true)
+        {
+            (string Key, ProjectDocument Document) job;
+            lock (solveGate)
+            {
+                if (pendingSolve is not { } next)
+                {
+                    solving = false;
+                    return;
+                }
+
+                job = next;
+                pendingSolve = null;
+            }
+
+            var solved = new SpringTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, job.Document);
+            var current = false;
+            lock (solveGate)
+            {
+                if (job.Key == wantedTrajectoryKey)
+                {
+                    trajectory = solved;
+                    trajectoryKey = job.Key;
+                    current = true;
+                }
+            }
+
+            if (current)
+            {
+                TrajectorySolved?.Invoke();
+            }
+        }
     }
 
     public void TogglePlayback()
@@ -347,14 +429,31 @@ public sealed partial class EditorSession
         interactiveEditCommitted = false;
     }
 
+    /// <summary>An export is running, started here or by an agent. The project stays as it is until it ends (spec/06 ADR-65).</summary>
+    public bool IsExportRunning { get; private set; }
+
+    public void BeginExport() => IsExportRunning = true;
+
+    public void EndExport() => IsExportRunning = false;
+
     public void Undo()
     {
+        if (IsExportRunning)
+        {
+            return;
+        }
+
         History.Undo();
         AfterHistoryMove();
     }
 
     public void Redo()
     {
+        if (IsExportRunning)
+        {
+            return;
+        }
+
         History.Redo();
         AfterHistoryMove();
     }

@@ -16,6 +16,25 @@ public sealed class VoiceoverCutTests
         new() { Id = id, SourceStartMs = start, DurationMs = duration, RelativePath = "assets/vo.wav", FileOffsetMs = offset, TrackIndex = track };
 
     [Fact]
+    public void UndoAndRedoWaitForAnExport()
+    {
+        var session = Session(Segment("a", 0, 4000));
+        session.SplitVoiceover("a", 2000);
+        session.BeginExport();
+        session.Undo();
+        Assert.Equal(2, session.Document.Timeline.Voiceovers.Count);
+        session.EndExport();
+        session.Undo();
+        Assert.Single(session.Document.Timeline.Voiceovers);
+        session.BeginExport();
+        session.Redo();
+        Assert.Single(session.Document.Timeline.Voiceovers);
+        session.EndExport();
+        session.Redo();
+        Assert.Equal(2, session.Document.Timeline.Voiceovers.Count);
+    }
+
+    [Fact]
     public void TheOffsetRoundTripsAndDefaultsToZero()
     {
         Assert.Equal(0, ProjectJson.Clone(new VoiceoverSegment()).FileOffsetMs);

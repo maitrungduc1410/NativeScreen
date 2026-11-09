@@ -21,6 +21,11 @@ public sealed partial class EditorWindow
 
     internal ExportSource McpExportSource() => CurrentExportSource();
 
+    /// <summary>An agent's export shows the same card as one started here, and Stop and Esc end it through this source.</summary>
+    internal Action<double> McpBeginExport(CancellationTokenSource stop) => BeginExportOverlay(stop);
+
+    internal void McpEndExport() => EndExportOverlay();
+
     internal void McpToast(string message) => ShowToast(message);
 
     internal void McpSeek(double timelineMs) => SeekTo(Math.Clamp(timelineMs, 0, session.DurationMs));
@@ -45,7 +50,10 @@ public sealed partial class EditorWindow
     internal void McpSave()
     {
         hasUnsavedChanges = source.PackagePath is not null;
-        SaveNow(waitForDisk: true);
+        if (!SaveNow(waitForDisk: true))
+        {
+            throw new McpToolException("The project could not be saved.");
+        }
     }
 
     /// <summary>Moves the package to the Recycle Bin without asking: agents were told destructive tools act at once.</summary>

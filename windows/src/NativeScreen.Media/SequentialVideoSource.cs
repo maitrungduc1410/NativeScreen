@@ -13,7 +13,7 @@ public sealed class SequentialVideoSource(string path) : IVideoFrameSource, IDis
 
     public VideoFrame? FrameAt(double sourceMs)
     {
-        if (current is null || sourceMs < current.PresentationMs - 0.5 || sourceMs > current.PresentationMs + SeekAheadMs)
+        if (current is null || NeedsSeek(sourceMs, current.PresentationMs, next?.PresentationMs))
         {
             reader.Seek(Math.Max(0, sourceMs));
             Recycle(current);
@@ -32,6 +32,13 @@ public sealed class SequentialVideoSource(string path) : IVideoFrameSource, IDis
 
         return current;
     }
+
+    /// <summary>
+    /// Only for going back, or across a cut with frames in between. A still screen can leave seconds to the next frame: the
+    /// current one is then right, and a seek would land on it again for every frame of the export.
+    /// </summary>
+    public static bool NeedsSeek(double sourceMs, double currentMs, double? nextMs) =>
+        sourceMs < currentMs - 0.5 || (nextMs is { } next && next <= sourceMs + 0.5 && sourceMs > currentMs + SeekAheadMs);
 
     public void Dispose() => reader.Dispose();
 

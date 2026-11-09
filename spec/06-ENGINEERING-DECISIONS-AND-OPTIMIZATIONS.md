@@ -1298,4 +1298,21 @@ The exporter reads the live `ProjectSession` for every frame, so an edit made ha
 - While it is true, MCP refuses the tools that change the project, its playhead or its window (`toolsBlockedDuringExport`), including a second `export_video`. Tools that only read keep working.
 - `undo` and `redo` return early and `Cut`, `Paste` and `Delete` are disabled, because the menu bar can still be clicked with the mouse. `mutate` is deliberately not guarded: a transcript or scan that finishes during an export would lose its result without any error.
 
-Windows has the same gap and still needs this (`spec/05`).
+On Windows an export reads a frozen copy of the document, so an edit could never reach the video, but the project on screen would stop matching the file being written. `EditorSession.IsExportRunning` covers both kinds of export, `BlockedDuringExport` is the same list, and `Undo` and `Redo` return early. The card covers the whole window including the menu button, so only the keyboard needed blocking: every key is swallowed while it runs, and Esc stops it, from either source. A client that did not ask for a stop gets an error saying it was stopped in the editor.
+
+---
+
+## 66. ADR-66: Windows Performance and Failure Pass
+
+A review of the Windows port for work repeated without need and for failures that ended the process.
+
+- **Saves in a chain.** Each write waits for the one before it. It must not inherit that one's failure: a file locked for a moment made every later save fail without writing, until the editor closed and the wait threw. `ProjectStore.WriteAfter` keeps the order and drops the old failure, which its own caller already reported.
+- **Scratch textures.** Blur needs a same-sized scratch layer. Naming it by size made a new permanent texture for every size of the preview, so dragging a window edge could reach gigabytes of video memory. They now live in a list that keeps a size only while it is used: at most 12, and none unused for 8 composes.
+- **What a thread boundary does.** An exception on the render, decode or preview audio thread ended the process, with every open editor and any recording. Each thread now catches at its top. The picture stops with a toast, or the sound stops and the clock falls back to QPC. The GPU is not recreated: the project is reopened.
+- **Solving the motion.** The key is computed only after an edit, and holds exactly what the solver reads: cursor, motion, zooms and whether the zoom track is hidden. Slices were in it and the hidden flag was not, so a clip drag solved for nothing and hiding the track did not reach the preview. From 60 s of recording a solve runs on one background worker that always takes the newest edit, and `TrajectorySolved` redraws. The first solve when a project opens is still on the UI thread.
+- **Frames that did not change.** A display draws several times per video frame, and a still screen has seconds between frames. The Lanczos downscale and the whole camera chain before the sticker are kept while the decoded frame, the document snapshot and the person mask are the same objects. Active masks change with the time, so they skip the Lanczos cache. The sticker follows the time and is always drawn.
+- **Recording's frame cap.** Comparing each frame with the last one kept rounds down to a whole number of display refreshes: 37.5 fps at 75 Hz, 48 fps at 144 Hz. `FramePacer` keeps a schedule, so the average holds at 60.
+- **Recording's encoder queue.** Live writers turn throttling off (ADR-23), so nothing bounded the queue, at up to 12 MB a frame. Above 30 frames not yet encoded, screen and camera frames are dropped. `IMFSinkWriter::GetStatistics` is called directly, because the wrapper leaves the structure's size at zero and the call fails.
+- **Person masks in the preview.** The render thread only copies the picture. Sampling it for the network, a few milliseconds per picture, moved to the worker, and the tensor and two masks are reused: a new tensor per picture was 21 MB/s on the large object heap.
+- **Timeline drags.** Trim badges and ruler ticks are moved on each pointer event, not created again.
+- **Export over a still screen.** A seek forward is only useful when the next decoded frame is also behind the target. Otherwise it lands on the same frame again, once per exported frame.

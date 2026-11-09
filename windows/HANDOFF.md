@@ -27,6 +27,21 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Windows port: performance and failure pass
+
+### Verifier
+- **Result:** PASS. Release builds with 0 warnings; Core 313, Rendering 27, Media 28 pass. In the app, with no microphone or camera: resizing through 25 sizes, a cut, two plays during priming, pause, a frame render, an export, undo, save and close all worked, and the process stayed up.
+- **Changed (`spec/06` ADR-66):** saves survive a failed write; scratch textures are bounded; render, decode and audio threads no longer end the process; motion is solved only when what it reads changes, and off the UI thread from 60 s; hiding the zoom track reaches the preview; recording's 60 fps cap holds at any refresh rate; the encoder queue is bounded; unchanged video frames skip Lanczos and the camera chain; timeline drags reuse their elements; export no longer seeks on every frame over a still screen.
+- **One string added outside Xcode:** "The preview stopped after a graphics or file error...". Build once on a Mac (root `AGENTS.md`).
+- **Not covered:** a real GPU reset, and a real encoder backlog, were not produced. Recreating the GPU device after a loss is not done; the project is reopened.
+
+## 2026-11-09, Windows port: a project is frozen while it exports
+
+### Verifier
+- **Result:** PASS. Release builds with 0 warnings; Core 300, Rendering 23, Media 21 pass. In the app, an export started over MCP shows the card; `update_project`, `undo`, `render_frame`, a second `export_video` and `close_project` are refused and `get_project` still works; Stop and Esc each end it and the client gets an error saying so; editing works again afterwards. Blocking shortcuts during an export started from the editor was not pressed by hand.
+- **Ported (`spec/06` ADR-65):** `EditorSession.IsExportRunning`, the tool list in `McpToolbox`, the export card for agents, and Esc stopping an export. A second export from the editor is refused too.
+- **Differs from macOS:** no menu items needed disabling, because the card covers the menu button.
+
 ## 2026-11-09, Windows port: app version in Settings
 
 ### Verifier
