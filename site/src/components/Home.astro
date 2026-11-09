@@ -1,0 +1,421 @@
+---
+import "../styles/site.css";
+import { locales, dictOf, pathOf, urlOf, ogImageOf, SITE, type Locale } from "../i18n";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictOf(locale);
+const repo = "https://github.com/maitrungduc1410/NativeScreen";
+const dmg = `${repo}/releases/latest/download/NativeScreen.dmg`;
+const exe = `${repo}/releases/latest/download/NativeScreen-win-Setup.exe`;
+const older = t.older.replace("{link}", `<a href="${repo}/releases">GitHub Releases</a>`);
+const ogImage = ogImageOf(locale.slug);
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Native Screen",
+  url: urlOf(locale.slug),
+  inLanguage: locale.lang,
+  description: t.desc,
+  applicationCategory: "MultimediaApplication",
+  operatingSystem: "macOS 14 or later, Windows 10 or 11",
+  image: ogImage,
+  screenshot: `${SITE}/assets/shots/editor-dark.jpg`,
+  downloadUrl: `${urlOf(locale.slug)}#download`,
+  license: "https://opensource.org/license/mit",
+  isAccessibleForFree: true,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  author: { "@type": "Person", name: "Duc Trung Mai" },
+  sameAs: [repo],
+};
+---
+<!doctype html>
+<html lang={locale.lang}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {locale.slug === "en" && (
+    <script is:inline>
+      // Only the English home page redirects. Language pages are always shown as linked, and crawlers stay here.
+      (function () {
+        var pages = { en: "/", vi: "/vi/", zh: "/zh-hans/", ja: "/ja/", de: "/de/", fr: "/fr/", es: "/es/", pt: "/pt-br/" };
+        var saved = { "zh-hans": "zh", "pt-br": "pt" };
+        function fromTag(tag) {
+          tag = tag.toLowerCase();
+          var base = tag.split("-")[0];
+          // Only Simplified Chinese is available, so Traditional readers move on to their next language.
+          if (base === "zh" && /^zh-(tw|hk|mo|hant)/.test(tag)) return null;
+          return pages[base] ? base : null;
+        }
+        try {
+          var choice = localStorage.getItem("ns-lang");
+          var target = choice ? (saved[choice] || choice) : null;
+          if (!target) {
+            var tags = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || "en"];
+            for (var i = 0; i < tags.length && !target; i++) target = fromTag(tags[i]);
+          }
+          if (target && target !== "en" && pages[target]) location.replace(pages[target] + location.search + location.hash);
+        } catch (e) {}
+      })();
+    </script>
+  )}
+  <title>{t.title}</title>
+  <meta name="description" content={t.desc}>
+  <link rel="canonical" href={urlOf(locale.slug)}>
+  {locales.map((l) => <link rel="alternate" hreflang={l.lang} href={urlOf(l.slug)}>)}
+  <link rel="alternate" hreflang="x-default" href={urlOf("en")}>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f3ee">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141312">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Native Screen">
+  <meta property="og:url" content={urlOf(locale.slug)}>
+  <meta property="og:title" content={t.ogTitle}>
+  <meta property="og:description" content={t.ogDesc}>
+  <meta property="og:image" content={ogImage}>
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content={t.ogAlt}>
+  <meta property="og:locale" content={locale.og}>
+  {locales.filter((l) => l.slug !== locale.slug).map((l) => <meta property="og:locale:alternate" content={l.og}>)}
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content={t.ogTitle}>
+  <meta name="twitter:description" content={t.ogDesc}>
+  <meta name="twitter:image" content={ogImage}>
+  <meta name="twitter:image:alt" content={t.ogAlt}>
+
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)}></script>
+
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="apple-touch-icon" href="/assets/icon.png">
+  <link rel="preload" as="image" href="/assets/demos/hero-poster.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <script is:inline>
+    // Applied before first paint so a saved theme does not flash.
+    try { const t = localStorage.getItem("ns-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-row">
+    <a class="wordmark" href="#top" aria-label={t.homeAria}>
+      <img src="/assets/icon.png" alt="" width="28" height="28">
+      <span>Native Screen</span>
+    </a>
+    <nav class="nav" aria-label={t.navSections}>
+      <a href="#timeline">{t.navTimeline}</a>
+      <a href="#polish">{t.navPolish}</a>
+      <a href="#camera">{t.navCamera}</a>
+      <a href="#agents">{t.navAgents}</a>
+      <a href="#download">{t.navDownload}</a>
+      <a href={repo}>GitHub</a>
+    </nav>
+    <div class="theme-switch" role="radiogroup" aria-label={t.theme}>
+      <button type="button" role="radio" data-theme-choice="system" aria-checked="true">{t.themeAuto}</button>
+      <button type="button" role="radio" data-theme-choice="light" aria-checked="false">{t.themeLight}</button>
+      <button type="button" role="radio" data-theme-choice="dark" aria-checked="false">{t.themeDark}</button>
+    </div>
+    <details class="lang-menu">
+      <summary aria-label={t.language}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+        <span class="lang-name">{locale.name}</span>
+      </summary>
+      <ul>
+        {locales.map((l) => (
+          <li><a href={pathOf(l.slug)} hreflang={l.lang} lang={l.lang} data-lang-link={l.slug} aria-current={l.slug === locale.slug ? "page" : undefined}>{l.name}</a></li>
+        ))}
+      </ul>
+    </details>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero wrap">
+    <p class="kicker">{t.kicker}</p>
+    <h1>{t.h1a}<br><em>{t.h1b}</em></h1>
+    <div class="hero-foot">
+      <p class="lede">{t.lede}</p>
+      <div class="cta">
+        <a class="button primary" data-download data-windows-label={t.dlWin} href={dmg}>{t.dlMac}</a>
+        <a class="button" data-download-alt href={exe}>Windows</a>
+        <p class="fine">{t.req}</p>
+      </div>
+    </div>
+
+    <figure class="demo demo-hero">
+      <video class="media" src="/assets/demos/hero.mp4" poster="/assets/demos/hero-poster.jpg" width="2560" height="1440" muted loop playsinline autoplay preload="auto" data-autoplay aria-label={t.heroAria}></video>
+      <figcaption>{t.heroCap}</figcaption>
+    </figure>
+  </section>
+
+  <section class="facts wrap" aria-label={t.glance}>
+    <dl>
+      <div><dt>0</dt><dd>{t.f0}</dd></div>
+      <div><dt>2</dt><dd>{t.f1}</dd></div>
+      <div><dt>8</dt><dd>{t.f2}</dd></div>
+      <div><dt>MIT</dt><dd>{t.f3}</dd></div>
+    </dl>
+  </section>
+
+  <section class="chapter wrap" id="timeline">
+    <header class="chapter-head">
+      <span class="num">01</span>
+      <h2>{t.tlH}</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>{t.tlP}</p>
+        <ul class="ticks">
+          <li>{t.tl1}</li>
+          <li>{t.tl2}</li>
+          <li>{t.tl3}</li>
+          <li>{t.tl4}</li>
+        </ul>
+      </div>
+      <figure class="col-figure">
+        <video class="media" src="/assets/demos/blur.mp4" muted loop playsinline preload="none" data-autoplay aria-label={t.blurAria}></video>
+        <figcaption>{t.blurCap}</figcaption>
+      </figure>
+    </div>
+    <figure class="demo">
+      <img class="media shot" src="/assets/shots/timeline.jpg" width="2400" height="534" loading="lazy" alt={t.tlAlt}>
+      <figcaption>{t.tlCap}</figcaption>
+    </figure>
+  </section>
+
+  <section class="chapter wrap" id="polish">
+    <header class="chapter-head">
+      <span class="num">02</span>
+      <h2>{t.poH}</h2>
+    </header>
+    <div class="features">
+      <article class="feature">
+        <div class="feature-text">
+          <h3>{t.zoomH}</h3>
+          <p>{t.zoomP}</p>
+        </div>
+        <div class="feature-media">
+          <video class="media" src="/assets/demos/auto-zoom.mp4" muted loop playsinline preload="none" data-autoplay aria-label={t.zoomAria}></video>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-text">
+          <h3>{t.curH}</h3>
+          <p>{t.curP}</p>
+          <div class="segmented swap" role="radiogroup" aria-label={t.curLabel} data-swap-for="swap-cursor">
+            <button type="button" role="radio" aria-checked="false" data-swap="before">{t.curBefore}</button>
+            <button type="button" role="radio" aria-checked="true" data-swap="after">Native Screen</button>
+          </div>
+        </div>
+        <div class="feature-media" id="swap-cursor">
+          <video class="media" src="/assets/demos/cursor-before.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="before" aria-label={t.curBeforeAria} hidden></video>
+          <video class="media" src="/assets/demos/cursor-after.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="after" aria-label={t.curAfterAria}></video>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-text">
+          <h3>{t.mbH}</h3>
+          <p>{t.mbP}</p>
+          <div class="segmented swap" role="radiogroup" aria-label={t.mbLabel} data-swap-for="swap-blur">
+            <button type="button" role="radio" aria-checked="false" data-swap="off">{t.off}</button>
+            <button type="button" role="radio" aria-checked="true" data-swap="on">{t.on}</button>
+          </div>
+        </div>
+        <div class="feature-media" id="swap-blur">
+          <video class="media" src="/assets/demos/motion-blur-off.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="off" aria-label={t.mbOffAria} hidden></video>
+          <video class="media" src="/assets/demos/motion-blur-on.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="on" aria-label={t.mbOnAria}></video>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-text">
+          <h3>{t.keyH}</h3>
+          <p>{t.keyP}</p>
+        </div>
+        <div class="feature-media">
+          <video class="media" src="/assets/demos/shortcuts.mp4" muted loop playsinline preload="none" data-autoplay aria-label={t.keyAria}></video>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="chapter wrap" id="camera">
+    <header class="chapter-head">
+      <span class="num">03</span>
+      <h2>{t.camH2}</h2>
+    </header>
+    <div class="features">
+      <article class="feature">
+        <div class="feature-text">
+          <h3>{t.camH3}</h3>
+          <p>{t.camP}</p>
+          <div class="segmented swap" role="radiogroup" aria-label={t.camLabel} data-swap-for="swap-camera">
+            <button type="button" role="radio" aria-checked="false" data-swap="original">{t.camOrig}</button>
+            <button type="button" role="radio" aria-checked="false" data-swap="blur">{t.camBlur}</button>
+            <button type="button" role="radio" aria-checked="true" data-swap="sticker">{t.camPhoto}</button>
+          </div>
+        </div>
+        <div class="feature-media" id="swap-camera">
+          <video class="media" src="/assets/demos/camera-original.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="original" aria-label={t.camOrigAria} hidden></video>
+          <video class="media" src="/assets/demos/camera-blur.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="blur" aria-label={t.camBlurAria} hidden></video>
+          <video class="media" src="/assets/demos/camera-sticker.mp4" muted loop playsinline preload="none" data-autoplay data-swap-video="sticker" aria-label={t.camStickerAria}></video>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="chapter wrap" id="formats">
+    <header class="chapter-head">
+      <span class="num">04</span>
+      <h2>{t.fmtH}</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>{t.fmtP}</p>
+        <div class="segmented" role="radiogroup" aria-label={t.ratioLabel} data-ratio-group>
+          <button type="button" role="radio" aria-checked="true" data-ratio="16 / 9">{t.wide}</button>
+          <button type="button" role="radio" aria-checked="false" data-ratio="1 / 1">{t.square}</button>
+          <button type="button" role="radio" aria-checked="false" data-ratio="9 / 16">{t.vertical}</button>
+        </div>
+      </div>
+      <figure class="col-figure ratio-stage">
+        <div class="ratio-frame" id="ratio-frame">
+          <video class="media fill" src="/assets/demos/ratio-wide.mp4" muted loop playsinline preload="none" data-ratio-video="16 / 9" aria-label={t.r169}></video>
+          <video class="media fill" src="/assets/demos/ratio-square.mp4" muted loop playsinline preload="none" data-ratio-video="1 / 1" aria-label={t.r11} hidden></video>
+          <video class="media fill" src="/assets/demos/ratio-vertical.mp4" muted loop playsinline preload="none" data-ratio-video="9 / 16" aria-label={t.r916} hidden></video>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <section class="chapter wrap" id="captions">
+    <header class="chapter-head">
+      <span class="num">05</span>
+      <h2>{t.capH}</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>{t.capP}</p>
+        <p class="note" set:html={t.capNote}></p>
+      </div>
+      <figure class="col-figure">
+        <img class="media shot" src="/assets/shots/transcript.jpg" width="2400" height="1478" loading="lazy" alt={t.transAlt}>
+        <figcaption>{t.transCap}</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="chapter wrap" id="agents">
+    <header class="chapter-head">
+      <span class="num">06</span>
+      <h2>{t.aiH}</h2>
+    </header>
+    <div class="cols">
+      <div class="col-text">
+        <p>{t.aiP}</p>
+      </div>
+      <ol class="steps">
+        <li set:html={t.ai1}></li>
+        <li>{t.ai2}</li>
+        <li>{t.ai3}</li>
+      </ol>
+    </div>
+    <figure class="demo">
+      <video class="media" src="/assets/demos/agent.mp4" muted loop playsinline preload="none" data-autoplay aria-label={t.aiAria}></video>
+      <figcaption>{t.aiCap}</figcaption>
+    </figure>
+  </section>
+
+  <section class="chapter wrap" id="yours">
+    <header class="chapter-head">
+      <span class="num">07</span>
+      <h2>{t.yourH}</h2>
+    </header>
+    <div class="native">
+      <p class="native-lede">{t.natLede}</p>
+    </div>
+    <div class="grid-notes">
+      <div>
+        <h3>{t.n1H}</h3>
+        <p>{t.n1P}</p>
+      </div>
+      <div>
+        <h3>{t.n2H}</h3>
+        <p>{t.n2P}</p>
+      </div>
+      <div>
+        <h3>{t.n3H}</h3>
+        <p>{t.n3P}</p>
+      </div>
+      <div>
+        <h3>{t.n4H}</h3>
+        <p class="langs" lang="mul">{locales.map((l) => l.name).join(" · ")}</p>
+      </div>
+      <div>
+        <h3>{t.n5H}</h3>
+        <p>{t.n5P}</p>
+      </div>
+      <div>
+        <h3>{t.n6H}</h3>
+        <p>{t.n6P}</p>
+      </div>
+    </div>
+    <div class="demo pair">
+      <figure>
+        <img class="media shot" src="/assets/shots/editor-light.jpg" width="2400" height="1506" loading="lazy" alt={t.lightAlt}>
+        <figcaption>{t.lightCap}</figcaption>
+      </figure>
+      <figure>
+        <img class="media shot" src="/assets/shots/editor-dark.jpg" width="2400" height="1506" loading="lazy" alt={t.darkAlt}>
+        <figcaption>{t.darkCap}</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="download wrap" id="download">
+    <h2>{t.dlH}</h2>
+    <p class="lede">{t.dlLede}</p>
+    <div class="dl-grid">
+      <div class="dl">
+        <img class="media shot dl-shot" src="/assets/shots/editor-light.jpg" width="2400" height="1506" loading="lazy" alt={t.macAlt}>
+        <h3>macOS</h3>
+        <p class="fine">{t.macFine}</p>
+        <a class="button primary" href={dmg}>{t.dlDmg}</a>
+        <p>{t.macNote}</p>
+      </div>
+      <div class="dl">
+        <img class="media shot dl-shot" src="/assets/shots/editor-windows.jpg" width="2395" height="1504" loading="lazy" alt={t.winAlt}>
+        <h3>Windows</h3>
+        <p class="fine">{t.winFine}</p>
+        <a class="button primary" href={exe}>{t.dlExe}</a>
+        <details>
+          <summary>{t.whyH}</summary>
+          <p set:html={t.whyP}></p>
+        </details>
+      </div>
+    </div>
+    <p class="fine" set:html={older}></p>
+  </section>
+
+</main>
+
+<footer class="footer wrap">
+  <p>{t.footer}</p>
+  <p><a href={repo}>{t.source}</a> · <a href={`${repo}/issues`}>{t.report}</a> · <a href={`${repo}/tree/master/spec`}>{t.spec}</a></p>
+</footer>
+
+<script>
+  import "../scripts/main.js";
+</script>
+</body>
+</html>

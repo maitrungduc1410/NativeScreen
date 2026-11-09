@@ -14,7 +14,7 @@ desktop.ini
 *.m4s
 *.m3u8
 # Website demos are tracked.
-!site/assets/**/*.mp4
+!site/public/assets/**/*.mp4
 
 # Python (tools/)
 __pycache__/

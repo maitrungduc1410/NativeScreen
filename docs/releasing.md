@@ -75,8 +75,13 @@ reads `--azureTrustedSignFile` if Azure Trusted Signing is used instead.
 
 ### Website
 
-Settings > Pages > Source: **GitHub Actions**. Then run **Website**. The site is at
-`https://maitrungduc1410.github.io/NativeScreen/` until a custom domain is set there.
+Settings > Pages > Source: **GitHub Actions**. Then run **Website**. The site is at `https://nativescreen.app/`, set
+as the custom domain under Settings > Pages. The address is `SITE` in `site/src/i18n/index.ts`, `site` in
+`site/astro.config.mjs` and the sitemap line in `site/public/robots.txt`, so change them together if the domain changes.
+
+The site is built with Astro. Run `npm ci` then `npm run dev` in `site/` to work on it. Every language is a file in
+`site/src/i18n/`, and `en.ts` is the reference: a key missing from another language fails the build, so add new text to
+all 8. After changing a headline, run `npm run og` (macOS with Chrome) to redraw the social preview images.
 
 ## Checking a release locally
 

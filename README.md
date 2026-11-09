@@ -7,7 +7,7 @@
 **Polished screen recordings and product demos, made on your computer.**
 Free and open source. Native on macOS and Windows.
 
-[Website](https://maitrungduc1410.github.io/NativeScreen/) ·
+[Website](https://nativescreen.app/) ·
 [Download for Mac](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg) ·
 [Download for Windows](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe) ·
 [All releases](https://github.com/maitrungduc1410/NativeScreen/releases)
@@ -16,7 +16,7 @@ Free and open source. Native on macOS and Windows.
 
 ![The Native Screen editor](site/assets/shots/editor-light.jpg)
 
-See it move on the [website](https://maitrungduc1410.github.io/NativeScreen/).
+See it move on the [website](https://nativescreen.app/).
 
 ## Why Native Screen
 
@@ -74,8 +74,8 @@ See it move on the [website](https://maitrungduc1410.github.io/NativeScreen/).
 launch macOS asks for Screen Recording permission, and for camera and microphone when you turn them on. Updates arrive
 inside the app (`Native Screen > Check for Updates...`).
 
-**Windows.** The Windows build is not code signed yet (we have applied for free signing for open source projects).
-Until then Windows SmartScreen shows a blue "Windows protected your PC" screen the first time. Click **More info**, then
+**Windows.** Signing certificates cost money every year, and Native Screen is free and open source, so the Windows
+build is not code signed yet. We will look for a way to improve this. For now Windows SmartScreen shows a blue "Windows protected your PC" screen the first time. Click **More info**, then
 **Run anyway**. You can check the download against the SHA-256 shown on the release page. Updates install themselves
 after that.
 

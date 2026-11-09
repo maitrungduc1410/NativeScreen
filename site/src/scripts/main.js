@@ -58,6 +58,18 @@
     mark(document.documentElement.dataset.theme || "system", "data-theme-choice");
   }
 
+  // Language menu: a click is an explicit choice, so the automatic redirect stops applying.
+  document.querySelectorAll("[data-lang-link]").forEach((link) => {
+    link.addEventListener("click", () => {
+      try { localStorage.setItem("ns-lang", link.dataset.langLink); } catch (e) {}
+    });
+  });
+  const langMenu = document.querySelector(".lang-menu");
+  if (langMenu) {
+    document.addEventListener("click", (e) => { if (!langMenu.contains(e.target)) langMenu.open = false; });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") langMenu.open = false; });
+  }
+
   // Primary download button matches the visitor's system.
   const isWindows = /Windows/i.test(navigator.userAgent);
   if (isWindows) {
@@ -65,7 +77,7 @@
     const alt = document.querySelector("[data-download-alt]");
     if (primary && alt) {
       [primary.href, alt.href] = [alt.href, primary.href];
-      primary.textContent = "Download for Windows";
+      primary.textContent = primary.dataset.windowsLabel;
       alt.textContent = "macOS";
     }
   }
@@ -91,7 +103,7 @@
   });
 
   // Aspect ratio switcher.
-  const ratioGroup = document.querySelector(".segmented[aria-label='Aspect ratio']");
+  const ratioGroup = document.querySelector("[data-ratio-group]");
   const frame = document.getElementById("ratio-frame");
   if (ratioGroup && frame) {
     const stage = frame.parentElement;
