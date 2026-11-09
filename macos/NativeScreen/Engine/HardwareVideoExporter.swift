@@ -628,6 +628,25 @@ public final class HardwareVideoExporter {
             return pb
         }
 
+        /// Encodes one throwaway frame and reports whether a sample came back. Used on a probe session only.
+        func encodesFrame() -> Bool {
+            guard let s = session, let buffer = allocatePixelBuffer() else { return false }
+            nonisolated(unsafe) var produced = false
+            let status = VTCompressionSessionEncodeFrame(
+                s,
+                imageBuffer: buffer,
+                presentationTimeStamp: .zero,
+                duration: CMTime(value: 1, timescale: 60),
+                frameProperties: nil,
+                infoFlagsOut: nil
+            ) { encodeStatus, _, sampleBuffer in
+                produced = encodeStatus == noErr && sampleBuffer != nil
+            }
+            guard status == noErr else { return false }
+            VTCompressionSessionCompleteFrames(s, untilPresentationTimeStamp: .invalid)
+            return produced
+        }
+
         func setAverageBitRate(_ bitsPerSecond: Int) {
             workQueue.async {
                 guard let s = self.session else { return }
@@ -1035,6 +1054,7 @@ public final class HardwareVideoExporter {
     /// - The two lanes produce different SPS/PPS. The file still has one `avc1` sample description: the muxer writes every
     ///   keyframe with its own SPS/PPS in-band (`H264InBandParameterSets`), so Chrome can play it.
     /// - HEVC uses only the Hardware Media Engine lane.
+    /// - If the hardware encoder cannot run at this size, one software lane does the whole export (ADR-64).
     @MainActor
     private static func exportMP4VideoFileHybrid(
         session: ProjectSession,
@@ -1059,7 +1079,11 @@ public final class HardwareVideoExporter {
         let cmCodec: CMVideoCodecType = (codecOption == .h265) ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264
         let ordered = OrderedEncodedSampleQueue()
 
-        guard let hwWorker = VTParallelCompressionWorker(
+        let hardwareWorks = await Task.detached(priority: .userInitiated) {
+            hardwareEncoderWorks(width: targetW, height: targetH, codecType: cmCodec, quality: hwQuality, bitrate: bitrate, fps: fps)
+        }.value
+
+        let hwWorker: VTParallelCompressionWorker? = hardwareWorks ? VTParallelCompressionWorker(
             width: targetW,
             height: targetH,
             codecType: cmCodec,
@@ -1069,14 +1093,12 @@ public final class HardwareVideoExporter {
             fps: fps,
             label: "com.nativescreen.export.vt.hw",
             onEncoded: { ordered.deliver(frameIndex: $0, sample: $1, fromHardware: true) }
-        ) else {
-            throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: "Hardware video encoder unavailable."])
-        }
+        ) : nil
 
-        let swWorker: VTParallelCompressionWorker? = (codecOption == .h264) ? VTParallelCompressionWorker(
+        let swWorker: VTParallelCompressionWorker? = (codecOption == .h264 || hwWorker == nil) ? VTParallelCompressionWorker(
             width: targetW,
             height: targetH,
-            codecType: kCMVideoCodecType_H264,
+            codecType: cmCodec,
             useHardware: false,
             quality: hwQuality,
             bitrate: bitrate,
@@ -1084,6 +1106,10 @@ public final class HardwareVideoExporter {
             label: "com.nativescreen.export.vt.sw",
             onEncoded: { ordered.deliver(frameIndex: $0, sample: $1, fromHardware: false) }
         ) : nil
+
+        guard hwWorker != nil || swWorker != nil else {
+            throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: "Hardware video encoder unavailable."])
+        }
 
         let totalDurationMs = session.timeMapper.totalTimelineDurationMs
         let frameStepMs = 1000.0 / Double(fps)
@@ -1111,9 +1137,9 @@ public final class HardwareVideoExporter {
             }
         }
 
-        var lanes = [EncodeLane(worker: hwWorker, source: await ExportFrameSource.make(session: session))]
-        if let swWorker {
-            lanes.append(EncodeLane(worker: swWorker, source: await ExportFrameSource.make(session: session)))
+        var lanes: [EncodeLane] = []
+        for worker in [hwWorker, swWorker].compactMap({ $0 }) {
+            lanes.append(EncodeLane(worker: worker, source: await ExportFrameSource.make(session: session)))
         }
         let sourceMs: (Int) -> Double = { frameIdx in
             session.timeMapper.sourceTime(forTimelineMs: Double(frameIdx) * frameStepMs).sourceMs
@@ -1239,7 +1265,7 @@ public final class HardwareVideoExporter {
                 for lane in lanes {
                     // The software lane waits until the Media Engine has produced enough frames to measure its bitrate,
                     // so its very first GOP is already rate-matched.
-                    let softwareLaneNeedsCalibration = !lane.worker.isHardware && ordered.hardwareBitsPerFrame() == nil && nextGOP < gopCount - 1
+                    let softwareLaneNeedsCalibration = hwWorker != nil && !lane.worker.isHardware && ordered.hardwareBitsPerFrame() == nil && nextGOP < gopCount - 1
                     if lane.gopIndex == nil, !softwareLaneNeedsCalibration, nextGOP < gopCount, nextGOP <= ordered.orderedFrameCount / gopSize + maxGOPLead {
                         lane.gopIndex = nextGOP
                         lane.nextFrameIndex = nextGOP * gopSize
@@ -1320,7 +1346,7 @@ public final class HardwareVideoExporter {
 
             // Flush both encoders off the main actor. At most `maxGOPLead` GOPs are still in flight here.
             await Task.detached(priority: .userInitiated) {
-                hwWorker.finishAndWait()
+                hwWorker?.finishAndWait()
                 swWorker?.finishAndWait()
             }.value
             try Task.checkCancellation()
@@ -1344,13 +1370,38 @@ public final class HardwareVideoExporter {
             reportProgress(1.0, force: true)
         } catch {
             lanes.forEach { $0.prefetch?.cancel(); $0.source.cancel() }
-            hwWorker.cancel()
+            hwWorker?.cancel()
             swWorker?.cancel()
             audioPipeline?.reader.cancelReading()
             muxWriter?.cancelWriting()
             try? FileManager.default.removeItem(at: outputURL)
             throw error
         }
+    }
+
+    /// Whether the hardware encoder can really encode this size. Some refuse the session, and some accept it and then
+    /// fail every frame, so one frame goes through a separate session that is thrown away (its timestamp would clash).
+    private nonisolated static func hardwareEncoderWorks(
+        width: Int,
+        height: Int,
+        codecType: CMVideoCodecType,
+        quality: Double,
+        bitrate: Int,
+        fps: Int
+    ) -> Bool {
+        guard let probe = VTParallelCompressionWorker(
+            width: width,
+            height: height,
+            codecType: codecType,
+            useHardware: true,
+            quality: quality,
+            bitrate: bitrate,
+            fps: fps,
+            label: "com.nativescreen.export.vt.probe",
+            onEncoded: { _, _ in }
+        ) else { return false }
+        defer { probe.finishAndWait() }
+        return probe.encodesFrame()
     }
 
     @MainActor

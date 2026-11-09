@@ -53,7 +53,7 @@ Measured on an M4 Pro with a 43-second 3456×2170 recording exported at 4K/60fps
 - Parallel lanes: ~25s, peak RSS ~170 MB (bounded), worst GOP SSIM 0.9910, overall SSIM 0.9944 (was 0.9937). Files are ~15% larger because the software GOPs no longer get a lower bitrate.
 - Progress is reported from frames encoded by either lane, not frames muxed in order (the in-order count only moves when the slower lane finishes its GOP, which made the bar jump).
 - Main thread: no stall over 40ms while encoding (only ~0.8s of setup at export start).
-- `HEVC` uses only the hardware lane. `ProRes` and `GIF` use the same background decoder and main-actor pacing (yield every ~8ms, progress at ~30 Hz).
+- `HEVC` uses only the hardware lane (software if that lane cannot run, ADR-64). `ProRes` and `GIF` use the same background decoder and main-actor pacing (yield every ~8ms, progress at ~30 Hz).
 
 ---
 
@@ -1280,3 +1280,11 @@ A window recording of a mostly still app showed each click's result before the c
 The export reader chose whichever of its two decoded frames was nearest the target time, so a new frame appeared up to half a gap early. The preview was right because the player shows the frame on screen at that time. Export lanes start their own readers at different times, so the early jump also moved around within one export.
 
 The reader now returns the last frame at or before the target, with 0.5 ms for rounding, which is what the preview and the Windows `SequentialVideoSource` do. The cursor and telemetry were never late, so nothing changed in the solver. A reader that starts between two frames gets the held frame stamped with its start time, so a cut lands on the right image too.
+
+## 64. ADR-64: Export Falls Back to the Software Encoder
+
+MP4 export required the hardware encoder, and a 4158x2160 export failed on a macOS 14 machine in both codecs. The H.264 hardware encoder stops at 4096 wide: measured on an M4 Pro, 4096 works and 4098 refuses the session (`-12903`), so wider H.264 exports failed on every Mac. HEVC on that M4 Pro encodes up to 8192 wide, but on the macOS 14 machine it got a session and no frame came out.
+
+A session can be created and still fail every frame, so checking creation is not enough. Before each MP4 export, one throwaway frame goes through a separate hardware session. If no sample comes back, the export uses one software lane, in the chosen codec, at the target bitrate. The probe session is discarded because its frame would clash with the real frame 0.
+
+With no hardware lane there is no bitrate to calibrate against, so the software lane must not wait for one, or the export never starts.
