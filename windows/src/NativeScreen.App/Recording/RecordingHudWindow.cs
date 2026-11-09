@@ -1079,7 +1079,8 @@ public sealed partial class RecordingHudWindow : Window
             // The recorder opens the same devices, so the meter and the preview let go of them first.
             capturing = true;
             UpdateDevices();
-            await deviceWork;
+            // Only that the devices were let go matters here: a failure while closing one must not stop the recording.
+            await deviceWork.ContinueWith(_ => { }, TaskScheduler.Default);
             var directory = RecordingPackage.Create(AppSettings.Shared.ProjectsDirectory, DateTime.Now);
             var options = new RecordingOptions(chosen, directory, IsSystemAudioActive, microphone?.Id, camera?.Id, cameraMaxHeight, systemAudioAllApps ? null : systemAudioApps.ToList());
             var (created, started) = await Task.Run(() =>
@@ -1124,7 +1125,10 @@ public sealed partial class RecordingHudWindow : Window
             AppExclusion(false);
             ShowIdle();
             UpdateDevices();
-            await new ContentDialog { XamlRoot = root.XamlRoot, RequestedTheme = ElementTheme.Dark, Title = Loc.T("Could not start recording"), Content = exception.Message, CloseButtonText = Loc.T("OK") }.ShowAsync();
+            // A message box and not a dialog: the recording bar is too small to host one.
+            var message = exception.Message;
+            var title = Loc.T("Could not start recording");
+            _ = Task.Run(() => MessageBoxW(0, message, title, MessageBoxWarningTopmost));
         }
     }
 

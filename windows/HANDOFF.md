@@ -27,6 +27,13 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Windows fix: recording with the camera preview failed at start
+
+### Verifier
+- **Result:** the fix builds and the existing tests pass. No test covers it: a file-based media source accepts a second `Shutdown`, so only a real camera reproduces this. An agent never ran it with a camera (`spec/06` ADR-23, ADR-61); **the owner ran it with a camera and microphone and it works.**
+- **Cause:** `MF_E_SHUTDOWN` from a second `Shutdown` on the camera source, seen in the owner's run and in the event log's stack.
+- **Changes:** `WebcamRecorder.Release`, used by the recorder and the preview. The start of a recording ignores a failure while closing devices. Start errors use a message box, because the dialog was cut off by the bar's window.
+
 ## 2026-11-09, Windows port: voiceover cuts, label insets; 30 stickers on both systems
 
 ### Verifier

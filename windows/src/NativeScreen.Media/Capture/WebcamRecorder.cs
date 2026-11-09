@@ -13,6 +13,7 @@ public sealed class WebcamRecorder : IDisposable
 {
     private const int MinimumFps = 15;
     private const int MaximumFps = 60;
+    private const int MediaSourceAlreadyShutDown = unchecked((int)0xC00D3E85);
 
     private readonly IMFMediaSource source;
     private readonly IMFSourceReader reader;
@@ -114,13 +115,33 @@ public sealed class WebcamRecorder : IDisposable
         }
 
         writer.Dispose();
-        source.Stop();
+        try
+        {
+            source.Stop();
+        }
+        catch (SharpGen.Runtime.SharpGenException)
+        {
+            // Already gone with the device.
+        }
     }
 
     public void Dispose()
     {
         reader.Dispose();
-        source.Shutdown();
+        Release(source);
+    }
+
+    /// <summary>Releasing its source reader normally shuts a media source down too, and a second Shutdown fails with MF_E_SHUTDOWN (spec/06 ADR-61).</summary>
+    public static void Release(IMFMediaSource source)
+    {
+        try
+        {
+            source.Shutdown();
+        }
+        catch (SharpGen.Runtime.SharpGenException exception) when (exception.ResultCode.Code == MediaSourceAlreadyShutDown)
+        {
+        }
+
         source.Dispose();
     }
 

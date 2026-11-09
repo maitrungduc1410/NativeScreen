@@ -62,8 +62,7 @@ public sealed class CameraPreviewSource : IDisposable
             reader.Dispose();
         }
 
-        source.Shutdown();
-        source.Dispose();
+        WebcamRecorder.Release(source);
     }
 
     private void Run()

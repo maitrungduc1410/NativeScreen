@@ -1251,3 +1251,13 @@ One machine (i9-9880H, Radeon Pro 5500M, Windows 10 19045), the website's 7 s 10
 - An export started while the scan was running waited, and its first frame has the sticker.
 
 Stickers were placed on one person by eye. Landmarks from another model do not land on the same points as Vision, so check each sticker against a macOS export of the same recording.
+
+## 61. ADR-61: A Camera Is Shut Down Once
+
+`IMFSourceReader` shuts its media source down when it is released, unless told to disconnect. Calling `IMFMediaSource::Shutdown` afterwards fails with `MF_E_SHUTDOWN`, which Vortice throws. In `CameraPreviewSource.Dispose` that fault landed in the device-work chain, so a recording with the camera preview open failed at start, and the same call took the app down when quitting from the tray with the preview open.
+
+`WebcamRecorder.Release` tolerates only that code. The source still has to be shut down when the reader was not released, which happens when the read thread does not stop in time. `StartRecording` also no longer fails because a device could not be closed cleanly.
+
+Errors at the start of a recording go to a message box: a dialog cannot fit in the recording bar's window and was cut off.
+
+No agent has run this with a camera (ADR-23). The error text and stack come from the owner's run and the Windows event log, and the owner confirmed the fix with a camera and microphone.
