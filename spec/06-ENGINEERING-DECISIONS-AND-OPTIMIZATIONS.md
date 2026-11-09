@@ -1288,3 +1288,14 @@ MP4 export required the hardware encoder, and a 4158x2160 export failed on a mac
 A session can be created and still fail every frame, so checking creation is not enough. Before each MP4 export, one throwaway frame goes through a separate hardware session. If no sample comes back, the export uses one software lane, in the chosen codec, at the target bitrate. The probe session is discarded because its frame would clash with the real frame 0.
 
 With no hardware lane there is no bitrate to calibrate against, so the software lane must not wait for one, or the export never starts.
+
+## 65. ADR-65: A Project Is Frozen While It Exports
+
+The exporter reads the live `ProjectSession` for every frame, so an edit made halfway would land in only the second half of the video. An export started in the editor was safe from the user, because its overlay covers the window and the key monitor swallows shortcuts, but an agent could still edit that project. An export started by an agent showed no overlay, so both the user and the agent could edit during it.
+
+- `ProjectSession.isExportRunning` is true during either kind of export.
+- An export started by an agent (`AgentExportProgress`) shows the same overlay. Stop and ESC cancel it through the task that runs it, the same way a client's `notifications/cancelled` does.
+- While it is true, MCP refuses the tools that change the project, its playhead or its window (`toolsBlockedDuringExport`), including a second `export_video`. Tools that only read keep working.
+- `undo` and `redo` return early and `Cut`, `Paste` and `Delete` are disabled, because the menu bar can still be clicked with the mouse. `mutate` is deliberately not guarded: a transcript or scan that finishes during an export would lose its result without any error.
+
+Windows has the same gap and still needs this (`spec/05`).

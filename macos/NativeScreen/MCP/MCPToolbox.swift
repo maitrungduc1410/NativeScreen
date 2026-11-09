@@ -45,6 +45,12 @@ final class MCPToolbox {
 
     // MARK: - Dispatch
 
+    /// Tools that change the project, its playhead or its window. The exporter reads the session frame by frame.
+    private static let toolsBlockedDuringExport: Set<String> = [
+        "close_project", "delete_project", "rename_project", "update_project", "add_item", "update_item", "delete_item",
+        "split_item", "undo", "redo", "render_frame", "run_action", "set_background", "apply_preset", "export_video",
+    ]
+
     /// Checks the top-level arguments against the tool's schema. Omitting `project` means the frontmost editor, so a
     /// misspelled key must fail rather than be ignored: it would otherwise run the tool on the wrong project.
     private func validate(tool name: String, arguments raw: [String: Any]) throws {
@@ -68,6 +74,9 @@ final class MCPToolbox {
         let args = MCPArguments(raw: raw)
         do {
             try validate(tool: name, arguments: raw)
+            if Self.toolsBlockedDuringExport.contains(name), try session(args).isExportRunning {
+                throw MCPToolError("This project is exporting. Wait for the export to finish before calling \(name).")
+            }
             switch name {
             case "get_status": return ok(getStatus())
             case "list_projects": return ok(listProjects(args))
@@ -1207,17 +1216,32 @@ final class MCPToolbox {
             DockProgressIndicatingController.shared.setProgress(nil)
         }
         session.isPlaying = false
-        session.showToast("Exporting video...")
         DockProgressIndicatingController.shared.setProgress(0)
         let started = Date()
         var lastReported = -1.0
-        try await HardwareVideoExporter.exportProject(session: session, outputURL: outURL, config: config) { [weak self] fraction in
-            self?.activeExports[exportID]?.progress = fraction
-            DockProgressIndicatingController.shared.setProgress(fraction)
-            if fraction - lastReported >= 0.02 || fraction >= 1 {
-                lastReported = fraction
-                progress?.report(fraction, "Exporting \(Int(fraction * 100))%")
+        // A separate task, so the Stop button in the editor can end it as well as the client's cancel request.
+        let work = Task { @MainActor [weak self] in
+            try await HardwareVideoExporter.exportProject(session: session, outputURL: outURL, config: config) { fraction in
+                self?.activeExports[exportID]?.progress = fraction
+                session.agentExport?.progress = fraction
+                session.agentExport?.latestSampleAtMs = ProcessInfo.processInfo.systemUptime * 1000.0
+                DockProgressIndicatingController.shared.setProgress(fraction)
+                if fraction - lastReported >= 0.02 || fraction >= 1 {
+                    lastReported = fraction
+                    progress?.report(fraction, "Exporting \(Int(fraction * 100))%")
+                }
             }
+        }
+        session.agentExport = AgentExportProgress(
+            destination: config.target == .clipboard ? "Clipboard (\(outURL.lastPathComponent))" : outURL.path,
+            startedAtMs: ProcessInfo.processInfo.systemUptime * 1000.0,
+            stop: { work.cancel() }
+        )
+        defer { session.agentExport = nil }
+        try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
         }
         try Task.checkCancellation()
 

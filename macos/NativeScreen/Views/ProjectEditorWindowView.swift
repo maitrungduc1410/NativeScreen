@@ -24,7 +24,10 @@ public struct ProjectEditorWindowView: View {
     @State private var isShowingCommandMenu = false
     @State private var isShowingPresetsPopover = false
     @State private var exportConfig = HardwareVideoExporter.ExportConfiguration()
-    @State private var isExporting = false
+    private var isExporting: Bool {
+        get { session.isExportingFromEditor }
+        nonmutating set { session.isExportingFromEditor = newValue }
+    }
     @State private var exportProgress: Double = 0.0
     @State private var exportStartedAtMs: Double = 0.0
     @State private var exportMeasurementStart: (progress01: Double, atMs: Double)?
@@ -42,7 +45,7 @@ public struct ProjectEditorWindowView: View {
     }
 
     private var isModalOverlayActive: Bool {
-        isShowingCommandMenu || isShowingExportSheet || isExporting || session.isShowingStillFrameExportModal || session.isShowingCameraCropModal
+        isShowingCommandMenu || isShowingExportSheet || session.isExportRunning || session.isShowingStillFrameExportModal || session.isShowingCameraCropModal
     }
 
     public var body: some View {
@@ -762,6 +765,18 @@ public struct ProjectEditorWindowView: View {
                 )
                 .zIndex(600)
                 .transition(.opacity)
+            } else if let agentExport = session.agentExport {
+                ExportingFullOverlayView(
+                    projectName: session.document.name,
+                    destinationPath: agentExport.destination,
+                    progress: agentExport.progress,
+                    startedAtMs: agentExport.startedAtMs,
+                    measurementStart: (progress01: 0.0, atMs: agentExport.startedAtMs),
+                    latestSample: agentExport.latestSampleAtMs.map { (progress01: agentExport.progress, atMs: $0) },
+                    onStopExport: agentExport.stop
+                )
+                .zIndex(600)
+                .transition(.opacity)
             }
 
             // 7. CAMERA CROP MODAL OVERLAY
@@ -832,7 +847,7 @@ public struct ProjectEditorWindowView: View {
     private func performPendingEditorCommand() {
         guard let command = session.pendingEditorCommand else { return }
         session.pendingEditorCommand = nil
-        guard !isExporting else { return }
+        guard !session.isExportRunning else { return }
         switch command {
         case .showExportSheet:
             session.isPlaying = false
@@ -950,6 +965,13 @@ public struct ProjectEditorWindowView: View {
                 if event.keyCode == 53 { // ESC stops active export
                     cancelActiveExport()
                     return nil
+                }
+                return nil
+            }
+
+            if let agentExport = session.agentExport {
+                if event.keyCode == 53 { // ESC stops an export an agent started, like one started here
+                    agentExport.stop()
                 }
                 return nil
             }

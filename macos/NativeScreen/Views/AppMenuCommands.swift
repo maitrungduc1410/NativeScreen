@@ -103,6 +103,7 @@ struct AppMenuCommands: Commands {
                 }
             }
             .keyboardShortcut("x", modifiers: [.command])
+            .disabled(session?.isExportRunning == true)
             Button("Copy") {
                 if !Self.sendToTextResponder(#selector(NSText.copy(_:))), let session {
                     if let id = session.selectedMaskId {
@@ -119,6 +120,7 @@ struct AppMenuCommands: Commands {
                 if !Self.sendToTextResponder(#selector(NSText.paste(_:))) { session?.pasteFromClipboard() }
             }
             .keyboardShortcut("v", modifiers: [.command])
+            .disabled(session?.isExportRunning == true)
             Button("Paste and Match Style") {
                 _ = Self.sendToTextResponder(#selector(NSTextView.pasteAsPlainText(_:)))
             }
@@ -126,6 +128,7 @@ struct AppMenuCommands: Commands {
             Button("Delete") {
                 if !Self.sendToTextResponder(#selector(NSText.delete(_:))) { session?.deleteSelectedTimelineItem() }
             }
+            .disabled(session?.isExportRunning == true)
             Button("Select All") {
                 _ = Self.sendToTextResponder(#selector(NSText.selectAll(_:)))
             }

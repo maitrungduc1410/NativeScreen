@@ -9,6 +9,15 @@ import UniformTypeIdentifiers
 
 /// Per-window isolated NLE Project Session with Value-Type Snapshot Undo/Redo (`⌘Z` / `⇧⌘Z`)
 /// and `.nativescreen` package persistence.
+/// An export an AI agent started, shown in the editor with the same overlay as one started there.
+public struct AgentExportProgress {
+    public let destination: String
+    public let startedAtMs: Double
+    public var progress: Double = 0
+    public var latestSampleAtMs: Double? = nil
+    public let stop: @MainActor () -> Void
+}
+
 @Observable
 @MainActor
 public final class ProjectSession: Identifiable {
@@ -38,6 +47,11 @@ public final class ProjectSession: Identifiable {
     public private(set) var activeMaskIdAtPreviewTime: String? = nil
     public private(set) var isCursorHiddenAtPreviewTime: Bool = false
     public var previewPlaybackRate: Double = 1.0
+
+    // The exporter reads this session frame by frame, so the project stays frozen while one runs (`spec/06` ADR-65).
+    public var isExportingFromEditor: Bool = false
+    public var agentExport: AgentExportProgress? = nil
+    public var isExportRunning: Bool { isExportingFromEditor || agentExport != nil }
     public var isSplitModeActive: Bool = false
     public var timelineZoom: Double = 1.0
     public var isReelModeActive: Bool = false
@@ -499,7 +513,7 @@ public final class ProjectSession: Identifiable {
     public var hasRecordedCursor: Bool { !cursorEvents.isEmpty }
 
     public func undo() {
-        guard let previous = undoStack.popLast() else { return }
+        guard !isExportRunning, let previous = undoStack.popLast() else { return }
         lastMutateUptime = 0
         redoStack.append(document)
         document = previous
@@ -508,7 +522,7 @@ public final class ProjectSession: Identifiable {
     }
 
     public func redo() {
-        guard let next = redoStack.popLast() else { return }
+        guard !isExportRunning, let next = redoStack.popLast() else { return }
         lastMutateUptime = 0
         undoStack.append(document)
         document = next
