@@ -112,6 +112,9 @@ public sealed partial class SettingsWindow : Window
         Body.Children.Add(Ui.Text(AppSettings.Shared.ProjectsDirectory, 12, "Ink60"));
         Options(("Change", false, () => _ = ChooseProjectsFolder()));
         Updates();
+        // Here and not in Updates(), which stops early in a build with no updater.
+        var fileVersion = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyFileVersionAttribute>(typeof(SettingsWindow).Assembly)?.Version;
+        Body.Children.Add(Ui.Text(NativeScreen.Core.AppVersionText.Format(Loc.T("Version"), AppUpdater.Shared.InstalledVersion ?? McpServer.AppVersion, fileVersion), 12, "Ink60"));
     }
 
     private void Updates()

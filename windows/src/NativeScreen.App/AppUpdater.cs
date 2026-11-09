@@ -30,6 +30,9 @@ internal sealed class AppUpdater
 
     public string? ReadyVersion => ready?.TargetFullRelease.Version.ToString();
 
+    /// <summary>The installed version with its pre-release suffix. Null in a build run from the source tree.</summary>
+    public string? InstalledVersion => manager?.CurrentVersion?.ToString();
+
     private static UpdateManager? Create()
     {
         try

@@ -27,6 +27,14 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-09, Windows port: app version in Settings
+
+### Verifier
+- **Result:** PASS, except for the item under **Not checked**.
+- **Changes:** a line at the end of `Settings > General`, outside `Updates()`. The version comes from Velopack when installed, otherwise `McpServer.AppVersion`; the run number is the fourth part of the assembly's file version. `Version` is in the catalog. Unit test: `AppVersionTextTests`.
+- **Checked in the app:** a build with `-p:Version=1.2.3-beta.1 -p:FileVersion=1.2.3.57`, not installed, shows `Phiên bản 1.2.3 (57)` in Vietnamese. Release builds and tests pass: Core 299, Rendering 23, Media 21.
+- **Not checked:** an installed copy, so the `-beta.1` suffix from Velopack has not been seen on screen.
+
 ## 2026-11-09, Settings: show the app version (Windows only)
 
 ### Writer
