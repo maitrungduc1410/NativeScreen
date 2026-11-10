@@ -247,7 +247,7 @@ public final class JSONLinesAppender {
             FileManager.default.createFile(atPath: fileURL.path, contents: nil)
         }
         self.fileHandle = try? FileHandle(forWritingTo: fileURL)
-        try? self.fileHandle?.seekToEnd()
+        _ = try? self.fileHandle?.seekToEnd()
     }
 
     public func append<T: Encodable>(_ event: T) {

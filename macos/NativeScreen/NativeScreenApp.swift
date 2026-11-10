@@ -18,6 +18,18 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
         }
         MCPServer.shared.applySetting()
         _ = AppUpdater.shared // starts Sparkle's scheduled checks
+        Task { await RecordingCoordinator.shared.recoverInterruptedRecordings() }
+    }
+
+    /// Windows are not closed one by one on quit, so saving and the save prompt have to happen here.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard ProjectWorkspaceStore.shared.prepareToQuit() else { return .terminateCancel }
+        guard RecordingCoordinator.shared.isRecording else { return .terminateNow }
+        Task {
+            await RecordingCoordinator.shared.stopRecordingAndOpenEditor(opensEditor: false)
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

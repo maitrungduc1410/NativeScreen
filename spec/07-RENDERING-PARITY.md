@@ -102,7 +102,9 @@ Then apply `canvas.cropRect01` (min 16 px).
 - Screen rect comes from the stage layout (`StageLayout`, port `resolvedStageLayout`, `rawStageLayout`,
   `computeSplitScreenGeometry`, `calculateFittedScreenRect`, `cameraPlacement` exactly). Padding uses uniform margin
   `m = (s - s / (1 + 2r)) / 2` where `s` = shortest canvas side and `r = clamp(paddingRatio, 0, 0.45)`.
-- Scale the masked screen into the rect (§3 Lanczos rule).
+- Scale the masked screen into the rect (§3 Lanczos rule). During a classic zoom the rect is the zoomed one, so the screen goes
+  straight from source pixels to its final size. Corners, inset and the cursor are drawn at the zoomed size too; only the baked
+  shadow and the device bezel are enlarged after rendering (`spec/06` ADR-67).
 - **Corner radius:** `borderRadius * S`, or with a device mockup `34 * S` (iPhone) / `14 * S` (others).
 - **Inset border** (no mockup, `inset.size > 0.1`): rounded rect of the screen rect grown by `inset.size * S`, radius
   `radius + insetPx`, color `inset.color` at `inset.opacity`, drawn under the screen.

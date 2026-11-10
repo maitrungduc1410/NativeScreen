@@ -18,6 +18,30 @@ public final class TelemetryRecorder {
     private var pauseStartUptimeSec: TimeInterval?
     private var accumulatedPausedSec: TimeInterval = 0.0
 
+    /// `NSCursor.currentSystem` returns a new object every time, so it never equals `NSCursor.iBeam` and the like.
+    /// A cursor is recognized by its hotspot and shape, as ratios so an enlarged system pointer still matches.
+    private struct CursorShape: Hashable {
+        let hotX: Int
+        let hotY: Int
+        let aspect: Int
+
+        init(_ cursor: NSCursor) {
+            let size = cursor.image.size
+            hotX = Int((cursor.hotSpot.x / max(1.0, size.width) * 100.0).rounded())
+            hotY = Int((cursor.hotSpot.y / max(1.0, size.height) * 100.0).rounded())
+            aspect = Int((size.width / max(1.0, size.height) * 100.0).rounded())
+        }
+    }
+
+    /// Names as in `spec/02` §3.1. Open and closed hand have the same shape, so `closedHandImageData` tells them apart.
+    private let knownCursorKinds: [CursorShape: String] = [
+        CursorShape(.iBeam): "iBeam",
+        CursorShape(.pointingHand): "pointingHand",
+        CursorShape(.crosshair): "crosshair",
+        CursorShape(.openHand): "openHand",
+    ]
+    private let closedHandImageData = NSCursor.closedHand.image.tiffRepresentation
+
     public init(
         telemetryDirectoryURL: URL,
         captureLogicalBounds: CGRect
@@ -120,23 +144,12 @@ public final class TelemetryRecorder {
     }
 
     private func detectCurrentSystemCursorKind() -> String {
-        let current = NSCursor.currentSystem ?? NSCursor.current
-        if current == NSCursor.iBeam {
-            return "ibeam"
+        guard let current = NSCursor.currentSystem else { return "arrow" }
+        let kind = knownCursorKinds[CursorShape(current)] ?? "arrow"
+        if kind == "openHand", current.image.tiffRepresentation == closedHandImageData {
+            return "closedHand"
         }
-        if current == NSCursor.pointingHand {
-            return "pointer"
-        }
-        if current == NSCursor.crosshair {
-            return "crosshair"
-        }
-        if current == NSCursor.openHand {
-            return "openhand"
-        }
-        if current == NSCursor.closedHand {
-            return "closedhand"
-        }
-        return "arrow"
+        return kind
     }
 
     private func sampleCurrentMousePosition() {

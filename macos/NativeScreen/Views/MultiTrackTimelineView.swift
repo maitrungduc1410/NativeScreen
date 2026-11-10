@@ -758,9 +758,7 @@ public struct MultiTrackTimelineView: View {
                 let blockW = max(12.0, CGFloat((mapped.timelineEndMs - mapped.timelineStartMs) / totalTimelineMs) * contentWidth)
                 let isSelected = (session.selectedSliceId == mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
                 let isOtherSliceSelected = (session.selectedSliceId != nil && session.selectedSliceId != mapped.slice.id && session.selectedZoomId == nil && session.selectedMaskId == nil)
-                let isPlayedNow = abs(session.committedSourceTimeMs - mapped.slice.sourceStartMs) >= 0.0
-                    && session.committedSourceTimeMs >= mapped.slice.sourceStartMs
-                    && session.committedSourceTimeMs <= mapped.slice.sourceEndMs
+                let isPlayedNow = session.playedTimelineItemIds.contains(mapped.slice.id)
 
                 TimelineInteractiveSegmentView(
                     topTitle: "Clip",
@@ -907,9 +905,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedZoomId == zoom.id)
                     let isOtherZoomSelected = (session.selectedZoomId != nil && session.selectedZoomId != zoom.id)
-                    let isPlayedNow = session.committedSourceTimeMs >= zoom.sourceStartMs
-                        && session.committedSourceTimeMs <= zoom.sourceEndMs
-                    let timelineDurationMs = max(250.0, tEndMs - tStartMs)
+                    let isPlayedNow = session.playedTimelineItemIds.contains(zoom.id)
 
                     TimelineInteractiveSegmentView(
                         topTitle: zoom.presentation == .loupe ? "Loupe" : "Zoom",
@@ -1097,9 +1093,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedMaskId == item.id)
                     let isOtherMaskSelected = (session.selectedMaskId != nil && session.selectedMaskId != item.id)
-                    let isPlayedNow = session.committedSourceTimeMs >= item.sourceStartMs
-                        && session.committedSourceTimeMs <= item.sourceEndMs
-                    let timelineDurationMs = max(220.0, tEndMs - tStartMs)
+                    let isPlayedNow = session.playedTimelineItemIds.contains(item.id)
 
                     TimelineInteractiveSegmentView(
                         topTitle: "Mask",
@@ -1454,8 +1448,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedCaptionId == block.id)
                     let isOtherSelected = (session.selectedCaptionId != nil && !isSelected)
-                    let isPlayedNow = session.committedSourceTimeMs >= block.sourceStartMs
-                        && session.committedSourceTimeMs <= block.sourceEndMs
+                    let isPlayedNow = session.playedTimelineItemIds.contains(block.id)
 
                     TimelineInteractiveSegmentView(
                         topTitle: "Caption",
@@ -1630,8 +1623,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedCameraLayoutId == seg.id)
                     let isOtherSelected = (session.selectedCameraLayoutId != nil && session.selectedCameraLayoutId != seg.id)
-                    let isPlayedNow = session.committedSourceTimeMs >= seg.sourceStartMs
-                        && session.committedSourceTimeMs <= seg.sourceEndMs
+                    let isPlayedNow = session.playedTimelineItemIds.contains(seg.id)
 
                     TimelineInteractiveSegmentView(
                         topTitle: "Layout",
@@ -1794,8 +1786,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isSelected = (session.selectedVoiceoverId == vo.id)
                     let isOtherSelected = (session.selectedVoiceoverId != nil && session.selectedVoiceoverId != vo.id)
-                    let isPlayedNow = session.committedSourceTimeMs >= vo.sourceStartMs
-                        && session.committedSourceTimeMs <= vo.sourceEndMs
+                    let isPlayedNow = session.playedTimelineItemIds.contains(vo.id)
                     let voSamples = session.voiceoverWaveformSamplesByID[vo.id] ?? []
                     let voVolumePct = "\(Int(round(vo.volume * 100)))%"
                     let voVolIcon = vo.volume <= 0.01 ? "speaker.slash.fill" : (vo.volume < 0.5 ? "speaker.wave.1.fill" : "speaker.wave.2.fill")
@@ -2535,7 +2526,7 @@ private struct ClipSegmentDecoration: Equatable, View {
         return levels
     }
 
-    private static func readLevelBin(_ level: [Float], index: Int) -> Double {
+    nonisolated private static func readLevelBin(_ level: [Float], index: Int) -> Double {
         guard !level.isEmpty else { return 0.0 }
         if index < 0 || index >= level.count {
             return 0.0
@@ -2545,7 +2536,7 @@ private struct ClipSegmentDecoration: Equatable, View {
 
     /// Evaluates the 4-point Catmull-Rom Cubic Spline at `samplePosition` on `levelIndex`:
     /// `curve = left + 0.5 * t * (linearTerm + t * (quadraticTerm + t * cubicTerm))`
-    private static func readPyramidLevel(pyramid: [[Float]], levelIndex: Int, samplePosition: Double) -> Double {
+    nonisolated private static func readPyramidLevel(pyramid: [[Float]], levelIndex: Int, samplePosition: Double) -> Double {
         guard levelIndex >= 0 && levelIndex < pyramid.count else { return 0.0 }
         let level = pyramid[levelIndex]
         let scale = pow(2.0, Double(levelIndex))

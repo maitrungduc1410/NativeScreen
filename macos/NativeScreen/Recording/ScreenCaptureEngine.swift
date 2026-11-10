@@ -391,12 +391,10 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private var webcamVideoInput: AVAssetWriterInput?
     private var webcamPixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var isWebcamSessionStarted: Bool = false
-    private var webcamFirstPTS: CMTime = .invalid
     private var lastAppendedWebcamPTS: CMTime = .invalid
     private var microphoneWriter: AVAssetWriter?
     private var microphoneAudioInput: AVAssetWriterInput?
     private var isMicrophoneSessionStarted: Bool = false
-    private var microphoneFirstPTS: CMTime = .invalid
     private var lastAppendedMicrophonePTS: CMTime = .invalid
 
     private let videoQueue = DispatchQueue(label: "com.nativescreen.capture.video", qos: .userInteractive)
@@ -424,6 +422,17 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     }
     private let pauseLock = NSLock()
     private var pauseIntervals: [PauseInterval] = []
+    /// Time of the first screen frame, after pauses are removed. Every track counts from it (ADR-69).
+    private var timelineOriginPTS: CMTime = .invalid
+
+    /// Where a sample at `pts` falls on the shared timeline. `nil` before the first screen frame: it is not part of the recording.
+    private func timelineTime(forPTS pts: CMTime) -> CMTime? {
+        pauseLock.lock()
+        let origin = timelineOriginPTS
+        pauseLock.unlock()
+        guard origin.isValid, CMTimeCompare(pts, origin) >= 0 else { return nil }
+        return CMTimeSubtract(pts, origin)
+    }
 
     public private(set) var recordedDurationMs: Double = 0.0
     public var onFirstVideoFrameArrived: ((TimeInterval) -> Void)?
@@ -576,6 +585,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         self.lastSampleTime = .zero
         pauseLock.lock()
         self.pauseIntervals = []
+        self.timelineOriginPTS = .invalid
         pauseLock.unlock()
 
         let scStream = SCStream(filter: filter, configuration: config, delegate: self)
@@ -613,7 +623,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 maxResolution: cameraMaxResolution
             ) { [weak self] resolvedDims, configuredFps in
                 guard let self = self else { return }
-                self.avDeviceQueue.async {
+                self.avDeviceQueue.async { [self] in
                     if let webcamURL = outputWebcamURL {
                         try? FileManager.default.removeItem(at: webcamURL)
                         if let wWriter = try? AVAssetWriter(outputURL: webcamURL, fileType: .mp4) {
@@ -653,7 +663,6 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                                 self.webcamVideoInput = wInput
                                 self.webcamPixelBufferAdaptor = adaptor
                                 self.isWebcamSessionStarted = false
-                                self.webcamFirstPTS = .invalid
                                 self.lastAppendedWebcamPTS = .invalid
                             }
                         }
@@ -693,7 +702,6 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                         self.microphoneWriter = mWriter
                         self.microphoneAudioInput = mInput
                         self.isMicrophoneSessionStarted = false
-                        self.microphoneFirstPTS = .invalid
                         self.lastAppendedMicrophonePTS = .invalid
                     }
                 }
@@ -875,6 +883,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 writer.startSession(atSourceTime: pts)
                 isWritingSessionStarted = true
                 firstSampleTime = pts
+                pauseLock.lock()
+                timelineOriginPTS = pts
+                pauseLock.unlock()
                 // Anchor telemetry `t = 0.0ms` to the exact presentation timestamp of the first captured video frame!
                 let frameUptimeSec = CMTimeGetSeconds(rawPTS)
                 let nowUptime = ProcessInfo.processInfo.systemUptime
@@ -938,20 +949,20 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         let rawPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         guard rawPTS.isValid, let pausedOffset = pausedOffset(forHostPTS: rawPTS) else { return }
-        let pts = CMTimeSubtract(rawPTS, pausedOffset)
+        guard var framePTS = timelineTime(forPTS: CMTimeSubtract(rawPTS, pausedOffset)) else { return }
 
         if !isWebcamSessionStarted {
             // Guard against cold-start ISP black frames if the user started recording within milliseconds of selecting a camera
             if WarmCameraCaptureController.shared.isCameraAdjustingOrCold && Self.isFrameNearBlack(sampleBuffer) {
                 return
             }
-            webcamFirstPTS = pts
             wWriter.startSession(atSourceTime: .zero)
             isWebcamSessionStarted = true
         }
 
-        var framePTS = CMTimeSubtract(pts, webcamFirstPTS)
-        if !framePTS.isValid || CMTimeGetSeconds(framePTS) < 0 {
+        // The camera usually starts a little after the screen. Its first picture covers that gap, so the file
+        // has no hole at the start and every later frame sits at its real time.
+        if !lastAppendedWebcamPTS.isValid {
             framePTS = .zero
         }
         // Guarantee strictly monotonic presentation timestamps so `AVAssetWriter` never fails on cold-start clock jitter
@@ -1010,14 +1021,18 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         let adjusted = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: pausedOffset) ?? sampleBuffer
         let pts = CMSampleBufferGetPresentationTimeStamp(adjusted)
-        guard pts.isValid else { return }
+        guard pts.isValid, let timelinePTS = timelineTime(forPTS: pts) else { return }
 
         if !isMicrophoneSessionStarted {
-            microphoneFirstPTS = pts
             mWriter.startSession(atSourceTime: .zero)
             isMicrophoneSessionStarted = true
+            // The microphone usually starts a little after the screen. Real silence fills that gap, because transcription
+            // and the waveform read the file from its first sample and would not see a hole.
+            if let silence = Self.silentAudioSample(matching: adjusted, duration: timelinePTS), mInput.isReadyForMoreMediaData {
+                mInput.append(silence)
+            }
         }
-        guard let zeroBasedBuffer = Self.adjustSampleBufferTime(adjusted, bySubtracting: microphoneFirstPTS) else { return }
+        guard let zeroBasedBuffer = Self.adjustSampleBufferTime(adjusted, bySubtracting: CMTimeSubtract(pts, timelinePTS)) else { return }
         let zeroPTS = CMSampleBufferGetPresentationTimeStamp(zeroBasedBuffer)
         if lastAppendedMicrophonePTS.isValid && CMTimeCompare(zeroPTS, lastAppendedMicrophonePTS) <= 0 {
             return
@@ -1027,6 +1042,44 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 lastAppendedMicrophonePTS = zeroPTS
             }
         }
+    }
+
+    /// LPCM silence at time zero in the format of `reference`. `nil` when `duration` is under one audio buffer.
+    static func silentAudioSample(matching reference: CMSampleBuffer, duration: CMTime) -> CMSampleBuffer? {
+        guard let format = CMSampleBufferGetFormatDescription(reference),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
+              asbd.mFormatID == kAudioFormatLinearPCM, asbd.mBytesPerFrame > 0, asbd.mSampleRate > 0 else { return nil }
+        let frameCount = Int(CMTimeGetSeconds(duration) * asbd.mSampleRate)
+        guard frameCount > 0, CMTimeGetSeconds(duration) >= 0.005 else { return nil }
+        let isNonInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+        let byteCount = frameCount * Int(asbd.mBytesPerFrame) * (isNonInterleaved ? Int(asbd.mChannelsPerFrame) : 1)
+
+        var block: CMBlockBuffer?
+        guard CMBlockBufferCreateWithMemoryBlock(
+            allocator: kCFAllocatorDefault,
+            memoryBlock: nil,
+            blockLength: byteCount,
+            blockAllocator: nil,
+            customBlockSource: nil,
+            offsetToData: 0,
+            dataLength: byteCount,
+            flags: kCMBlockBufferAssureMemoryNowFlag,
+            blockBufferOut: &block
+        ) == noErr, let block, CMBlockBufferFillDataBytes(with: 0, blockBuffer: block, offsetIntoDestination: 0, dataLength: byteCount) == noErr else {
+            return nil
+        }
+
+        var sample: CMSampleBuffer?
+        guard CMAudioSampleBufferCreateReadyWithPacketDescriptions(
+            allocator: kCFAllocatorDefault,
+            dataBuffer: block,
+            formatDescription: format,
+            sampleCount: frameCount,
+            presentationTimeStamp: .zero,
+            packetDescriptions: nil,
+            sampleBufferOut: &sample
+        ) == noErr else { return nil }
+        return sample
     }
 
     /// Selects the highest frame rate format (preferring 60fps when supported by the camera, e.g. Continuity Camera / external 60fps webcams,

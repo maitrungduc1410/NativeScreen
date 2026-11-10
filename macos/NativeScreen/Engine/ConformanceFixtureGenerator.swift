@@ -494,7 +494,7 @@ enum ConformanceFixtureGenerator {
         try writeJSONL(spec.keys, to: telemetry.appendingPathComponent("keys.jsonl"))
         try writeJSONL([WindowSample](), to: telemetry.appendingPathComponent("window.jsonl"))
 
-        var metadata = RecordingMetadata(
+        let metadata = RecordingMetadata(
             appVersion: "1.0.0",
             platform: "macos",
             createdAt: createdAt,
@@ -1013,7 +1013,7 @@ enum ConformanceFixtureGenerator {
 
     private static func cgImage(pixels: [UInt8], width: Int, height: Int) throws -> CGImage {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        var storage = pixels
+        let storage = pixels
         guard let provider = CGDataProvider(data: Data(storage) as CFData),
               let image = CGImage(
                 width: width, height: height,

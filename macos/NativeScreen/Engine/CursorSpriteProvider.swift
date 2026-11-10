@@ -252,8 +252,10 @@ public final class CursorSpriteProvider {
 
     private func mapTelemetryCursorKind(_ rawKind: String) -> String {
         switch rawKind {
-        case "arrow", "pointer", "default": return "pointer"
-        case "pointingHand", "pointinghand": return "pointinghand"
+        // `pointer` here is a recorded kind, the hand that both recorders wrote before following `spec/02`.
+        // The arrow sprite is also called `pointer`, which is how the two got mixed up.
+        case "arrow", "default": return "pointer"
+        case "pointingHand", "pointinghand", "pointer": return "pointinghand"
         case "iBeam", "ibeam", "ibeamstroke": return "ibeamstroke"
         case "crosshair", "cross": return "cross"
         case "closedHand", "closedhand", "openHand", "openhand": return "closedhand"

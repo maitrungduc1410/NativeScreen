@@ -115,6 +115,14 @@
   - [x] **macOS:** a project is frozen while it exports, for the user and for agents (`spec/06` ADR-65).
   - [x] **Windows:** the same freeze, with the export overlay for exports started by an agent.
   - [ ] A command line (`nativescreen export ...`) on the same tools.
+- [x] **Sharp zooms on macOS:** a zoomed frame is drawn from source pixels, not enlarged from the canvas (`spec/06` ADR-67).
+  - [ ] **Windows:** the same draw order, then regenerate the `zoom-follow` and `zoom-manual` fixtures.
+- [x] **GIF export on macOS** streams to disk and stores only what changed, so memory stays flat (`spec/06` ADR-68).
+- [x] **Camera and microphone on macOS** start at the first screen frame (`spec/06` ADR-69).
+- [x] **Interrupted recordings on macOS** are recovered at the next launch, and quitting saves and asks like closing a window (`spec/06` ADR-70).
+- [x] **Export on macOS** keeps segmentation, audio and frame rendering off the main thread (`spec/06` ADR-71).
+- [x] **Cursor kinds on macOS** (I-beam, hand, crosshair) are recorded (`spec/06` ADR-73).
+  - [ ] **Windows:** write `pointingHand` for `IDC_HAND`, and read a recorded `pointer` as the hand in `OverlayRasterizer.MapKind`.
 - [x] **Releases and updates:** manual GitHub Actions release (`docs/releasing.md`, ADR-53) builds a signed, notarized DMG and a Sparkle appcast for macOS and a Velopack installer for Windows, as a draft release. `Check for Updates...` in the app menu and menu bar menu, `Check for updates automatically` in Settings > General (release builds only).
   - [x] Windows: Velopack startup hook and update check in the app (see `windows/HANDOFF.md`).
   - [ ] Windows code signing (SignPath Foundation).

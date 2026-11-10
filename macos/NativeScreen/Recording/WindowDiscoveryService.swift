@@ -208,7 +208,7 @@ public enum WindowDiscoveryService {
     public static func topmostWindowUnderMouse() -> CapturableWindowInfo? {
         let quartzPoint = currentMouseQuartzPoint()
         let windows = listFrontToBackWindows(resolveCornerRadius: false)
-        return windows.first { $0.bounds.contains(quartzPoint) }.map(withCornerRadius)
+        return windows.first { $0.bounds.contains(quartzPoint) }.map { withCornerRadius($0) }
     }
 
     /// Brings the target application & window to the front before starting window capture.

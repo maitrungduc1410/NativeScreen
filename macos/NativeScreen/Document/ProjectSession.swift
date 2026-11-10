@@ -46,6 +46,8 @@ public final class ProjectSession: Identifiable {
     public private(set) var spokenTranscriptSegmentIds: Set<String> = []
     public private(set) var activeMaskIdAtPreviewTime: String? = nil
     public private(set) var isCursorHiddenAtPreviewTime: Bool = false
+    /// Timeline items under the committed playhead. The timeline tracks read this instead of the playhead.
+    public private(set) var playedTimelineItemIds: Set<String> = []
     public var previewPlaybackRate: Double = 1.0
 
     // The exporter reads this session frame by frame, so the project stays frozen while one runs (`spec/06` ADR-65).
@@ -628,6 +630,22 @@ public final class ProjectSession: Identifiable {
         }
         if spoken != spokenTranscriptSegmentIds {
             spokenTranscriptSegmentIds = spoken
+        }
+
+        let committedMs = committedSourceTimeMs
+        func isUnderPlayhead(_ startMs: Double, _ endMs: Double) -> Bool { committedMs >= startMs && committedMs <= endMs }
+        var played: Set<String> = []
+        let timeline = document.timeline
+        for item in timeline.slices where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
+        for item in timeline.zooms where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
+        for track in timeline.maskTracks {
+            for item in track.items where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
+        }
+        for item in timeline.cameraLayouts where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
+        for item in timeline.voiceovers where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
+        for item in document.captions.captionBlocks where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
+        if played != playedTimelineItemIds {
+            playedTimelineItemIds = played
         }
     }
 

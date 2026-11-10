@@ -615,7 +615,7 @@ public enum LocalOnDeviceMediaIntelligence {
         return current
     }
 
-    public static func applyCustomColorPreset(to input: CIImage, preset: CustomCameraColorPreset) -> CIImage {
+    public nonisolated static func applyCustomColorPreset(to input: CIImage, preset: CustomCameraColorPreset) -> CIImage {
         let baseExtent = input.extent
         var img = input
         // 1. Warmth (-1.0 .. 1.0 -> 8000K cool .. 5000K warm)
@@ -644,7 +644,7 @@ public enum LocalOnDeviceMediaIntelligence {
         return img.cropped(to: baseExtent)
     }
 
-    public static func applyBuiltInLook(to input: CIImage, preset: CameraColorGradePreset) -> CIImage {
+    public nonisolated static func applyBuiltInLook(to input: CIImage, preset: CameraColorGradePreset) -> CIImage {
         switch preset {
         case .original:
             return input

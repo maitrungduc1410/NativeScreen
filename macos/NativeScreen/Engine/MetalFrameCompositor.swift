@@ -110,7 +110,7 @@ public final class MetalFrameCompositor {
         self.ciContext = CIContext(mtlDevice: dev, options: [
             .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
             .workingFormat: CIFormat.BGRA8,
-            .cacheIntermediates: true,
+            .cacheIntermediates: false, // video frames never repeat; slow static layers are baked into textures instead
             .priorityRequestLow: false
         ])
     }
@@ -193,8 +193,33 @@ public final class MetalFrameCompositor {
             : targetStage
         let screenFrameRect = stage.screenRect
 
-        let scaleX = screenFrameRect.width / max(1.0, maskedScreen.extent.width)
-        let scaleY = screenFrameRect.height / max(1.0, maskedScreen.extent.height)
+        // The zoom is applied while the screen is drawn, not to the finished layer: enlarging a layer already rendered
+        // at canvas size would throw away the detail the recording has (ADR-67).
+        let zoomScale = CGFloat(max(1.0, cameraState.scale))
+        let hasCenterOffset = hypot(cameraState.center01.x - 0.5, cameraState.center01.y - 0.5) > 0.0005
+        let cameraTransform: CGAffineTransform? = {
+            guard !cameraState.isLoupeMode && (zoomScale > 1.0005 || hasCenterOffset) else { return nil }
+            let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
+            let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
+            let zoomInterp01 = min(1.0, max(0.0, (zoomScale - 1.0) / 0.5))
+            // Zooming moves the focus from the screen's center to the canvas center (the same point unless the
+            // screen is offset, e.g. in split screen or mid layout transition).
+            let canvasCenterX = screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zoomInterp01
+            let canvasCenterY = screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zoomInterp01
+            return CGAffineTransform(translationX: canvasCenterX, y: canvasCenterY)
+                .scaledBy(x: zoomScale, y: zoomScale)
+                .translatedBy(x: -focusX, y: -focusY)
+        }()
+        let drawnScreenRect = cameraTransform.map { screenFrameRect.applying($0) } ?? screenFrameRect
+        let drawScale = drawnScreenRect.width / max(1.0, screenFrameRect.width)
+        // Small margin for motion blur, so downstream filters never evaluate the oversized zoomed layer outside the canvas.
+        let zoomedMargin = canvasRect.insetBy(dx: -24, dy: -24)
+        func zoomed(_ layer: CIImage) -> CIImage {
+            cameraTransform.map { layer.transformed(by: $0) } ?? layer
+        }
+
+        let scaleX = drawnScreenRect.width / max(1.0, maskedScreen.extent.width)
+        let scaleY = drawnScreenRect.height / max(1.0, maskedScreen.extent.height)
         var scaledScreen: CIImage
         if abs(scaleX - scaleY) < 0.002 && scaleX < 0.99 {
             scaledScreen = maskedScreen.applyingFilter("CILanczosScaleTransform", parameters: [
@@ -209,14 +234,16 @@ public final class MetalFrameCompositor {
             ? (doc.frameStyle.deviceMockup.deviceId?.contains("iphone") == true ? 34.0 : 14.0)
             : doc.frameStyle.borderRadius
         let scaledRadius = CGFloat(baseRadius) * (outputSize.height / 900.0)
+        let drawnRadius = scaledRadius * drawScale
         scaledScreen = applyRoundedCorners(
             to: scaledScreen,
-            rect: CGRect(origin: .zero, size: screenFrameRect.size),
-            radius: scaledRadius
+            rect: CGRect(origin: .zero, size: drawnScreenRect.size),
+            radius: drawnRadius,
+            bakesMask: cameraTransform == nil
         )
 
         var positionedScreen = scaledScreen.transformed(
-            by: CGAffineTransform(translationX: screenFrameRect.minX, y: screenFrameRect.minY)
+            by: CGAffineTransform(translationX: drawnScreenRect.minX, y: drawnScreenRect.minY)
         )
 
         // Device Mockup Bezel
@@ -227,16 +254,16 @@ public final class MetalFrameCompositor {
                 screenRadius: scaledRadius,
                 mockup: doc.frameStyle.deviceMockup
             ) {
-                positionedScreen = bezelImg.composited(over: positionedScreen)
+                positionedScreen = zoomed(bezelImg).composited(over: positionedScreen)
             }
         } else if doc.frameStyle.inset.enabled && doc.frameStyle.inset.size > 0.1 {
             // Screen Inset Border (`Inset` toggle in Background tab)
-            let insetPx = CGFloat(doc.frameStyle.inset.size) * (outputSize.height / 900.0)
-            let outerInsetRect = screenFrameRect.insetBy(dx: -insetPx, dy: -insetPx)
+            let insetPx = CGFloat(doc.frameStyle.inset.size) * (outputSize.height / 900.0) * drawScale
+            let outerInsetRect = drawnScreenRect.insetBy(dx: -insetPx, dy: -insetPx)
             let c = CIColor(hexString: doc.frameStyle.inset.color)
             if let insetBox = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
                 "inputExtent": CIVector(cgRect: outerInsetRect),
-                "inputRadius": scaledRadius + insetPx,
+                "inputRadius": drawnRadius + insetPx,
                 "inputColor": CIColor(red: c.red, green: c.green, blue: c.blue, alpha: CGFloat(doc.frameStyle.inset.opacity))
             ])?.outputImage {
                 positionedScreen = positionedScreen.composited(over: insetBox)
@@ -282,7 +309,7 @@ public final class MetalFrameCompositor {
                 }
             }
             if let blurredShadow {
-                positionedScreen = positionedScreen.composited(over: blurredShadow)
+                positionedScreen = positionedScreen.composited(over: zoomed(blurredShadow))
             }
         }
 
@@ -294,37 +321,16 @@ public final class MetalFrameCompositor {
         if !hideCursorInSlice && cursorState.opacity > 0.01 {
             positionedScreen = renderCursorAndRipple(
                 over: positionedScreen,
-                canvasRect: canvasRect,
-                screenFrameRect: screenFrameRect,
+                canvasRect: cameraTransform == nil ? canvasRect : zoomedMargin,
+                screenFrameRect: drawnScreenRect,
                 cursorState: cursorState,
                 cursorConfig: doc.cursor,
-                canvasScale: outputSize.height / 900.0
+                canvasScale: outputSize.height / 900.0 * drawScale
             )
         }
 
-        // Apply Virtual Camera Pan & Zoom Transform (Classic mode)
-        let zoomScale = CGFloat(max(1.0, cameraState.scale))
-        let hasCenterOffset = hypot(cameraState.center01.x - 0.5, cameraState.center01.y - 0.5) > 0.0005
-        if !cameraState.isLoupeMode && (zoomScale > 1.0005 || hasCenterOffset) {
-            let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
-            let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
-            let zoomInterp01 = min(1.0, max(0.0, (zoomScale - 1.0) / 0.5))
-            // Zooming moves the focus from the screen's center to the canvas center (the same point unless the
-            // screen is offset, e.g. in split screen or mid layout transition).
-            let canvasCenterX = screenFrameRect.midX + (canvasRect.midX - screenFrameRect.midX) * zoomInterp01
-            let canvasCenterY = screenFrameRect.midY + (canvasRect.midY - screenFrameRect.midY) * zoomInterp01
-
-            var cameraTransform = CGAffineTransform.identity
-            cameraTransform = cameraTransform.translatedBy(x: canvasCenterX, y: canvasCenterY)
-            cameraTransform = cameraTransform.scaledBy(x: zoomScale, y: zoomScale)
-            cameraTransform = cameraTransform.translatedBy(x: -focusX, y: -focusY)
-
-            // Crop immediately to `canvasRect` (+ small margin for motion blur) so downstream filters
-            // NEVER evaluate an oversized 1.8x–3.5x zoomed intermediate texture outside the visible canvas!
-            let zoomedMargin = canvasRect.insetBy(dx: -24, dy: -24)
-            positionedScreen = positionedScreen
-                .transformed(by: cameraTransform)
-                .cropped(to: zoomedMargin)
+        if cameraTransform != nil {
+            positionedScreen = positionedScreen.cropped(to: zoomedMargin)
         }
 
         // --- PASS 5: Camera motion blur ---
@@ -334,7 +340,7 @@ public final class MetalFrameCompositor {
             !z.disabled && z.instantAnimation && sourceTimeMs >= z.sourceStartMs && sourceTimeMs <= z.sourceEndMs + 50.0
         }
         // Paused on the last frame: the camera is at rest, so no blur.
-        let isPausedAtTimelineEnd = !includeShortcutOverlay
+        let isPausedAtTimelineEnd = isRealtimePreview
             && !session.isPlaying
             && session.hoverSkimTimelineMs == nil
             && session.playheadTimelineMs >= session.timeMapper.totalTimelineDurationMs - 16.7
@@ -378,7 +384,7 @@ public final class MetalFrameCompositor {
                 rectNow: rectNow,
                 rectPrevious: rectPrev,
                 shutter: blurStrength,
-                isExportQuality: includeShortcutOverlay || !session.isPlaying
+                isExportQuality: !isRealtimePreview || !session.isPlaying
             )
         }
 
@@ -953,11 +959,12 @@ public final class MetalFrameCompositor {
         )
     }
 
-    private func applyRoundedCorners(to image: CIImage, rect: CGRect, radius: CGFloat) -> CIImage {
+    /// While zooming the rect changes every frame and can be far larger than the canvas, so the mask is not baked.
+    private func applyRoundedCorners(to image: CIImage, rect: CGRect, radius: CGFloat, bakesMask: Bool) -> CIImage {
         guard radius > 0.5 else { return image }
         let maskKey = RoundedMaskCacheKey(rect: rect, radius: radius)
         let roundedMask: CIImage
-        if maskKey == lastRoundedMaskCacheKey, let cached = cachedRoundedMaskImage {
+        if bakesMask, maskKey == lastRoundedMaskCacheKey, let cached = cachedRoundedMaskImage {
             roundedMask = cached
         } else {
             guard let generated = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
@@ -967,10 +974,14 @@ public final class MetalFrameCompositor {
             ])?.outputImage else {
                 return image
             }
-            let materialized = materializeToGPUTexture(generated, extent: rect) ?? generated
-            lastRoundedMaskCacheKey = maskKey
-            cachedRoundedMaskImage = materialized
-            roundedMask = materialized
+            if bakesMask {
+                let materialized = materializeToGPUTexture(generated, extent: rect) ?? generated
+                lastRoundedMaskCacheKey = maskKey
+                cachedRoundedMaskImage = materialized
+                roundedMask = materialized
+            } else {
+                roundedMask = generated
+            }
         }
         let clearBG = CIImage.empty().cropped(to: rect)
         return image.applyingFilter("CIBlendWithMask", parameters: [
@@ -1989,24 +2000,11 @@ public final class MetalFrameCompositor {
         }
         // Vision may overwrite its buffer on the next request, which the other lane makes before this mask is used again.
         guard let ownedMask = LocalOnDeviceMediaIntelligence.copyingPixels(of: mask) else { return mask }
-        segmentedWebcamFrames.append(SegmentedWebcamFrame(frame: sourceFrame, crop: camCfg.cropRect01, mirror: camCfg.mirror, mask: ownedMask))
-        if segmentedWebcamFrames.count > Self.maxSegmentedWebcamFrames {
-            segmentedWebcamFrames.removeFirst()
-        }
+        rememberPersonMask(ownedMask, frame: sourceFrame, camCfg: camCfg)
         return ownedMask
     }
 
-    private func prepareRecordedWebcamFrame(
-        _ frame: CIImage,
-        packageURL: URL,
-        camCfg: CameraConfig,
-        customPreset: CustomCameraColorPreset?,
-        webcamMs: Double,
-        faceTrack: FaceTrack?,
-        isCutoutMode: Bool,
-        isRealtimePreview: Bool
-    ) -> CIImage {
-        let frameIdentity = ObjectIdentifier(frame)
+    private static func croppedAndMirrored(_ frame: CIImage, camCfg: CameraConfig) -> CIImage {
         var img = frame.transformed(by: CGAffineTransform(translationX: -frame.extent.minX, y: -frame.extent.minY))
         let ext = img.extent
         let crop = camCfg.cropRect01
@@ -2025,6 +2023,51 @@ public final class MetalFrameCompositor {
         if !camCfg.mirror {
             img = img.transformed(by: CGAffineTransform(scaleX: -1.0, y: 1.0).translatedBy(x: -img.extent.width, y: 0.0))
         }
+        return img
+    }
+
+    /// Runs the `.accurate` segmentation for an exported frame on a background thread, so `composeFrame` finds the
+    /// mask ready and the editor stays responsive. If this frame ends up not needing it, nothing else changes (ADR-71).
+    func prepareExportFrame(webcamFrame: CIImage?, sourceTimeMs: Double, session: ProjectSession) async {
+        guard let webcamFrame else { return }
+        let key = Self.stageKey(session: session, at: sourceTimeMs)
+        let camCfg = key.config
+        let isCutout = !key.isFullscreenCamera && camCfg.layoutMode == .cutout
+        guard key.isCameraVisible, isCutout || camCfg.backgroundMode != .original,
+              !segmentedWebcamFrames.contains(where: {
+                  $0.frame === webcamFrame && $0.crop == camCfg.cropRect01 && $0.mirror == camCfg.mirror
+              }) else { return }
+
+        let image = Self.croppedAndMirrored(webcamFrame, camCfg: camCfg)
+        nonisolated(unsafe) let request = webcamSegmentationRequest
+        let owned: CIImage? = await Task.detached(priority: .userInitiated) {
+            LocalOnDeviceMediaIntelligence.personSegmentationMask(for: image, reusing: request)
+                .flatMap(LocalOnDeviceMediaIntelligence.copyingPixels(of:))
+        }.value
+        if let owned {
+            rememberPersonMask(owned, frame: webcamFrame, camCfg: camCfg)
+        }
+    }
+
+    private func rememberPersonMask(_ mask: CIImage, frame: CIImage, camCfg: CameraConfig) {
+        segmentedWebcamFrames.append(SegmentedWebcamFrame(frame: frame, crop: camCfg.cropRect01, mirror: camCfg.mirror, mask: mask))
+        if segmentedWebcamFrames.count > Self.maxSegmentedWebcamFrames {
+            segmentedWebcamFrames.removeFirst()
+        }
+    }
+
+    private func prepareRecordedWebcamFrame(
+        _ frame: CIImage,
+        packageURL: URL,
+        camCfg: CameraConfig,
+        customPreset: CustomCameraColorPreset?,
+        webcamMs: Double,
+        faceTrack: FaceTrack?,
+        isCutoutMode: Bool,
+        isRealtimePreview: Bool
+    ) -> CIImage {
+        let frameIdentity = ObjectIdentifier(frame)
+        var img = Self.croppedAndMirrored(frame, camCfg: camCfg)
         // The cutout layout has no background of its own, so a chosen background only applies to the other layouts.
         let wantsBackground = !isCutoutMode && camCfg.backgroundMode != .original
         var personMask: CIImage?

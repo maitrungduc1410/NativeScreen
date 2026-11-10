@@ -397,8 +397,32 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
     /// With autosave off, closing an editor with unsaved edits asks whether to save them.
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard let (sessionID, _) = editorWindowsBySessionID.first(where: { $0.value === sender }),
-              let session = sessionsByID[sessionID],
-              session.hasUnsavedChanges else { return true }
+              let session = sessionsByID[sessionID] else { return true }
+        return confirmUnsavedChanges(of: session)
+    }
+
+    /// Asks about unsaved edits, confirms stopping a running export, and saves everything else. `false` cancels the quit.
+    public func prepareToQuit() -> Bool {
+        let open = Array(sessionsByID.values)
+        if open.contains(where: \.isExportRunning) {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "An export is still running. Quit anyway?")
+            alert.addButton(withTitle: String(localized: "Cancel"))
+            alert.addButton(withTitle: String(localized: "Quit Native Screen")).hasDestructiveAction = true
+            guard alert.runModal() == .alertSecondButtonReturn else { return false }
+        }
+        for session in open {
+            guard confirmUnsavedChanges(of: session) else { return false }
+            if AppSettings.shared.autosaveEnabled {
+                try? session.saveNow() // an autosave may still be waiting for its delay
+            }
+        }
+        return true
+    }
+
+    private func confirmUnsavedChanges(of session: ProjectSession) -> Bool {
+        guard session.hasUnsavedChanges else { return true }
         let alert = NSAlert()
         alert.messageText = String(localized: "Do you want to save the changes made to “\(session.document.name)”?")
         alert.informativeText = String(localized: "Your changes will be lost if you don’t save them.")

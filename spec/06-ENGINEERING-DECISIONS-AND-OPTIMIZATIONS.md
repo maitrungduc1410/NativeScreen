@@ -1316,3 +1316,64 @@ A review of the Windows port for work repeated without need and for failures tha
 - **Person masks in the preview.** The render thread only copies the picture. Sampling it for the network, a few milliseconds per picture, moved to the worker, and the tensor and two masks are reused: a new tensor per picture was 21 MB/s on the large object heap.
 - **Timeline drags.** Trim badges and ruler ticks are moved on each pointer event, not created again.
 - **Export over a still screen.** A seek forward is only useful when the next decoded frame is also behind the target. Otherwise it lands on the same frame again, once per exported frame.
+
+## 67. ADR-67: Zoomed Frames Come From Source Pixels
+
+The screen was scaled down to the fitted rect, composited with its corners and cursor, and the finished layer was then enlarged by the camera zoom. A 3456 px recording exported at 1080p with a 1.8x zoom was therefore shrunk to half and enlarged again, which blurred text that the recording held sharply. CoreImage only joins neighboring affine transforms, so a transform on top of a filter or a composite works from pixels already rendered at canvas size. Removing Lanczos alone would not have helped.
+
+The camera transform is now applied while the screen is drawn. The source is scaled once to the zoomed rect (Lanczos when that is still a downscale), and the corners, inset, cursor and click ripple use the zoomed rect and scale. Soft layers (the baked shadow and the device bezel) are still enlarged after rendering. The rounded mask is not baked during a zoom: its rect changes every frame and can be far larger than the canvas, and CoreImage evaluates only the visible part of the generator. Unzoomed frames are unchanged pixel for pixel.
+
+On a test frame at 1.8x, a sharpness measure (Laplacian variance) went from 110 to 150, limited by the source recording. Windows and the `zoom-follow` and `zoom-manual` fixtures still use the old order (`spec/05`).
+
+## 68. ADR-68: GIF Export Streams to Disk
+
+`CGImageDestination` keeps every added image until it finalizes: a 12 s, 50 fps, 1080p GIF took 10.9 GB of memory. `StreamingGIFWriter` encodes each frame alone with ImageIO, which still does the color reduction and compression, and copies its palette and pixel data into one file.
+
+- Only the rectangle that changed since the last frame is stored, with disposal "keep previous", and an identical frame extends the delay of the one before. Without this the same clip was 3 times larger.
+- A frame is written only when the next one arrives, because its delay comes before its pixels.
+- Delays are whole centiseconds, so they are rounded from the running total. A 30 fps GIF alternates 3 and 4, and keeps its real length.
+- No looping means no `NETSCAPE2.0` block, which every player reads as "play once".
+
+The same clip now peaks at 234 MB (178 MB before the export starts), takes 11.7 s instead of 14.2 s, and is 54 MB instead of 46 MB.
+
+## 69. ADR-69: Every Recorded Track Starts at the First Screen Frame
+
+The camera and microphone files counted from their own first sample, and that offset was stored nowhere, so both played early against the screen. In existing recordings the camera was 0.13 to 0.55 s short of the screen and the microphone 0.08 to 0.16 s short, which also put lips and voice up to 0.39 s apart.
+
+The first screen frame now sets `timelineOriginPTS`, and the other tracks place their samples relative to it. Samples before it are dropped. The gap at the start is filled instead of left empty, because transcription and the waveform read an audio file from its first sample, and a hole in the camera file would show the placeholder portrait: the first camera picture is placed at zero, and the microphone file starts with real silence. Recordings made before this fix keep their offset.
+
+## 70. ADR-70: Recordings Survive a Crash, and Quitting Saves
+
+The video was already written in 2 s fragments, but `project.json` and `metadata.json` only appeared when a recording stopped normally, so a crash left a folder the app could not open.
+
+- A recording now writes `metadata.json` (duration 0) and `recording/in-progress` (the process id) when it starts. The marker is removed once `project.json` exists.
+- At launch, a package with a marker whose process is gone is finished from what is on disk: the duration comes from `display.mp4`, and a new project is built from the telemetry. It opens with a toast. A file with under 500 ms to play goes to the Trash.
+- `applicationShouldTerminate` does what closing a window does: it asks about unsaved edits, saves pending autosaves and warns about a running export. A recording in progress is finished first (`.terminateLater`).
+- `isStartingRecording` closes the gap before `isRecording` turns on, which is several awaits long. Two quick starts used to run two captures, and the first could never be stopped. If a start fails, its telemetry, engine and empty package are cleaned up.
+
+## 71. ADR-71: Export Keeps Heavy Work Off the Main Actor
+
+The export loop runs on the main actor because `composeFrame` reads `ProjectSession`. Building a `CIImage` graph is cheap, but some steps were not, and they blocked every window.
+
+- Person segmentation at `.accurate` runs in `prepareExportFrame` on a background task, before `composeFrame`, which then finds the mask ready.
+- `BufferedAudioSamples` decodes and mixes audio on its own thread, up to 32 buffers ahead. The muxer takes what is ready and retries later.
+- ProRes rendering and GIF rendering and encoding wait for the GPU on a background task.
+
+With a virtual background, the main thread's response time during an export went from a median of 86 ms (worst 1018 ms) to 2.6 ms (worst 62 ms), while the export took 24.3 s instead of 22.2 s.
+
+## 72. ADR-72: Export Audio Volume Changes Are Constant Ramps
+
+`AVMutableAudioMixInputParameters.setVolume(_:at:)` fades from one point to the next in an `AVAssetReaderAudioMixOutput`, measured over 2 s between two points. A slice's volume bled into the next, and a voiceover that hides the recording faded the microphone out instead of cutting it. Each slice, and each part of a slice under such a voiceover, now gets its own `setVolumeRamp` with equal start and end. Hiding is worked out per slice from source time, so it also holds across cuts and speed changes.
+
+## 73. ADR-73: Detecting the Cursor Kind
+
+`NSCursor.currentSystem` returns a new object on every call, so comparing it with `NSCursor.iBeam` was never true and every recording stored `arrow`. A cursor is now recognized by its hotspot and aspect, as ratios so an enlarged system pointer still matches. Open and closed hand share a shape and are told apart by their image data. Unknown cursors stay `arrow`.
+
+The recorder writes the names in `spec/02` §3.1 (`pointingHand`, `iBeam`, `openHand`, `closedHand`). It used to write `pointer` for the hand, which the renderer read as the arrow sprite (also named `pointer`), so links showed an arrow. The renderer now reads a recorded `pointer` as the hand, which fixes recordings made that way on either platform. The Windows recorder still writes `pointer` and its renderer still maps it to the arrow (`spec/05`).
+
+## 74. ADR-74: Preview Playback Costs
+
+- The timeline tracks read `playedTimelineItemIds`, which changes only when an item starts or stops being under the playhead. Reading the playhead there rebuilt every segment at 120 Hz.
+- Motion blur uses the lighter settings during playback, based on `isRealtimePreview`. The old test could never be true after the preview began sharing the export path.
+- The preview decodes to the same 4:2:0 format as the exporter and the `CIContext` does not cache intermediates. Exported frames are unchanged pixel for pixel. CPU and memory did not change measurably on the 12-frame test recording.
+- `CaptionLineLayout` keeps 4 entries instead of 1, so two projects rendering at once do not rebuild each other's lines on every frame.

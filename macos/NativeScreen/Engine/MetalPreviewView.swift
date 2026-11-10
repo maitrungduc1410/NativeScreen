@@ -188,6 +188,10 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
                 }
             } else {
                 playerAnchors.removeAll()
+                // Not every stop bumps `renderRevision`, so the draw below may never run to pause these.
+                if let player, player.rate != 0 {
+                    player.pause()
+                }
                 if let webcam = webcamPlayer, webcam.rate != 0 {
                     webcam.pause()
                 }
@@ -247,8 +251,9 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
 
             let asset = AVURLAsset(url: url)
             let item = AVPlayerItem(asset: asset)
+            // The decoder's own format, as in the exporter: a third of the memory of BGRA and no conversion per frame.
             let pixelAttrs: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ]
             let output = AVPlayerItemVideoOutput(pixelBufferAttributes: pixelAttrs)
@@ -308,7 +313,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
 
             let item = AVPlayerItem(asset: AVURLAsset(url: url))
             let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ])
             item.add(output)

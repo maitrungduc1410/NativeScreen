@@ -426,6 +426,8 @@ public final class RecordingCoordinator {
     @ObservationIgnored private var pickerTicksSinceWindowQuery = 0
     private var countdownTimer: Timer?
     private var recordingTimer: Timer?
+    /// True from the moment a start is accepted until the capture runs. `isRecording` only turns on after long awaits.
+    private var isStartingRecording = false
     private var recordingStartUptime: TimeInterval = 0
     private var pauseStartUptime: TimeInterval?
     private var accumulatedPausedSeconds: TimeInterval = 0
@@ -955,7 +957,7 @@ public final class RecordingCoordinator {
 
     /// Initiates recording: if `countdownOption != .off`, enters the Countdown bar first (`Get ready. Recording will start soon.` + `Continue (3)`).
     public func requestStartRecording() {
-        guard !isRecording && !isCountingDown else { return }
+        guard !isRecording && !isCountingDown && !isStartingRecording else { return }
         isPickingTarget = false
         stopPickerOverlay()
 
@@ -1006,12 +1008,18 @@ public final class RecordingCoordinator {
     }
 
     public func startRecordingImmediately() async {
-        guard !isRecording else { return }
+        guard !isRecording && !isStartingRecording else { return }
+        isStartingRecording = true
+        defer { isStartingRecording = false }
         lastErrorMessage = nil
         isPickingTarget = false
         stopPickerOverlay()
         // Hide the active recording HUD (`[⏹ 0:04 | ⏸ ↺ 🗑]`) from both ScreenCaptureKit recordings and system screenshots!
         hudPanel?.sharingType = .none
+
+        var startedPackageURL: URL?
+        var startedTelemetry: TelemetryRecorder?
+        var startedEngine: ScreenCaptureEngine?
 
         do {
             let shareable = try await SCShareableContent.excludingDesktopWindows(
@@ -1122,6 +1130,7 @@ public final class RecordingCoordinator {
 
             try FileManager.default.createDirectory(at: telemetryDir, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+            startedPackageURL = packageURL
 
             let pixelWidth = Int(logicalBounds.width * screenScale)
             let pixelHeight = Int(logicalBounds.height * screenScale)
@@ -1160,11 +1169,19 @@ public final class RecordingCoordinator {
                 ? recordingDir.appendingPathComponent("microphone.m4a")
                 : nil
 
+            // Written now so a crash or power loss leaves a package that can be recovered at the next launch (ADR-70).
+            try Self.encodedForDisk(RecordingMetadata(durationMs: 0.0, captureTarget: targetMeta, tracks: currentRecordingTracks()))
+                .write(to: recordingDir.appendingPathComponent("metadata.json"), options: .atomic)
+            try Data("\(ProcessInfo.processInfo.processIdentifier)".utf8)
+                .write(to: Self.inProgressMarkerURL(in: packageURL), options: .atomic)
+
             let engine = ScreenCaptureEngine()
+            startedEngine = engine
             let telemetry = TelemetryRecorder(
                 telemetryDirectoryURL: telemetryDir,
                 captureLogicalBounds: logicalBounds
             )
+            startedTelemetry = telemetry
             engine.onFirstVideoFrameArrived = { firstFrameUptimeSec in
                 telemetry.markFirstVideoFrameArrived(atUptimeSec: firstFrameUptimeSec)
             }
@@ -1223,6 +1240,11 @@ public final class RecordingCoordinator {
                 }
             }
         } catch {
+            startedTelemetry?.stop()
+            await startedEngine?.stopCapture()
+            if let startedPackageURL {
+                try? FileManager.default.removeItem(at: startedPackageURL)
+            }
             restorePostRecordingSystemState()
             lastErrorMessage = error.localizedDescription
             updateHUDPanelFrameForCurrentState(animated: true)
@@ -1411,7 +1433,7 @@ public final class RecordingCoordinator {
 
     /// Returns the saved length in milliseconds, or nil when nothing was saved.
     @discardableResult
-    public func stopRecordingAndOpenEditor() async -> Double? {
+    public func stopRecordingAndOpenEditor(opensEditor: Bool = true) async -> Double? {
         guard isRecording else { return nil }
         recordingTimer?.invalidate()
         recordingTimer = nil
@@ -1453,55 +1475,12 @@ public final class RecordingCoordinator {
             }
             durationMs = min(durationMs, playableMs)
         }
-        let hasRecordedWebcam = selectedCameraDeviceID != nil
-        let hasRecordedMic = captureMicrophone && selectedMicrophoneDeviceID != nil
-        let metadata = RecordingMetadata(
-            durationMs: durationMs,
-            captureTarget: targetMeta,
-            tracks: RecordingTracksMetadata(
-                displayVideo: "display.mp4",
-                webcamVideo: hasRecordedWebcam ? "webcam.mp4" : nil,
-                microphoneAudio: hasRecordedMic ? "microphone.m4a" : nil,
-                systemAudio: isSystemAudioEffectivelyActive ? "display.mp4" : nil
-            )
+        writeProjectFiles(
+            packageURL: packageURL,
+            metadata: RecordingMetadata(durationMs: durationMs, captureTarget: targetMeta, tracks: currentRecordingTracks())
         )
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let metaData = try? encoder.encode(metadata) {
-            try? metaData.write(to: recordingDir.appendingPathComponent("metadata.json"), options: .atomic)
-        }
-
-        let clicksURL = recordingDir.appendingPathComponent(metadata.tracks.clicksTelemetry)
-        let keysURL = recordingDir.appendingPathComponent(metadata.tracks.keysTelemetry)
-        let clicks = JSONLinesCodec.load(ClickEvent.self, from: clicksURL)
-        let keys = JSONLinesCodec.load(KeyStrokeEvent.self, from: keysURL)
-
-        let autoZooms = autoCreateZooms ? AutoZoomClusterGenerator.generateZooms(
-            clicks: clicks,
-            keys: keys,
-            durationMs: durationMs,
-            defaultScale: 1.8
-        ) : []
-
-        let projectName = targetMeta.appName ?? packageURL.deletingPathExtension().lastPathComponent
-        let initialSlice = ClipSlice(sourceStartMs: 0.0, sourceEndMs: durationMs, speed: 1.0)
-        var doc = ProjectDocument(
-            name: projectName,
-            camera: CameraConfig(enabled: hasRecordedWebcam),
-            timeline: TimelineConfig(
-                slices: [initialSlice],
-                zooms: autoZooms,
-                maskTracks: []
-            )
-        )
-        if let defPreset = AppSettings.shared.presetForNewProject() {
-            defPreset.apply(to: &doc)
-        }
-
-        if let docData = try? encoder.encode(doc) {
-            try? docData.write(to: packageURL.appendingPathComponent("project.json"), options: .atomic)
-        }
+        guard opensEditor else { return durationMs }
 
         hideRecordingHUD()
 
@@ -1517,6 +1496,89 @@ public final class RecordingCoordinator {
             onRecordingCompleted?(session)
         }
         return durationMs
+    }
+
+    // MARK: - Project files and recovery
+
+    private static func inProgressMarkerURL(in packageURL: URL) -> URL {
+        packageURL.appendingPathComponent("recording", isDirectory: true).appendingPathComponent("in-progress")
+    }
+
+    private static func encodedForDisk<T: Encodable>(_ value: T) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(value)
+    }
+
+    private func currentRecordingTracks() -> RecordingTracksMetadata {
+        RecordingTracksMetadata(
+            displayVideo: "display.mp4",
+            webcamVideo: selectedCameraDeviceID != nil ? "webcam.mp4" : nil,
+            microphoneAudio: (captureMicrophone && selectedMicrophoneDeviceID != nil) ? "microphone.m4a" : nil,
+            systemAudio: isSystemAudioEffectivelyActive ? "display.mp4" : nil
+        )
+    }
+
+    /// Finishes a package: metadata, a new project built from the telemetry, and the in-progress marker removed.
+    private func writeProjectFiles(packageURL: URL, metadata: RecordingMetadata) {
+        let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+        if let data = try? Self.encodedForDisk(metadata) {
+            try? data.write(to: recordingDir.appendingPathComponent("metadata.json"), options: .atomic)
+        }
+
+        let clicks = JSONLinesCodec.load(ClickEvent.self, from: recordingDir.appendingPathComponent(metadata.tracks.clicksTelemetry))
+        let keys = JSONLinesCodec.load(KeyStrokeEvent.self, from: recordingDir.appendingPathComponent(metadata.tracks.keysTelemetry))
+        let autoZooms = autoCreateZooms ? AutoZoomClusterGenerator.generateZooms(
+            clicks: clicks,
+            keys: keys,
+            durationMs: metadata.durationMs,
+            defaultScale: 1.8
+        ) : []
+
+        var doc = ProjectDocument(
+            name: metadata.captureTarget.appName ?? packageURL.deletingPathExtension().lastPathComponent,
+            camera: CameraConfig(enabled: metadata.tracks.webcamVideo != nil),
+            timeline: TimelineConfig(
+                slices: [ClipSlice(sourceStartMs: 0.0, sourceEndMs: metadata.durationMs, speed: 1.0)],
+                zooms: autoZooms,
+                maskTracks: []
+            )
+        )
+        if let defPreset = AppSettings.shared.presetForNewProject() {
+            defPreset.apply(to: &doc)
+        }
+        if let data = try? Self.encodedForDisk(doc) {
+            try? data.write(to: packageURL.appendingPathComponent("project.json"), options: .atomic)
+        }
+        try? FileManager.default.removeItem(at: Self.inProgressMarkerURL(in: packageURL))
+    }
+
+    /// Opens recordings a crash or power loss cut off. The writers finish a fragment every 2 s, so the file plays up
+    /// to the last one. A package still owned by another running copy of the app is left alone.
+    public func recoverInterruptedRecordings() async {
+        let packages = (try? FileManager.default.contentsOfDirectory(
+            at: ProjectWorkspaceStore.defaultProjectsDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for packageURL in packages where packageURL.pathExtension == "nativescreen" && packageURL != activePackageURL {
+            let marker = Self.inProgressMarkerURL(in: packageURL)
+            guard let owner = try? String(contentsOf: marker, encoding: .utf8) else { continue }
+            if let pid = Int32(owner), pid != ProcessInfo.processInfo.processIdentifier, kill(pid, 0) == 0 { continue }
+
+            let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+            guard let data = try? Data(contentsOf: recordingDir.appendingPathComponent("metadata.json")),
+                  var metadata = try? JSONDecoder().decode(RecordingMetadata.self, from: data) else { continue }
+            let asset = AVURLAsset(url: recordingDir.appendingPathComponent(metadata.tracks.displayVideo))
+            let playableMs = ((try? await asset.load(.duration)).map(CMTimeGetSeconds) ?? 0) * 1000.0
+            guard playableMs.isFinite, playableMs >= 500 else {
+                try? FileManager.default.trashItem(at: packageURL, resultingItemURL: nil)
+                continue
+            }
+            metadata.durationMs = playableMs
+            writeProjectFiles(packageURL: packageURL, metadata: metadata)
+            ProjectWorkspaceStore.shared.openOrFocusProject(at: packageURL)?
+                .showToast("Interrupted recording recovered", durationMs: 4000)
+        }
     }
 
     // MARK: - App Menu Entry Points (`Record`, `View > Show recording widget`, `Window > Reset windows positions`)

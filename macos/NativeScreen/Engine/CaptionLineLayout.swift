@@ -116,16 +116,17 @@ enum CaptionLineLayout {
     }
 
     private static let cacheLock = NSLock()
-    private static var cachedKey: LinesCacheKey?
-    private static var cachedLinesByTrack: [(track: CaptionTrack, lines: [Line])] = []
+    /// A few entries, because several open projects can render at once (one exporting, another playing).
+    private static var cachedLines: [(key: LinesCacheKey, lines: [(track: CaptionTrack, lines: [Line])])] = []
+    private static let maxCachedLines = 4
 
     /// Only recomputed when the captions change (`Array ==` is O(1) on shared storage). Hidden tracks are left out.
     static func linesByTrack(in config: CaptionsConfig) -> [(track: CaptionTrack, lines: [Line])] {
         let key = LinesCacheKey(segments: config.segments, tracks: config.captionTracks, blocks: config.captionBlocks)
         cacheLock.lock()
         defer { cacheLock.unlock() }
-        if key == cachedKey {
-            return cachedLinesByTrack
+        if let hit = cachedLines.first(where: { $0.key == key }) {
+            return hit.lines
         }
         let wordsById = Dictionary(config.segments.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let result: [(track: CaptionTrack, lines: [Line])] = config.captionTracks.filter { !$0.isHidden }.map { track in
@@ -135,8 +136,10 @@ enum CaptionLineLayout {
                 .compactMap { makeLine(block: $0, style: $0.styleOverride ?? track.style, wordsById: wordsById) }
             return (track, lines)
         }
-        cachedKey = key
-        cachedLinesByTrack = result
+        cachedLines.append((key, result))
+        if cachedLines.count > maxCachedLines {
+            cachedLines.removeFirst()
+        }
         return result
     }
 

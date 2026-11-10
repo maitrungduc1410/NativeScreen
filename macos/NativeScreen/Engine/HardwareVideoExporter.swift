@@ -911,6 +911,57 @@ public final class HardwareVideoExporter {
         }
     }
 
+    /// Decodes and mixes the export's audio on its own thread, a little ahead of the muxer, so the main actor only
+    /// picks up finished buffers (ADR-71).
+    private nonisolated final class BufferedAudioSamples: @unchecked Sendable {
+        enum Next {
+            case sample(CMSampleBuffer)
+            case notReady
+            case finished
+        }
+
+        private let condition = NSCondition()
+        private var buffered: [CMSampleBuffer] = []
+        private var reachedEnd = false
+        private var isCancelled = false
+        private static let capacity = 32
+
+        init(output: AVAssetReaderAudioMixOutput) {
+            nonisolated(unsafe) let output = output
+            DispatchQueue(label: "com.nativescreen.export.audio", qos: .userInitiated).async { [self] in
+                while true {
+                    condition.lock()
+                    while buffered.count >= Self.capacity && !isCancelled { condition.wait() }
+                    let stop = isCancelled
+                    condition.unlock()
+                    if stop { return }
+
+                    let sample = output.copyNextSampleBuffer()
+                    condition.lock()
+                    if let sample { buffered.append(sample) } else { reachedEnd = true }
+                    condition.unlock()
+                    if sample == nil { return }
+                }
+            }
+        }
+
+        func next() -> Next {
+            condition.lock()
+            defer { condition.unlock() }
+            guard !buffered.isEmpty else { return reachedEnd ? .finished : .notReady }
+            let sample = buffered.removeFirst()
+            condition.signal()
+            return .sample(sample)
+        }
+
+        func cancel() {
+            condition.lock()
+            isCancelled = true
+            condition.signal()
+            condition.unlock()
+        }
+    }
+
     /// Keeps long `@MainActor` export loops from starving the UI: yields to the main run loop every ~8ms of work and
     /// throttles progress callbacks to ~30 Hz.
     @MainActor
@@ -1152,6 +1203,7 @@ public final class HardwareVideoExporter {
 
         // Multi-Track Audio Mixdown (`display.mp4` system audio + `microphone.m4a` + `voiceovers` + `backgroundMusic`)
         let audioPipeline = await buildMultiTrackAudioReaderAndOutput(session: session)
+        let audioFeed = audioPipeline.map { BufferedAudioSamples(output: $0.output) }
 
         // The passthrough muxer needs a format hint, so it is created when frame 0 comes out of the encoder.
         var muxWriter: AVAssetWriter?
@@ -1228,12 +1280,22 @@ public final class HardwareVideoExporter {
                 input.markAsFinished()
             }
 
-            if !isAudioDone, let aInput = muxAudioInput, let (_, aOutput) = audioPipeline {
-                while !isAudioDone && aInput.isReadyForMoreMediaData {
-                    guard let aSample = pendingAudioSample ?? aOutput.copyNextSampleBuffer() else {
-                        isAudioDone = true
-                        aInput.markAsFinished()
-                        break
+            if !isAudioDone, let aInput = muxAudioInput, let audioFeed {
+                audioLoop: while !isAudioDone && aInput.isReadyForMoreMediaData {
+                    let aSample: CMSampleBuffer
+                    if let pendingAudioSample {
+                        aSample = pendingAudioSample
+                    } else {
+                        switch audioFeed.next() {
+                        case .sample(let next):
+                            aSample = next
+                        case .notReady:
+                            break audioLoop
+                        case .finished:
+                            isAudioDone = true
+                            aInput.markAsFinished()
+                            break audioLoop
+                        }
                     }
                     let aSeconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(aSample))
                     // Hold audio back only while the video input could take more frames (we are just waiting on the
@@ -1286,6 +1348,8 @@ public final class HardwareVideoExporter {
                     let frameSourceMs = sourceMs(frameIdx)
                     let frames = await (lane.prefetch ?? Task { await lane.source.frames(atSourceMs: frameSourceMs) }).value
                     lane.prefetch = nil
+                    try Task.checkCancellation()
+                    await compositor.prepareExportFrame(webcamFrame: frames.webcam, sourceTimeMs: frameSourceMs, session: session)
                     try Task.checkCancellation()
                     autoreleasepool {
                         let composited = compositor.composeFrame(
@@ -1362,6 +1426,7 @@ public final class HardwareVideoExporter {
                 }
             }
 
+            audioFeed?.cancel()
             audioPipeline?.reader.cancelReading()
             await muxWriter?.finishWriting()
             if let writer = muxWriter, writer.status == .failed {
@@ -1372,6 +1437,7 @@ public final class HardwareVideoExporter {
             lanes.forEach { $0.prefetch?.cancel(); $0.source.cancel() }
             hwWorker?.cancel()
             swWorker?.cancel()
+            audioFeed?.cancel()
             audioPipeline?.reader.cancelReading()
             muxWriter?.cancelWriting()
             try? FileManager.default.removeItem(at: outputURL)
@@ -1469,7 +1535,11 @@ public final class HardwareVideoExporter {
             }
         }
 
-        writer.startWriting()
+        func writerFailure() -> Error {
+            writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "The video file could not be written."])
+        }
+
+        guard writer.startWriting() else { throw writerFailure() }
         writer.startSession(atSourceTime: .zero)
 
         let totalDurationMs = session.timeMapper.totalTimelineDurationMs
@@ -1484,19 +1554,22 @@ public final class HardwareVideoExporter {
         if isProResAudioDone {
             proResAudioInput?.markAsFinished()
         }
+        let audioFeed = isProResAudioDone ? nil : audioPipeline.map { BufferedAudioSamples(output: $0.output) }
 
         func drainReadyProResAudioSamples() {
             guard !isProResAudioDone,
                   let aInput = proResAudioInput,
-                  let (_, aOutput) = audioPipeline else { return }
-            while !isProResAudioDone && aInput.isReadyForMoreMediaData {
-                if let aSample = aOutput.copyNextSampleBuffer() {
+                  let audioFeed else { return }
+            audioLoop: while !isProResAudioDone && aInput.isReadyForMoreMediaData {
+                switch audioFeed.next() {
+                case .sample(let aSample):
                     if !aInput.append(aSample) {
                         isProResAudioDone = true
                         aInput.markAsFinished()
-                        break
                     }
-                } else {
+                case .notReady:
+                    break audioLoop
+                case .finished:
                     isProResAudioDone = true
                     aInput.markAsFinished()
                 }
@@ -1509,6 +1582,7 @@ public final class HardwareVideoExporter {
 
                 while !writerInput.isReadyForMoreMediaData {
                     try Task.checkCancellation()
+                    if writer.status == .failed { throw writerFailure() }
                     drainReadyProResAudioSamples()
                     try await Task.sleep(for: .milliseconds(2))
                 }
@@ -1517,11 +1591,12 @@ public final class HardwareVideoExporter {
                 let sourceMs = session.timeMapper.sourceTime(forTimelineMs: timelineMs).sourceMs
                 let frames = await frameSource.frames(atSourceMs: sourceMs)
 
-                try autoreleasepool {
+                try Task.checkCancellation()
+                await compositor.prepareExportFrame(webcamFrame: frames.webcam, sourceTimeMs: sourceMs, session: session)
+                try Task.checkCancellation()
 
-                    try Task.checkCancellation()
-
-                    let composited = compositor.composeFrame(
+                let composited = autoreleasepool {
+                    compositor.composeFrame(
                         sourceVideoFrame: frames.screen,
                         sourceTimeMs: sourceMs,
                         session: session,
@@ -1529,21 +1604,27 @@ public final class HardwareVideoExporter {
                         includeShortcutOverlay: true,
                         webcamVideoFrame: frames.webcam
                     )
+                }
 
-                    if let pool = adaptor.pixelBufferPool {
-                        var pixelBufferOut: CVPixelBuffer?
-                        CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBufferOut)
+                if let pool = adaptor.pixelBufferPool {
+                    var pixelBufferOut: CVPixelBuffer?
+                    CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBufferOut)
 
-                        if let pixelBuffer = pixelBufferOut {
-                            compositor.ciContext.render(
-                                composited,
-                                to: pixelBuffer,
-                                bounds: CGRect(origin: .zero, size: outputSize),
-                                colorSpace: colorSpace
-                            )
-                            let pts = CMTime(value: CMTimeValue(frameIdx), timescale: CMTimeScale(fps))
-                            adaptor.append(pixelBuffer, withPresentationTime: pts)
-                        }
+                    if let pixelBufferOut {
+                        nonisolated(unsafe) let pixelBuffer = pixelBufferOut
+                        let context = compositor.ciContext
+                        await Task.detached(priority: .userInitiated) {
+                            autoreleasepool {
+                                context.render(
+                                    composited,
+                                    to: pixelBuffer,
+                                    bounds: CGRect(origin: .zero, size: outputSize),
+                                    colorSpace: colorSpace
+                                )
+                            }
+                        }.value
+                        let pts = CMTime(value: CMTimeValue(frameIdx), timescale: CMTimeScale(fps))
+                        guard adaptor.append(pixelBuffer, withPresentationTime: pts) else { throw writerFailure() }
                     }
                 }
 
@@ -1566,11 +1647,14 @@ public final class HardwareVideoExporter {
                 }
             }
 
+            audioFeed?.cancel()
             audioPipeline?.reader.cancelReading()
             await writer.finishWriting()
+            if writer.status != .completed { throw writerFailure() }
             onProgress(progressRange.1)
         } catch {
             frameSource.cancel()
+            audioFeed?.cancel()
             audioPipeline?.reader.cancelReading()
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: outputURL)
@@ -1579,6 +1663,11 @@ public final class HardwareVideoExporter {
     }
 
     // MARK: - 4. Multi-Track NLE Audio Mixdown (`display.mp4` + `microphone.m4a` + `VoiceoverSegment`s + `BackgroundMusicConfig`)
+
+    /// `setVolume(_:at:)` fades from one point to the next during export, so a change must be a constant ramp to be a step.
+    private static func setConstantVolume(_ volume: Float, on params: AVMutableAudioMixInputParameters, in range: CMTimeRange) {
+        params.setVolumeRamp(fromStartVolume: volume, toEndVolume: volume, timeRange: range)
+    }
 
     @MainActor
     private static func buildMultiTrackAudioReaderAndOutput(
@@ -1619,7 +1708,7 @@ public final class HardwareVideoExporter {
                                 compSysTrack.scaleTimeRange(CMTimeRange(start: destStartCM, duration: sliceDurCM), toDuration: destDurCM)
                             }
                             let vol = slice.muted ? Float(0.0) : Float(min(1.0, max(0.0, slice.systemAudioVolume * doc.audio.systemAudioVolume * Double(masterVol))))
-                            params.setVolume(vol, at: destStartCM)
+                            setConstantVolume(vol, on: params, in: CMTimeRange(start: destStartCM, duration: destDurCM))
                             hasInsertedAny = true
                         }
                     }
@@ -1644,6 +1733,10 @@ public final class HardwareVideoExporter {
                let compMicTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
                 let params = AVMutableAudioMixInputParameters(track: compMicTrack)
                 var hasInsertedAny = false
+                // Where a voiceover replaces the recording, the microphone stays silent, as it does in the preview.
+                let hidingVoiceovers = doc.timeline.voiceovers
+                    .filter { !$0.disabled && $0.hideRecording && !doc.timeline.isVoiceoverTrackHidden($0.trackIndex) }
+                    .sorted { $0.sourceStartMs < $1.sourceStartMs }
                 for mapped in mappedSlices {
                     let slice = mapped.slice
                     let startSec = slice.sourceStartMs / 1000.0
@@ -1658,21 +1751,34 @@ public final class HardwareVideoExporter {
                             compMicTrack.scaleTimeRange(CMTimeRange(start: destStartCM, duration: sliceDurCM), toDuration: destDurCM)
                         }
                         let baseVol = slice.muted ? Float(0.0) : Float(min(1.0, max(0.0, slice.microphoneVolume * doc.audio.microphoneVolume * Double(masterVol))))
-                        params.setVolume(baseVol, at: destStartCM)
+
+                        // The parts of this slice under a hiding voiceover, merged where voiceovers overlap.
+                        var mutedRanges: [(start: Double, end: Double)] = []
+                        for vo in hidingVoiceovers where vo.sourceEndMs > slice.sourceStartMs && vo.sourceStartMs < slice.sourceEndMs {
+                            let start = max(vo.sourceStartMs, slice.sourceStartMs)
+                            let end = min(vo.sourceEndMs, slice.sourceEndMs)
+                            if let last = mutedRanges.last, start <= last.end {
+                                mutedRanges[mutedRanges.count - 1].end = max(last.end, end)
+                            } else {
+                                mutedRanges.append((start, end))
+                            }
+                        }
+                        func setVolume(_ volume: Float, fromSourceMs start: Double, toSourceMs end: Double) {
+                            guard end > start else { return }
+                            func timeline(_ sourceMs: Double) -> CMTime {
+                                CMTime(seconds: (mapped.timelineStartMs + (sourceMs - slice.sourceStartMs) / max(0.1, slice.speed)) / 1000.0, preferredTimescale: 600)
+                            }
+                            setConstantVolume(volume, on: params, in: CMTimeRange(start: timeline(start), end: timeline(end)))
+                        }
+                        let sourceEndMs = slice.sourceStartMs + availSec * 1000.0
+                        var cursorMs = slice.sourceStartMs
+                        for range in mutedRanges {
+                            setVolume(baseVol, fromSourceMs: cursorMs, toSourceMs: min(range.start, sourceEndMs))
+                            setVolume(0.0, fromSourceMs: range.start, toSourceMs: min(range.end, sourceEndMs))
+                            cursorMs = range.end
+                        }
+                        setVolume(baseVol, fromSourceMs: cursorMs, toSourceMs: sourceEndMs)
                         hasInsertedAny = true
-                    }
-                }
-                // Duck/mute original microphone during any active `VoiceoverSegment` with `hideRecording == true`
-                for vo in doc.timeline.voiceovers where !vo.disabled && vo.hideRecording && !doc.timeline.isVoiceoverTrackHidden(vo.trackIndex) {
-                    if let tStart = session.timeMapper.timelineTime(forSourceMs: vo.sourceStartMs),
-                       let tEnd = session.timeMapper.timelineTime(forSourceMs: vo.sourceEndMs),
-                       tEnd > tStart {
-                        params.setVolume(0.0, at: CMTime(seconds: tStart / 1000.0, preferredTimescale: 600))
-                        // Back to the volume of the slice playing at `tEnd`, not the project-wide one.
-                        let sliceAtEnd = mappedSlices.first { tEnd >= $0.timelineStartMs && tEnd < $0.timelineEndMs }?.slice
-                        let baseVol = (sliceAtEnd?.muted ?? false) ? Float(0.0)
-                            : Float(min(1.0, max(0.0, (sliceAtEnd?.microphoneVolume ?? 1.0) * doc.audio.microphoneVolume * Double(masterVol))))
-                        params.setVolume(baseVol, at: CMTime(seconds: tEnd / 1000.0, preferredTimescale: 600))
                     }
                 }
 
@@ -1803,29 +1909,18 @@ public final class HardwareVideoExporter {
         let frameStepMs = 1000.0 / Double(fps)
         let totalFrames = max(1, Int(ceil(totalDurationMs / frameStepMs)))
 
-        guard let destination = CGImageDestinationCreateWithURL(
-            outputURL as CFURL,
-            UTType.gif.identifier as CFString,
-            totalFrames,
-            nil
-        ) else {
-            throw NSError(domain: "NativeScreenExport", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create GIF destination."])
+        let writer = try StreamingGIFWriter(
+            url: outputURL,
+            width: Int(outputSize.width),
+            height: Int(outputSize.height),
+            loops: !disableLoop
+        )
+
+        // GIF delays are whole centiseconds. Rounding the running total keeps a 30 fps GIF at its real length.
+        func delayCentiseconds(ofFrame index: Int) -> Int {
+            func centiseconds(_ frames: Int) -> Int { Int((Double(frames) * 100.0 / Double(fps)).rounded()) }
+            return centiseconds(index + 1) - centiseconds(index)
         }
-
-        let fileProperties: [String: Any] = [
-            kCGImagePropertyGIFDictionary as String: [
-                kCGImagePropertyGIFLoopCount as String: disableLoop ? 1 : 0
-            ]
-        ]
-        CGImageDestinationSetProperties(destination, fileProperties as CFDictionary)
-
-        let frameDelay = 1.0 / Double(fps)
-        let frameProperties: [String: Any] = [
-            kCGImagePropertyGIFDictionary as String: [
-                kCGImagePropertyGIFUnclampedDelayTime as String: frameDelay,
-                kCGImagePropertyGIFDelayTime as String: frameDelay
-            ]
-        ]
 
         let frameSource = await ExportFrameSource.make(session: session)
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -1839,11 +1934,11 @@ public final class HardwareVideoExporter {
                 let sourceMs = session.timeMapper.sourceTime(forTimelineMs: timelineMs).sourceMs
                 let frames = await frameSource.frames(atSourceMs: sourceMs)
 
-                try autoreleasepool {
-
-                    try Task.checkCancellation()
-
-                    let composited = compositor.composeFrame(
+                try Task.checkCancellation()
+                await compositor.prepareExportFrame(webcamFrame: frames.webcam, sourceTimeMs: sourceMs, session: session)
+                try Task.checkCancellation()
+                let composited = autoreleasepool {
+                    compositor.composeFrame(
                         sourceVideoFrame: frames.screen,
                         sourceTimeMs: sourceMs,
                         session: session,
@@ -1851,16 +1946,22 @@ public final class HardwareVideoExporter {
                         includeShortcutOverlay: true,
                         webcamVideoFrame: frames.webcam
                     )
-
-                    if let cgImage = compositor.ciContext.createCGImage(
-                        composited,
-                        from: CGRect(origin: .zero, size: outputSize),
-                        format: .RGBA8,
-                        colorSpace: colorSpace
-                    ) {
-                        CGImageDestinationAddImage(destination, cgImage, frameProperties as CFDictionary)
-                    }
                 }
+                let context = compositor.ciContext
+                let delay = delayCentiseconds(ofFrame: frameIdx)
+                // Rendering waits for the GPU and encoding takes a while, so neither runs on the main actor.
+                try await Task.detached(priority: .userInitiated) {
+                    try autoreleasepool {
+                        if let cgImage = context.createCGImage(
+                            composited,
+                            from: CGRect(origin: .zero, size: outputSize),
+                            format: .RGBA8,
+                            colorSpace: colorSpace
+                        ) {
+                            try writer.append(cgImage, delayCentiseconds: delay)
+                        }
+                    }
+                }.value
 
                 pacer.reportProgress(Double(frameIdx + 1) / Double(totalFrames), onProgress)
                 try await pacer.yieldIfNeeded()
@@ -1868,14 +1969,216 @@ public final class HardwareVideoExporter {
 
             try Task.checkCancellation()
             frameSource.cancel()
-            if !CGImageDestinationFinalize(destination) {
-                throw NSError(domain: "NativeScreenExport", code: -4, userInfo: [NSLocalizedDescriptionKey: "Failed to finalize GIF file."])
-            }
+            try writer.finish()
             onProgress(1.0)
         } catch {
             frameSource.cancel()
+            writer.abandon()
             try? FileManager.default.removeItem(at: outputURL)
             throw error
+        }
+    }
+
+    /// Writes an animated GIF straight to disk. `CGImageDestination` keeps every added image until it finalizes, which
+    /// took 11 GB for a 12 s clip, so each frame is encoded alone and its blocks are copied into one file (ADR-68).
+    private nonisolated final class StreamingGIFWriter: @unchecked Sendable {
+        private let handle: FileHandle
+        private let width: Int
+        private let height: Int
+        private var previousPixels: CFData?
+        private var pendingFrame: Data?
+        private var pendingTransparentIndex: UInt8?
+        private var pendingDelay = 0
+
+        private static func error(_ message: String) -> NSError {
+            NSError(domain: "NativeScreenExport", code: -3, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+
+        init(url: URL, width: Int, height: Int, loops: Bool) throws {
+            guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+                throw Self.error("Cannot create GIF file.")
+            }
+            handle = try FileHandle(forWritingTo: url)
+            self.width = width
+            self.height = height
+
+            var header = Data("GIF89a".utf8)
+            Self.appendUInt16(width, to: &header)
+            Self.appendUInt16(height, to: &header)
+            header.append(contentsOf: [0x70, 0, 0]) // no global color table: every frame carries its own palette
+            if loops {
+                header.append(contentsOf: [0x21, 0xFF, 0x0B])
+                header.append(Data("NETSCAPE2.0".utf8))
+                header.append(contentsOf: [0x03, 0x01, 0x00, 0x00, 0x00]) // 0 = forever
+            }
+            try handle.write(contentsOf: header)
+        }
+
+        /// Only the part that changed is stored, and a frame identical to the last one just extends its delay. Each
+        /// frame is held back until the next one arrives, because its delay is written in front of its pixels.
+        func append(_ image: CGImage, delayCentiseconds: Int) throws {
+            let pixels = image.dataProvider?.data
+            var region = CGRect(x: 0, y: 0, width: width, height: height)
+            if let pixels, let previousPixels, image.width == width, image.height == height {
+                if let changed = Self.changedRect(from: previousPixels, to: pixels, width: width, height: height, bytesPerRow: image.bytesPerRow) {
+                    region = changed
+                } else if pendingDelay + delayCentiseconds <= Int(UInt16.max) {
+                    pendingDelay += delayCentiseconds
+                    return
+                } else {
+                    region = CGRect(x: 0, y: 0, width: 1, height: 1)
+                }
+            }
+            guard let patch = image.cropping(to: region),
+                  let frame = autoreleasepool(invoking: { Self.encodedFrame(patch) }),
+                  let parsed = Self.parse(frame) else {
+                throw Self.error("Cannot encode GIF frame.")
+            }
+            try writePendingFrame()
+
+            var block = Data([0x2C])
+            Self.appendUInt16(Int(region.minX), to: &block)
+            Self.appendUInt16(Int(region.minY), to: &block)
+            Self.appendUInt16(Int(region.width), to: &block)
+            Self.appendUInt16(Int(region.height), to: &block)
+            block.append(0x80 | parsed.colorTableSizeBits)
+            block.append(frame[parsed.colorTable])
+            block.append(frame[parsed.imageData])
+            pendingFrame = block
+            pendingTransparentIndex = parsed.transparentIndex
+            pendingDelay = delayCentiseconds
+            previousPixels = pixels
+        }
+
+        func finish() throws {
+            try writePendingFrame()
+            try handle.write(contentsOf: Data([0x3B]))
+            try handle.close()
+        }
+
+        private func writePendingFrame() throws {
+            guard let pendingFrame else { return }
+            var control = Data([0x21, 0xF9, 0x04, 0x04 | (pendingTransparentIndex == nil ? 0 : 1)]) // keep the previous frame
+            Self.appendUInt16(pendingDelay, to: &control)
+            control.append(contentsOf: [pendingTransparentIndex ?? 0, 0])
+            try handle.write(contentsOf: control)
+            try handle.write(contentsOf: pendingFrame)
+            self.pendingFrame = nil
+        }
+
+        /// The smallest rectangle holding every pixel that differs, or `nil` when the two images are identical.
+        private static func changedRect(from old: CFData, to new: CFData, width: Int, height: Int, bytesPerRow: Int) -> CGRect? {
+            guard CFDataGetLength(old) == CFDataGetLength(new), CFDataGetLength(new) >= bytesPerRow * height,
+                  let a = CFDataGetBytePtr(old), let b = CFDataGetBytePtr(new) else {
+                return CGRect(x: 0, y: 0, width: width, height: height)
+            }
+            let rowBytes = width * 4
+            var top = 0
+            while top < height, memcmp(a + top * bytesPerRow, b + top * bytesPerRow, rowBytes) == 0 { top += 1 }
+            guard top < height else { return nil }
+            var bottom = height - 1
+            while bottom > top, memcmp(a + bottom * bytesPerRow, b + bottom * bytesPerRow, rowBytes) == 0 { bottom -= 1 }
+
+            var left = width
+            var right = -1
+            for y in top...bottom {
+                let rowA = a + y * bytesPerRow
+                let rowB = b + y * bytesPerRow
+                guard memcmp(rowA, rowB, rowBytes) != 0 else { continue }
+                var x = 0
+                while x < left, memcmp(rowA + x * 4, rowB + x * 4, 4) == 0 { x += 1 }
+                left = min(left, x)
+                x = width - 1
+                while x > right, memcmp(rowA + x * 4, rowB + x * 4, 4) == 0 { x -= 1 }
+                right = max(right, x)
+            }
+            return CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
+        }
+
+        func abandon() {
+            try? handle.close()
+        }
+
+        private static func appendUInt16(_ value: Int, to data: inout Data) {
+            data.append(UInt8(value & 0xFF))
+            data.append(UInt8((value >> 8) & 0xFF))
+        }
+
+        private static func encodedFrame(_ image: CGImage) -> Data? {
+            let data = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(data, UTType.gif.identifier as CFString, 1, nil) else {
+                return nil
+            }
+            CGImageDestinationAddImage(destination, image, nil)
+            return CGImageDestinationFinalize(destination) ? data as Data : nil
+        }
+
+        private struct ParsedFrame {
+            let colorTable: Range<Int>
+            let colorTableSizeBits: UInt8
+            let transparentIndex: UInt8?
+            /// LZW minimum code size, sub-blocks and their terminator.
+            let imageData: Range<Int>
+        }
+
+        /// Finds the palette and pixel data of a GIF holding one image. `nil` if it is not laid out as GIF requires.
+        private static func parse(_ bytes: Data) -> ParsedFrame? {
+            let start = bytes.startIndex
+            guard bytes.count > 13 else { return nil }
+
+            func skipSubBlocks(from index: Int) -> Int? {
+                var cursor = index
+                while cursor < bytes.endIndex {
+                    let size = Int(bytes[cursor])
+                    cursor += 1 + size
+                    if size == 0 { return cursor }
+                }
+                return nil
+            }
+            func tableBytes(_ sizeBits: UInt8) -> Int { 3 << (Int(sizeBits) + 1) }
+
+            let screenFlags = bytes[start + 10]
+            var cursor = start + 13
+            var globalTable: (range: Range<Int>, sizeBits: UInt8)?
+            if screenFlags & 0x80 != 0 {
+                let sizeBits = screenFlags & 0x07
+                globalTable = (cursor..<(cursor + tableBytes(sizeBits)), sizeBits)
+                cursor += tableBytes(sizeBits)
+            }
+
+            var transparentIndex: UInt8?
+            while cursor < bytes.endIndex {
+                switch bytes[cursor] {
+                case 0x21:
+                    guard cursor + 2 < bytes.endIndex else { return nil }
+                    if bytes[cursor + 1] == 0xF9, cursor + 6 < bytes.endIndex, bytes[cursor + 3] & 0x01 != 0 {
+                        transparentIndex = bytes[cursor + 6]
+                    }
+                    guard let next = skipSubBlocks(from: cursor + 2) else { return nil }
+                    cursor = next
+                case 0x2C:
+                    guard cursor + 10 < bytes.endIndex else { return nil }
+                    let flags = bytes[cursor + 9]
+                    cursor += 10
+                    var table = globalTable
+                    if flags & 0x80 != 0 {
+                        let sizeBits = flags & 0x07
+                        table = (cursor..<(cursor + tableBytes(sizeBits)), sizeBits)
+                        cursor += tableBytes(sizeBits)
+                    }
+                    guard let table, cursor < bytes.endIndex, table.range.upperBound <= bytes.endIndex,
+                          let end = skipSubBlocks(from: cursor + 1), end <= bytes.endIndex else { return nil }
+                    return ParsedFrame(
+                        colorTable: table.range,
+                        colorTableSizeBits: table.sizeBits,
+                        transparentIndex: transparentIndex,
+                        imageData: cursor..<end
+                    )
+                default:
+                    return nil
+                }
+            }
+            return nil
         }
     }
 }
