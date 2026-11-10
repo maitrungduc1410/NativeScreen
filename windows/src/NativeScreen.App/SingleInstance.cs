@@ -8,7 +8,8 @@ namespace NativeScreen.App;
 
 /// <summary>
 /// One process per copy of the app, so a project opened from Explorer does not bring a second tray icon and recording bar.
-/// The name includes the executable's path, so two builds of the app can run side by side (spec/06 ADR-41).
+/// The name includes the executable's path, so two builds of the app can run side by side (spec/06 ADR-41). A packaged copy
+/// uses its package family name instead, because its path changes with every version (spec/06 ADR-81).
 /// </summary>
 internal static partial class SingleInstance
 {
@@ -16,7 +17,7 @@ internal static partial class SingleInstance
     private const int AllowAnyProcess = -1;
 
     private static readonly string Name = "NativeScreen-" + Convert.ToHexString(
-        SHA256.HashData(Encoding.UTF8.GetBytes((Environment.ProcessPath ?? "").ToUpperInvariant())))[..16];
+        SHA256.HashData(Encoding.UTF8.GetBytes((AppPackage.FamilyName ?? Environment.ProcessPath ?? "").ToUpperInvariant())))[..16];
 
     private static Mutex? owned;
 

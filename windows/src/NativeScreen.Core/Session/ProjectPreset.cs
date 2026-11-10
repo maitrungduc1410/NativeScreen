@@ -53,7 +53,7 @@ public sealed class ProjectPreset
     {
         var crop = document.Canvas.CropRect01;
         var cameraEnabled = document.Camera.Enabled;
-        var cameraCrop = document.Camera.CropRect01;
+        var existing = document.Camera;
         document.Canvas = ProjectJson.Clone(Canvas);
         document.Canvas.CropRect01 = crop;
         document.Background = ProjectJson.Clone(Background);
@@ -61,7 +61,15 @@ public sealed class ProjectPreset
         document.Cursor = ProjectJson.Clone(Cursor);
         document.Camera = ProjectJson.Clone(Camera);
         document.Camera.Enabled = cameraEnabled;
-        document.Camera.CropRect01 = cameraCrop;
+        document.Camera.CropRect01 = existing.CropRect01;
+        // How this recording was made (the room behind the presenter, a camera-only framing) is not a look: a preset from
+        // another project must not switch green screen on or reframe the picture (spec/06 ADR-78).
+        document.Camera.BackgroundRemoval = existing.BackgroundRemoval;
+        document.Camera.ChromaKeyColor = existing.ChromaKeyColor;
+        document.Camera.ChromaSimilarity = existing.ChromaSimilarity;
+        document.Camera.ChromaSmoothness = existing.ChromaSmoothness;
+        document.Camera.ChromaSpill = existing.ChromaSpill;
+        document.Camera.CameraOnlyFraming = existing.CameraOnlyFraming;
         document.Motion = ProjectJson.Clone(Motion);
         document.Audio = ProjectJson.Clone(Audio);
     }

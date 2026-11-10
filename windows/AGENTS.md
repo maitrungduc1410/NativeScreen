@@ -74,7 +74,8 @@ Work is split between two agents on two machines. Know which one you are.
 | MCP tool errors (Windows) | Run the app with `NS_MCP_TRACE=<file>`. Every tool failure other than a plain refusal is appended with its stack. Clients reach the app with `NativeScreen.App.exe --mcp` once `Settings > AI Agents` is on. |
 | Timeline zoom cost (Windows) | Run the app with `NS_TIMELINE_ZOOM_STATS=<file>`. Each zoom step appends the zoom, the relayout ms and the total ms. |
 | UI in another language (Windows) | Run the app with `NS_LANGUAGE=<id>` (`vi`, `zh-Hans`, `ja`, `de`, `fr`, `es`, `pt-BR`, `en`) for one run. |
-| Build the MSIX (Windows) | `powershell windows/scripts/package-msix.ps1` |
+| Build the MSIX (Windows) | `powershell windows/scripts/package-msix.ps1` builds the Store package (`NS_STORE`, no updater) with the local test identity into `windows/artifacts/msix` and checks its images, native libraries and data files. Store identity and version: `-IdentityName -Publisher -PublisherDisplayName -Version` (`docs/releasing.md`). |
+| Redraw the Store tiles (Windows) | `powershell windows/scripts/make-store-assets.ps1` (from the macOS app icon, into `Assets/Store`) |
 | Regenerate conformance fixtures (macOS) | `"Native Screen.app/Contents/MacOS/Native Screen" --generate-conformance conformance` |
 
 If a command changes, update this table in the same commit.

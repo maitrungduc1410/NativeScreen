@@ -11,7 +11,7 @@ namespace NativeScreen.App;
 /// XAML above the preview: handles for the masks under a paused playhead, and the short-video safe zones. It draws only when
 /// paused and only after an edit or a seek, so it costs nothing during playback.
 /// </summary>
-internal sealed class PreviewOverlay
+internal sealed partial class PreviewOverlay
 {
     private const double HandleSize = 14;
     private const double MinimumSize01 = 0.02;
@@ -79,14 +79,18 @@ internal sealed class PreviewOverlay
 
     public Func<IReadOnlyDictionary<string, System.Numerics.Vector4>>? CaptionHits { get; set; }
 
-    public void Refresh()
+    public void Refresh() => Refresh(rebuildDuringDrag: false);
+
+    private void Refresh(bool rebuildDuringDrag)
     {
-        if (active is not null)
+        // While a text is typed into, its field stays; rebuilding would take the focus away and end the typing.
+        if (active is not null || textEditor is not null || annotationDrag is not null && !rebuildDuringDrag)
         {
             return;
         }
 
         canvas.Children.Clear();
+        annotationCornerSigns.Clear();
         var (width, height) = (canvas.ActualWidth, canvas.ActualHeight);
         if (width < 2 || height < 2)
         {
@@ -104,7 +108,7 @@ internal sealed class PreviewOverlay
             return;
         }
 
-        if (session.IsPlaying || session.HoverSkimTimelineMs is not null || !session.Document.Timeline.MaskTracks.Exists(track => !track.IsHidden))
+        if (session.IsPlaying || session.HoverSkimTimelineMs is not null || !session.Document.Timeline.MaskTracks.Exists(track => !track.IsHidden) && !session.Document.Timeline.AnnotationTracks.Exists(track => !track.IsHidden))
         {
             return;
         }
@@ -118,6 +122,8 @@ internal sealed class PreviewOverlay
                 DrawMask(mask, map, at);
             }
         }
+
+        DrawAnnotations(map, at, width, height);
     }
 
     /// <summary>Drag over the recording to choose the area; a plain click places a default mask around the click.</summary>
@@ -227,8 +233,9 @@ internal sealed class PreviewOverlay
         var (sourceWidth, sourceHeight, hasCamera) = source();
         var crop = document.Canvas.CropRect01;
         var at = session.SourceAtPlayhead;
-        var camera = trajectory.Evaluate(at).Camera;
-        var stage = new StageLayoutEngine().Resolve(document, at, width, height, Math.Max(16, sourceWidth * crop.Width), Math.Max(16, sourceHeight * crop.Height), camera.Scale, hasCamera);
+        var face = session.IsCameraOnly ? CameraOnlyLayout.FaceCenter01(document, session.FaceTrack, at) : null;
+        var camera = CameraOnlyLayout.FaceCentered(trajectory.Evaluate(at).Camera, face);
+        var stage = new StageLayoutEngine().Resolve(document, at, width, height, Math.Max(16, sourceWidth * crop.Width), Math.Max(16, sourceHeight * crop.Height), camera.Scale, hasCamera, cameraOnly: session.IsCameraOnly, faceTrack: session.FaceTrack);
         return camera.IsLoupeMode
             ? new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, Point01.Center, 1)
             : new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, camera.Center01, camera.Scale);
@@ -325,6 +332,11 @@ internal sealed class PreviewOverlay
 
     private void Moved(object sender, PointerRoutedEventArgs args)
     {
+        if (MovedAnnotation(args))
+        {
+            return;
+        }
+
         if (active is not { } drag)
         {
             return;
@@ -372,6 +384,11 @@ internal sealed class PreviewOverlay
 
     private void Finish()
     {
+        if (FinishAnnotation())
+        {
+            return;
+        }
+
         if (active is not { } drag)
         {
             return;

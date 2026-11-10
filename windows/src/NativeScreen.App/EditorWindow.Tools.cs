@@ -349,7 +349,8 @@ public sealed partial class EditorWindow
             session.ClickEvents,
             session.Shortcuts(),
             tools.WaitForFaceTrack(),
-            ExportPersonMasks.TryCreate);
+            ExportPersonMasks.TryCreate,
+            source.Project?.IsCameraOnly == true);
     }
 
     // MARK: Crop

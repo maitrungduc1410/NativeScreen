@@ -20,12 +20,35 @@ public sealed class AppSettings
     public string? DefaultPresetId { get; set; }
     public string AfterRecording { get; set; } = "project";
     public bool HighlightRecordedArea { get; set; } = true;
+
+    /// <summary>Live drawings stay on screen until cleared instead of fading after 3 s; read when a recording starts.</summary>
+    public bool DrawingsStayUntilCleared { get; set; }
+
+    public string LiveDrawingTool { get; set; } = "pen";
+
+    public string LiveDrawingColor { get; set; } = "#FF3B30";
+
+    public bool ShowSpeakerNotes { get; set; }
+
+    public string SpeakerNotesText { get; set; } = "";
+
+    public double SpeakerNotesFontSize { get; set; } = 26;
+
+    public double SpeakerNotesSpeed { get; set; } = 30;
+
+    public bool SpeakerNotesScrollsWhileRecording { get; set; } = true;
+
+    /// <summary>Saved recording setups, per user (spec/06 ADR-76).</summary>
+    public List<RecordingProfile> RecordingProfiles { get; set; } = [];
     public bool ShowAudioWaveform { get; set; } = true;
     public bool SmoothWaveform { get; set; } = true;
     public bool SnapToSegments { get; set; } = true;
 
     /// <summary>Favorite backgrounds in add order: mesh:&lt;id&gt; or wallpaper:&lt;id&gt; (spec/06 ADR-32).</summary>
     public List<string> FavoriteBackgrounds { get; set; } = [];
+
+    /// <summary>Annotation styles the user saved; per user, not in projects (spec/06 ADR-75).</summary>
+    public List<NativeScreen.Core.AnnotationStyle> AnnotationStyles { get; set; } = [];
 
     /// <summary>Settings > AI Agents: lets MCP clients drive the app (spec/06 ADR-52). Off by default; the bridge reads it too.</summary>
     public bool AiAgentsEnabled { get; set; }

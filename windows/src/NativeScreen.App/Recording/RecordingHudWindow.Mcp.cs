@@ -38,6 +38,9 @@ public sealed partial class RecordingHudWindow
     internal static (string? CameraId, string? MicrophoneId, bool SystemAudio) McpChoices =>
         shared is { } hud ? (hud.camera?.Id, hud.microphone?.Id, hud.systemAudio) : (null, null, true);
 
+    /// <summary>The target of a camera-only recording started by an agent.</summary>
+    internal static CaptureTarget McpCameraTarget() => CameraTarget();
+
     /// <summary>Applies the agent's device choices as a click in the bar would, then starts the countdown.</summary>
     internal static void McpStart(CaptureTarget target, (bool Set, CaptureDeviceInfo? Device) camera, (bool Set, CaptureDeviceInfo? Device) microphone, bool? systemAudio, int? countdownSeconds)
     {
@@ -68,6 +71,20 @@ public sealed partial class RecordingHudWindow
         }
 
         hud.mcpLastError = null;
+        if (target.Mode == CaptureTargetMode.Camera)
+        {
+            if (hud.camera is null)
+            {
+                throw new McpToolException("A camera recording needs a camera: pass cameraId (from list_capture_targets).");
+            }
+
+            // The large preview stays up through the countdown and the recording, as when the mode is picked in the bar.
+            if (hud.stage is null)
+            {
+                hud.ToggleCameraStage();
+            }
+        }
+
         hud.Reveal();
         hud.CancelPicking();
         hud.UpdateDevices();

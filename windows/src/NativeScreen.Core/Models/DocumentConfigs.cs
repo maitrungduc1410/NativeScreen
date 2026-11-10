@@ -171,9 +171,20 @@ public sealed class CursorConfig : IJsonOnDeserialized
     public bool OptimizeCursorChanges { get; set; } = true;
     public bool KeepInSyncWithHovers { get; set; } = true;
     public ClickEffectConfig ClickEffect { get; set; } = new();
+    /// <summary>Replaces the arrow (and every shape with `alwaysUsePointer`). Other shapes keep the theme's.</summary>
+    public CustomCursorImage? CustomPointer { get; set; }
+    /// <summary>Replaces the pointing hand.</summary>
+    public CustomCursorImage? CustomHand { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>A cursor picture the user chose, copied into `assets/cursors/`. `hotspot01` is the tip, from the top left.</summary>
+public sealed class CustomCursorImage
+{
+    public string ImagePath { get; set; } = "";
+    public Point01 Hotspot01 { get; set; } = Point01.Zero;
 }
 
 public sealed class CustomCameraColorPreset
@@ -225,6 +236,17 @@ public sealed class CameraConfig
     public string? BackgroundImageName { get; set; }
     public string? StickerId { get; set; }
     public double DelayAdjustmentMs { get; set; }
+    /// <summary>Camera-only recordings: how the picture is framed.</summary>
+    public CameraOnlyFraming CameraOnlyFraming { get; set; } = CameraOnlyFraming.Framed;
+    public CameraBackgroundRemoval BackgroundRemoval { get; set; } = CameraBackgroundRemoval.Ai;
+    /// <summary>Green screen: the backdrop color, how far around it is removed, edge softness and spill removal (0...1).</summary>
+    public string ChromaKeyColor { get; set; } = GreenScreenColor;
+    public double ChromaSimilarity { get; set; } = 0.4;
+    public double ChromaSmoothness { get; set; } = 0.3;
+    public double ChromaSpill { get; set; } = 0.5;
+
+    public const string GreenScreenColor = "#00B140";
+    public const string BlueScreenColor = "#0047BB";
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

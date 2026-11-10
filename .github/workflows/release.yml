@@ -255,6 +255,47 @@ jobs:
           path: releases/*
           if-no-files-found: error
 
+  # The Microsoft Store package (docs/releasing.md). Stable versions only. Microsoft signs it at certification, so it is
+  # kept as a workflow artifact for upload in Partner Center and never attached to the GitHub release. It has no updater.
+  store:
+    needs: check
+    if: inputs.platforms != 'macos' && !inputs.prerelease && !contains(inputs.version, '-')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      NS_STORE_IDENTITY_NAME: ${{ vars.NS_STORE_IDENTITY_NAME }}
+      NS_STORE_PUBLISHER: ${{ vars.NS_STORE_PUBLISHER }}
+      NS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.NS_STORE_PUBLISHER_DISPLAY_NAME }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: windows/global.json
+
+      - name: Check Store identity
+        run: |
+          $missing = @("NS_STORE_IDENTITY_NAME", "NS_STORE_PUBLISHER", "NS_STORE_PUBLISHER_DISPLAY_NAME") | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
+          if ($missing) { Write-Output "::error::Missing variables: $($missing -join ', ') (see docs/releasing.md)"; exit 1 }
+
+      - name: Build the MSIX
+        run: |
+          windows/scripts/package-msix.ps1 `
+            -IdentityName $env:NS_STORE_IDENTITY_NAME `
+            -Publisher $env:NS_STORE_PUBLISHER `
+            -PublisherDisplayName $env:NS_STORE_PUBLISHER_DISPLAY_NAME `
+            -Version $env:VERSION `
+            -Build $env:BUILD_NUMBER
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: store-msix
+          path: windows/artifacts/msix/**/*.msix
+          if-no-files-found: error
+
   release:
     needs: [macos, windows]
     # Runs when every requested platform built (a skipped platform is fine, a failed one is not).
@@ -264,6 +305,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: assets
+          # Not the Store package: it is uploaded to Partner Center, not offered on GitHub.
+          pattern: "{macos,windows}"
           merge-multiple: true
 
       - name: Create draft release

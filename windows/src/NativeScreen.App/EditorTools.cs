@@ -30,6 +30,70 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     public event Action? Changed;
 
     public bool HasPackage => source.PackagePath is not null;
+
+    public string? PackagePath => source.PackagePath;
+
+    /// <summary>The camera movie: the camera layer, or the main picture of a camera-only recording.</summary>
+    public string? CameraPicturePath => WebcamPath;
+
+    /// <summary>
+    /// Turns on green screen keying with the backdrop color read from the top 12% of the camera picture at the playhead
+    /// (spec/06 ADR-78). Keeps the current color when no frame can be read. One undo step.
+    /// </summary>
+    public async Task UseGreenScreen()
+    {
+        var color = await SampledBackdropColor(session.SourceAtPlayhead);
+        session.Mutate(document =>
+        {
+            document.Camera.BackgroundRemoval = CameraBackgroundRemoval.GreenScreen;
+            if (color is not null)
+            {
+                document.Camera.ChromaKeyColor = color;
+            }
+        });
+    }
+
+    /// <summary>The average color of the top strip of the camera picture at `sourceMs`, as `#RRGGBB`.</summary>
+    public async Task<string?> SampledBackdropColor(double sourceMs)
+    {
+        if (CameraPicturePath is not { } path || !File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await Task.Run(() =>
+            {
+                using var reader = new VideoFileReader(path);
+                if (MediaAssets.FrameAt(reader, sourceMs) is not { } frame || frame.Width <= 4 || frame.Height <= 4)
+                {
+                    return null;
+                }
+
+                var pixels = MediaAssets.ToBgra(frame);
+                var rows = Math.Max(1, (int)(frame.Height * 0.12));
+                long b = 0, g = 0, r = 0;
+                for (var y = 0; y < rows; y++)
+                {
+                    for (var x = 0; x < frame.Width; x++)
+                    {
+                        var o = (y * frame.Width + x) * 4;
+                        b += pixels[o];
+                        g += pixels[o + 1];
+                        r += pixels[o + 2];
+                    }
+                }
+
+                var count = (long)rows * frame.Width;
+                return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"#{r / count:X2}{g / count:X2}{b / count:X2}");
+            });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException or System.Runtime.InteropServices.COMException)
+        {
+            return null;
+        }
+    }
     public string? Status { get; private set; }
     public bool IsTranscribing { get; private set; }
     public bool IsScanningSensitive { get; private set; }
@@ -42,7 +106,15 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     private CancellationTokenSource? faceScanCancel;
 
     /// <summary>The face positions for stickers and face tracking; null until scanned or loaded.</summary>
-    public FaceTrack? FaceTrack { get; private set; }
+    public FaceTrack? FaceTrack
+    {
+        get;
+        private set
+        {
+            field = value;
+            session.FaceTrack = value;
+        }
+    }
 
     /// <summary>0 to 1 while the webcam is being scanned, null otherwise.</summary>
     public double? FaceScanProgress { get; private set; }
@@ -57,10 +129,11 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
 
     public event Action? FaceScanProgressChanged;
 
-    private bool NeedsFaceTrack => session.HasRecordedCamera && session.Document.Camera.Enabled
+    // A camera-only picture is scanned for its face too: framing and zoom follow it (spec/06 ADR-77).
+    private bool NeedsFaceTrack => (session.IsCameraOnly || session.HasRecordedCamera && session.Document.Camera.Enabled)
         && (session.Document.Camera.StickerId is not null || session.Document.Camera.EnableFaceTracking);
 
-    private string? WebcamPath => source.PackagePath is { } package && source.Project?.Metadata.Tracks.WebcamVideo is { } webcam
+    private string? WebcamPath => source.PackagePath is { } package && (source.Project?.IsCameraOnly == true ? source.Project.Metadata.Tracks.DisplayVideo : source.Project?.Metadata.Tracks.WebcamVideo) is { } webcam
         ? Path.Combine(package, "recording", webcam)
         : null;
 
@@ -182,6 +255,70 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         {
             toast($"Could not use this image: {exception.Message}");
         }
+    }
+
+    /// <summary>
+    /// Asks for a picture and copies it into `assets/<folder>/<UUID>.<ext>` of the package. Returns the package-relative path,
+    /// or null when cancelled or the copy failed. A replaced file is never deleted, so undo can bring it back.
+    /// </summary>
+    public async Task<string?> PickImageIntoPackage(string folder)
+    {
+        if (source.PackagePath is not { } package)
+        {
+            return null;
+        }
+
+        var picker = new FileOpenPicker();
+        foreach (var type in ImageTypes)
+        {
+            picker.FileTypeFilter.Add(type);
+        }
+
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+        if (await picker.PickSingleFileAsync() is not { } file)
+        {
+            return null;
+        }
+
+        var extension = Path.GetExtension(file.Path).TrimStart('.').ToLowerInvariant();
+        var name = Guid.NewGuid().ToString().ToUpperInvariant() + "." + (extension.Length == 0 ? "png" : extension);
+        var relative = $"assets/{folder}/{name}";
+        try
+        {
+            await Task.Run(() =>
+            {
+                Directory.CreateDirectory(Path.Combine(package, "assets", folder));
+                File.Copy(file.Path, Path.Combine(package, "assets", folder, name));
+            });
+            return relative;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            toast("Could not copy the image");
+            return null;
+        }
+    }
+
+    /// <summary>A custom arrow or hand picture, copied into `assets/cursors/` (spec/02 Custom cursors).</summary>
+    public async Task SetCustomCursor(bool hand)
+    {
+        if (await PickImageIntoPackage("cursors") is not { } path)
+        {
+            return;
+        }
+
+        var image = new CustomCursorImage { ImagePath = path, Hotspot01 = hand ? new Point01(0.45, 0.05) : new Point01(0, 0) };
+        session.Mutate(document =>
+        {
+            if (hand)
+            {
+                document.Cursor.CustomHand = image;
+            }
+            else
+            {
+                document.Cursor.CustomPointer = image;
+            }
+        });
     }
 
     public async Task ChooseCameraBackgroundImage()

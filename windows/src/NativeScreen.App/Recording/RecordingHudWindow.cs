@@ -48,7 +48,9 @@ public sealed partial class RecordingHudWindow : Window
     private double countdownTotal;
     private bool busy;
     private bool isPaused;
-    private ScreenRecorder? recorder;
+    private IRecordingEngine? recorder;
+    private CameraStageWindow? stage;
+    private (int Width, int Height, double FrameMs)? cameraFormat;
     private CaptureTarget? target;
     private string? package;
     private DateTime startedAt;
@@ -178,12 +180,21 @@ public sealed partial class RecordingHudWindow : Window
         AppWindow.Show();
         FitToContent();
         UpdateDevices();
+        if (AppSettings.Shared.ShowSpeakerNotes && notes is null)
+        {
+            SetSpeakerNotes(true);
+        }
     }
 
     private void Conceal()
     {
         isShown = false;
         CancelPicking();
+        if (recorder is null && pending is null)
+        {
+            CloseCameraStage();
+        }
+
         AppWindow.Hide();
         UpdateDevices();
     }
@@ -340,12 +351,18 @@ public sealed partial class RecordingHudWindow : Window
         modes.Children.Add(ModeButton("", "Display", CaptureTargetMode.Display));
         modes.Children.Add(ModeButton("", "Window", CaptureTargetMode.Window));
         modes.Children.Add(ModeButton("", "Area", CaptureTargetMode.Area));
+        modes.Children.Add(ModeButton("", "Camera", CaptureTargetMode.Camera));
         bar.Children.Add(modes);
         bar.Children.Add(Separator());
         var devices = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         devices.Children.Add(CameraButton());
         devices.Children.Add(MicrophoneButton());
-        devices.Children.Add(SystemAudioButton());
+        // System audio comes with the screen stream, which the Camera mode does not start.
+        if (stage is null)
+        {
+            devices.Children.Add(SystemAudioButton());
+        }
+
         bar.Children.Add(devices);
         bar.Children.Add(Separator());
         var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -361,7 +378,7 @@ public sealed partial class RecordingHudWindow : Window
     private Button ModeButton(string glyph, string title, CaptureTargetMode mode)
     {
         title = Loc.T(title);
-        var selected = pickingMode == mode;
+        var selected = pickingMode == mode || mode == CaptureTargetMode.Camera && stage is not null;
         var stack = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var icon = Ui.Icon(glyph, 16.5, Ui.Rgb(1, 1, 1, selected ? 1 : 0.92));
         icon.HorizontalAlignment = HorizontalAlignment.Center;
@@ -376,6 +393,13 @@ public sealed partial class RecordingHudWindow : Window
 
     private void SelectMode(CaptureTargetMode mode)
     {
+        if (mode == CaptureTargetMode.Camera)
+        {
+            ToggleCameraStage();
+            return;
+        }
+
+        CloseCameraStage();
         if (pickingMode == mode)
         {
             CancelPicking();
@@ -404,6 +428,56 @@ public sealed partial class RecordingHudWindow : Window
         SetWindowPos(Handle, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize);
     }
 
+    /// <summary>
+    /// The Camera mode: the large preview with its record button, kept up through the countdown and the recording. A second
+    /// click on the mode, Esc or hiding the bar closes it (spec/06 ADR-77).
+    /// </summary>
+    private void ToggleCameraStage()
+    {
+        if (stage is not null)
+        {
+            CloseCameraStage();
+            ShowIdle();
+            UpdateDevices();
+            return;
+        }
+
+        CancelPicking();
+        camera ??= WebcamRecorder.Cameras().FirstOrDefault();
+        if (camera is not { } chosen)
+        {
+            var title = Loc.T("Camera");
+            var message = Loc.T("A camera recording needs a camera.");
+            _ = Task.Run(() => MessageBoxW(0, message, title, MessageBoxWarningTopmost));
+            return;
+        }
+
+        stage = new CameraStageWindow(chosen.Name, microphone is not null, () => BeginCountdown(CameraTarget()));
+        stage.AppWindow.Show(false);
+        DockNotes();
+        ShowIdle();
+        UpdateDevices();
+    }
+
+    private void CloseCameraStage()
+    {
+        if (stage is null)
+        {
+            return;
+        }
+
+        stage.Close();
+        stage = null;
+        DockNotes();
+    }
+
+    /// <summary>A camera-only recording has no screen target; the display only places the bar.</summary>
+    private static CaptureTarget CameraTarget()
+    {
+        var display = CaptureTargets.Displays().FirstOrDefault(item => item.IsPrimary) ?? CaptureTargets.Displays()[0];
+        return new CaptureTarget(CaptureTargetMode.Camera, display, null, new NativeScreen.Media.PixelRect(0, 0, 16, 16));
+    }
+
     private void CancelPicking()
     {
         overlay?.Cancel();
@@ -421,6 +495,12 @@ public sealed partial class RecordingHudWindow : Window
         {
             CancelPicking();
             ShowIdle();
+        }
+        else if (stage is not null && recorder is null)
+        {
+            CloseCameraStage();
+            ShowIdle();
+            UpdateDevices();
         }
         else if (recorder is null)
         {
@@ -815,7 +895,8 @@ public sealed partial class RecordingHudWindow : Window
             }, TaskScheduler.Default);
         }
 
-        var showPreview = isShown && camera is not null && showCameraPreview;
+        // In the Camera mode the large stage window shows the camera instead of the floating bubble.
+        var showPreview = isShown && camera is not null && showCameraPreview && stage is null;
         if (showPreview && previewWindow is null)
         {
             previewWindow = new CameraPreviewWindow();
@@ -827,23 +908,25 @@ public sealed partial class RecordingHudWindow : Window
             previewWindow = null;
         }
 
-        var wantedCamera = idle && showPreview ? camera?.Id : null;
-        if (wantedCamera != previewedCamera)
+        var wantedCamera = idle && (showPreview || stage is not null) ? camera?.Id : null;
+        // The key names the window too, so moving between the bubble and the stage reopens the preview on the right one.
+        var wantedKey = wantedCamera is null ? null : wantedCamera + (stage is not null ? "|stage" : "|bubble");
+        if (wantedKey != previewedCamera)
         {
-            previewedCamera = wantedCamera;
+            previewedCamera = wantedKey;
             var old = cameraPreview;
             cameraPreview = null;
-            var window = previewWindow;
+            Action<byte[], int, int>? show = stage is { } stageWindow ? stageWindow.ShowFrame : previewWindow is { } bubble ? bubble.ShowFrame : null;
             deviceWork = deviceWork.ContinueWith(_ =>
             {
                 old?.Dispose();
-                if (wantedCamera is null || window is null)
+                if (wantedCamera is null || show is null)
                 {
                     return;
                 }
 
-                var opened = CameraPreviewSource.TryStart(wantedCamera, window.ShowFrame);
-                if (opened is not null && !DispatcherQueue.TryEnqueue(() => AdoptPreview(opened, wantedCamera)))
+                var opened = CameraPreviewSource.TryStart(wantedCamera, show);
+                if (opened is not null && !DispatcherQueue.TryEnqueue(() => AdoptPreview(opened, wantedKey ?? "")))
                 {
                     opened.Dispose();
                 }
@@ -985,6 +1068,15 @@ public sealed partial class RecordingHudWindow : Window
                 settings.Save();
             };
             menu.Items.Add(highlight);
+            // Read when a recording starts, so the screen and the saved strokes never disagree.
+            var stay = new ToggleMenuFlyoutItem { Text = Loc.T("Drawings Stay Until Cleared"), IsChecked = settings.DrawingsStayUntilCleared };
+            stay.Click += (_, _) =>
+            {
+                settings.DrawingsStayUntilCleared = stay.IsChecked;
+                settings.Save();
+            };
+            menu.Items.Add(stay);
+            AddNotesAndProfiles(menu);
             var after = new MenuFlyoutSubItem { Text = Loc.T("After recording") };
             foreach (var (title, action) in new[] { ("Create project", "project"), ("Export to clipboard", "clipboard"), ("Export to file", "file") })
             {
@@ -1083,18 +1175,29 @@ public sealed partial class RecordingHudWindow : Window
             await deviceWork.ContinueWith(_ => { }, TaskScheduler.Default);
             var directory = RecordingPackage.Create(AppSettings.Shared.ProjectsDirectory, DateTime.Now);
             var options = new RecordingOptions(chosen, directory, IsSystemAudioActive, microphone?.Id, camera?.Id, cameraMaxHeight, systemAudioAllApps ? null : systemAudioApps.ToList());
+            var cameraOnly = chosen.Mode == CaptureTargetMode.Camera;
+            var cameraId = camera?.Id;
+            var microphoneId = microphone?.Id;
             var (created, started) = await Task.Run(() =>
             {
-                var next = new ScreenRecorder(options);
+                IRecordingEngine next = cameraOnly
+                    ? new CameraOnlyRecorder(directory, cameraId ?? throw new InvalidOperationException(Loc.T("A camera recording needs a camera.")), cameraMaxHeight, microphoneId)
+                    : new ScreenRecorder(options);
                 return (next, next.WaitForFirstFrame());
             });
+            cameraFormat = created is CameraOnlyRecorder cameraRecorder ? cameraRecorder.Format : null;
             pending = null;
             target = chosen;
             package = directory;
             recorder = created;
             busy = false;
             created.Failed += failure => DispatcherQueue.TryEnqueue(() => _ = EndAfterFailure(created, failure));
-            if (previewWindow is { } preview)
+            if (stage is { } cameraStage)
+            {
+                created.CameraFrame += cameraStage.ShowFrame;
+                cameraStage.SetRecording(true);
+            }
+            else if (previewWindow is { } preview)
             {
                 created.CameraFrame += preview.ShowFrame;
             }
@@ -1106,10 +1209,12 @@ public sealed partial class RecordingHudWindow : Window
             }
 
             startedAt = DateTime.UtcNow;
+            drawingsStay = AppSettings.Shared.DrawingsStayUntilCleared;
+            notes?.RecordingStarted();
             pausedTotal = TimeSpan.Zero;
             pausedAt = null;
             isPaused = false;
-            if (AppSettings.Shared.HighlightRecordedArea)
+            if (AppSettings.Shared.HighlightRecordedArea && !cameraOnly)
             {
                 recordedArea = new RecordedAreaHighlight(chosen.Rect, chosen.Display.Scale);
             }
@@ -1160,6 +1265,7 @@ public sealed partial class RecordingHudWindow : Window
         actions.Children.Add(Item(Ui.Icon("", 16.5, Ui.Rgb(1, 1, 1, 0.9)), "Restart recording", () => _ = Restart(), 38, 38));
         actions.Children.Add(Item(Ui.Icon("", 16, Ui.Rgb(1, 1, 1, 0.9)), "Cancel & delete recording", () => _ = ConfirmDelete(), 38, 38));
         bar.Children.Add(actions);
+        AddDrawingControls();
         if (recorder?.IsMissingAppAudio == true)
         {
             var warning = Label("Some app sound is missing", 12.5, 1);
@@ -1181,7 +1287,13 @@ public sealed partial class RecordingHudWindow : Window
         }
 
         isPaused = !isPaused;
+        if (isPaused)
+        {
+            StopDrawingForPause();
+        }
+
         recorder.SetPaused(isPaused);
+        notes?.RecordingPaused(isPaused);
         if (isPaused)
         {
             pausedAt = DateTime.UtcNow;
@@ -1202,6 +1314,8 @@ public sealed partial class RecordingHudWindow : Window
         tick.Stop();
         recordedArea?.Dispose();
         recordedArea = null;
+        DisposeDrawing();
+        notes?.RecordingEnded();
         var running = recorder;
         recorder = null;
         if (running is not null)
@@ -1221,7 +1335,7 @@ public sealed partial class RecordingHudWindow : Window
     }
 
     /// <summary>The captured window went away or a writer failed: keep what was written, open it, and say why the recording stopped.</summary>
-    private async Task EndAfterFailure(ScreenRecorder engine, CaptureFailure failure)
+    private async Task EndAfterFailure(IRecordingEngine engine, CaptureFailure failure)
     {
         if (recorder != engine || busy)
         {
@@ -1260,7 +1374,7 @@ public sealed partial class RecordingHudWindow : Window
     {
         try
         {
-            using var reader = new VideoFileReader(Path.Combine(directory, "recording", "display.mp4"));
+            using var reader = new VideoFileReader(Path.Combine(directory, "recording", File.Exists(Path.Combine(directory, "recording", "display.mp4")) ? "display.mp4" : "webcam.mp4"));
             return reader.DurationMs;
         }
         catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or COMException or IOException or InvalidOperationException or IndexOutOfRangeException)
@@ -1298,13 +1412,28 @@ public sealed partial class RecordingHudWindow : Window
             stats.DurationMs = Math.Min(stats.DurationMs, playableMs);
         }
 
-        await Task.Run(() => RecordingPackage.Finish(directory, chosen.Metadata(), stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms, DateTimeOffset.UtcNow));
+        var cameraOnly = chosen.Mode == CaptureTargetMode.Camera;
+        var metadata = cameraOnly && cameraFormat is { } format ? CameraOnlyMetadata(format) : chosen.Metadata();
+        CloseCameraStage();
+        await Task.Run(() => RecordingPackage.Finish(directory, metadata, stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms && !cameraOnly, DateTimeOffset.UtcNow, cameraOnly));
         await Task.Run(() => ApplyDefaultPreset(directory));
         busy = false;
         ShowIdle();
         await Projects.Open(directory, root.XamlRoot, AppSettings.Shared.AfterRecording);
         return stats.DurationMs;
     }
+
+    /// <summary>A camera-only recording's target: the camera picture's size with scale 1, at the camera's rate (spec/02).</summary>
+    private static CaptureTargetMetadata CameraOnlyMetadata((int Width, int Height, double FrameMs) format) => new()
+    {
+        Mode = CaptureTargetMode.Camera,
+        DisplayId = 0,
+        LogicalBounds = new LogicalBounds { X = 0, Y = 0, Width = format.Width, Height = format.Height },
+        PixelSize = new PixelDimensions { Width = format.Width, Height = format.Height },
+        ScaleFactor = 1,
+        RefreshRate = Math.Round(1000 / Math.Max(1, format.FrameMs)),
+        WindowBorderRadius = 0
+    };
 
     /// <summary>A new project starts in the style of the default preset, when one is set.</summary>
     private static void ApplyDefaultPreset(string directory)

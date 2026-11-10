@@ -153,6 +153,31 @@ internal sealed class SegmentMenu
         menu.Show(anchor, at);
     }
 
+    public static void ForAnnotation(EditorSession session, string id, FrameworkElement anchor, Point at)
+    {
+        if (session.Annotation(id) is not { } item)
+        {
+            return;
+        }
+
+        var menu = new SegmentMenu();
+        menu.Command("Split at playhead", "C", () => session.SplitAnnotation(id, session.SourceAtPlayhead));
+        menu.Command(item.Disabled ? "Enable" : "Disable", "D", () => session.ToggleAnnotationDisabled(id));
+        menu.Command(item.Anchor == AnnotationAnchor.Screen ? "Pin to frame" : "Pin to screen", null, () => session.SetAnnotationAnchor(id, item.Anchor == AnnotationAnchor.Screen ? AnnotationAnchor.Canvas : AnnotationAnchor.Screen));
+        menu.Separator();
+        menu.Command("Bring to front", null, () => session.MoveAnnotationLayer(id, AnnotationLayerMove.Front));
+        menu.Command("Bring forward", null, () => session.MoveAnnotationLayer(id, AnnotationLayerMove.Forward));
+        menu.Command("Send backward", null, () => session.MoveAnnotationLayer(id, AnnotationLayerMove.Backward));
+        menu.Command("Send to back", null, () => session.MoveAnnotationLayer(id, AnnotationLayerMove.Back));
+        menu.Separator();
+        menu.Command("Duplicate", "Ctrl+D", () => session.DuplicateAnnotation(id));
+        menu.Command("Copy", "Ctrl+C", () => session.CopyAnnotation(id));
+        menu.Command("Cut to clipboard", "Ctrl+X", () => session.CutAnnotation(id));
+        menu.Separator();
+        menu.Danger("Remove", "Delete", () => session.DeleteAnnotation(id));
+        menu.Show(anchor, at);
+    }
+
     public static void ForShortcut(EditorSession session, ShortcutCluster cluster, FrameworkElement anchor, Point at)
     {
         var all = session.Shortcuts();

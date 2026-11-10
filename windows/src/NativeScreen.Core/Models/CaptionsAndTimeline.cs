@@ -355,6 +355,8 @@ public sealed class TimelineConfig
     public List<CameraLayoutSegment> CameraLayouts { get; set; } = [];
     public bool IsCameraLayoutsTrackHidden { get; set; }
     public List<MaskTrack> MaskTracks { get; set; } = [];
+    /// <summary>Text, arrows, shapes, steps, images and pen strokes; the first track draws on top (spec/02).</summary>
+    public List<AnnotationTrack> AnnotationTracks { get; set; } = [];
     public List<VoiceoverSegment> Voiceovers { get; set; } = [];
     public bool IsVoiceoversTrackHidden { get; set; }
     public List<int> HiddenVoiceoverTracks { get; set; } = [];

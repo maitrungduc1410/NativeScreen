@@ -163,6 +163,12 @@ public sealed partial class EditorSession
 
     public bool HasRecordedCamera { get; init; }
 
+    /// <summary>A camera-only recording (spec/06 ADR-77): the camera is the main picture.</summary>
+    public bool IsCameraOnly { get; init; }
+
+    /// <summary>The face track once loaded or scanned; camera-only framing and zoom follow it.</summary>
+    public FaceTrack? FaceTrack { get; set; }
+
     public bool HasMicrophoneTrack { get; init; }
 
     public bool HasRecordedMicrophone => HasMicrophoneTrack || Document.Captions.Segments.Count > 0;
@@ -174,6 +180,11 @@ public sealed partial class EditorSession
         {
             case InspectorTab.Cursor:
                 return CursorEvents.Count > 0 ? (true, null) : (false, "There is no mouse cursor recorded");
+            case InspectorTab.CameraLayout when IsCameraOnly:
+            case InspectorTab.CameraStyle when IsCameraOnly:
+                return (true, null);
+            case InspectorTab.DeviceFrame when IsCameraOnly:
+                return (false, "Device frames are for screen recordings");
             case InspectorTab.CameraLayout:
                 return HasRecordedCamera ? (true, null) : (false, "No camera recorded");
             case InspectorTab.CameraStyle:
@@ -382,6 +393,7 @@ public sealed partial class EditorSession
         coalesceAt = now;
         renderDocument = null;
         NormalizeMaskTracks();
+        NormalizeAnnotationTracks();
         NormalizeCaptionTracks(hadCaptionTracks);
         Mapper = new NLETimeMapper(History.Current.Timeline.Slices);
         PlayheadTimelineMs = Math.Clamp(PlayheadTimelineMs, 0, DurationMs);
@@ -737,6 +749,10 @@ public sealed partial class EditorSession
         {
             Mutate(document => document.Timeline.Zooms.RemoveAll(zoom => zoom.Id == zoomId));
         }
+        else if (SelectedAnnotationId is { } annotationId)
+        {
+            DeleteAnnotation(annotationId);
+        }
         else if (SelectedMaskId is { } maskId)
         {
             Mutate(document =>
@@ -783,6 +799,11 @@ public sealed partial class EditorSession
         if (SelectedMask is null)
         {
             SelectedMaskId = null;
+        }
+
+        if (SelectedAnnotationId is { } annotationId && Annotation(annotationId) is null)
+        {
+            SelectedAnnotationId = null;
         }
 
         if (SelectedLayout is null)
@@ -833,5 +854,6 @@ public sealed partial class EditorSession
         SelectedLayoutId = null;
         SelectedShortcutId = null;
         SelectedVoiceoverId = null;
+        SelectedAnnotationId = null;
     }
 }

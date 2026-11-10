@@ -31,6 +31,20 @@ public sealed class WebcamRecorder : IDisposable
     /// <summary>The newest frame in NV12 for the floating preview, swapped atomically. Null before the first frame.</summary>
     public event Action<byte[], int, int>? PreviewFrame;
 
+    /// <summary>
+    /// Camera-only recordings: called once on the camera thread with the host time of the first usable frame (cold, black frames
+    /// are skipped), before that frame is placed on the timeline, so it can be time zero (spec/06 ADR-77).
+    /// </summary>
+    public Action<double>? FirstUsableFrame { get; set; }
+
+    /// <summary>Picture size and rate of the written movie.</summary>
+    public (int Width, int Height, double FrameMs) Format => (width, height, frameMs);
+
+    /// <summary>Time of the last written frame on the recording timeline.</summary>
+    public double LastFrameMs => lastPts;
+
+    private bool sawUsableFrame;
+
     private WebcamRecorder(IMFMediaSource source, IMFSourceReader reader, string path, int width, int height, int fps, Func<double, double?> elapsed, Action<string>? writeFailed)
     {
         this.source = source;
@@ -173,6 +187,28 @@ public sealed class WebcamRecorder : IDisposable
     private unsafe void HandleSample(IMFSample sample)
     {
         var host = Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
+        if (FirstUsableFrame is { } first && !sawUsableFrame)
+        {
+            using var probe = sample.ConvertToContiguousBuffer();
+            probe.Lock(out var probePointer, out _, out var probeLength);
+            try
+            {
+                CopyNv12(new ReadOnlySpan<byte>((void*)probePointer, probeLength), nv12, width, height);
+            }
+            finally
+            {
+                probe.Unlock();
+            }
+
+            if (!IsUsable(nv12, width, height))
+            {
+                return;
+            }
+
+            sawUsableFrame = true;
+            first(host);
+        }
+
         if (elapsed(host) is not { } pts)
         {
             return;
@@ -202,6 +238,23 @@ public sealed class WebcamRecorder : IDisposable
             lastPts = pts;
             PreviewFrame?.Invoke(nv12, width, height);
         }
+    }
+
+    /// <summary>A camera warming up sends black frames first; a frame counts once its average luma is above near black.</summary>
+    internal static bool IsUsable(byte[] nv12, int width, int height)
+    {
+        long sum = 0;
+        var samples = 0;
+        for (var y = 0; y < height; y += 8)
+        {
+            for (var x = 0; x < width; x += 8)
+            {
+                sum += nv12[y * width + x];
+                samples++;
+            }
+        }
+
+        return samples > 0 && sum / samples > 20;
     }
 
     internal static void CopyNv12(ReadOnlySpan<byte> frame, byte[] nv12, int width, int height)

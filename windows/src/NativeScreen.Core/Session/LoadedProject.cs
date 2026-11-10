@@ -11,6 +11,9 @@ public sealed class LoadedProject
     public SpringTrajectorySolver Trajectory { get; }
     public bool HasRecordedCamera { get; }
 
+    /// <summary>Recorded in the Camera mode: the main picture is the camera, with no screen, cursor or system audio.</summary>
+    public bool IsCameraOnly => Metadata.CaptureTarget.Mode == CaptureTargetMode.Camera;
+
     public LoadedProject(string packageDirectory)
     {
         var projectPath = Path.Combine(packageDirectory, "project.json");
@@ -23,13 +26,16 @@ public sealed class LoadedProject
 
         Document.Timeline.Zooms = AutoZoomClusterGenerator.NormalizeNonOverlappingZooms(Document.Timeline.Zooms, Metadata.DurationMs);
         Document.Timeline.MaskTracks.RemoveAll(track => track.Items.Count == 0);
+        // Items on an annotation track must not overlap, or dragging one pushes it away. Older live drawings could.
+        AnnotationTrack.RepackOverlapping(Document.Timeline.AnnotationTracks);
         CursorEvents = JsonLines.Load<CursorSampleEvent>(Path.Combine(recording, Metadata.Tracks.CursorTelemetry));
         ClickEvents = JsonLines.Load<ClickEvent>(Path.Combine(recording, Metadata.Tracks.ClicksTelemetry));
         KeyEvents = JsonLines.Load<KeyStrokeEvent>(Path.Combine(recording, Metadata.Tracks.KeysTelemetry));
         TimeMapper = new NLETimeMapper(Document.Timeline.Slices);
         Trajectory = new SpringTrajectorySolver(Metadata.DurationMs, CursorEvents, ClickEvents, Document);
         var webcam = Metadata.Tracks.WebcamVideo;
-        HasRecordedCamera = webcam is not null || File.Exists(Path.Combine(recording, "webcam.mp4"));
+        // A camera-only recording names its camera movie as the screen and has no camera layer (spec/06 ADR-77).
+        HasRecordedCamera = !IsCameraOnly && (webcam is not null || File.Exists(Path.Combine(recording, "webcam.mp4")));
 
         Document.Captions.MigrateTranscriptToCaptionTracksIfNeeded();
         Document.Captions.RemoveEmptyCaptionTracks();
@@ -63,6 +69,7 @@ public sealed class LoadedProject
             sourceW,
             sourceH,
             zoom,
-            HasRecordedCamera);
+            HasRecordedCamera,
+            cameraOnly: IsCameraOnly);
     }
 }

@@ -9,7 +9,7 @@ using ZoomMode = NativeScreen.Core.ZoomMode;
 namespace NativeScreen.App;
 
 /// <summary>Builds the inspector for the selected tab or timeline block. Every control writes to the session document.</summary>
-internal sealed class InspectorPanel
+internal sealed partial class InspectorPanel
 {
     private static readonly string[] CuratedSolidColors =
     [
@@ -63,7 +63,11 @@ internal sealed class InspectorPanel
 
         var offset = scroller.VerticalOffset;
         body.Children.Clear();
-        if (session.SelectedZoom is { } zoom)
+        if (session.SelectedAnnotation is { } annotation)
+        {
+            AnnotationEditor(annotation);
+        }
+        else if (session.SelectedZoom is { } zoom)
         {
             ZoomEditor(zoom);
         }
@@ -317,6 +321,87 @@ internal sealed class InspectorPanel
         }
     }
 
+    /// <summary>A custom arrow or hand picture: a click on it sets the tip (spec/02 Custom cursors).</summary>
+    private UIElement CustomCursorRow(string title, bool hand, CustomCursorImage? image)
+    {
+        var tile = new Grid { Width = 56, Height = 56, CornerRadius = new CornerRadius(9), Background = Ui.Pal("Ink07") };
+        if (image is not null && tools.PackagePath is { } package && File.Exists(Path.Combine(package, image.ImagePath)))
+        {
+            var picture = new Image
+            {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(Path.Combine(package, image.ImagePath))),
+                Stretch = Stretch.Uniform,
+                Margin = new Thickness(6)
+            };
+            var marker = new Microsoft.UI.Xaml.Shapes.Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(217, 255, 255, 255)),
+                Stroke = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 112, 87, 250)),
+                StrokeThickness = 2,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                IsHitTestVisible = false
+            };
+            void Place()
+            {
+                var left = (tile.Width - picture.ActualWidth) / 2;
+                var top = (tile.Height - picture.ActualHeight) / 2;
+                marker.Margin = new Thickness(left + image.Hotspot01.X * picture.ActualWidth - 4, top + image.Hotspot01.Y * picture.ActualHeight - 4, 0, 0);
+            }
+
+            picture.SizeChanged += (_, _) => Place();
+            picture.PointerPressed += (_, args) =>
+            {
+                var at = args.GetCurrentPoint(picture).Position;
+                var hotspot = new Point01(
+                    Math.Clamp(at.X / Math.Max(1, picture.ActualWidth), 0, 1),
+                    Math.Clamp(at.Y / Math.Max(1, picture.ActualHeight), 0, 1));
+                Edit(d =>
+                {
+                    var target = hand ? d.Cursor.CustomHand : d.Cursor.CustomPointer;
+                    if (target is not null)
+                    {
+                        target.Hotspot01 = hotspot;
+                    }
+                });
+            };
+            tile.Children.Add(picture);
+            tile.Children.Add(marker);
+        }
+        else
+        {
+            tile.Children.Add(Ui.Icon(hand ? "" : "", 18));
+        }
+
+        A11y.Name(tile, title);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        buttons.Children.Add(Action(image is null ? "Choose image..." : "Replace...", () => _ = tools.SetCustomCursor(hand)));
+        if (image is not null)
+        {
+            buttons.Children.Add(Action("Remove", () => Edit(d =>
+            {
+                if (hand)
+                {
+                    d.Cursor.CustomHand = null;
+                }
+                else
+                {
+                    d.Cursor.CustomPointer = null;
+                }
+            })));
+        }
+
+        var text = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(Ui.Text(title, 12.5, "Ink88"));
+        text.Children.Add(buttons);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        row.Children.Add(tile);
+        row.Children.Add(text);
+        return row;
+    }
+
     private void Cursor()
     {
         Add(Toggle("Hide cursor", null, () => Doc.Cursor.Hidden, (d, v) => d.Cursor.Hidden = v));
@@ -360,6 +445,15 @@ internal sealed class InspectorPanel
             Add(Labeled("Cursor color", 10, Strip("cursor-color-" + selectedThemeId, row, selectedVariant, selectedCard)));
         }
 
+        var custom = new StackPanel { Spacing = 10 };
+        custom.Children.Add(CustomCursorRow("Arrow", false, Doc.Cursor.CustomPointer));
+        custom.Children.Add(CustomCursorRow("Hand", true, Doc.Cursor.CustomHand));
+        if (Doc.Cursor.CustomPointer is not null || Doc.Cursor.CustomHand is not null)
+        {
+            custom.Children.Add(Note("Click the picture to set the tip. Other shapes keep the style above."));
+        }
+
+        Add(Labeled("Custom cursor", 10, custom));
         Add(Toggle("Always use pointer cursor", null, () => Doc.Cursor.AlwaysUsePointer, (d, v) => d.Cursor.AlwaysUsePointer = v));
         Add(Toggle("Hide cursor if not moving", null, () => Doc.Cursor.HideWhenIdleAfterMs is not null, (d, v) => d.Cursor.HideWhenIdleAfterMs = v ? 2000 : null));
         if (Doc.Cursor.HideWhenIdleAfterMs is not null)
@@ -419,6 +513,12 @@ internal sealed class InspectorPanel
 
     private void CameraLayout()
     {
+        if (session.IsCameraOnly)
+        {
+            CameraOnlyLayout();
+            return;
+        }
+
         if (!hasCamera)
         {
             Add(Note("This recording has no camera video."));
@@ -479,7 +579,10 @@ internal sealed class InspectorPanel
 
     private void CameraStyle()
     {
-        if (!hasCamera)
+        // Camera-only recordings style the main picture: stickers, face tracking and delay follow the camera layer, and
+        // cropping is the canvas crop.
+        var cameraOnly = session.IsCameraOnly;
+        if (!hasCamera && !cameraOnly)
         {
             Add(Note("This recording has no camera video."));
             return;
@@ -491,8 +594,13 @@ internal sealed class InspectorPanel
             AddDivider();
         }
 
-        CameraStickerSection();
+        CameraBackgroundRemovalSection();
         AddDivider();
+        if (!cameraOnly)
+        {
+            CameraStickerSection();
+            AddDivider();
+        }
 
         var looks = Doc.Camera.ColorGradePreset;
         var wrap = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 92, ItemHeight = 44 };
@@ -550,13 +658,22 @@ internal sealed class InspectorPanel
         }
 
         var hasCrop = !Rect01Full(Doc.Camera.CropRect01);
-        Add(Labeled("Crop", 10, Options(
-            (hasCrop ? "Edit crop" : "Crop camera", false, () => CameraCropRequested?.Invoke()),
-            ("Reset", false, hasCrop ? () => Edit(d => d.Camera.CropRect01 = Rect01.Full) : null))));
+        if (!cameraOnly)
+        {
+            Add(Labeled("Crop", 10, Options(
+                (hasCrop ? "Edit crop" : "Crop camera", false, () => CameraCropRequested?.Invoke()),
+                ("Reset", false, hasCrop ? () => Edit(d => d.Camera.CropRect01 = Rect01.Full) : null))));
+        }
+
         Add(Slider("Color grading intensity", () => Doc.Camera.ColorGradeIntensity, (d, v) => d.Camera.ColorGradeIntensity = v, 0, 1, 1));
         Add(Slider("Sharpen", () => Doc.Camera.Sharpen01, (d, v) => d.Camera.Sharpen01 = v, 0, 1, 0));
         AddDivider();
         Add(Toggle("Mirror horizontally", null, () => Doc.Camera.Mirror, (d, v) => d.Camera.Mirror = v));
+        if (cameraOnly)
+        {
+            return;
+        }
+
         Add(Toggle("Face tracking", null, () => Doc.Camera.EnableFaceTracking, (d, v) => d.Camera.EnableFaceTracking = v));
         if (Doc.Camera.EnableFaceTracking)
         {
@@ -568,6 +685,80 @@ internal sealed class InspectorPanel
         }
 
         Add(Collapsible("Advanced", () => Slider("Camera delay", () => Doc.Camera.DelayAdjustmentMs, (d, v) => d.Camera.DelayAdjustmentMs = v, -200, 200, 0)));
+    }
+
+    /// <summary>Where the person mask comes from: on-device segmentation, or a color key on a backdrop (spec/06 ADR-78).</summary>
+    private void CameraBackgroundRemovalSection()
+    {
+        var camera = Doc.Camera;
+        var green = camera.BackgroundRemoval == CameraBackgroundRemoval.GreenScreen;
+        Add(Labeled("Remove background with", 10, Options(
+            ("AI", !green, () => Edit(d => d.Camera.BackgroundRemoval = CameraBackgroundRemoval.Ai)),
+            ("Green screen", green, () => _ = tools.UseGreenScreen()))));
+        if (!green)
+        {
+            return;
+        }
+
+        Add(Labeled("Backdrop color", 10, ColorField.Create(
+            "Backdrop color",
+            camera.ChromaKeyColor,
+            hex => session.Mutate(d => d.Camera.ChromaKeyColor = hex, "chroma-color", structural: false),
+            hex => Edit(d => d.Camera.ChromaKeyColor = hex))));
+        Add(Options(
+            ("Green", camera.ChromaKeyColor == CameraConfig.GreenScreenColor, () => Edit(d => d.Camera.ChromaKeyColor = CameraConfig.GreenScreenColor)),
+            ("Blue", camera.ChromaKeyColor == CameraConfig.BlueScreenColor, () => Edit(d => d.Camera.ChromaKeyColor = CameraConfig.BlueScreenColor)),
+            ("Detect from the video", false, () => _ = tools.UseGreenScreen())));
+        Add(Slider("Similarity", () => Doc.Camera.ChromaSimilarity, (d, v) => d.Camera.ChromaSimilarity = v, 0, 1, 0.4));
+        Add(Slider("Smoothness", () => Doc.Camera.ChromaSmoothness, (d, v) => d.Camera.ChromaSmoothness = v, 0, 1, 0.3));
+        Add(Slider("Spill removal", () => Doc.Camera.ChromaSpill, (d, v) => d.Camera.ChromaSpill = v, 0, 1, 0.5));
+        Add(Note("Used wherever the background is removed: the cutout, and a blurred or replaced background."));
+    }
+
+    /// <summary>The Camera Layout tab of a camera-only recording: how the main picture sits on the canvas (spec/06 ADR-77).</summary>
+    private void CameraOnlyLayout()
+    {
+        var camera = Doc.Camera;
+        Add(Labeled("Framing", 10, Options(
+            ("Framed", camera.CameraOnlyFraming == CameraOnlyFraming.Framed, () => Edit(d => d.Camera.CameraOnlyFraming = CameraOnlyFraming.Framed)),
+            ("Full frame", camera.CameraOnlyFraming == CameraOnlyFraming.FullFrame, () => Edit(d => d.Camera.CameraOnlyFraming = CameraOnlyFraming.FullFrame)),
+            ("Cutout", camera.CameraOnlyFraming == CameraOnlyFraming.Cutout, () => Edit(d => d.Camera.CameraOnlyFraming = CameraOnlyFraming.Cutout)))));
+        AddDivider();
+        Add(Toggle("Keep my face centered", "Full frame and Cutout crop around your face, and zooms center on it. Done locally, no data is sent to the server.", () => Doc.Camera.EnableFaceTracking, (d, v) => d.Camera.EnableFaceTracking = v));
+        if (camera.EnableFaceTracking)
+        {
+            FaceScanStatus();
+        }
+
+        if (camera.CameraOnlyFraming == CameraOnlyFraming.Cutout)
+        {
+            AddDivider();
+            if (camera.BackgroundRemoval == CameraBackgroundRemoval.Ai)
+            {
+                PersonModelRow();
+            }
+
+            Add(Slider("Edge softness", () => Doc.Camera.CutoutEdgeSoftness, (d, v) => d.Camera.CutoutEdgeSoftness = v, 0, 1, 0.2));
+            Add(Slider("Edge inset", () => Doc.Camera.CutoutEdgeInset, (d, v) => d.Camera.CutoutEdgeInset = v, 0, 1, 0));
+        }
+
+        var canvas = Doc.Canvas;
+        if (canvas.AspectRatioMode != AspectRatioMode.Preset || canvas.AspectRatioPreset != AspectRatioPreset.Vertical9x16)
+        {
+            AddDivider();
+            Add(Action("Make a vertical video (9:16)", () => Edit(d =>
+            {
+                d.Canvas.AspectRatioMode = AspectRatioMode.Preset;
+                d.Canvas.AspectRatioPreset = AspectRatioPreset.Vertical9x16;
+                if (d.Camera.CameraOnlyFraming == CameraOnlyFraming.Framed)
+                {
+                    d.Camera.CameraOnlyFraming = CameraOnlyFraming.FullFrame;
+                }
+
+                d.Camera.EnableFaceTracking = true;
+            })));
+            Add(Note("Fills a 9:16 frame and follows your face, for shorts and reels."));
+        }
     }
 
     private void CameraBackgroundSection()

@@ -1,3 +1,4 @@
+#if !NS_STORE
 using Velopack;
 using Velopack.Sources;
 
@@ -6,7 +7,7 @@ namespace NativeScreen.App;
 /// <summary>
 /// App updates through Velopack, from the GitHub releases (spec/06 ADR-53). Only an installed copy has an updater: a build
 /// run from the source tree never replaces itself. An update is downloaded in the background and installed when the user
-/// asks for it.
+/// asks for it. The Store build compiles <c>AppUpdater.Store.cs</c> instead (spec/06 ADR-81).
 /// </summary>
 internal sealed class AppUpdater
 {
@@ -123,3 +124,4 @@ internal sealed class AppUpdater
         }
     }
 }
+#endif

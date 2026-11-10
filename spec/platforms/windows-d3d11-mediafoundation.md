@@ -15,7 +15,7 @@ insufficient (measured), and must be recorded as an ADR in `spec/06`.
 | Concern | Choice |
 | :--- | :--- |
 | Runtime | .NET 10 (LTS), C# latest, nullable enabled, `x64` and `arm64` |
-| UI | WinUI 3 (Windows App SDK, latest stable), unpackaged during development (`WindowsPackageType=None`), MSIX later |
+| UI | WinUI 3 (Windows App SDK, latest stable), unpackaged (`WindowsPackageType=None`) for development and the Velopack installer; MSIX with `NsPackage=true` for the Microsoft Store (`NS_STORE`, no updater, `spec/06` ADR-81) |
 | MVVM | `CommunityToolkit.Mvvm` (source-generated observable properties and commands) |
 | Direct3D 11, DXGI, Direct2D, DirectWrite, Media Foundation | `Vortice.Windows` (`Vortice.Direct3D11`, `Vortice.DXGI`, `Vortice.D3DCompiler`, `Vortice.Direct2D1`, `Vortice.MediaFoundation`, `Vortice.WinUI` for `ISwapChainPanelNative`) |
 | Win32 (hooks, DPI, window styles, cursor, QPC) | `Microsoft.Windows.CsWin32` (generated P/Invoke from `NativeMethods.txt`) |

@@ -1,20 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Store package (NsPackage=true, scripts/package-msix.ps1, spec/06 ADR-81). Identity Name, Publisher, PublisherDisplayName
+  and Version below are local defaults for a sideloaded test package. The build writes the real values into a copy of
+  this file from NsStoreIdentityName, NsStorePublisher, NsStorePublisherDisplayName and NsPackageVersion
+  (docs/releasing.md). Never commit the Partner Center values here.
+-->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:uap11="http://schemas.microsoft.com/appx/manifest/uap/windows10/11"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  IgnorableNamespaces="uap uap5 uap11 rescap">
   <Identity Name="NativeScreen" Publisher="CN=NativeScreen" Version="1.0.0.0" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>Native Screen</DisplayName>
     <PublisherDisplayName>Native Screen</PublisherDisplayName>
-    <Logo>Assets\StoreLogo.png</Logo>
+    <Logo>Assets\Store\StoreLogo.png</Logo>
   </Properties>
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+    <!-- The build writes TargetPlatformMinVersion and TargetPlatformVersion of the csproj here; these show what it writes.
+         10.0.19041.0: GraphicsCaptureSession.IsCursorCaptureEnabled needs Windows 10 2004. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
   </Dependencies>
   <Resources>
-    <Resource Language="x-generate" />
+    <!-- The UI languages of the shared string catalog. The first is the default. -->
+    <Resource Language="en-US" />
+    <Resource Language="vi" />
+    <Resource Language="zh-Hans" />
+    <Resource Language="ja" />
+    <Resource Language="de" />
+    <Resource Language="fr" />
+    <Resource Language="es" />
+    <Resource Language="pt-BR" />
   </Resources>
   <Applications>
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
@@ -22,24 +40,39 @@
         DisplayName="Native Screen"
         Description="Screen recorder and cinematic demo video editor"
         BackgroundColor="transparent"
-        Square150x150Logo="Assets\Square150x150Logo.png"
-        Square44x44Logo="Assets\Square44x44Logo.png" />
+        Square150x150Logo="Assets\Store\Square150x150Logo.png"
+        Square44x44Logo="Assets\Store\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\Store\Wide310x150Logo.png"
+          Square71x71Logo="Assets\Store\Square71x71Logo.png"
+          Square310x310Logo="Assets\Store\Square310x310Logo.png"
+          ShortName="Native Screen" />
+        <uap:SplashScreen Image="Assets\Store\SplashScreen.png" />
+      </uap:VisualElements>
       <Extensions>
         <uap:Extension Category="windows.fileTypeAssociation">
           <uap:FileTypeAssociation Name="nativescreen">
             <uap:DisplayName>Native Screen Project</uap:DisplayName>
-            <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
+            <uap:Logo>Assets\Store\Square44x44Logo.png</uap:Logo>
             <uap:SupportedFileTypes>
               <uap:FileType>.nativescreen</uap:FileType>
             </uap:SupportedFileTypes>
           </uap:FileTypeAssociation>
         </uap:Extension>
+        <!-- A path that survives updates, for MCP clients (the package folder's name changes with every version). -->
+        <uap5:Extension Category="windows.appExecutionAlias" Executable="NativeScreen.App.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap5:AppExecutionAlias>
+            <uap5:ExecutionAlias Alias="nativescreen.exe" />
+          </uap5:AppExecutionAlias>
+        </uap5:Extension>
       </Extensions>
     </Application>
   </Applications>
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
     <Capability Name="internetClient" />
+    <!-- General-use (Windows SDK 10.0.26100 UapManifestSchema_v11.xsd), needed for GraphicsCaptureSession.IsBorderRequired. -->
+    <uap11:Capability Name="graphicsCaptureWithoutBorder" />
     <DeviceCapability Name="microphone" />
     <DeviceCapability Name="webcam" />
   </Capabilities>

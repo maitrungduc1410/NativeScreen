@@ -24,6 +24,7 @@ public sealed partial class FrameCompositor : IDisposable
         ("CameraMotionBlur", "cs_5_0"),
         ("Lut3D", "cs_5_0"),
         ("SharpenLuma", "cs_5_0"),
+        ("ChromaKey", "cs_5_0"),
         ("FullscreenTriangle", "vs_5_0")
     ];
 
@@ -44,6 +45,7 @@ public sealed partial class FrameCompositor : IDisposable
     private readonly ID3D11ComputeShader _clickRipple;
     private readonly ID3D11ComputeShader _lut;
     private readonly ID3D11ComputeShader _sharpen;
+    private readonly ID3D11ComputeShader _chromaKey;
     private readonly ID3D11Buffer _meshConstants;
     private readonly ID3D11Buffer _boxConstants;
 
@@ -81,6 +83,7 @@ public sealed partial class FrameCompositor : IDisposable
         _clickRipple = (ID3D11ComputeShader)shaders["ClickRipple"];
         _lut = (ID3D11ComputeShader)shaders["Lut3D"];
         _sharpen = (ID3D11ComputeShader)shaders["SharpenLuma"];
+        _chromaKey = (ID3D11ComputeShader)shaders["ChromaKey"];
         _meshConstants = CreateConstants(Marshal.SizeOf<BackgroundConstants>());
         _boxConstants = CreateConstants(Marshal.SizeOf<BoxConstants>());
     }
@@ -141,6 +144,7 @@ public sealed partial class FrameCompositor : IDisposable
             word.Dispose();
         }
 
+        DisposeAnnotationSprites();
         overlays?.Dispose();
         DisposeCameraEffects();
         foreach (var view in lutViews.Values)

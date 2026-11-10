@@ -97,6 +97,53 @@
         }
       }
     },
+    "A camera recording needs a camera." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für eine Kameraaufnahme wird eine Kamera benötigt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una grabación de cámara necesita una cámara."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un enregistrement de caméra nécessite une caméra."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラ録画にはカメラが必要です。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uma gravação de câmera precisa de uma câmera."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghi hình camera cần có camera."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摄像头录制需要一个摄像头。"
+          }
+        }
+      }
+    },
     "A freehand stroke" : {
       "extractionState" : "manual",
       "localizations" : {

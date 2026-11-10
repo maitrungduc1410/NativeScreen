@@ -23,7 +23,8 @@ public static class RecordingPackage
         bool hasMicrophone,
         bool hasSystemAudio,
         bool autoCreateZooms,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool cameraOnly = false)
     {
         var recording = Path.Combine(package, "recording");
         var duration = Math.Max(1000, durationMs);
@@ -33,12 +34,22 @@ public static class RecordingPackage
             CreatedAt = now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             DurationMs = duration,
             CaptureTarget = target,
-            Tracks = new RecordingTracksMetadata
-            {
-                WebcamVideo = hasWebcam ? "webcam.mp4" : null,
-                MicrophoneAudio = hasMicrophone ? "microphone.m4a" : null,
-                SystemAudio = hasSystemAudio ? "display.mp4" : null
-            }
+            Tracks = cameraOnly
+                ? new RecordingTracksMetadata
+                {
+                    // The camera movie is the main picture (spec/06 ADR-77).
+                    DisplayVideo = "webcam.mp4",
+                    WebcamVideo = null,
+                    MicrophoneAudio = hasMicrophone ? "microphone.m4a" : null,
+                    SystemAudio = null,
+                    WindowTelemetry = null
+                }
+                : new RecordingTracksMetadata
+                {
+                    WebcamVideo = hasWebcam ? "webcam.mp4" : null,
+                    MicrophoneAudio = hasMicrophone ? "microphone.m4a" : null,
+                    SystemAudio = hasSystemAudio ? "display.mp4" : null
+                }
         };
         File.WriteAllText(Path.Combine(recording, "metadata.json"), ProjectJson.Serialize(metadata));
 
@@ -48,11 +59,21 @@ public static class RecordingPackage
         {
             Name = target.AppName ?? Path.GetFileNameWithoutExtension(package)
         };
-        document.Camera.Enabled = hasWebcam;
+        document.Camera.Enabled = hasWebcam && !cameraOnly;
+        // New camera-only projects keep the face centered when cropped or zoomed.
+        document.Camera.EnableFaceTracking = cameraOnly;
+        document.Timeline.AnnotationTracks = LiveDrawingTracks(recording, duration);
         document.Timeline.Slices = [new ClipSlice { Id = EditorSession.NewId(), SourceStartMs = 0, SourceEndMs = duration, Speed = 1 }];
         document.Timeline.Zooms = autoCreateZooms ? AutoZoomClusterGenerator.GenerateZooms(clicks, keys, duration, 1.8) : [];
         ProjectStore.WriteProjectJson(package, ProjectStore.Serialize(document, now));
         return document;
+    }
+
+    /// <summary>What was drawn while recording (`telemetry/drawings.jsonl`) as `Live drawing` tracks at the top (spec/02 §3.5).</summary>
+    public static List<AnnotationTrack> LiveDrawingTracks(string recording, double durationMs)
+    {
+        var path = Path.Combine(recording, "telemetry", "drawings.jsonl");
+        return File.Exists(path) ? LiveDrawingEvent.AnnotationTracks(JsonLines.Load<LiveDrawingEvent>(path), durationMs) : [];
     }
 }
 

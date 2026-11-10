@@ -99,7 +99,7 @@ public sealed partial class EditorWindow : Window
         AppTheme.Register(this);
         Ui.SizeWindow(this, 1600, 1000, 1180, 720);
 
-        session = new EditorSession(source.Document, source.DurationMs) { HasRecordedCamera = source.HasCamera, HasMicrophoneTrack = source.Project?.Metadata.Tracks.MicrophoneAudio is not null, CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
+        session = new EditorSession(source.Document, source.DurationMs) { HasRecordedCamera = source.HasCamera, IsCameraOnly = source.Project?.IsCameraOnly == true, SourceWidth = source.SourceWidth, SourceHeight = source.SourceHeight, HasMicrophoneTrack = source.Project?.Metadata.Tracks.MicrophoneAudio is not null, CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
         tools = new EditorTools(this, session, source, ShowToast);
         tools.StartPlayback = () => session.IsPlaying ? Task.CompletedTask : TogglePlaybackAsync();
         tools.PausePlayback = () =>
@@ -119,6 +119,8 @@ public sealed partial class EditorWindow : Window
         timeline.Toast += ShowToast;
         timeline.ZoomNudged += ZoomTimeline;
         overlay = new PreviewOverlay(session, PreviewCanvas, () => (source.SourceWidth, source.SourceHeight, source.HasCamera));
+        overlay.PackageDirectory = source.PackagePath;
+        overlay.RedrawRequested = () => DrawPreview();
         PreviewCanvas.SizeChanged += (_, _) => overlay.Refresh();
 
         SetTitleBar(TitleBar);
@@ -441,10 +443,50 @@ public sealed partial class EditorWindow : Window
         QuickDock.Children.Add(DockGroup(
             MaskDockButton("", "Sensitive data mask", MaskType.Blur),
             MaskDockButton("", "Highlight mask", MaskType.Spotlight)));
+        QuickDock.Children.Add(DockGroup(AnnotationDockButton()));
         QuickDock.Children.Add(DockGroup(
             Ui.IconButton(Ui.Icon("", 16), "Add shortcut", () => session.AddCustomShortcut(null, session.SourceAtPlayhead)),
             Ui.IconButton(Ui.Icon("\uE8BD", 16), "Add caption track", () => session.AddCaptionTrack()),
             VoiceoverDockButton()));
+    }
+
+    /// <summary>One dock button with a menu of the kinds that can be added (a pen stroke only comes from drawing).</summary>
+    private Button AnnotationDockButton()
+    {
+        Button? button = null;
+        button = Ui.IconButton(Ui.Icon("", 16), "Add annotation", () =>
+        {
+            var menu = new MenuFlyout();
+            foreach (var (kind, glyph) in (ReadOnlySpan<(AnnotationKind, string)>)[(AnnotationKind.Text, ""), (AnnotationKind.Arrow, ""), (AnnotationKind.Rectangle, ""), (AnnotationKind.Ellipse, ""), (AnnotationKind.Step, ""), (AnnotationKind.Image, "")])
+            {
+                var chosen = kind;
+                var item = new MenuFlyoutItem { Text = Loc.T(kind.Title()), Icon = new FontIcon { Glyph = glyph } };
+                item.Click += (_, _) => _ = AddAnnotation(chosen);
+                menu.Items.Add(item);
+            }
+
+            menu.ShowAt(button!);
+        });
+        return button;
+    }
+
+    private async Task AddAnnotation(AnnotationKind kind)
+    {
+        if (session.IsPlaying)
+        {
+            TogglePlayback();
+        }
+
+        if (kind != AnnotationKind.Image)
+        {
+            session.AddAnnotationAtPlayhead(kind);
+            return;
+        }
+
+        if (await tools.PickImageIntoPackage("annotations") is { } path)
+        {
+            session.AddImageAnnotation(path);
+        }
     }
 
     private Button VoiceoverDockButton()
@@ -808,7 +850,9 @@ public sealed partial class EditorWindow : Window
             HasCamera = source.HasCamera,
             PackageDirectory = source.PackagePath,
             FaceTrack = tools.FaceTrack,
-            PersonMasks = tools.PreviewMasks
+            PersonMasks = tools.PreviewMasks,
+            CameraOnly = source.Project?.IsCameraOnly == true,
+            HiddenAnnotationId = session.EditingAnnotationTextId
         };
         renderer.Submit(request, width, height, Preview.CompositionScaleX, session.LiveSourceClock());
     }

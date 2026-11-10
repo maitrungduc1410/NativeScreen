@@ -7,7 +7,8 @@ public enum DeletableTrackKind
     Mask,
     Voiceover,
     Shortcut,
-    Caption
+    Caption,
+    Annotation
 }
 
 /// <summary>A track to delete: masks, shortcuts and captions by id, voiceovers by track index.</summary>
@@ -27,6 +28,14 @@ public sealed partial class EditorSession
                     document.Timeline.CameraLayouts.Clear();
                     document.Timeline.IsCameraLayoutsTrackHidden = false;
                 });
+                return true;
+            case DeletableTrackKind.Annotation when track.Id is { } annotationTrackId:
+                if (Document.Timeline.AnnotationTracks.Find(item => item.Id == annotationTrackId) is { } annotationTrack && annotationTrack.Items.Exists(item => item.Id == SelectedAnnotationId))
+                {
+                    SelectAnnotation(null);
+                }
+
+                MutateAnnotations(document => document.Timeline.AnnotationTracks.RemoveAll(item => item.Id == annotationTrackId));
                 return true;
             case DeletableTrackKind.Mask when track.Id is { } maskTrackId:
                 if (Document.Timeline.MaskTracks.Find(item => item.Id == maskTrackId) is { } maskTrack && maskTrack.Items.Exists(item => item.Id == SelectedMaskId))

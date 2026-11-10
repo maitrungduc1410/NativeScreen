@@ -18,7 +18,7 @@ public sealed partial class FrameCompositor
 
     private readonly Dictionary<string, (ID3D11ShaderResourceView View, int Width, int Height)> stickerArt = [];
     private (string Path, ID3D11ShaderResourceView View, int Width, int Height)? cameraBackground;
-    private (VideoFrame Frame, CameraConfig Config, PersonMask? Mask, bool Cutout, ID3D11ShaderResourceView View, int Width, int Height, bool IsCutOut)? preparedCamera;
+    private (VideoFrame Frame, CameraConfig Config, PersonMask? Mask, bool Cutout, bool CameraOnly, ID3D11ShaderResourceView View, int Width, int Height, bool IsCutOut)? preparedCamera;
     private ID3D11Buffer? compositeConstants;
     private ID3D11Texture2D? personMaskTexture;
     private ID3D11ShaderResourceView? personMaskView;
@@ -28,29 +28,38 @@ public sealed partial class FrameCompositor
     private readonly record struct CompositeConstants(Vector2 TargetSize, Vector2 TexelStep, int Mode, int Radius, int Dilate, int Pad);
 
     /// <summary>The graded camera with its background and sticker. <paramref name="isCutOut"/> tells whether it now has transparent parts.</summary>
-    private ID3D11ShaderResourceView PreparedCamera(ID3D11ShaderResourceView webcam, ComposeRequest request, bool cutoutLayout, out int width, out int height, out bool isCutOut)
+    private ID3D11ShaderResourceView PreparedCamera(ID3D11ShaderResourceView webcam, ComposeRequest request, bool cutoutLayout, out int width, out int height, out bool isCutOut) =>
+        PreparedPicture(webcam, request.WebcamWidth, request.WebcamHeight, request.WebcamFrame, request, cutoutLayout, cameraOnly: false, out width, out height, out isCutOut);
+
+    /// <summary>
+    /// The camera picture prepared for display: crop and mirror, background removal (segmentation or a green screen key),
+    /// grade, sharpen, and the sticker. A camera-only main picture skips the camera crop and the sticker (spec/07 Pass 2).
+    /// </summary>
+    private ID3D11ShaderResourceView PreparedPicture(ID3D11ShaderResourceView webcam, int webcamWidth, int webcamHeight, VideoFrame? webcamFrame, ComposeRequest request, bool cutoutLayout, bool cameraOnly, out int width, out int height, out bool isCutOut)
     {
         var config = request.Document.Camera;
+        var crop = cameraOnly ? Rect01.Full : config.CropRect01;
         var wantsBackground = !cutoutLayout && config.BackgroundMode != CameraBackgroundMode.Original;
-        // Asked on every frame: this is also what starts the next picture's segmentation.
-        var mask = (cutoutLayout || wantsBackground) && request.WebcamFrame is { } frame
-            ? request.PersonMasks?.MaskFor(frame, config.CropRect01, config.Mirror)
+        var keyed = (cutoutLayout || wantsBackground) && config.BackgroundRemoval == CameraBackgroundRemoval.GreenScreen;
+        // Asked on every frame: this is also what starts the next picture's segmentation. A green screen needs none.
+        var mask = (cutoutLayout || wantsBackground) && !keyed && webcamFrame is { } frame
+            ? request.PersonMasks?.MaskFor(frame, crop, config.Mirror)
             : null;
 
         // The camera runs far below the display rate, and a frame's document is a snapshot, so the same three objects mean the same picture (spec/06 ADR-66).
-        if (preparedCamera is { } known && ReferenceEquals(known.Frame, request.WebcamFrame) && ReferenceEquals(known.Config, config) && ReferenceEquals(known.Mask, mask) && known.Cutout == cutoutLayout)
+        if (preparedCamera is { } known && ReferenceEquals(known.Frame, webcamFrame) && ReferenceEquals(known.Config, config) && ReferenceEquals(known.Mask, mask) && known.Cutout == cutoutLayout && known.CameraOnly == cameraOnly)
         {
             width = known.Width;
             height = known.Height;
             isCutOut = known.IsCutOut;
-            return DrawnSticker(known.View, request, width, height);
+            return cameraOnly ? known.View : DrawnSticker(known.View, request, width, height);
         }
 
-        var view = GradedCamera(webcam, request, out width, out height);
+        var view = GradedCamera(webcam, webcamWidth, webcamHeight, config, crop, request.PackageDirectory, keyed, out width, out height, out var keyMask);
         isCutOut = false;
-        if (mask is not null)
+        if (mask is not null || keyMask is not null)
         {
-            var soft = SoftPersonMask(mask, config, width, height);
+            var soft = keyMask is not null ? SoftMask(keyMask.View, config, width, height) : SoftPersonMask(mask!, config, width, height);
             if (cutoutLayout)
             {
                 var cut = Layer("camera-final", width, height);
@@ -66,18 +75,24 @@ public sealed partial class FrameCompositor
             }
         }
 
-        preparedCamera = request.WebcamFrame is { } shown ? (shown, config, mask, cutoutLayout, view, width, height, isCutOut) : null;
-        return DrawnSticker(view, request, width, height);
+        preparedCamera = webcamFrame is { } shown ? (shown, config, mask, cutoutLayout, cameraOnly, view, width, height, isCutOut) : null;
+        return cameraOnly ? view : DrawnSticker(view, request, width, height);
     }
 
     private RenderLayer SoftPersonMask(PersonMask mask, CameraConfig config, int width, int height)
     {
         UploadPersonMask(mask);
+        return SoftMask(personMaskView!, config, width, height);
+    }
+
+    /// <summary>The person mask stretched to the picture, then the edge inset and softness (spec/07 §7.3).</summary>
+    private RenderLayer SoftMask(ID3D11ShaderResourceView source, CameraConfig config, int width, int height)
+    {
         var context = _graphics.Context;
         var soft = Layer("camera-mask", width, height);
         BindTarget(soft);
         context.OMSetBlendState(null);
-        DrawQuad(personMaskView!, Identity(width, height), default, 0, 1);
+        DrawQuad(source, Identity(width, height), default, 0, 1);
         if (config.CutoutEdgeInset > 0.01)
         {
             Morph(soft, (int)Math.Round(Math.Clamp(config.CutoutEdgeInset * 10, 1, 12)), dilate: false);
@@ -321,5 +336,6 @@ public sealed partial class FrameCompositor
         personMaskView?.Dispose();
         personMaskTexture?.Dispose();
         compositeConstants?.Dispose();
+        chromaConstants?.Dispose();
     }
 }

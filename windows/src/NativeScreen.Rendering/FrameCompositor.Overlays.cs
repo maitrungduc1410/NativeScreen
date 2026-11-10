@@ -150,14 +150,12 @@ public sealed partial class FrameCompositor
     }
 
     /// <summary>Crop, default mirror and look, before placement. The raw frame is flipped unless mirror is on.</summary>
-    private ID3D11ShaderResourceView GradedCamera(ID3D11ShaderResourceView webcam, ComposeRequest request, out int width, out int height)
+    private ID3D11ShaderResourceView GradedCamera(ID3D11ShaderResourceView webcam, int webcamWidth, int webcamHeight, CameraConfig config, Rect01 crop, string? packageDirectory, bool keyed, out int width, out int height, out RenderLayer? keyMask)
     {
-        var config = request.Document.Camera;
-        var crop = config.CropRect01;
         var cropWidth = Math.Max(0.25, crop.Width);
         var cropHeight = Math.Max(0.25, crop.Height);
-        width = Math.Max(16, (int)(cropWidth * request.WebcamWidth));
-        height = Math.Max(16, (int)(cropHeight * request.WebcamHeight));
+        width = Math.Max(16, (int)(cropWidth * webcamWidth));
+        height = Math.Max(16, (int)(cropHeight * webcamHeight));
         var context = _graphics.Context;
         var raw = Layer("camera-raw", width, height);
         BindTarget(raw);
@@ -172,7 +170,18 @@ public sealed partial class FrameCompositor
             0,
             1);
 
-        var lut = LookTable(config, request.PackageDirectory);
+        keyMask = null;
+        if (keyed)
+        {
+            // Green screen: the mask comes from the cropped, mirrored picture before the spill step (spec/07 §7.4).
+            keyMask = Layer("camera-key-mask", width, height);
+            ChromaKeyPass(raw, keyMask, config, 0);
+            var despilled = Layer("camera-despilled", width, height);
+            ChromaKeyPass(raw, despilled, config, 1);
+            raw = despilled;
+        }
+
+        var lut = LookTable(config, packageDirectory);
         if (lut is null || config.ColorGradeIntensity <= 0.005)
         {
             return Sharpened(raw, config, width, height);
@@ -193,6 +202,35 @@ public sealed partial class FrameCompositor
         context.CSSetShaderResource(0, null!);
         context.CSSetShaderResource(1, null!);
         return Sharpened(graded, config, width, height);
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private readonly record struct ChromaConstants(Vector3 Key, float Similarity, float Smoothness, float Spill, int Mode, float Pad);
+
+    private ID3D11Buffer? chromaConstants;
+
+    private void ChromaKeyPass(RenderLayer source, RenderLayer target, CameraConfig config, int mode)
+    {
+        var context = _graphics.Context;
+        context.UnsetRenderTargets();
+        chromaConstants ??= CreateConstants(System.Runtime.InteropServices.Marshal.SizeOf<ChromaConstants>());
+        var (r, g, b) = AnnotationMath.HexColor(config.ChromaKeyColor);
+        context.UpdateSubresource(
+            new ChromaConstants(
+                new Vector3(r, g, b),
+                (float)Math.Clamp(config.ChromaSimilarity, 0, 1),
+                (float)Math.Clamp(config.ChromaSmoothness, 0, 1),
+                (float)Math.Clamp(config.ChromaSpill, 0, 1),
+                mode,
+                0),
+            chromaConstants);
+        context.CSSetShader(_chromaKey);
+        context.CSSetShaderResource(0, source.View);
+        context.CSSetUnorderedAccessView(0, target.Unordered);
+        context.CSSetConstantBuffer(0, chromaConstants);
+        context.Dispatch((uint)((target.Width + 7) / 8), (uint)((target.Height + 7) / 8), 1);
+        context.CSSetUnorderedAccessView(0, null!);
+        context.CSSetShaderResource(0, null!);
     }
 
     private ID3D11ShaderResourceView Sharpened(RenderLayer layer, CameraConfig config, int width, int height)
@@ -811,7 +849,7 @@ public sealed partial class FrameCompositor
 
     // MARK: Device mockup
 
-    private void DrawBezel(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int width, int height)
+    private void DrawBezel(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int width, int height, QuadMap placement)
     {
         var mockup = document.FrameStyle.DeviceMockup;
         if (!mockup.Enabled)
@@ -830,7 +868,7 @@ public sealed partial class FrameCompositor
 
         RebindPipeline(target);
         _graphics.Context.OMSetBlendState(_sourceOver);
-        DrawQuad(layer.View, Identity(width, height), default, 0, 1);
+        DrawQuad(layer.View, placement, default, 0, 1);
     }
 
     private void RasterizeBezel(RenderLayer layer, DeviceMockupConfig mockup, PixelRect screen, float radius, int height)

@@ -42,7 +42,8 @@ public sealed partial class SettingsWindow
         var hint = Ui.Text("Paste this in the agent’s terminal or settings. The agent starts Native Screen when it needs it.", 12, "Ink60");
         hint.TextWrapping = TextWrapping.Wrap;
         Body.Children.Add(hint);
-        var executable = Environment.ProcessPath ?? "NativeScreen.App.exe";
+        // A packaged copy lives in a folder named after its version, so clients get the execution alias instead (spec/06 ADR-81).
+        var executable = AppPackage.ClientCommand;
         var json = $$"""
             {
               "mcpServers": {

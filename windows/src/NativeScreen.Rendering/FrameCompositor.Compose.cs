@@ -30,6 +30,10 @@ public sealed class ComposeRequest
     public VideoFrame? ScreenFrame { get; init; }
     public FaceTrack? FaceTrack { get; init; }
     public IPersonMaskSource? PersonMasks { get; init; }
+    /// <summary>A text annotation being typed into on the canvas: the field shows it, so the preview leaves it out.</summary>
+    public string? HiddenAnnotationId { get; init; }
+    /// <summary>A camera-only recording: the screen source is the camera movie, styled as the camera (spec/06 ADR-77).</summary>
+    public bool CameraOnly { get; init; }
 
     public ComposeRequest At(double sourceMs) => new()
     {
@@ -51,7 +55,9 @@ public sealed class ComposeRequest
         WebcamFrame = WebcamFrame,
         ScreenFrame = ScreenFrame,
         FaceTrack = FaceTrack,
-        PersonMasks = PersonMasks
+        PersonMasks = PersonMasks,
+        HiddenAnnotationId = HiddenAnnotationId,
+        CameraOnly = CameraOnly
     };
 }
 
@@ -96,30 +102,55 @@ public sealed partial class FrameCompositor
         request = WithDecodedFrames(request);
         var document = request.Document;
         var state = request.Trajectory.Evaluate(request.SourceMs);
+        var camera = CameraAt(request, request.SourceMs, state.Camera);
         var background = Background(document, request.PackageDirectory, width, height, request.ExportQuality);
+        if (request.CameraOnly && request.Screen is { } main)
+        {
+            request = WithCameraOnlyPicture(request, main);
+        }
+
         var (screenView, screenWidth, screenHeight) = MaskedScreen(request, width, height);
         var cropWidth = Math.Max(16, screenWidth * document.Canvas.CropRect01.Width);
         var cropHeight = Math.Max(16, screenHeight * document.Canvas.CropRect01.Height);
         var stage = new StageLayoutEngine().Resolve(
-            document, request.SourceMs, width, height, cropWidth, cropHeight, state.Camera.Scale, request.HasCamera);
+            document, request.SourceMs, width, height, cropWidth, cropHeight, camera.Scale, request.HasCamera && !request.CameraOnly, cameraOnly: request.CameraOnly, faceTrack: request.FaceTrack);
         var screen = stage.ScreenRect;
-        var radius = CompositeMetrics.ScreenCornerRadius(document.FrameStyle, height);
+        // A camera-only picture that fills the canvas has no frame: no corners, inset or shadow.
+        var fillsCanvas = request.CameraOnly && document.Camera.CameraOnlyFraming.FillsCanvas();
+        var radius = fillsCanvas ? 0 : CompositeMetrics.ScreenCornerRadius(document.FrameStyle, height, request.CameraOnly);
 
+        // The camera zoom is applied while the screen is drawn, so a zoomed frame comes from source pixels; only the baked
+        // shadow and the bezel are enlarged after rendering (spec/06 ADR-67).
+        var zoom = ZoomedRect(camera, screen, width, height);
+        var drawn = zoom ?? screen;
+        var drawScale = drawn.Width / Math.Max(1, screen.Width);
+        var soft = ZoomMap(screen, zoom, width, height);
         var layer = Layer("screen", width, height);
         context.ClearRenderTargetView(layer.Target, new Color4(0, 0, 0, 0));
         Viewport(layer);
-        DrawShadow(document, screen, radius, layer, width, height);
-        DrawInset(document, screen, radius, layer, height);
-        DrawScreen(request, screenView, screenWidth, screenHeight, screen, radius, layer);
-        DrawBezel(document, screen, radius, layer, width, height);
-        layer = Rippled(layer, document, state.Cursor, screen, width, height);
+        if (!fillsCanvas)
+        {
+            DrawShadow(document, screen, radius, layer, width, height, soft);
+            DrawInset(document, drawn, radius * drawScale, layer, height, drawScale);
+        }
+
+        DrawScreen(request, screenView, screenWidth, screenHeight, drawn, radius * drawScale, layer);
+        if (!request.CameraOnly)
+        {
+            DrawBezel(document, screen, radius, layer, width, height, soft);
+        }
+
+        layer = Rippled(layer, document, state.Cursor, drawn, width, height);
+        DrawScreenAnnotations(layer, request, screen, zoom, width, height);
         BindTarget(layer);
         context.OMSetBlendState(_sourceOver);
-        DrawClick(document, state.Cursor, screen, height);
-        DrawCursor(document, state.Cursor, request.SourceMs, screen, layer, height);
+        if (request.Trajectory.HasRecordedCursor)
+        {
+            DrawClick(document, state.Cursor, drawn, height * drawScale);
+            DrawCursor(document, state.Cursor, request.SourceMs, drawn, layer, height * drawScale, request.PackageDirectory);
+        }
 
-        var zoomed = Zoomed(layer, state.Camera, screen, width, height);
-        var blurred = MotionBlurred(zoomed, request, state.Camera, screen, width, height);
+        var blurred = MotionBlurred(layer, request, camera, screen, width, height);
 
         var output = Layer("output", width, height);
         BindTarget(output);
@@ -140,7 +171,8 @@ public sealed partial class FrameCompositor
         context.OMSetBlendState(_sourceOver);
         DrawQuad(blurred.View, Identity(width, height), default, 0, 1);
         context.UnsetRenderTargets();
-        var lensed = Lens(output, state.Camera, screen, width, height);
+        var lensed = Lens(output, camera, screen, width, height);
+        DrawCanvasAnnotations(lensed, request, width, height);
         DrawOverlays(lensed, request, stage, width, height);
         context.UnsetRenderTargets();
         RetireScratchLayers();
@@ -168,6 +200,8 @@ public sealed partial class FrameCompositor
             Shortcuts = request.Shortcuts,
             FaceTrack = request.FaceTrack,
             PersonMasks = request.PersonMasks,
+            HiddenAnnotationId = request.HiddenAnnotationId,
+            CameraOnly = request.CameraOnly,
             WebcamFrame = webcam ?? request.WebcamFrame,
             ScreenFrame = screen ?? request.ScreenFrame,
             Screen = screen is null ? request.Screen : Nv12View("video-screen", screen),
@@ -492,7 +526,7 @@ public sealed partial class FrameCompositor
     }
 
     // Pass 3. The shadow is baked into its own layer and never blurred per frame.
-    private void DrawShadow(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int width, int height)
+    private void DrawShadow(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int width, int height, QuadMap soft)
     {
         var shadow = document.FrameStyle.Shadow;
         if (!shadow.Enabled || shadow.Intensity <= 0.01)
@@ -522,10 +556,10 @@ public sealed partial class FrameCompositor
 
         BindTarget(target);
         context.OMSetBlendState(_sourceOver);
-        DrawQuad(baked.View, Identity(width, height), default, 0, 1);
+        DrawQuad(baked.View, soft, default, 0, 1);
     }
 
-    private void DrawCursor(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, double sourceMs, PixelRect screen, RenderLayer target, int height)
+    private void DrawCursor(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, double sourceMs, PixelRect screen, RenderLayer target, double height, string? packageDirectory)
     {
         var slice = document.Timeline.Slices.Find(item => sourceMs >= item.SourceStartMs && sourceMs <= item.SourceEndMs);
         if (cursor.Opacity <= 0.01 || slice?.HideCursor == true || document.Cursor.Hidden)
@@ -535,7 +569,7 @@ public sealed partial class FrameCompositor
 
         _graphics.Context.ClearState();
         overlays ??= new OverlayRasterizer(_graphics.Device);
-        var sprite = overlays.CursorSprite(document.Cursor, cursor.CursorType);
+        var sprite = overlays.CustomCursorSprite(document.Cursor, cursor.CursorType, packageDirectory) ?? overlays.CursorSprite(document.Cursor, cursor.CursorType);
         RebindPipeline(target);
         if (sprite is not { } found)
         {
@@ -567,7 +601,7 @@ public sealed partial class FrameCompositor
         BindTarget(target);
     }
 
-    private void DrawInset(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int height)
+    private void DrawInset(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int height, double drawScale)
     {
         var inset = document.FrameStyle.Inset;
         if (document.FrameStyle.DeviceMockup.Enabled || !inset.Enabled || inset.Size <= 0.1)
@@ -575,7 +609,7 @@ public sealed partial class FrameCompositor
             return;
         }
 
-        var grow = inset.Size * CompositeMetrics.CanvasScale(height);
+        var grow = inset.Size * CompositeMetrics.CanvasScale(height) * drawScale;
         var color = Hex(inset.Color);
         color.W = (float)inset.Opacity;
         BindTarget(target);
@@ -648,7 +682,7 @@ public sealed partial class FrameCompositor
     }
 
     // Pass 4.
-    private void DrawClick(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, PixelRect screen, int height)
+    private void DrawClick(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, PixelRect screen, double height)
     {
         var style = document.Cursor.ClickEffect.VisualStyle;
         if (style != ClickEffectStyle.Circle || cursor.Opacity <= 0.01)
@@ -715,24 +749,18 @@ public sealed partial class FrameCompositor
         return output;
     }
 
-    private RenderLayer Zoomed(RenderLayer layer, SpringTrajectorySolver.CameraFrameState camera, PixelRect screen, int width, int height)
+    /// <summary>Places a canvas-sized layer drawn around `screen` so that the screen lands on `zoom` (identity at rest).</summary>
+    private static QuadMap ZoomMap(PixelRect screen, PixelRect? zoom, int width, int height)
     {
-        if (ZoomedRect(camera, screen, width, height) is not { } rect)
+        if (zoom is not { } rect)
         {
-            return layer;
+            return Identity(width, height);
         }
 
         var scale = rect.Width / screen.Width;
-        var output = Layer("zoomed", width, height);
-        var context = _graphics.Context;
-        context.ClearRenderTargetView(output.Target, new Color4(0, 0, 0, 0));
-        BindTarget(output);
-        context.OMSetBlendState(null);
-        var map = new QuadMap(
+        return new QuadMap(
             new Vector4((float)(1 / (scale * width)), 0, (float)((screen.X - rect.X / scale) / width), 0),
             new Vector4(0, (float)(1 / (scale * height)), (float)((screen.Y - rect.Y / scale) / height), 0));
-        DrawQuad(layer.View, map, default, 0, 1);
-        return output;
     }
 
     /// <summary>Where the screen rect lands under the classic zoom, or null when the camera is at rest.</summary>
@@ -765,7 +793,8 @@ public sealed partial class FrameCompositor
             return layer;
         }
 
-        var previous = request.Trajectory.Evaluate(Math.Max(0, ms - 16.67)).Camera;
+        var previousMs = Math.Max(0, ms - 16.67);
+        var previous = CameraAt(request, previousMs, request.Trajectory.Evaluate(previousMs).Camera);
         var now = ZoomedRect(camera, screen, width, height) ?? screen;
         var before = ZoomedRect(previous, screen, width, height) ?? screen;
         var opened = new PixelRect(

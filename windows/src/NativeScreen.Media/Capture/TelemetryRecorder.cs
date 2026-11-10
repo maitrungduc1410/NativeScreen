@@ -37,10 +37,10 @@ public sealed class TelemetryRecorder : IDisposable
 
     private static readonly (nint Handle, string Kind)[] SystemCursors =
     [
-        (LoadCursorW(0, 32649), "pointer"),
-        (LoadCursorW(0, 32513), "ibeam"),
+        (LoadCursorW(0, 32649), "pointingHand"),
+        (LoadCursorW(0, 32513), "iBeam"),
         (LoadCursorW(0, 32515), "crosshair"),
-        (LoadCursorW(0, 32646), "openhand")
+        (LoadCursorW(0, 32646), "openHand")
     ];
 
     private readonly StreamWriter cursorFile;
@@ -134,9 +134,15 @@ public sealed class TelemetryRecorder : IDisposable
         UnhookWindowsHookEx(keyboard);
     }
 
+    /// <summary>
+    /// Set while the presenter draws on the screen: their clicks and the drawing keys are not clicks, zooms or keycaps; the cursor
+    /// is still sampled, so it follows the pen in the video (spec/06 ADR-79).
+    /// </summary>
+    public static volatile bool IsDrawing;
+
     private nint MouseHook(int code, nint message, nint data)
     {
-        if (code >= 0)
+        if (code >= 0 && !IsDrawing)
         {
             var info = Marshal.PtrToStructure<MouseHookStruct>(data);
             var kind = (int)message;
@@ -151,7 +157,7 @@ public sealed class TelemetryRecorder : IDisposable
 
     private nint KeyboardHook(int code, nint message, nint data)
     {
-        if (code >= 0)
+        if (code >= 0 && !IsDrawing)
         {
             var info = Marshal.PtrToStructure<KeyboardHookStruct>(data);
             events.Writer.TryWrite(new HookEvent(NowMs(), (int)message, info.VirtualKey, 0, 0, true));

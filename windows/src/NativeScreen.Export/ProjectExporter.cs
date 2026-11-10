@@ -19,7 +19,8 @@ public sealed record ExportSource(
     IReadOnlyList<ClickEvent> ClickEvents,
     IReadOnlyList<ShortcutCluster> Shortcuts,
     Task<FaceTrack?>? FaceTrack = null,
-    Func<IPersonMaskSource?>? PersonMasks = null);
+    Func<IPersonMaskSource?>? PersonMasks = null,
+    bool CameraOnly = false);
 
 /// <summary>
 /// Sequential decode, compose, encode on its own thread and its own compositor, so a running export never touches the
@@ -57,7 +58,8 @@ public sealed class ProjectExporter(ExportSource source)
                 PackageDirectory = source.PackageDirectory,
                 Shortcuts = source.Shortcuts,
                 FaceTrack = faceTrack,
-                PersonMasks = masks
+                PersonMasks = masks,
+                CameraOnly = source.CameraOnly
             },
             width,
             height);
@@ -109,7 +111,8 @@ public sealed class ProjectExporter(ExportSource source)
                         PackageDirectory = source.PackageDirectory,
                         Shortcuts = source.Shortcuts,
                         FaceTrack = faceTrack,
-                        PersonMasks = masks
+                        PersonMasks = masks,
+                        CameraOnly = source.CameraOnly
                     },
                     width,
                     height);

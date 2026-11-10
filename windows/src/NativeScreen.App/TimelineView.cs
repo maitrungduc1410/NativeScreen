@@ -453,6 +453,7 @@ internal sealed class TimelineView
         y = DrawZooms(y);
         y = DrawLayouts(y);
         y = DrawMasks(y);
+        y = DrawAnnotations(y);
         y = DrawShortcuts(y);
         y = DrawVoiceovers(y);
         y = DrawCaptions(y);
@@ -1295,6 +1296,68 @@ internal sealed class TimelineView
         }
 
         return y + MaskRowHeight + RowSpacing;
+    }
+
+    /// <summary>Annotation tracks: the first draws on top (spec/02). Items never overlap on a track.</summary>
+    private double DrawAnnotations(double y)
+    {
+        foreach (var track in session.Document.Timeline.AnnotationTracks)
+        {
+            var trackId = track.Id;
+            AddRowTarget(
+                y,
+                MaskRowHeight,
+                GhostStyle.Of(Palette.Annotation),
+                () => (session.Document.Timeline.AnnotationTracks.Find(other => other.Id == trackId)?.Items ?? []).Select(item => session.Mapper.TimelineSpan(item.SourceStartMs, item.SourceEndMs)).OfType<(double Start, double End)>(),
+                450,
+                3000,
+                (int)AnnotationItem.MinDurationMs,
+                (start, end) => session.AddAnnotationInRange(trackId, start, end));
+            AddLabel(Loc.TrackName(track.Name), y, MaskRowHeight, eye: true, track.IsHidden, () => session.ToggleAnnotationTrackVisibility(trackId), new DeletableTimelineTrack(DeletableTrackKind.Annotation, trackId));
+            foreach (var item in track.Items)
+            {
+                var (left, width) = Place(item.SourceStartMs, item.SourceEndMs);
+                var title = item.Kind == AnnotationKind.Text && item.Text.Trim().Length > 0 ? item.Text.Trim() : Loc.T(item.Kind.Title());
+                var block = Block(left, y, width, MaskRowHeight, Palette.Annotation, title, item.Kind == AnnotationKind.Text ? null : Loc.T(item.Anchor == AnnotationAnchor.Screen ? "Pin to screen" : "Pin to frame"), item.Id == session.SelectedAnnotationId, item.Disabled || track.IsHidden);
+                block.SubtitleTruncates = true;
+                Follow(block, item.SourceStartMs, item.SourceEndMs);
+                var id = item.Id;
+                block.SplitAt = time => session.SplitAnnotation(id, session.Mapper.SourceTime(time).SourceMs);
+                Draggable(block, width, id, () => session.SelectAnnotation(id), (start, end) =>
+                {
+                    session.UpdateAnnotation(id, current =>
+                    {
+                        current.ShiftTime(start - current.SourceStartMs);
+                        current.SourceEndMs = end;
+                    }, "annotation-drag");
+                }, () =>
+                {
+                    var current = session.Annotation(id)!;
+                    var siblings = session.Document.Timeline.AnnotationTracks.First(other => other.Items.Exists(entry => entry.Id == id)).Items.Where(entry => entry.Id != id).ToList();
+                    var low = siblings.Where(entry => entry.SourceEndMs <= current.SourceStartMs + AnnotationTrack.OverlapToleranceMs).Select(entry => entry.SourceEndMs - AnnotationTrack.OverlapToleranceMs).DefaultIfEmpty(0).Max();
+                    var high = siblings.Where(entry => entry.SourceStartMs >= current.SourceEndMs - AnnotationTrack.OverlapToleranceMs).Select(entry => entry.SourceStartMs + AnnotationTrack.OverlapToleranceMs).DefaultIfEmpty(session.SourceDurationMs).Min();
+                    return (current.SourceStartMs, current.SourceEndMs, low, high);
+                },
+                movedRows: rows =>
+                {
+                    var from = session.AnnotationTrackIndex(id);
+                    if (from >= 0)
+                    {
+                        session.MoveAnnotationToTrack(id, from + rows);
+                    }
+                });
+                block.RightTapped += (_, args) =>
+                {
+                    args.Handled = true;
+                    session.SelectAnnotation(id);
+                    SegmentMenu.ForAnnotation(session, id, canvas, args.GetPosition(canvas));
+                };
+            }
+
+            y += MaskRowHeight + RowSpacing;
+        }
+
+        return y;
     }
 
     private double DrawMasks(double y)
@@ -2211,6 +2274,7 @@ internal sealed class TimelineView
         private static readonly Palette MaskLight = new(C(0.733, 0.31, 0.522), C(0.851, 0.475, 0.663), C(0.98, 0.82, 0.898), C(0.8, 0.38, 0.6, 0.85));
         private static readonly Palette CaptionLight = new(C(0.106, 0.561, 0.616), C(0.231, 0.722, 0.773), C(0.7, 0.941, 0.969), C(0.18, 0.69, 0.757, 0.85));
         private static readonly Palette LayoutLight = new(C(0.533, 0.478, 0.51), C(0.69, 0.643, 0.667), C(0.918, 0.89, 0.906), C(0.62, 0.561, 0.6, 0.85));
+        private static readonly Palette AnnotationLight = new(C(0.894, 0.42, 0.29), C(0.957, 0.565, 0.447), C(1, 0.86, 0.81), C(0.92, 0.47, 0.33, 0.85));
 
         private static bool IsLight => AppTheme.Current == ElementTheme.Light;
 
@@ -2219,12 +2283,14 @@ internal sealed class TimelineView
         public static Palette Mask => IsLight ? MaskLight : MaskDark;
         public static Palette Caption => IsLight ? CaptionLight : CaptionDark;
         public static Palette Layout => IsLight ? LayoutLight : LayoutDark;
+        public static Palette Annotation => IsLight ? AnnotationLight : AnnotationDark;
 
         private static readonly Palette ClipDark = new(Color.FromArgb(255, 147, 97, 12), Color.FromArgb(255, 218, 144, 18), Color.FromArgb(255, 244, 198, 119), DarkSelected);
         private static readonly Palette ZoomDark = new(Color.FromArgb(255, 77, 47, 245), Color.FromArgb(255, 139, 120, 249), Color.FromArgb(255, 244, 242, 254), DarkSelected);
         private static readonly Palette MaskDark = new(Color.FromArgb(255, 130, 52, 90), Color.FromArgb(255, 183, 75, 128), Color.FromArgb(255, 220, 166, 192), DarkSelected);
         private static readonly Palette CaptionDark = new(Color.FromArgb(255, 22, 99, 110), Color.FromArgb(255, 31, 143, 158), Color.FromArgb(255, 153, 222, 231), DarkSelected);
         private static readonly Palette LayoutDark = new(Color.FromArgb(255, 101, 87, 94), Color.FromArgb(255, 141, 124, 132), Color.FromArgb(255, 209, 200, 205), DarkSelected);
+        private static readonly Palette AnnotationDark = new(C(0.651, 0.259, 0.165), C(0.851, 0.38, 0.255), C(0.98, 0.78, 0.72), DarkSelected);
     }
 
     /// <summary>A block-colored ghost for most rows; shortcuts have their own see-through purple.</summary>

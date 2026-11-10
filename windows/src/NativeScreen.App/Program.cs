@@ -1,6 +1,8 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+#if !NS_STORE
 using Velopack;
+#endif
 
 namespace NativeScreen.App;
 
@@ -18,10 +20,13 @@ public static class Program
             return McpBridge.Run();
         }
 
+#if !NS_STORE
         // The installer starts the app with hook arguments; these exit before any window, COM or single-instance work.
+        // The Store build has no Velopack: the Store installs and updates it (spec/06 ADR-81).
         VelopackApp.Build()
             .OnBeforeUninstallFastCallback(_ => ExplorerContextMenu.Unregister())
             .Run();
+#endif
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(callback =>

@@ -134,6 +134,8 @@ public static class McpDocument
             "voiceover" => In(Array("timeline", "voiceovers")),
             "mask_track" => In(Array("timeline", "maskTracks")),
             "mask" => Array("timeline", "maskTracks")?.OfType<JsonObject>().Select(track => In(track["items"] as JsonArray)).FirstOrDefault(item => item is not null),
+            "annotation_track" => In(Array("timeline", "annotationTracks")),
+            "annotation" => Array("timeline", "annotationTracks")?.OfType<JsonObject>().Select(track => In(track["items"] as JsonArray)).FirstOrDefault(item => item is not null),
             "caption" => In(Array("captions", "captionBlocks")),
             "caption_track" => In(Array("captions", "captionTracks")),
             "shortcut_track" => In(Array("captions", "shortcutTracks")),
@@ -172,6 +174,12 @@ public static class McpDocument
             Check(track.Items.Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)).ToList(), "mask");
         }
 
+        foreach (var track in document.Timeline.AnnotationTracks)
+        {
+            track.Items.Sort((a, b) => a.SourceStartMs.CompareTo(b.SourceStartMs));
+            Check(track.Items.Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)).ToList(), "annotation");
+        }
+
         foreach (var track in document.Captions.CaptionTracks)
         {
             Check(document.Captions.CaptionBlocks.Where(item => item.TrackId == track.Id).Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)).ToList(), "caption");
@@ -184,6 +192,8 @@ public static class McpDocument
         var ids = new HashSet<string>(document.Timeline.Zooms.Select(item => item.Id));
         ids.UnionWith(document.Timeline.CameraLayouts.Select(item => item.Id));
         ids.UnionWith(document.Timeline.MaskTracks.SelectMany(track => track.Items).Select(item => item.Id));
+        ids.UnionWith(document.Timeline.AnnotationTracks.SelectMany(track => track.Items).Select(item => item.Id));
+        ids.UnionWith(document.Timeline.AnnotationTracks.SelectMany(track => track.Items).Select(item => item.Id));
         ids.UnionWith(document.Captions.CaptionBlocks.Select(item => item.Id));
         ids.UnionWith(document.Captions.CustomShortcuts.Select(item => item.Id));
         return ids;
@@ -274,6 +284,8 @@ public static class McpDocument
         ["cursor.clickEffect.visualStyle"] = Values<ClickEffectStyle>(),
         ["cursor.rotationMode"] = Values<CursorRotationMode>(),
         ["camera.layoutMode"] = Values<CameraLayoutMode>(),
+        ["camera.cameraOnlyFraming"] = Values<CameraOnlyFraming>(),
+        ["camera.backgroundRemoval"] = Values<CameraBackgroundRemoval>(),
         ["camera.aspectRatioPreset"] = Values<CameraAspectRatioPreset>(),
         ["camera.colorGradePreset"] = Values<CameraColorGradePreset>(),
         ["camera.shape"] = Values<CameraShape>(),
@@ -289,6 +301,10 @@ public static class McpDocument
         ["timeline.zooms[].presentation"] = Values<ZoomPresentation>(),
         ["timeline.maskTracks[].items[].type"] = Values<MaskType>(),
         ["timeline.maskTracks[].items[].style"] = Values<MaskStyle>(),
+        ["timeline.annotationTracks[].items[].kind"] = Values<AnnotationKind>(),
+        ["timeline.annotationTracks[].items[].anchor"] = Values<AnnotationAnchor>(),
+        ["timeline.annotationTracks[].items[].enter and .exit"] = Values<AnnotationAnimation>(),
+        ["timeline.annotationTracks[].items[].textBackground"] = Values<AnnotationTextBackground>(),
         ["timeline.cameraLayouts[].layoutType"] = Values<CameraTimelineLayoutType>(),
         ["timeline.voiceovers[].attachMode"] = Values<VoiceoverAttachMode>()
     };

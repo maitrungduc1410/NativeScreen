@@ -336,6 +336,7 @@ internal sealed class McpToolbox
             ["playheadTimelineMs"] = session.PlayheadTimelineMs,
             ["isPlaying"] = session.IsPlaying,
             ["sourcePixelSize"] = new JsonObject { ["width"] = source.SourceWidth, ["height"] = source.SourceHeight },
+            ["captureMode"] = source.Project?.IsCameraOnly == true ? "camera" : (source.Project?.Metadata.CaptureTarget.Mode ?? CaptureTargetMode.Display).ToString().ToLowerInvariant(),
             ["recorded"] = new JsonObject
             {
                 ["camera"] = source.HasCamera,
@@ -445,6 +446,66 @@ internal sealed class McpToolbox
 
                 id = AddMask(session, args, start, end);
                 break;
+            case "annotation":
+            {
+                if (end - start < AnnotationItem.MinDurationMs)
+                {
+                    throw new McpToolException("An annotation must last at least 220 ms.");
+                }
+
+                var annotationKind = AnnotationKind.Text;
+                if (args.String("annotationKind") is { } kindName)
+                {
+                    annotationKind = McpDocument.Parse<AnnotationKind>(kindName)
+                        ?? throw new McpToolException($"Unknown annotationKind {kindName}. Allowed: {string.Join(", ", McpDocument.Values<AnnotationKind>().Select(item => item!.GetValue<string>()))}");
+                }
+
+                if (args.String("trackId") is { } annotationTrackId)
+                {
+                    var track = document.Timeline.AnnotationTracks.Find(item => item.Id == annotationTrackId)
+                        ?? throw new McpToolException($"No annotation track {annotationTrackId}.");
+                    McpDocument.RequireFree(track.Items.Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)), start, end, "annotation on that track");
+                    session.AddAnnotationInRange(annotationTrackId, start, end);
+                    id = session.SelectedAnnotationId;
+                    if (id is not null && session.Annotation(id)?.Kind != annotationKind)
+                    {
+                        session.UpdateAnnotation(id, item => item.Kind = annotationKind);
+                    }
+                }
+                else
+                {
+                    session.AddAnnotationInTimeRange(annotationKind, start, end);
+                    id = session.SelectedAnnotationId;
+                }
+
+                if (id is not null && args.String("text") is { } annotationText)
+                {
+                    session.UpdateAnnotation(id, item => item.Text = annotationText);
+                }
+
+                if (id is not null && args.String("imagePath") is { } imagePath)
+                {
+                    var file = Environment.ExpandEnvironmentVariables(imagePath);
+                    if (!File.Exists(file) || editor.McpSource.PackagePath is not { } package)
+                    {
+                        session.DeleteAnnotation(id);
+                        throw new McpToolException($"No image at {imagePath}.");
+                    }
+
+                    var name = Guid.NewGuid().ToString().ToUpperInvariant() + Path.GetExtension(file).ToLowerInvariant();
+                    Directory.CreateDirectory(Path.Combine(package, "assets", "annotations"));
+                    File.Copy(file, Path.Combine(package, "assets", "annotations", name));
+                    var stored = "assets/annotations/" + name;
+                    session.UpdateAnnotation(id, item =>
+                    {
+                        item.ImagePath = stored;
+                        item.Kind = AnnotationKind.Image;
+                    });
+                }
+
+                break;
+            }
+
             case "shortcut":
                 var shortcutsBefore = session.Document.Captions.CustomShortcuts.Select(item => item.Id).ToHashSet();
                 session.AddCustomShortcut(args.String("trackId"), start, end);
@@ -549,6 +610,29 @@ internal sealed class McpToolbox
     private static void PatchItem(EditorSession session, string kind, string id, JsonObject patch)
     {
         patch = (JsonObject)patch.DeepClone();
+        if (kind == "annotation" && patch["layer"] is { } layer)
+        {
+            var move = layer.GetValue<string>() switch
+            {
+                "front" => AnnotationLayerMove.Front,
+                "forward" => AnnotationLayerMove.Forward,
+                "backward" => AnnotationLayerMove.Backward,
+                "back" => AnnotationLayerMove.Back,
+                _ => throw new McpToolException("layer must be one of: front, forward, backward, back.")
+            };
+            if (session.Annotation(id) is null)
+            {
+                throw new McpToolException("No annotation with id " + id + ".");
+            }
+
+            patch.Remove("layer");
+            session.MoveAnnotationLayer(id, move);
+            if (patch.Count == 0)
+            {
+                return;
+            }
+        }
+
         if (kind == "caption" && patch["text"]?.GetValue<string>() is { } text)
         {
             if (!session.Document.Captions.CaptionBlocks.Exists(block => block.Id == id))
@@ -601,6 +685,14 @@ internal sealed class McpToolbox
             case "mask":
                 Require(document.Timeline.MaskTracks.Exists(track => track.Items.Exists(item => item.Id == id)));
                 session.DeleteMask(id);
+                break;
+            case "annotation":
+                Require(session.Annotation(id) is not null);
+                session.DeleteAnnotation(id);
+                break;
+            case "annotation_track":
+                Require(document.Timeline.AnnotationTracks.Exists(item => item.Id == id));
+                session.DeleteTimelineTrack(new DeletableTimelineTrack(DeletableTrackKind.Annotation, id));
                 break;
             case "camera_layout":
                 Require(document.Timeline.CameraLayouts.Exists(item => item.Id == id));
@@ -670,6 +762,7 @@ internal sealed class McpToolbox
                 break;
             case "zoom": session.SplitZoom(id, sourceMs); break;
             case "mask": session.SplitMask(id, sourceMs); break;
+            case "annotation": session.SplitAnnotation(id, sourceMs); break;
             case "caption": session.SplitCaption(id, sourceMs); break;
             case "camera_layout": session.SplitLayout(id, sourceMs); break;
             case "voiceover": session.SplitVoiceover(id, sourceMs); break;
@@ -1013,7 +1106,8 @@ internal sealed class McpToolbox
             "display" => DisplayTarget(targetArgs.Long("displayId")),
             "window" => WindowTarget(targetArgs.Long("windowId") ?? throw new McpToolException("Missing argument: target.windowId")),
             "area" => AreaTarget(targetArgs.Object("rect")),
-            _ => throw new McpToolException("target.type must be display, window or area.")
+            "camera" => RecordingHudWindow.McpCameraTarget(),
+            _ => throw new McpToolException("target.type must be display, window, area or camera.")
         };
 
         (bool, CaptureDeviceInfo?) camera = (false, null);

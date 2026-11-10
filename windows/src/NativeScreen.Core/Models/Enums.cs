@@ -194,7 +194,49 @@ public enum CaptureTargetMode
     [JsonStringEnumMemberName("display")] Display,
     [JsonStringEnumMemberName("window")] Window,
     [JsonStringEnumMemberName("area")] Area,
-    [JsonStringEnumMemberName("device")] Device
+    /// <summary>Only the camera: `tracks.displayVideo` names the camera movie, the main picture (spec/06 ADR-77).</summary>
+    [JsonStringEnumMemberName("camera")] Camera
+}
+
+/// <summary>How the person is separated from the room wherever the camera's background is removed (spec/06 ADR-78).</summary>
+public enum CameraBackgroundRemoval
+{
+    [JsonStringEnumMemberName("ai")] Ai,
+    [JsonStringEnumMemberName("green-screen")] GreenScreen
+}
+
+/// <summary>How the picture of a camera-only recording sits on the canvas.</summary>
+public enum CameraOnlyFraming
+{
+    /// <summary>Fitted inside the padding, with the frame style's corners, shadow and inset.</summary>
+    [JsonStringEnumMemberName("framed")] Framed,
+    /// <summary>Fills the canvas edge to edge, cropped around the face when face tracking is on.</summary>
+    [JsonStringEnumMemberName("full-frame")] FullFrame,
+    /// <summary>The person, cut out of the room, filling the canvas over the background.</summary>
+    [JsonStringEnumMemberName("cutout")] Cutout
+}
+
+/// <summary>Reads `"device"`, a mode older recordings and profiles may name, as `display` (spec/06 ADR-80).</summary>
+public sealed class CaptureTargetModeConverter : JsonConverter<CaptureTargetMode>
+{
+    public override CaptureTargetMode Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options) =>
+        reader.GetString() switch
+        {
+            "display" or "device" => CaptureTargetMode.Display,
+            "window" => CaptureTargetMode.Window,
+            "area" => CaptureTargetMode.Area,
+            "camera" => CaptureTargetMode.Camera,
+            var other => throw new System.Text.Json.JsonException($"Unknown capture mode {other}")
+        };
+
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, CaptureTargetMode value, System.Text.Json.JsonSerializerOptions options) =>
+        writer.WriteStringValue(value switch
+        {
+            CaptureTargetMode.Window => "window",
+            CaptureTargetMode.Area => "area",
+            CaptureTargetMode.Camera => "camera",
+            _ => "display"
+        });
 }
 
 public enum ExportFormat

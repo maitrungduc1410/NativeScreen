@@ -392,7 +392,11 @@ public sealed partial class EditorWindow
                 ZoomTimeline(1 / TimelineZoomStep);
                 return true;
             case VirtualKey.D:
-                if (session.SelectedLayoutId is { } layout)
+                if (session.SelectedAnnotationId is { } duplicated)
+                {
+                    session.DuplicateAnnotation(duplicated);
+                }
+                else if (session.SelectedLayoutId is { } layout)
                 {
                     session.DuplicateLayout(layout);
                 }
@@ -407,7 +411,11 @@ public sealed partial class EditorWindow
 
                 return true;
             case VirtualKey.C:
-                if (session.SelectedZoomId is { } copiedZoom)
+                if (session.SelectedAnnotationId is { } copiedAnnotation)
+                {
+                    session.CopyAnnotation(copiedAnnotation);
+                }
+                else if (session.SelectedZoomId is { } copiedZoom)
                 {
                     session.CopyZoom(copiedZoom);
                 }
@@ -418,7 +426,11 @@ public sealed partial class EditorWindow
 
                 return true;
             case VirtualKey.X:
-                if (session.SelectedZoomId is { } cutZoom)
+                if (session.SelectedAnnotationId is { } cutAnnotation)
+                {
+                    session.CutAnnotation(cutAnnotation);
+                }
+                else if (session.SelectedZoomId is { } cutZoom)
                 {
                     session.CutZoom(cutZoom);
                 }

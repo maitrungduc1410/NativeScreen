@@ -20,8 +20,8 @@ public sealed class RecordingTests
     {
         Assert.Equal(8_000_000, RecordingRates.DisplayBitrate(100, 100));
         Assert.Equal(1920 * 1080 * 4, RecordingRates.DisplayBitrate(1920, 1080));
-        Assert.Equal("pointer", CursorKindMap.FromWindowsCursor("IDC_HAND"));
-        Assert.Equal("ibeam", CursorKindMap.FromWindowsCursor("IDC_IBEAM"));
+        Assert.Equal("pointingHand", CursorKindMap.FromWindowsCursor("IDC_HAND"));
+        Assert.Equal("iBeam", CursorKindMap.FromWindowsCursor("IDC_IBEAM"));
         var point = CaptureCoordinates.Normalize(640, 360, 0, 0, 1280, 720);
         Assert.Equal(0.5, point.X, 6);
         Assert.Equal(0.5, point.Y, 6);

@@ -38,7 +38,7 @@ public readonly record struct RecordingStats(int FramesWritten, int FramesRepeat
 /// Windows.Graphics.Capture into a fragmented display.mp4, plus microphone, webcam and telemetry on their own threads. Every
 /// track shares one origin (the first video frame) and one pause timeline, the same scheme as the macOS engine.
 /// </summary>
-public sealed class ScreenRecorder : IDisposable
+public sealed class ScreenRecorder : IRecordingEngine
 {
     private const int MaxFps = 60;
     private const int FramePoolSize = 3;
@@ -276,6 +276,8 @@ public sealed class ScreenRecorder : IDisposable
     }
 
     private static double NowMs() => Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
+
+    public double? TimelineMs(double hostMs) => ElapsedForTrack(hostMs);
 
     private double? PauseOffset(double hostMs)
     {

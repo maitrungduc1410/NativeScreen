@@ -105,6 +105,82 @@ public sealed class OverlayRasterizer : IDisposable
         return result;
     }
 
+
+    /// <summary>
+    /// The user's picture for this cursor kind (spec/07 Pass 4): the arrow (every kind with `alwaysUsePointer`) or the hand,
+    /// drawn into a 256 px square at 72% with its hotspot on the same fraction of the square. Null uses the theme.
+    /// </summary>
+    public (RenderLayer Layer, double HotspotX, double HotspotY)? CustomCursorSprite(CursorConfig config, string cursorType, string? packageDirectory)
+    {
+        var custom = config.AlwaysUsePointer ? config.CustomPointer : MapKind(cursorType) switch
+        {
+            "pointer" => config.CustomPointer,
+            "pointinghand" => config.CustomHand,
+            _ => null
+        };
+        if (custom is null || packageDirectory is null || custom.ImagePath.Length == 0)
+        {
+            return null;
+        }
+
+        var key = FormattableString.Invariant($"custom|{packageDirectory}|{custom.ImagePath}|{custom.Hotspot01.X}|{custom.Hotspot01.Y}");
+        if (sprites.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        var path = Path.Combine(packageDirectory, custom.ImagePath);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        ImageTexture picture;
+        try
+        {
+            picture = ImageTexture.Load(path, 1024, orient: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
+        {
+            return null;
+        }
+
+        if (picture.Width <= 0 || picture.Height <= 0)
+        {
+            return null;
+        }
+
+        const int size = 256;
+        var scale = (float)(size / (double)Math.Max(picture.Width, picture.Height) * 0.72);
+        var drawnWidth = picture.Width * scale;
+        var drawnHeight = picture.Height * scale;
+        var hx = (float)custom.Hotspot01.X;
+        var hy = (float)custom.Hotspot01.Y;
+        var left = hx * (size - drawnWidth);
+        var top = hy * (size - drawnHeight);
+        var layer = new RenderLayer(device, size, size);
+        Draw(layer, () =>
+        {
+            var pinned = GCHandle.Alloc(picture.Pixels, GCHandleType.Pinned);
+            try
+            {
+                using var bitmap = context.CreateBitmap(
+                    new SizeI(picture.Width, picture.Height),
+                    pinned.AddrOfPinnedObject(),
+                    (uint)(picture.Width * 4),
+                    new BitmapProperties1(new PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied)));
+                context.DrawBitmap(bitmap, new Rect(left, top, drawnWidth, drawnHeight), 1, Vortice.Direct2D1.InterpolationMode.HighQualityCubic, null, null);
+            }
+            finally
+            {
+                pinned.Free();
+            }
+        });
+        var result = (layer, (double)hx, (double)hy);
+        sprites[key] = result;
+        return result;
+    }
+
     /// <summary>Clears a layer and draws into it. Direct2D shares the device, so the compositor must not be mid-pass.</summary>
     public void Draw(RenderLayer layer, Action draw)
     {
@@ -196,8 +272,9 @@ public sealed class OverlayRasterizer : IDisposable
 
     private static string MapKind(string raw) => raw switch
     {
-        "arrow" or "pointer" or "default" => "pointer",
-        "pointingHand" or "pointinghand" => "pointinghand",
+        "arrow" or "default" => "pointer",
+        // Older recordings on both platforms wrote `pointer` for the hand (spec/06 ADR-73).
+        "pointingHand" or "pointinghand" or "pointer" => "pointinghand",
         "iBeam" or "ibeam" or "ibeamstroke" => "ibeamstroke",
         "crosshair" or "cross" => "cross",
         "closedHand" or "closedhand" or "openHand" or "openhand" => "closedhand",

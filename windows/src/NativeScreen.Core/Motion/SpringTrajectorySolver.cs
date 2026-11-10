@@ -141,12 +141,16 @@ public sealed class SpringTrajectorySolver
     public IReadOnlyList<CursorFrameState> CursorStates { get; }
     public IReadOnlyList<CameraFrameState> CameraStates { get; }
 
+    /// <summary>False for camera-only recordings and projects made from a video: no cursor is drawn (spec/07 Pass 4).</summary>
+    public bool HasRecordedCursor { get; }
+
     public SpringTrajectorySolver(
         double durationMs,
         IReadOnlyList<CursorSampleEvent> cursorEvents,
         IReadOnlyList<ClickEvent> clickEvents,
         ProjectDocument document)
     {
+        HasRecordedCursor = cursorEvents.Count > 0;
         var totalDuration = Math.Max(100, durationMs);
         var totalSteps = Math.Max(2, (int)Math.Ceiling(totalDuration / stepMs) + 1);
         var dt = stepMs / 1000.0;

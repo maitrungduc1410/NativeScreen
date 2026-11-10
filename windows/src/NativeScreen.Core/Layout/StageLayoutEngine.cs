@@ -81,15 +81,21 @@ public sealed class StageLayoutEngine
         double sourceHeight,
         double zoomScale,
         bool hasRecordedCamera,
-        bool cameraHiddenBySilence = false)
+        bool cameraHiddenBySilence = false,
+        bool cameraOnly = false,
+        FaceTrack? faceTrack = null)
     {
-        var layout = Resolved(document, sourceMs, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, hasRecordedCamera, cameraHiddenBySilence);
+        var layout = Resolved(document, sourceMs, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, hasRecordedCamera, cameraHiddenBySilence, cameraOnly);
+        // A camera-only picture that fills the canvas replaces the screen rect, so every user of the stage agrees (spec/06 ADR-77).
+        var screenRect = cameraOnly && document.Camera.CameraOnlyFraming.FillsCanvas()
+            ? CameraOnlyLayout.FillRect(canvasWidth, canvasHeight, sourceWidth, sourceHeight, CameraOnlyLayout.FaceCenter01(document, faceTrack, sourceMs))
+            : TopLeft(layout.Screen, canvasHeight);
         return new StageFrame
         {
             SourceMs = sourceMs,
             CanvasWidth = canvasWidth,
             CanvasHeight = canvasHeight,
-            ScreenRect = TopLeft(layout.Screen, canvasHeight),
+            ScreenRect = screenRect,
             CameraRect = TopLeft(layout.Camera.Rect, canvasHeight),
             CornerRadius = layout.Camera.CornerRadius,
             Opacity = layout.Camera.Opacity,
@@ -164,10 +170,11 @@ public sealed class StageLayoutEngine
         double sourceHeight,
         double zoomScale,
         bool hasRecordedCamera,
-        bool cameraHiddenBySilence)
+        bool cameraHiddenBySilence,
+        bool cameraOnly)
     {
         var now = StageKey(document, sourceMs, hasRecordedCamera, cameraHiddenBySilence);
-        var current = Raw(now, document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale);
+        var current = Raw(now, document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, cameraOnly);
         var windowStart = sourceMs - TransitionMs;
         if (windowStart <= 0)
         {
@@ -195,7 +202,7 @@ public sealed class StageLayoutEngine
             }
         }
 
-        var previous = Raw(StageKey(document, lo, hasRecordedCamera, cameraHiddenBySilence), document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale);
+        var previous = Raw(StageKey(document, lo, hasRecordedCamera, cameraHiddenBySilence), document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, cameraOnly);
         var progress = Ease((sourceMs - hi) / TransitionMs);
         return Blend(previous, current, progress);
     }
@@ -255,7 +262,8 @@ public sealed class StageLayoutEngine
         double canvasHeight,
         double sourceWidth,
         double sourceHeight,
-        double zoomScale)
+        double zoomScale,
+        bool cameraOnly)
     {
         var config = key.Config;
         var split = Split(new Size(canvasWidth, canvasHeight), new Size(sourceWidth, sourceHeight), config, document.Canvas.PaddingRatio);
@@ -267,7 +275,8 @@ public sealed class StageLayoutEngine
         }
         else
         {
-            var padding = document.FrameStyle.DeviceMockup.Enabled
+            // A camera-only picture never gets a device frame (spec/06 ADR-77).
+            var padding = document.FrameStyle.DeviceMockup.Enabled && !cameraOnly
                 ? Math.Max(0.08, document.Canvas.PaddingRatio)
                 : document.Canvas.PaddingRatio;
             screen = Fitted(new Size(sourceWidth, sourceHeight), new Rect(0, 0, canvasWidth, canvasHeight), padding);

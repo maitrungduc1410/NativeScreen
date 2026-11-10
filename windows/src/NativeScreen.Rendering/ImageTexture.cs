@@ -40,12 +40,13 @@ public sealed class ImageTexture
         encoder.Commit();
     }
 
-    public static ImageTexture Load(string path, int? maxPixelSize = null)    {
+    public static ImageTexture Load(string path, int? maxPixelSize = null, bool orient = false)    {
         using var factory = new IWICImagingFactory();
         using var decoder = factory.CreateDecoderFromFileName(path);
         using var frame = decoder.GetFrame(0);
         using var converter = factory.CreateFormatConverter();
-        converter.Initialize(frame, PixelFormat.Format32bppPBGRA);
+        using var rotator = orient ? Oriented(factory, frame) : null;
+        converter.Initialize(rotator is null ? frame : rotator, PixelFormat.Format32bppPBGRA);
         if (maxPixelSize is { } limit && Math.Max(converter.Size.Width, converter.Size.Height) > limit)
         {
             var shrink = (double)limit / Math.Max(converter.Size.Width, converter.Size.Height);
@@ -60,6 +61,55 @@ public sealed class ImageTexture
         var pixels = new byte[size.Width * size.Height * 4];
         converter.CopyPixels((uint)(size.Width * 4), pixels);
         return new ImageTexture { Pixels = pixels, Width = (int)size.Width, Height = (int)size.Height };
+    }
+
+    /// <summary>The frame turned upright by its EXIF orientation, or null when it has none (or it reads as upright).</summary>
+    private static IWICBitmapFlipRotator? Oriented(IWICImagingFactory factory, IWICBitmapFrameDecode frame)
+    {
+        var orientation = 1;
+        try
+        {
+            using var metadata = frame.MetadataQueryReader;
+            // JPEG keeps it in the EXIF block, TIFF-like files at the top level. A missing name throws.
+            foreach (var name in (ReadOnlySpan<string>)["/app1/ifd/{ushort=274}", "/ifd/{ushort=274}"])
+            {
+                try
+                {
+                    if (metadata.GetMetadataByName(name) is { } value)
+                    {
+                        orientation = Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+                        break;
+                    }
+                }
+                catch (SharpGen.Runtime.SharpGenException)
+                {
+                }
+            }
+        }
+        catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or InvalidCastException or FormatException or OverflowException)
+        {
+            return null;
+        }
+
+        var options = orientation switch
+        {
+            2 => BitmapTransformOptions.FlipHorizontal,
+            3 => BitmapTransformOptions.Rotate180,
+            4 => BitmapTransformOptions.FlipVertical,
+            5 => BitmapTransformOptions.Rotate90 | BitmapTransformOptions.FlipHorizontal,
+            6 => BitmapTransformOptions.Rotate90,
+            7 => BitmapTransformOptions.Rotate270 | BitmapTransformOptions.FlipHorizontal,
+            8 => BitmapTransformOptions.Rotate270,
+            _ => BitmapTransformOptions.Rotate0
+        };
+        if (options == BitmapTransformOptions.Rotate0)
+        {
+            return null;
+        }
+
+        var rotator = factory.CreateBitmapFlipRotator();
+        rotator.Initialize(frame, options);
+        return rotator;
     }
 
     public ID3D11ShaderResourceView CreateView(ID3D11Device device)

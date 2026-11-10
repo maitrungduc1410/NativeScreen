@@ -19,6 +19,7 @@ public sealed class PixelDimensions
 
 public sealed class CaptureTargetMetadata
 {
+    [JsonConverter(typeof(CaptureTargetModeConverter))]
     public CaptureTargetMode Mode { get; set; } = CaptureTargetMode.Display;
     public long DisplayId { get; set; }
     public long? WindowId { get; set; }

@@ -27,6 +27,101 @@ one's installer and feed until the next release that has both, so publish single
 
 If a run fails half way, nothing is published: delete the draft if one was made and run again with the same version.
 
+## Microsoft Store (Windows)
+
+Windows has two channels built from the same source (`spec/06` ADR-81):
+
+| | GitHub (`Setup.exe`) | Microsoft Store (MSIX) |
+| :-- | :-- | :-- |
+| Built by | `windows` job: `dotnet publish` + `vpk pack` | `store` job: `windows/scripts/package-msix.ps1` (`NsPackage=true`) |
+| Signed by | nobody yet (SmartScreen warns) | Microsoft, at certification |
+| Updates | Velopack, from GitHub releases | the Store. The Store build has no Velopack and no update UI |
+| MCP command | the exe path | the execution alias `%LOCALAPPDATA%\Microsoft\WindowsApps\nativescreen.exe` |
+| Explorer "Open in Native Screen" | yes | no |
+
+The `store` job runs only for stable versions (no `-beta` suffix, pre-release off). It uploads the `.msix` as the
+`store-msix` artifact of the workflow run, not to the GitHub release, because an unsigned MSIX cannot be installed by
+users. The package version is `major.minor.build.0` (the Store needs a zero revision), so every Store submission
+needs a higher `major.minor.build` than the last one.
+
+### Submitting
+
+1. Run **Release** as usual. When it finishes, download `store-msix` from the run's summary page.
+2. Partner Center > Apps and games > Native Screen > start a submission (or update it) > Packages: upload the
+   `.msix`. Partner Center checks that its identity matches the reserved name.
+3. Fill in the listing, age rating and privacy policy URL (the app asks for microphone and camera, so a privacy policy
+   is required), and paste the certification notes below into **Submission options > Notes for certification**.
+4. Submit. Certification takes from a few hours to a few days; Microsoft signs the package and the Store delivers it.
+
+Submitting from CI with the `msstore` CLI (an Entra app: tenant id, client id, client secret, seller id) can be added
+later. Until then, nothing in CI talks to Partner Center.
+
+### Store identity
+
+After the app name is reserved, Partner Center > Apps and games > Native Screen > Product management > **Product
+identity** shows three values. Put them in **Settings > Secrets and variables > Actions > Variables**:
+
+| Variable | Product identity field | Looks like |
+| :-- | :-- | :-- |
+| `NS_STORE_IDENTITY_NAME` | Package/Identity/Name | `<number>.<name>` |
+| `NS_STORE_PUBLISHER` | Package/Identity/Publisher | `CN=<GUID>` |
+| `NS_STORE_PUBLISHER_DISPLAY_NAME` | Package/Properties/PublisherDisplayName | your publisher name |
+
+They are not secrets, but keep them out of the repository: `Package.appxmanifest` holds local values (`NativeScreen`,
+`CN=NativeScreen`) so a test package builds anywhere, and the build writes the real ones into a copy under `obj/`
+(MSBuild properties `NsStoreIdentityName`, `NsStorePublisher`, `NsStorePublisherDisplayName`). The `store` job stops
+if any of them is missing. To build the Store package locally:
+
+```powershell
+powershell windows/scripts/package-msix.ps1 -IdentityName "<Name>" -Publisher "CN=<GUID>" -PublisherDisplayName "<Publisher>" -Version 1.2.0
+```
+
+Without arguments it builds a test package with the local identity. It also checks the package: every image the
+manifest names, the native libraries and data files next to the exe, and no Velopack.
+
+### Testing a package before submitting
+
+On a test machine (this installs a certificate and an app, so not on a build machine you care about):
+
+1. Make a self-signed certificate whose subject equals the package's `Publisher` (`CN=NativeScreen` for the local
+   package), sign the `.msix` with `signtool sign /fd SHA256 /f <pfx> /p <password> <msix>`, and trust the certificate
+   under Local Machine > Trusted People.
+2. Install it (double-click the `.msix`, or `Add-AppxPackage <msix>`).
+3. Run the Windows App Certification Kit: `appcert.exe test -appxpackagepath <msix> -reportoutputpath <report.xml>`.
+   No failures are allowed.
+4. Check the items in the `windows/HANDOFF.md` entry "Microsoft Store: an MSIX build next to the Velopack installer".
+
+### Notes for certification
+
+Paste this into Partner Center > Submission options > **Notes for certification**:
+
+```text
+Native Screen is a free, open source screen recorder and video editor (Win32 desktop app, WinUI 3, packaged as MSIX).
+
+How to test: the app starts as a small recording bar (also in the notification area). Pick Display, Window or Area and
+press Record; press Stop in the bar to open the editor. Test recordings can be made without a microphone or camera.
+"Create Interactive Showcase Project" in the notification area menu opens a sample project without recording anything.
+
+Capabilities:
+- runFullTrust: desktop app using Windows.Graphics.Capture for the screen, WASAPI loopback for system audio and
+  Media Foundation for encoding.
+- graphicsCaptureWithoutBorder: removes the yellow capture border so it does not appear around the recorded area.
+  The user starts every recording; a countdown and the recording bar are always shown while recording.
+- microphone, webcam: only when the user turns the microphone or camera on in the recording bar.
+- internetClient: optional downloads of on-device models (speech to text, background removal) from Hugging Face when
+  the user turns those features on. This build has no self-updater; updates come from the Store.
+
+Keyboard and mouse hooks: while a recording is running (only then), the app uses low-level keyboard and mouse hooks to
+record pointer positions, clicks and the names of pressed keys with their timestamps. They drive automatic zoom,
+click effects and on-screen keycaps (shortcuts shown in the edited video, which the user can turn off). The data is
+written to the recording's project folder on the user's PC and is never sent anywhere.
+
+AI agents (off by default): Settings > AI Agents lets local MCP clients control the app through a named pipe that only
+the current Windows user can open. The execution alias nativescreen.exe is what those clients start.
+
+No account, no ads, no telemetry or analytics. Source code: https://github.com/maitrungduc1410/NativeScreen
+```
+
 ## One-time setup
 
 All of this goes in **Settings > Secrets and variables > Actions** of the repository.

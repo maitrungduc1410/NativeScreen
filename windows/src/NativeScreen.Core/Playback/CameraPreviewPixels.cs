@@ -30,5 +30,35 @@ public static class CameraPreviewPixels
         }
     }
 
+    /// <summary>The whole picture filling `outWidth` × `outHeight` (center crop to that aspect), mirrored.</summary>
+    public static void ToMirroredFill(ReadOnlySpan<byte> nv12, int width, int height, Span<byte> bgra, int outWidth, int outHeight)
+    {
+        var scale = Math.Max((double)outWidth / width, (double)outHeight / height);
+        var cropWidth = Math.Min(width, (int)(outWidth / scale));
+        var cropHeight = Math.Min(height, (int)(outHeight / scale));
+        var left = (width - cropWidth) / 2;
+        var top = (height - cropHeight) / 2;
+        var chroma = nv12[(width * height)..];
+        for (var row = 0; row < outHeight; row++)
+        {
+            var y = top + row * cropHeight / outHeight;
+            var chromaRow = (y / 2) * width;
+            var target = row * outWidth * 4;
+            for (var column = 0; column < outWidth; column++)
+            {
+                var x = left + (outWidth - 1 - column) * cropWidth / outWidth;
+                var luma = (nv12[y * width + x] - 16) * 298;
+                var chromaIndex = chromaRow + (x & ~1);
+                var u = chroma[chromaIndex] - 128;
+                var v = chroma[chromaIndex + 1] - 128;
+                bgra[target] = Clamp((luma + 541 * u + 128) >> 8);
+                bgra[target + 1] = Clamp((luma - 55 * u - 136 * v + 128) >> 8);
+                bgra[target + 2] = Clamp((luma + 459 * v + 128) >> 8);
+                bgra[target + 3] = 255;
+                target += 4;
+            }
+        }
+    }
+
     private static byte Clamp(int value) => (byte)(value < 0 ? 0 : value > 255 ? 255 : value);
 }

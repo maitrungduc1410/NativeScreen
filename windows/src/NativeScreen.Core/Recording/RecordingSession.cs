@@ -65,10 +65,10 @@ public static class CursorKindMap
 {
     public static string FromWindowsCursor(string systemCursor) => systemCursor switch
     {
-        "IDC_HAND" => "pointer",
-        "IDC_IBEAM" => "ibeam",
+        "IDC_HAND" => "pointingHand",
+        "IDC_IBEAM" => "iBeam",
         "IDC_CROSS" => "crosshair",
-        "IDC_SIZEALL" => "openhand",
+        "IDC_SIZEALL" => "openHand",
         _ => "arrow"
     };
 }

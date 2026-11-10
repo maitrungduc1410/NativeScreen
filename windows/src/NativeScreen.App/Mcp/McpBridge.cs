@@ -99,7 +99,11 @@ internal static class McpBridge
     /// </summary>
     private static void Launch()
     {
-        if (Environment.ProcessPath is { } executable)
+        if (AppPackage.IsPackaged)
+        {
+            AppPackage.LaunchNewCopy();
+        }
+        else if (Environment.ProcessPath is { } executable)
         {
             Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true })?.Dispose();
         }

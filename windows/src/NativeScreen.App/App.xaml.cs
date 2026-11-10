@@ -34,7 +34,11 @@ public partial class App : Application
     public static void Restart()
     {
         SingleInstance.Release();
-        if (Environment.ProcessPath is { } executable)
+        if (AppPackage.IsPackaged)
+        {
+            AppPackage.LaunchNewCopy();
+        }
+        else if (Environment.ProcessPath is { } executable)
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(executable) { UseShellExecute = false });
         }

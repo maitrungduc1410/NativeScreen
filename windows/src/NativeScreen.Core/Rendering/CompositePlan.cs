@@ -27,10 +27,10 @@ public static class CompositeMetrics
 {
     public static double CanvasScale(double outputHeight) => outputHeight / 900.0;
 
-    public static double ScreenCornerRadius(FrameStyleConfig frame, double outputHeight)
+    public static double ScreenCornerRadius(FrameStyleConfig frame, double outputHeight, bool cameraOnly = false)
     {
         var scale = CanvasScale(outputHeight);
-        var radius = frame.DeviceMockup.Enabled
+        var radius = frame.DeviceMockup.Enabled && !cameraOnly
             ? (frame.DeviceMockup.DeviceId?.Contains("iphone", StringComparison.OrdinalIgnoreCase) == true ? 34.0 : 14.0)
             : frame.BorderRadius;
         return radius * scale;

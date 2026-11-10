@@ -2,7 +2,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <!-- GraphicsCaptureSession.IsCursorCaptureEnabled needs Windows 10 2004; the Store manifest says the same. -->
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>NativeScreen.App</RootNamespace>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
@@ -29,6 +30,12 @@
     <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
     <AppxBundle>Never</AppxBundle>
     <GenerateTestArtifacts>false</GenerateTestArtifacts>
+    <!-- The Store build has no Velopack and never updates itself (spec/06 ADR-81). -->
+    <DefineConstants>$(DefineConstants);NS_STORE</DefineConstants>
+    <!-- Partner Center > Product identity. The defaults make a sideloadable test package (docs/releasing.md). -->
+    <NsStoreIdentityName Condition="'$(NsStoreIdentityName)' == ''">NativeScreen</NsStoreIdentityName>
+    <NsStorePublisher Condition="'$(NsStorePublisher)' == ''">CN=NativeScreen</NsStorePublisher>
+    <NsStorePublisherDisplayName Condition="'$(NsStorePublisherDisplayName)' == ''">Native Screen</NsStorePublisherDisplayName>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
@@ -38,7 +45,7 @@
     <Content Include="..\..\..\macos\NativeScreen\Resources\MCPTools.json" Link="Mcp\MCPTools.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Vortice.Direct2D1" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
-    <PackageReference Include="Velopack" />
+    <PackageReference Include="Velopack" Condition="'$(NsPackage)' != 'true'" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     <ProjectReference Include="..\NativeScreen.Core\NativeScreen.Core.csproj" />
     <ProjectReference Include="..\NativeScreen.Media\NativeScreen.Media.csproj" />
@@ -47,9 +54,39 @@
     <ProjectReference Include="..\NativeScreen.Intelligence\NativeScreen.Intelligence.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(NsPackage)' == 'true'">
-    <AppxManifest Include="Package.appxmanifest" />
-    <Content Include="Assets\StoreLogo.png;Assets\Square44x44Logo.png;Assets\Square150x150Logo.png" />
+    <!-- A copy with this build's identity and version, written by NsStampStoreManifest. -->
+    <AppxManifest Include="$(IntermediateOutputPath)Package.appxmanifest" />
+    <!-- Tiles and logos with their scale and target size variants, drawn by scripts/make-store-assets.ps1. -->
+    <Content Include="Assets\Store\*.png" />
   </ItemGroup>
+  <Target Name="NsStampStoreManifest" BeforeTargets="PrepareForBuild" Condition="'$(NsPackage)' == 'true'">
+    <PropertyGroup>
+      <!-- The Store needs a zero revision, and the version must rise with every submission. -->
+      <NsPackageVersion Condition="'$(NsPackageVersion)' == ''">$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value).0</NsPackageVersion>
+      <NsStoreManifest>$(IntermediateOutputPath)Package.appxmanifest</NsStoreManifest>
+      <NsManifestNamespaces>&lt;Namespace Prefix='m' Uri='http://schemas.microsoft.com/appx/manifest/foundation/windows10' /&gt;</NsManifestNamespaces>
+    </PropertyGroup>
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(NsPackageVersion)', '^\d+\.\d+\.\d+\.0$'))" Text="NsPackageVersion must be major.minor.build.0, got '$(NsPackageVersion)'." />
+    <Copy SourceFiles="Package.appxmanifest" DestinationFiles="$(NsStoreManifest)" />
+    <XmlPoke XmlInputPath="$(NsStoreManifest)" Namespaces="$(NsManifestNamespaces)" Query="/m:Package/m:Identity/@Name" Value="$(NsStoreIdentityName)" />
+    <XmlPoke XmlInputPath="$(NsStoreManifest)" Namespaces="$(NsManifestNamespaces)" Query="/m:Package/m:Identity/@Publisher" Value="$(NsStorePublisher)" />
+    <XmlPoke XmlInputPath="$(NsStoreManifest)" Namespaces="$(NsManifestNamespaces)" Query="/m:Package/m:Identity/@Version" Value="$(NsPackageVersion)" />
+    <XmlPoke XmlInputPath="$(NsStoreManifest)" Namespaces="$(NsManifestNamespaces)" Query="/m:Package/m:Properties/m:PublisherDisplayName" Value="$(NsStorePublisherDisplayName)" />
+    <Message Importance="high" Text="Store manifest: $(NsStoreIdentityName), $(NsStorePublisher), $(NsStorePublisherDisplayName), $(NsPackageVersion)" />
+  </Target>
+  <!-- The Windows App SDK and the inference packages both bring onnxruntime.dll and DirectML.dll, and a package holds one
+       file per path. Keep the copies the unpackaged build ends up with (the Windows App SDK's), so both builds load the
+       same native runtime (spec/06 ADR-81). -->
+  <Target Name="NsDropDuplicateInferenceDlls" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(NsPackage)' == 'true'">
+    <ItemGroup>
+      <NsDuplicateInferenceDll Include="@(PackagingOutputs)" Condition="$([System.String]::Copy('%(PackagingOutputs.FullPath)').ToLowerInvariant().Contains('\microsoft.ml.onnxruntime.directml\')) and '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'onnxruntime.dll'" />
+      <NsDuplicateInferenceDll Include="@(PackagingOutputs)" Condition="$([System.String]::Copy('%(PackagingOutputs.FullPath)').ToLowerInvariant().Contains('\microsoft.ai.directml\')) and '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'DirectML.dll'" />
+      <PackagingOutputs Remove="@(NsDuplicateInferenceDll)" />
+      <!-- Symbols never go in the package; leaving them out also skips the symbol package step. Like the publish trim
+           below: the DirectML debug layer, and speech runtimes for other processors (this package is x64). -->
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Extension)' == '.pdb' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'DirectML.Debug.dll' or $([System.String]::Copy('%(PackagingOutputs.FullPath)').Contains('\win-arm64\')) or $([System.String]::Copy('%(PackagingOutputs.FullPath)').Contains('\win-x86\'))" />
+    </ItemGroup>
+  </Target>
   <!-- Publishing an unpackaged app leaves out its compiled XAML and resource index, and WinUI then fails at startup. -->
   <!-- Debug layers and link libraries of the inference packages, tens of MB that an installed app never loads. -->
   <Target Name="NsTrimInferenceFromPublish" AfterTargets="Publish">

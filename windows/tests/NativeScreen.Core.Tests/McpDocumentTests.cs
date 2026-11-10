@@ -142,7 +142,8 @@ public sealed class McpDocumentTests
         Assert.Contains("manual", options["timeline.zooms[].mode"]!.AsArray().Select(item => item!.GetValue<string>()));
         Assert.Equal(ZoomMode.Manual, McpDocument.Parse<ZoomMode>("manual"));
         Assert.Null(McpDocument.Parse<ZoomMode>("nope"));
-        Assert.Equal(25, options.Count);
+        Assert.Contains("pen", options["timeline.annotationTracks[].items[].kind"]!.AsArray().Select(item => item!.GetValue<string>()));
+        Assert.Equal(31, options.Count);
     }
 
     [Fact]

@@ -79,6 +79,21 @@ build is not code signed yet. We will look for a way to improve this. For now Wi
 **Run anyway**. You can check the download against the SHA-256 shown on the release page. Updates install themselves
 after that.
 
+### Permissions
+
+What Native Screen asks for on Windows, and why. Everything it records stays on your PC.
+
+| Permission | Why |
+| :-- | :-- |
+| Full trust desktop app | It is a regular Windows app: Windows.Graphics.Capture records the screen, WASAPI loopback records system audio and Media Foundation encodes the video. |
+| Screen capture without the yellow border | So the border Windows draws around a captured window or screen does not end up in your recording. You always start a recording yourself, with a countdown, and the recording bar stays visible. |
+| Microphone | Only when you turn the microphone on in the recording bar. |
+| Camera | Only when you turn the camera on in the recording bar. |
+| Keyboard and mouse hooks | Only while recording: pointer positions, clicks and pressed keys, for automatic zoom, click effects and shortcut keycaps. Saved in the project folder, never sent anywhere. |
+| Internet | Downloads the on-device models for captions and background removal from Hugging Face when you use those features. The GitHub build also checks GitHub for updates (the Microsoft Store build is updated by the Store). |
+
+No account, no ads, no analytics.
+
 ## Let an AI agent drive it
 
 Turn on `Settings > AI Agents` in Native Screen. The page shows the exact command for your machine, for example:

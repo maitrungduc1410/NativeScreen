@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Security;
 using Microsoft.Win32;
 
@@ -8,16 +7,15 @@ namespace NativeScreen.App;
 /// "Open in Native Screen" on project folders. A package is a folder, and Windows applies file type associations only to files,
 /// so a double-click cannot reach the app (spec/06 ADR-41). Written at each launch, so it follows the app when it moves.
 /// </summary>
-internal static partial class ExplorerContextMenu
+internal static class ExplorerContextMenu
 {
     private const string KeyPath = @"Software\Classes\Directory\shell\NativeScreen.Open";
     private const string CommandName = "command";
-    private const int NoPackage = 15700;
 
     public static void Register()
     {
         // A packaged app's registry writes stay inside its own private view, where Explorer never looks.
-        if (Environment.ProcessPath is not { } exe || IsPackaged())
+        if (Environment.ProcessPath is not { } exe || AppPackage.IsPackaged)
         {
             return;
         }
@@ -49,12 +47,4 @@ internal static partial class ExplorerContextMenu
         }
     }
 
-    private static bool IsPackaged()
-    {
-        var length = 0u;
-        return GetCurrentPackageFullName(ref length, IntPtr.Zero) != NoPackage;
-    }
-
-    [LibraryImport("kernel32.dll")]
-    private static partial int GetCurrentPackageFullName(ref uint length, IntPtr name);
 }

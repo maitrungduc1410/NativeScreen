@@ -277,6 +277,21 @@ public sealed class ConformanceTests
                     {
                         actualProps.Remove("backgroundMode");
                     }
+
+                    // Camera-only framing and green screen (spec/06 ADR-77, ADR-78), at their defaults.
+                    foreach (var (name, value) in (ReadOnlySpan<(string, string)>)[("cameraOnlyFraming", "framed"), ("backgroundRemoval", "ai"), ("chromaKeyColor", "#00B140"), ("chromaSimilarity", "0.4"), ("chromaSmoothness", "0.3"), ("chromaSpill", "0.5")])
+                    {
+                        if (actualProps.TryGetValue(name, out var field) && field.ToString() == value)
+                        {
+                            actualProps.Remove(name);
+                        }
+                    }
+                }
+
+                // Annotations (spec/02), empty in every fixture.
+                if (path.EndsWith(".timeline", StringComparison.Ordinal) && actualProps.TryGetValue("annotationTracks", out var annotations) && annotations.GetArrayLength() == 0)
+                {
+                    actualProps.Remove("annotationTracks");
                 }
 
                 Assert.True(actualProps.Count == 0, $"{path} extra {string.Join(',', actualProps.Keys)}");

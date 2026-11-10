@@ -177,7 +177,11 @@ public sealed partial class EditorSession
     public void SplitAtCurrentTime()
     {
         var at = SourceAtPlayhead;
-        if (SelectedVoiceoverId is { } voiceover)
+        if (SelectedAnnotationId is { } annotation)
+        {
+            SplitAnnotation(annotation, at);
+        }
+        else if (SelectedVoiceoverId is { } voiceover)
         {
             SplitVoiceover(voiceover, at);
         }
@@ -333,6 +337,7 @@ public sealed partial class EditorSession
     {
         copiedZoom = ProjectJson.Clone(Document.Timeline.Zooms.First(zoom => zoom.Id == id));
         copiedMask = null;
+        copiedAnnotation = null;
         ToastRequested?.Invoke("Zoom range copied");
     }
 
@@ -396,6 +401,7 @@ public sealed partial class EditorSession
         {
             copiedMask = ProjectJson.Clone(mask);
             copiedZoom = null;
+            copiedAnnotation = null;
             ToastRequested?.Invoke("Mask copied");
         }
     }
@@ -426,6 +432,12 @@ public sealed partial class EditorSession
     /// <summary>Ctrl+V: a copied zoom's settings go to the selected zoom, otherwise a copy lands at the playhead.</summary>
     public void PasteFromClipboard()
     {
+        if (copiedAnnotation is not null)
+        {
+            PasteAnnotation();
+            return;
+        }
+
         var at = SourceAtPlayhead;
         if (copiedZoom is { } zoom)
         {
@@ -483,7 +495,11 @@ public sealed partial class EditorSession
     /// <summary>D: disables whatever is selected.</summary>
     public void ToggleDisableSelected()
     {
-        if (SelectedVoiceoverId is { } voiceover)
+        if (SelectedAnnotationId is { } annotation)
+        {
+            ToggleAnnotationDisabled(annotation);
+        }
+        else if (SelectedVoiceoverId is { } voiceover)
         {
             ToggleVoiceoverDisabled(voiceover);
         }
