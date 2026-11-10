@@ -333,7 +333,9 @@ public sealed class AnnotationItem : IJsonOnDeserialized
             }
         }
 
-        if (Enter == AnnotationAnimation.Draw && Kind == AnnotationKind.Pen && PointTimesMs.Count > 0)
+        // Only a stroke with drawing time replays by its clock: a dot (one point, or all at 0 ms) would stay at progress 0
+        // and never show, so it draws on over the animation instead.
+        if (Enter == AnnotationAnimation.Draw && Kind == AnnotationKind.Pen && PointTimesMs.Count > 0 && PointTimesMs[^1] > 1)
         {
             Apply(Enter, 0, true);
         }

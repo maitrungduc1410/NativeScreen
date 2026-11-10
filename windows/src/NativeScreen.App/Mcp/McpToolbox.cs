@@ -464,7 +464,7 @@ internal sealed class McpToolbox
                 {
                     var track = document.Timeline.AnnotationTracks.Find(item => item.Id == annotationTrackId)
                         ?? throw new McpToolException($"No annotation track {annotationTrackId}.");
-                    McpDocument.RequireFree(track.Items.Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)), start, end, "annotation on that track");
+                    McpDocument.RequireFree(track.Items.Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)), start, end, "annotation on that track", tolerance: AnnotationTrack.OverlapToleranceMs);
                     session.AddAnnotationInRange(annotationTrackId, start, end);
                     id = session.SelectedAnnotationId;
                     if (id is not null && session.Annotation(id)?.Kind != annotationKind)

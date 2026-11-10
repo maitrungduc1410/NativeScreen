@@ -15,7 +15,8 @@ namespace NativeScreen.Rendering;
 public sealed partial class FrameCompositor
 {
     private const long MaximumAnnotationPixels = 48L * 1024 * 1024;
-    private readonly Dictionary<string, (RenderLayer Layer, long Used, Vector2 Origin)> annotationSprites = [];
+    // A text's box is kept with its sprite, so a cached text needs no DirectWrite layout on the render thread.
+    private readonly Dictionary<string, (RenderLayer Layer, long Used, Vector2 Origin, Vector2 Box)> annotationSprites = [];
     private readonly Dictionary<string, AnnotationPicture?> annotationPictures = [];
     private long annotationPixels;
 
@@ -170,12 +171,12 @@ public sealed partial class FrameCompositor
 
     // MARK: Sprites
 
-    private (RenderLayer Layer, Vector2 Origin)? CachedSprite(string key)
+    private (RenderLayer Layer, Vector2 Origin, Vector2 Box)? CachedSprite(string key)
     {
         if (annotationSprites.TryGetValue(key, out var hit))
         {
-            annotationSprites[key] = (hit.Layer, composeCount, hit.Origin);
-            return (hit.Layer, hit.Origin);
+            annotationSprites[key] = (hit.Layer, composeCount, hit.Origin, hit.Box);
+            return (hit.Layer, hit.Origin, hit.Box);
         }
 
         return null;
@@ -185,7 +186,7 @@ public sealed partial class FrameCompositor
     /// Draws `body` into a new sprite, with a soft shadow cast by `caster` (the body when null): black at `shadowAlpha`, blurred
     /// by `shadowBlur` (a CoreGraphics blur, twice the Gaussian sigma) and moved `shadowDrop` down.
     /// </summary>
-    private RenderLayer BuildSprite(string key, Vector2 origin, int width, int height, Action<ID2D1DeviceContext5> body, Action<ID2D1DeviceContext5>? caster, float shadowAlpha, float shadowBlur, float shadowDrop)
+    private RenderLayer BuildSprite(string key, Vector2 origin, int width, int height, Action<ID2D1DeviceContext5> body, Action<ID2D1DeviceContext5>? caster, float shadowAlpha, float shadowBlur, float shadowDrop, Vector2 box = default)
     {
         var overlay = Overlays;
         var context = _graphics.Context;
@@ -212,7 +213,7 @@ public sealed partial class FrameCompositor
 
         DrawQuad(bodyLayer.View, Identity(width, height), default, 0, 1);
         context.UnsetRenderTargets();
-        annotationSprites[key] = (sprite, composeCount, origin);
+        annotationSprites[key] = (sprite, composeCount, origin, box);
         annotationPixels += (long)width * height;
         return sprite;
     }
@@ -262,31 +263,22 @@ public sealed partial class FrameCompositor
         return Overlays.WriteFactory.CreateTextLayout(item.Text.Length == 0 ? " " : item.Text, format, (float)wrapWidth, float.MaxValue);
     }
 
-    /// <summary>The text box (padding included) for a frame of the given size, as the canvas handles measure it.</summary>
-    public (double Width, double Height) MeasureAnnotationText(AnnotationItem item, int canvasWidth, int canvasHeight)
-    {
-        var fontSize = AnnotationMath.FontSize(item, canvasWidth, canvasHeight);
-        var padding = AnnotationMath.TextPadding(item, fontSize);
-        using var layout = AnnotationTextLayout(item, fontSize, AnnotationMath.TextWrapWidth(item, fontSize, canvasWidth));
-        var metrics = layout.Metrics;
-        return (Math.Ceiling(metrics.Width + padding.X * 2), Math.Ceiling(metrics.Height + padding.Y * 2));
-    }
-
     private (RenderLayer Layer, Vector2 Origin, Vector2 Box)? TextSprite(AnnotationItem item, int width, int height, int? visible)
     {
         var fontSize = AnnotationMath.FontSize(item, width, height);
         var padding = AnnotationMath.TextPadding(item, fontSize);
         var wrap = AnnotationMath.TextWrapWidth(item, fontSize, width);
         var key = string.Create(CultureInfo.InvariantCulture, $"text|{item.Text}|{fontSize}|{item.MaxWidthRatio}|{width}|{item.Bold}|{item.Color}|{item.TextBackground}|{item.BackgroundColor}|{visible}");
+        if (CachedSprite(key) is { } hit)
+        {
+            return hit;
+        }
+
         var layout = AnnotationTextLayout(item, fontSize, wrap);
         try
         {
             var metrics = layout.Metrics;
             var box = new Vector2((float)Math.Ceiling(metrics.Width + padding.X * 2), (float)Math.Ceiling(metrics.Height + padding.Y * 2));
-            if (CachedSprite(key) is { } hit)
-            {
-                return (hit.Layer, hit.Origin, box);
-            }
 
             // Room around the box for its shadow.
             var margin = (float)Math.Ceiling(fontSize * 0.5);
@@ -343,7 +335,8 @@ public sealed partial class FrameCompositor
                     : context => DrawLetters(context, true),
                 plate ? 0.30f : 0.55f,
                 (float)(fontSize * (plate ? 0.30 : 0.18)),
-                (float)(fontSize * 0.05));
+                (float)(fontSize * 0.05),
+                box);
             return (sprite, new Vector2(margin, margin), box);
         }
         finally
@@ -436,13 +429,6 @@ public sealed partial class FrameCompositor
 
         annotationPictures[path] = picture;
         return picture;
-    }
-
-    /// <summary>An image annotation's size in a frame of the given width, as the canvas handles measure it.</summary>
-    public (double Width, double Height) MeasureAnnotationImage(AnnotationItem item, int canvasWidth, string? packageDirectory)
-    {
-        var picture = Picture(item, packageDirectory);
-        return AnnotationMath.ImageSize(item, canvasWidth, picture?.Width, picture?.Height);
     }
 
     private (RenderLayer Layer, Vector2 Origin, Vector2 Box)? PictureSprite(AnnotationItem item, int width, int height, string? packageDirectory)

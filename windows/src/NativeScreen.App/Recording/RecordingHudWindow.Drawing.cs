@@ -34,6 +34,7 @@ public sealed partial class RecordingHudWindow
                     AppSettings.Shared.LiveDrawingTool = chosen.ToString().ToLowerInvariant();
                     AppSettings.Shared.Save();
                     ShowRecording();
+                    RaiseBarOverDrawing();
                 }, 34, 34, overlay.Tool == tool));
             }
 
@@ -48,11 +49,12 @@ public sealed partial class RecordingHudWindow
                     AppSettings.Shared.LiveDrawingColor = color;
                     AppSettings.Shared.Save();
                     ShowRecording();
+                    RaiseBarOverDrawing();
                 }, 26, 34, overlay.Color == color));
             }
 
-            row.Children.Add(Item(Ui.Icon("", 15, Ui.Rgb(1, 1, 1, 0.9)), "Undo (Ctrl+Z)", overlay.Undo, 34, 34));
-            row.Children.Add(Item(Ui.Icon("", 15, Ui.Rgb(1, 1, 1, 0.9)), "Clear drawings (C)", overlay.Clear, 34, 34));
+            row.Children.Add(Item(Ui.Icon("", 15, Ui.Rgb(1, 1, 1, 0.9)), "Undo (Ctrl+Z)", OnDrawing(overlay.Undo), 34, 34));
+            row.Children.Add(Item(Ui.Icon("", 15, Ui.Rgb(1, 1, 1, 0.9)), "Clear drawings (C)", OnDrawing(overlay.Clear), 34, 34));
         }
 
         bar.Children.Add(new Border { Width = 1, Height = 26, Background = Ui.Rgb(1, 1, 1, 0.20) });
@@ -84,10 +86,35 @@ public sealed partial class RecordingHudWindow
             }
 
             drawingOverlay.SetDrawing(true);
+            RaiseBarOverDrawing();
         }
 
         ShowRecording();
     }
+
+    private const uint SwpNoActivate = 0x0010;
+
+    /// <summary>
+    /// The overlay takes the keys (Esc, 1-4, C, Ctrl+Z) and the bar sits above it without being activated, so its drawing
+    /// tools stay clickable; otherwise the overlay, topmost and taking the mouse, turned every click on the bar into a stroke.
+    /// </summary>
+    private void RaiseBarOverDrawing()
+    {
+        if (!IsDrawing)
+        {
+            return;
+        }
+
+        drawingOverlay?.TakeKeys();
+        SetWindowPos(Handle, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+    }
+
+    /// <summary>A tool, color, undo or clear from the bar, then the keys go back to the overlay.</summary>
+    private Action OnDrawing(Action action) => () =>
+    {
+        action();
+        RaiseBarOverDrawing();
+    };
 
     /// <summary>Pausing stops drawing; the strokes stay where they are.</summary>
     private void StopDrawingForPause()

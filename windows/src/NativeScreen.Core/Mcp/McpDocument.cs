@@ -145,11 +145,12 @@ public static class McpDocument
     }
 
     /// <summary>Items on one track may touch but not overlap: the timeline cannot show it, and the preview would stack them.</summary>
-    public static void RequireFree(IEnumerable<(string Id, double Start, double End)> items, double start, double end, string what, string? ignoring = null)
+    /// <param name="tolerance">How far neighbors may overlap: 1 ms, or an annotation track's own tolerance.</param>
+    public static void RequireFree(IEnumerable<(string Id, double Start, double End)> items, double start, double end, string what, string? ignoring = null, double tolerance = 1)
     {
         foreach (var item in items)
         {
-            if (item.Id != ignoring && start < item.End - 1 && end > item.Start + 1)
+            if (item.Id != ignoring && start < item.End - tolerance && end > item.Start + tolerance)
             {
                 throw new McpToolException($"Overlaps the {what} {item.Id} ({(int)item.Start}–{(int)item.End} ms).");
             }
@@ -159,11 +160,11 @@ public static class McpDocument
     /// <summary>After an update: the changed item may not overlap another one. Overlaps it did not cause are left alone.</summary>
     public static void RequireNoOverlaps(ProjectDocument document, string id)
     {
-        void Check(List<(string Id, double Start, double End)> items, string what)
+        void Check(List<(string Id, double Start, double End)> items, string what, double tolerance = 1)
         {
             if (items.Find(item => item.Id == id) is { Id: not null } changed)
             {
-                RequireFree(items, changed.Start, changed.End, what, id);
+                RequireFree(items, changed.Start, changed.End, what, id, tolerance);
             }
         }
 
@@ -177,7 +178,8 @@ public static class McpDocument
         foreach (var track in document.Timeline.AnnotationTracks)
         {
             track.Items.Sort((a, b) => a.SourceStartMs.CompareTo(b.SourceStartMs));
-            Check(track.Items.Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)).ToList(), "annotation");
+            // Neighbors on an annotation track may touch by the track's tolerance, as the editor allows.
+            Check(track.Items.Select(item => (item.Id, item.SourceStartMs, item.SourceEndMs)).ToList(), "annotation", AnnotationTrack.OverlapToleranceMs);
         }
 
         foreach (var track in document.Captions.CaptionTracks)
@@ -192,7 +194,6 @@ public static class McpDocument
         var ids = new HashSet<string>(document.Timeline.Zooms.Select(item => item.Id));
         ids.UnionWith(document.Timeline.CameraLayouts.Select(item => item.Id));
         ids.UnionWith(document.Timeline.MaskTracks.SelectMany(track => track.Items).Select(item => item.Id));
-        ids.UnionWith(document.Timeline.AnnotationTracks.SelectMany(track => track.Items).Select(item => item.Id));
         ids.UnionWith(document.Timeline.AnnotationTracks.SelectMany(track => track.Items).Select(item => item.Id));
         ids.UnionWith(document.Captions.CaptionBlocks.Select(item => item.Id));
         ids.UnionWith(document.Captions.CustomShortcuts.Select(item => item.Id));

@@ -126,23 +126,15 @@ internal sealed partial class PreviewOverlay
             {
                 var center = ToCanvas(item, item.Position01, map, width, height);
                 var (w, h) = AnnotationMeasure.Box(item, width, height, PackageDirectory);
-                var box = Box(item, center, (float)w, (float)h, at, map, width, height, selected, corners: true);
-                if (item.Kind == AnnotationKind.Text)
-                {
-                    box.DoubleTapped += (_, args) =>
-                    {
-                        args.Handled = true;
-                        BeginTyping(item, center, (float)w, (float)h, width, height);
-                    };
-                }
-
+                Action? type = item.Kind == AnnotationKind.Text ? () => BeginTyping(item, center, (float)w, (float)h, width, height) : null;
+                Box(item, center, (float)w, (float)h, at, map, width, height, selected, corners: true, type);
                 break;
             }
         }
     }
 
     /// <summary>The item's turned box: a see-through body, its outline when selected, corner handles and the rotation knob.</summary>
-    private Border Box(AnnotationItem item, Vector2 center, float w, float h, double at, CanvasCoordinateTransform map, double width, double height, bool selected, bool corners)
+    private Border Box(AnnotationItem item, Vector2 center, float w, float h, double at, CanvasCoordinateTransform map, double width, double height, bool selected, bool corners, Action? doubleClick = null)
     {
         var body = new Border
         {
@@ -156,7 +148,7 @@ internal sealed partial class PreviewOverlay
         Canvas.SetLeft(body, center.X - Math.Max(8, w) / 2);
         Canvas.SetTop(body, center.Y - Math.Max(8, h) / 2);
         canvas.Children.Add(body);
-        Press(body, item, DragPart.Body, at, center, Vector2.Zero, map, width, height);
+        Press(body, item, DragPart.Body, at, center, Vector2.Zero, map, width, height, doubleClick);
         if (!selected)
         {
             return body;
@@ -182,6 +174,10 @@ internal sealed partial class PreviewOverlay
     }
 
     private readonly Dictionary<FrameworkElement, Vector2> annotationCornerSigns = [];
+    private (string Id, long Ticks, double X, double Y)? lastAnnotationPress;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDoubleClickTime();
 
     private FrameworkElement Knob(AnnotationItem item, Vector2 at, DragPart part, double atMs, CanvasCoordinateTransform map, double width, double height, bool small = false)
     {
@@ -199,9 +195,29 @@ internal sealed partial class PreviewOverlay
         return handle;
     }
 
-    private void Press(FrameworkElement element, AnnotationItem item, DragPart part, double at, Vector2 center, Vector2 sign, CanvasCoordinateTransform map, double width, double height) =>
+    /// <summary>
+    /// A press selects and starts a drag; a second press on the same item within the double-click time runs
+    /// <paramref name="doubleClick"/>. Counted here and not with DoubleTapped: every click rebuilds the handles, so the
+    /// second click lands on a new element and the gesture never forms.
+    /// </summary>
+    private void Press(FrameworkElement element, AnnotationItem item, DragPart part, double at, Vector2 center, Vector2 sign, CanvasCoordinateTransform map, double width, double height, Action? doubleClick = null) =>
         element.PointerPressed += (_, args) =>
         {
+            var position = args.GetCurrentPoint(canvas).Position;
+            var now = Environment.TickCount64;
+            var second = lastAnnotationPress is { } last
+                && last.Id == item.Id
+                && now - last.Ticks <= GetDoubleClickTime()
+                && Math.Abs(position.X - last.X) <= 6
+                && Math.Abs(position.Y - last.Y) <= 6;
+            lastAnnotationPress = second ? null : (item.Id, now, position.X, position.Y);
+            if (second && doubleClick is not null)
+            {
+                args.Handled = true;
+                doubleClick();
+                return;
+            }
+
             if (session.SelectedAnnotationId != item.Id)
             {
                 session.SelectAnnotation(item.Id);

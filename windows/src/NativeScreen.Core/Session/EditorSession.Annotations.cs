@@ -62,13 +62,14 @@ public sealed partial class EditorSession
         var face = IsCameraOnly ? CameraOnlyLayout.FaceCenter01(document, FaceTrack, sourceMs) : null;
         var camera = CameraOnlyLayout.FaceCentered(trajectory.Evaluate(sourceMs).Camera, face);
         var crop = document.Canvas.CropRect01;
+        // The same source size the compositor and the preview handles use, so a new or re-pinned item lands where it is drawn.
         var stage = new StageLayoutEngine().Resolve(
             document,
             sourceMs,
             canvasWidth,
             canvasHeight,
-            Math.Max(16, Math.Max(640, SourceWidth) * crop.Width),
-            Math.Max(16, Math.Max(400, SourceHeight) * crop.Height),
+            Math.Max(16, SourceWidth * crop.Width),
+            Math.Max(16, SourceHeight * crop.Height),
             camera.Scale,
             HasRecordedCamera,
             cameraOnly: IsCameraOnly,

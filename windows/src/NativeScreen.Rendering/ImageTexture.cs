@@ -63,8 +63,46 @@ public sealed class ImageTexture
         return new ImageTexture { Pixels = pixels, Width = (int)size.Width, Height = (int)size.Height };
     }
 
+    /// <summary>
+    /// The picture's size, EXIF orientation applied, from its header: nothing is decoded, so it is cheap enough for the UI
+    /// thread. Throws like <see cref="Load"/> when the file cannot be read.
+    /// </summary>
+    public static (int Width, int Height) ReadSize(string path)
+    {
+        using var factory = new IWICImagingFactory();
+        using var decoder = factory.CreateDecoderFromFileName(path);
+        using var frame = decoder.GetFrame(0);
+        var size = frame.Size;
+        // 5 to 8 turn the picture a quarter.
+        return Orientation(frame) is >= 5 and <= 8 ? ((int)size.Height, (int)size.Width) : ((int)size.Width, (int)size.Height);
+    }
+
     /// <summary>The frame turned upright by its EXIF orientation, or null when it has none (or it reads as upright).</summary>
     private static IWICBitmapFlipRotator? Oriented(IWICImagingFactory factory, IWICBitmapFrameDecode frame)
+    {
+        var options = Orientation(frame) switch
+        {
+            2 => BitmapTransformOptions.FlipHorizontal,
+            3 => BitmapTransformOptions.Rotate180,
+            4 => BitmapTransformOptions.FlipVertical,
+            5 => BitmapTransformOptions.Rotate90 | BitmapTransformOptions.FlipHorizontal,
+            6 => BitmapTransformOptions.Rotate90,
+            7 => BitmapTransformOptions.Rotate270 | BitmapTransformOptions.FlipHorizontal,
+            8 => BitmapTransformOptions.Rotate270,
+            _ => BitmapTransformOptions.Rotate0
+        };
+        if (options == BitmapTransformOptions.Rotate0)
+        {
+            return null;
+        }
+
+        var rotator = factory.CreateBitmapFlipRotator();
+        rotator.Initialize(frame, options);
+        return rotator;
+    }
+
+    /// <summary>The EXIF orientation (1 to 8), 1 when the file has none.</summary>
+    private static int Orientation(IWICBitmapFrameDecode frame)
     {
         var orientation = 1;
         try
@@ -88,28 +126,10 @@ public sealed class ImageTexture
         }
         catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or InvalidCastException or FormatException or OverflowException)
         {
-            return null;
+            return 1;
         }
 
-        var options = orientation switch
-        {
-            2 => BitmapTransformOptions.FlipHorizontal,
-            3 => BitmapTransformOptions.Rotate180,
-            4 => BitmapTransformOptions.FlipVertical,
-            5 => BitmapTransformOptions.Rotate90 | BitmapTransformOptions.FlipHorizontal,
-            6 => BitmapTransformOptions.Rotate90,
-            7 => BitmapTransformOptions.Rotate270 | BitmapTransformOptions.FlipHorizontal,
-            8 => BitmapTransformOptions.Rotate270,
-            _ => BitmapTransformOptions.Rotate0
-        };
-        if (options == BitmapTransformOptions.Rotate0)
-        {
-            return null;
-        }
-
-        var rotator = factory.CreateBitmapFlipRotator();
-        rotator.Initialize(frame, options);
-        return rotator;
+        return orientation;
     }
 
     public ID3D11ShaderResourceView CreateView(ID3D11Device device)

@@ -133,13 +133,24 @@ internal sealed class LiveDrawingOverlay : IDisposable
         SetWindowLongPtrW(hwnd, GwlExStyle, (nint)style);
         if (on)
         {
-            SetForegroundWindow(hwnd);
-            SetFocus(hwnd);
+            TakeKeys();
         }
         else
         {
             FinishStroke();
         }
+    }
+
+    /// <summary>The drawing keys come here while drawing. This also raises the overlay, so the bar re-raises itself after.</summary>
+    public void TakeKeys()
+    {
+        if (disposed || !drawing)
+        {
+            return;
+        }
+
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
     }
 
     public void Undo()

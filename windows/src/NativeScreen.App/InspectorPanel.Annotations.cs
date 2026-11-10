@@ -10,7 +10,8 @@ internal sealed partial class InspectorPanel
     private void AnnotationEditor(AnnotationItem shown)
     {
         var id = shown.Id;
-        AnnotationItem Find(ProjectDocument document) => EditorSession.FindAnnotation(document, id)!;
+        // An item removed while this panel is up (an agent, an undo) takes the edit on a throwaway copy instead of throwing.
+        AnnotationItem Find(ProjectDocument document) => EditorSession.FindAnnotation(document, id) ?? new AnnotationItem();
         AnnotationItem? Live() => session.Annotation(id);
         // With keyframes, geometry is shown and edited where the item is at the playhead.
         var at = Math.Clamp(session.SourceAtPlayhead, shown.SourceStartMs, shown.SourceEndMs);

@@ -19,10 +19,13 @@ public sealed partial class RecordingHudWindow
         menu.Items.Add(showNotes);
         menu.Items.Add(new MenuFlyoutSeparator());
         var profiles = new MenuFlyoutSubItem { Text = Loc.T("Profiles") };
+        // Listed once for the whole menu, not once per profile.
+        IReadOnlyList<CaptureDeviceInfo> cameras = settings.RecordingProfiles.Count > 0 ? WebcamRecorder.Cameras() : [];
+        IReadOnlyList<CaptureDeviceInfo> microphones = settings.RecordingProfiles.Count > 0 ? AudioTrackRecorder.Microphones() : [];
         foreach (var profile in settings.RecordingProfiles)
         {
             var chosen = profile;
-            var item = new ToggleMenuFlyoutItem { Text = profile.Name, IsChecked = Matches(profile) };
+            var item = new ToggleMenuFlyoutItem { Text = profile.Name, IsChecked = Matches(profile, cameras, microphones) };
             item.Click += (_, _) => ApplyProfile(chosen);
             profiles.Items.Add(item);
         }
@@ -33,7 +36,7 @@ public sealed partial class RecordingHudWindow
         }
 
         var save = new MenuFlyoutItem { Text = Loc.T("Save Current Settings as Profile...") };
-        save.Click += (_, _) => _ = SaveProfile();
+        save.Click += (_, _) => SaveProfile();
         profiles.Items.Add(save);
         if (settings.RecordingProfiles.Count > 0)
         {
@@ -130,10 +133,8 @@ public sealed partial class RecordingHudWindow
     };
 
     /// <summary>Whether the bar is set up as `profile`; a device that is not connected is ignored.</summary>
-    private bool Matches(RecordingProfile profile)
+    private bool Matches(RecordingProfile profile, IReadOnlyList<CaptureDeviceInfo> cameras, IReadOnlyList<CaptureDeviceInfo> microphones)
     {
-        var cameras = WebcamRecorder.Cameras();
-        var microphones = AudioTrackRecorder.Microphones();
         var cameraMatches = profile.CameraId is null ? camera is null : !cameras.Any(item => item.Id == profile.CameraId) || camera?.Id == profile.CameraId;
         var microphoneMatches = !profile.CaptureMicrophone ? microphone is null : !microphones.Any(item => item.Id == profile.MicrophoneId) || microphone?.Id == profile.MicrophoneId;
         return cameraMatches
@@ -190,30 +191,48 @@ public sealed partial class RecordingHudWindow
         UpdateDevices();
     }
 
-    private async Task SaveProfile()
+    /// <summary>
+    /// A flyout and not a dialog: a dialog draws inside its window, and the bar is too small to host one. The flyout's popup
+    /// may leave the window, as the options menu does.
+    /// </summary>
+    private void SaveProfile()
     {
-        var name = new TextBox { PlaceholderText = Loc.T("Profile name") };
-        var dialog = new ContentDialog
+        var name = new TextBox { PlaceholderText = Loc.T("Profile name"), Width = 300 };
+        var flyout = new Flyout { ShouldConstrainToRootBounds = false, Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Bottom };
+        void Save()
         {
-            XamlRoot = root.XamlRoot,
-            RequestedTheme = ElementTheme.Dark,
-            Title = Loc.T("Save Profile"),
-            Content = new StackPanel
+            if (name.Text.Trim() is { Length: > 0 } chosen)
             {
-                Spacing = 10,
-                Children =
-                {
-                    new TextBlock { Text = Loc.T("A profile keeps the capture mode, camera, microphone, system audio and recording options, so you can switch setups in one click."), TextWrapping = TextWrapping.Wrap },
-                    name
-                }
-            },
-            PrimaryButtonText = Loc.T("Save"),
-            CloseButtonText = Loc.T("Cancel")
-        };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary && name.Text.Trim() is { Length: > 0 } chosen)
-        {
-            AppSettings.Shared.RecordingProfiles.Add(CurrentProfile(chosen));
-            AppSettings.Shared.Save();
+                AppSettings.Shared.RecordingProfiles.Add(CurrentProfile(chosen));
+                AppSettings.Shared.Save();
+                flyout.Hide();
+            }
         }
+
+        var save = new Button { Content = Loc.T("Save"), HorizontalAlignment = HorizontalAlignment.Right };
+        save.Click += (_, _) => Save();
+        name.KeyDown += (_, args) =>
+        {
+            if (args.Key == Windows.System.VirtualKey.Enter)
+            {
+                args.Handled = true;
+                Save();
+            }
+        };
+        flyout.Content = new StackPanel
+        {
+            Spacing = 10,
+            Width = 300,
+            RequestedTheme = ElementTheme.Dark,
+            Children =
+            {
+                new TextBlock { Text = Loc.T("Save Profile"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+                new TextBlock { Text = Loc.T("A profile keeps the capture mode, camera, microphone, system audio and recording options, so you can switch setups in one click."), TextWrapping = TextWrapping.Wrap },
+                name,
+                save
+            }
+        };
+        flyout.Opened += (_, _) => name.Focus(FocusState.Programmatic);
+        flyout.ShowAt(bar);
     }
 }

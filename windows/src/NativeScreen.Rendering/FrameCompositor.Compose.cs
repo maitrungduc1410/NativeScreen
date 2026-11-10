@@ -131,7 +131,7 @@ public sealed partial class FrameCompositor
         if (!fillsCanvas)
         {
             DrawShadow(document, screen, radius, layer, width, height, soft);
-            DrawInset(document, drawn, radius * drawScale, layer, height, drawScale);
+            DrawInset(document, drawn, radius * drawScale, layer, height, drawScale, request.CameraOnly);
         }
 
         DrawScreen(request, screenView, screenWidth, screenHeight, drawn, radius * drawScale, layer);
@@ -601,10 +601,11 @@ public sealed partial class FrameCompositor
         BindTarget(target);
     }
 
-    private void DrawInset(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int height, double drawScale)
+    private void DrawInset(ProjectDocument document, PixelRect screen, double radius, RenderLayer target, int height, double drawScale, bool cameraOnly)
     {
         var inset = document.FrameStyle.Inset;
-        if (document.FrameStyle.DeviceMockup.Enabled || !inset.Enabled || inset.Size <= 0.1)
+        // A camera-only picture never gets a device frame, so the inset stays even when the mockup is on (spec/06 ADR-77).
+        if (document.FrameStyle.DeviceMockup.Enabled && !cameraOnly || !inset.Enabled || inset.Size <= 0.1)
         {
             return;
         }

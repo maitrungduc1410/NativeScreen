@@ -45,7 +45,7 @@ public static class AnnotationMeasure
         }
     }
 
-    /// <summary>The picture's pixel size from its header, EXIF orientation applied; null when missing.</summary>
+    /// <summary>The picture's pixel size from its header (nothing decoded), EXIF orientation applied; null when missing.</summary>
     public static (int Width, int Height)? ImageSize(AnnotationItem item, string? packageDirectory)
     {
         if (packageDirectory is null || item.ImagePath.Length == 0)
@@ -63,8 +63,7 @@ public static class AnnotationMeasure
                     return null;
                 }
 
-                var image = ImageTexture.Load(file, 4096, orient: true);
-                return (image.Width, image.Height);
+                return ImageTexture.ReadSize(file);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
             {

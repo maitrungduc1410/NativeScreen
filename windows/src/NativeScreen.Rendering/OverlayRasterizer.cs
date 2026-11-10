@@ -106,6 +106,9 @@ public sealed class OverlayRasterizer : IDisposable
     }
 
 
+    private readonly HashSet<string> unusableCustomCursors = [];
+    private readonly Dictionary<string, string> customCursorKeys = [];
+
     /// <summary>
     /// The user's picture for this cursor kind (spec/07 Pass 4): the arrow (every kind with `alwaysUsePointer`) or the hand,
     /// drawn into a 256 px square at 72% with its hotspot on the same fraction of the square. Null uses the theme.
@@ -129,26 +132,37 @@ public sealed class OverlayRasterizer : IDisposable
             return cached;
         }
 
-        var path = Path.Combine(packageDirectory, custom.ImagePath);
-        if (!File.Exists(path))
+        // A missing or unreadable picture is remembered: otherwise every frame would look for it and decode it again.
+        if (unusableCustomCursors.Contains(key))
         {
             return null;
         }
 
-        ImageTexture picture;
+        var path = Path.Combine(packageDirectory, custom.ImagePath);
+        ImageTexture? loaded = null;
         try
         {
-            picture = ImageTexture.Load(path, 1024, orient: true);
+            loaded = File.Exists(path) ? ImageTexture.Load(path, 1024, orient: true) : null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
+            loaded = null;
+        }
+
+        if (loaded is not { Width: > 0, Height: > 0 } picture)
+        {
+            unusableCustomCursors.Add(key);
             return null;
         }
 
-        if (picture.Width <= 0 || picture.Height <= 0)
+        // One sprite per slot: moving the tip makes a new one, and the old one goes.
+        var slot = (ReferenceEquals(custom, config.CustomHand) ? "hand|" : "pointer|") + packageDirectory;
+        if (customCursorKeys.TryGetValue(slot, out var previous) && previous != key && sprites.Remove(previous, out var old))
         {
-            return null;
+            old.Layer.Dispose();
         }
+
+        customCursorKeys[slot] = key;
 
         const int size = 256;
         var scale = (float)(size / (double)Math.Max(picture.Width, picture.Height) * 0.72);

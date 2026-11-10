@@ -27,6 +27,7 @@ internal sealed class SpeakerNotesWindow : Window
     private readonly TextBlock prompterText = new() { TextWrapping = TextWrapping.Wrap, Foreground = Ui.Rgb(1, 1, 1, 0.96), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
     private readonly StackPanel toolbar = new() { Orientation = Orientation.Horizontal, Spacing = 4, Padding = new Thickness(8, 6, 8, 6) };
     private readonly DispatcherTimer clock = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    private readonly DispatcherTimer saveTimer = new() { Interval = TimeSpan.FromMilliseconds(600) };
     private bool prompter;
     private double offset;
     private DateTime? scrollingSince;
@@ -42,8 +43,9 @@ internal sealed class SpeakerNotesWindow : Window
         editor.TextChanged += (_, _) =>
         {
             settings.SpeakerNotesText = editor.Text;
-            settings.Save();
+            ScheduleSave();
         };
+        saveTimer.Tick += (_, _) => SaveNow();
         prompterView.Children.Add(prompterText);
         prompterView.SizeChanged += (_, _) => Layout();
         prompterView.Tapped += (_, _) => ToggleScrolling();
@@ -69,16 +71,42 @@ internal sealed class SpeakerNotesWindow : Window
         var scale = GetDpiForWindow(Handle) / 96.0;
         var area = DisplayArea.Primary.WorkArea;
         AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(area.X + area.Width - (int)(440 * scale) - (int)(40 * scale), area.Y + (int)(80 * scale), (int)(440 * scale), (int)(300 * scale)));
-        Closed += (_, _) => clock.Stop();
+        Closed += (_, _) =>
+        {
+            clock.Stop();
+            if (saveTimer.IsEnabled)
+            {
+                SaveNow();
+            }
+        };
         Show(prompter: false);
     }
 
     private nint Handle => WinRT.Interop.WindowNative.GetWindowHandle(this);
 
+    /// <summary>Typing and the speed slider change the settings many times a second: they are written once things settle.</summary>
+    private void ScheduleSave()
+    {
+        saveTimer.Stop();
+        saveTimer.Start();
+    }
+
+    private void SaveNow()
+    {
+        saveTimer.Stop();
+        AppSettings.Shared.Save();
+    }
+
+    /// <summary>
+    /// Called before the recorder starts, so not even its first frame shows the notes. The recording itself then calls
+    /// <see cref="RecordingStarted"/>, or <see cref="RecordingEnded"/> when it could not start.
+    /// </summary>
+    public void LeaveOutOfCapture() => CaptureTargets.SetExcludedFromCapture(Handle, true);
+
     /// <summary>Left out of capture from the start of a recording to its end, when the prompter may also restart.</summary>
     public void RecordingStarted()
     {
-        CaptureTargets.SetExcludedFromCapture(Handle, true);
+        LeaveOutOfCapture();
         if (AppSettings.Shared.SpeakerNotesScrollsWhileRecording)
         {
             offset = 0;
@@ -154,7 +182,7 @@ internal sealed class SpeakerNotesWindow : Window
                 // Keeps the position when the speed changes mid-scroll.
                 Fold();
                 AppSettings.Shared.SpeakerNotesSpeed = args.NewValue;
-                AppSettings.Shared.Save();
+                ScheduleSave();
             };
             toolbar.Children.Add(speed);
         }

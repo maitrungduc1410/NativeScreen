@@ -115,4 +115,17 @@ public sealed class AnnotationModelTests
         using var written = JsonDocument.Parse(ProjectJson.Serialize(camera));
         Assert.Equal("green-screen", written.RootElement.GetProperty("backgroundRemoval").GetString());
     }
+
+    [Fact]
+    public void ASingleClickWithThePenDrawsOnInsteadOfStayingHidden()
+    {
+        // One point at 0 ms: there is no drawing time to replay, so the dot draws on over the animation.
+        var dot = new AnnotationItem { Kind = AnnotationKind.Pen, SourceStartMs = 0, SourceEndMs = 3000, Enter = AnnotationAnimation.Draw, AnimationMs = 300, Points01 = [new Point01(0.5, 0.5)], PointTimesMs = [0] };
+        Assert.Equal(0, dot.AnimationState(0).DrawProgress, 6);
+        Assert.Equal(1, dot.AnimationState(1000).DrawProgress, 6);
+
+        // A stroke with drawing time still replays at the speed it was drawn.
+        var stroke = new AnnotationItem { Kind = AnnotationKind.Pen, SourceStartMs = 0, SourceEndMs = 3000, Enter = AnnotationAnimation.Draw, AnimationMs = 300, Points01 = [new Point01(0, 0), new Point01(1, 1)], PointTimesMs = [0, 1000] };
+        Assert.Equal(0.5, stroke.AnimationState(500).DrawProgress, 6);
+    }
 }

@@ -409,7 +409,9 @@ public struct AnnotationItem: Codable, Equatable, Hashable, Identifiable, Sendab
                 }
             }
         }
-        if enter == .draw, kind == .pen, !pointTimesMs.isEmpty {
+        // Only a stroke with drawing time replays by its clock: a dot (one point, or all at 0 ms) would stay at progress 0
+        // and never show, so it draws on over the animation instead.
+        if enter == .draw, kind == .pen, let strokeMs = pointTimesMs.last, strokeMs > 1 {
             apply(enter, progress: 0, entering: true)
         } else {
             apply(enter, progress: min(1.0, max(0.0, (sourceMs - sourceStartMs) / span)), entering: true)

@@ -50,6 +50,7 @@ public sealed partial class RecordingHudWindow : Window
     private bool isPaused;
     private IRecordingEngine? recorder;
     private CameraStageWindow? stage;
+    private CaptureDeviceInfo? stageChoseCamera;
     private (int Width, int Height, double FrameMs)? cameraFormat;
     private CaptureTarget? target;
     private string? package;
@@ -443,7 +444,13 @@ public sealed partial class RecordingHudWindow : Window
         }
 
         CancelPicking();
-        camera ??= WebcamRecorder.Cameras().FirstOrDefault();
+        if (camera is null)
+        {
+            // Picked for this mode only: closing the mode gives the bar back its choice of no camera.
+            camera = WebcamRecorder.Cameras().FirstOrDefault();
+            stageChoseCamera = camera;
+        }
+
         if (camera is not { } chosen)
         {
             var title = Loc.T("Camera");
@@ -468,6 +475,12 @@ public sealed partial class RecordingHudWindow : Window
 
         stage.Close();
         stage = null;
+        if (stageChoseCamera is { } picked && camera?.Id == picked.Id && recorder is null)
+        {
+            camera = null;
+        }
+
+        stageChoseCamera = null;
         DockNotes();
     }
 
@@ -1166,6 +1179,8 @@ public sealed partial class RecordingHudWindow : Window
 
         busy = true;
         AppExclusion(true);
+        // The notes leave capture before the recorder starts: its first frame is the recording's first frame.
+        notes?.LeaveOutOfCapture();
         try
         {
             // The recorder opens the same devices, so the meter and the preview let go of them first.
@@ -1228,6 +1243,7 @@ public sealed partial class RecordingHudWindow : Window
             capturing = false;
             mcpLastError = exception.Message;
             AppExclusion(false);
+            notes?.RecordingEnded();
             ShowIdle();
             UpdateDevices();
             // A message box and not a dialog: the recording bar is too small to host one.
@@ -1316,6 +1332,8 @@ public sealed partial class RecordingHudWindow : Window
         recordedArea = null;
         DisposeDrawing();
         notes?.RecordingEnded();
+        // After a cancel or a start that failed, the stage stays up, ready to record again.
+        stage?.SetRecording(false);
         var running = recorder;
         recorder = null;
         if (running is not null)
@@ -1416,7 +1434,7 @@ public sealed partial class RecordingHudWindow : Window
         var metadata = cameraOnly && cameraFormat is { } format ? CameraOnlyMetadata(format) : chosen.Metadata();
         CloseCameraStage();
         await Task.Run(() => RecordingPackage.Finish(directory, metadata, stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms && !cameraOnly, DateTimeOffset.UtcNow, cameraOnly));
-        await Task.Run(() => ApplyDefaultPreset(directory));
+        await Task.Run(() => ApplyDefaultPreset(directory, cameraOnly));
         busy = false;
         ShowIdle();
         await Projects.Open(directory, root.XamlRoot, AppSettings.Shared.AfterRecording);
@@ -1436,7 +1454,7 @@ public sealed partial class RecordingHudWindow : Window
     };
 
     /// <summary>A new project starts in the style of the default preset, when one is set.</summary>
-    private static void ApplyDefaultPreset(string directory)
+    private static void ApplyDefaultPreset(string directory, bool cameraOnly)
     {
         var store = new ProjectPresetStore(EditorTools.PresetsDirectory);
         if (AppSettings.Shared.DefaultPresetId is { } id && store.Load().Find(item => item.Id == id) is { } preset)
@@ -1444,6 +1462,12 @@ public sealed partial class RecordingHudWindow : Window
             var path = Path.Combine(directory, "project.json");
             var document = ProjectJson.Deserialize<ProjectDocument>(File.ReadAllText(path));
             preset.Apply(document);
+            if (cameraOnly)
+            {
+                // As on macOS: the preset first, then a camera-only project keeps the face centered (spec/06 ADR-77).
+                document.Camera.EnableFaceTracking = true;
+            }
+
             File.WriteAllText(path, ProjectJson.Serialize(document));
         }
     }
