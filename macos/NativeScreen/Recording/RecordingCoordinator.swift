@@ -145,7 +145,20 @@ public final class RecordingCoordinator {
 
     public var isPickingTarget: Bool = false
     public var recordingElapsedSeconds: TimeInterval = 0.0
-    public var selectedMode: CaptureTargetMode = .window
+    public var selectedMode: CaptureTargetMode = .window {
+        didSet {
+            guard oldValue != selectedMode else { return }
+            if selectedMode == .camera && selectedCameraDeviceID == nil {
+                refreshConnectedMediaDevices()
+                if let first = connectedCameras.first {
+                    selectedCameraName = first.name
+                    selectedCameraDeviceID = first.id
+                }
+            }
+            updateFloatingCameraPreviewWindow()
+            updateHUDPanelFrameForCurrentState(animated: true)
+        }
+    }
     public var activeHUDMenuKind: HUDActiveMenuKind? = nil {
         didSet {
             if activeHUDMenuKind == nil {
@@ -222,7 +235,7 @@ public final class RecordingCoordinator {
     }
 
     public var isSystemAudioEffectivelyActive: Bool {
-        guard captureSystemAudio else { return false }
+        guard captureSystemAudio, selectedMode != .camera else { return false }
         if systemAudioFromAllApps { return true }
         return !selectedSystemAudioAppBundleIDs.isEmpty
     }
@@ -405,6 +418,15 @@ public final class RecordingCoordinator {
             updateRecordedAreaHighlightOverlay()
         }
     }
+    /// The speaker notes window (`SpeakerNotesPanel.swift`). It can be turned off any time, but on only between
+    /// recordings: the capture leaves out the recording UI that is on screen when it starts.
+    public var showSpeakerNotes: Bool = false {
+        didSet {
+            UserDefaults.standard.set(showSpeakerNotes, forKey: showSpeakerNotesKey)
+            updateSpeakerNotesWindow()
+        }
+    }
+    public var canTurnOnSpeakerNotes: Bool { !isRecording && !isCountingDown }
 
     // Multi-Monitor Window, Display & Area Picker State
     public var hoveredWindow: CapturableWindowInfo?
@@ -417,6 +439,29 @@ public final class RecordingCoordinator {
     private var hudPanel: DraggableHUDPanel?
     private var floatingCameraPreviewPanel: DraggableHUDPanel?
     private var floatingCameraPreviewView: LiveCameraPreviewHostNSView?
+    /// True while the preview is the large camera-mode stage instead of the small bubble.
+    private var floatingCameraPreviewIsStage = false
+
+    /// Camera mode shows a large preview with the record button. It stays up from picking the mode, through the
+    /// countdown and the recording, until the mode is closed (click it again, Esc) or the recording bar hides, so the
+    /// window is never rebuilt (and moved back) between those steps.
+    private var cameraStageRequested = false {
+        didSet {
+            guard oldValue != cameraStageRequested else { return }
+            updateFloatingCameraPreviewWindow()
+        }
+    }
+
+    var isCameraStageActive: Bool {
+        selectedMode == .camera && cameraStageRequested
+    }
+
+    /// Esc or a second click on the mode: stops picking a target and closes the camera stage.
+    private func cancelTargetPicking() {
+        isPickingTarget = false
+        cameraStageRequested = false
+        stopPickerOverlay()
+    }
     private var hudMicLevelTimer: Timer?
     private var lastHUDMenuClosedUptime: TimeInterval = 0
     private var pickerOverlayWindows: [NSWindow] = []
@@ -450,6 +495,7 @@ public final class RecordingCoordinator {
     private let hideDesktopIconsKey = "NativeScreen.RecordingOptions.HideDesktopIcons"
     private let hideDockIconKey = "NativeScreen.RecordingOptions.HideDockIcon"
     private let highlightRecordedAreaKey = "NativeScreen.RecordingOptions.HighlightRecordedArea"
+    private let showSpeakerNotesKey = "NativeScreen.RecordingOptions.ShowSpeakerNotes"
 
     fileprivate static let idleBarWidth: CGFloat = 900.0
     fileprivate static let countdownBarWidth: CGFloat = 496.0
@@ -464,6 +510,7 @@ public final class RecordingCoordinator {
         if defaults.object(forKey: autoCreateZoomsKey) != nil {
             autoCreateZooms = defaults.bool(forKey: autoCreateZoomsKey)
         }
+        showSpeakerNotes = defaults.bool(forKey: showSpeakerNotesKey)
         if defaults.object(forKey: countdownOptionKey) != nil,
            let opt = RecordingCountdownOption(rawValue: defaults.integer(forKey: countdownOptionKey)) {
             self.countdownOption = opt
@@ -587,6 +634,7 @@ public final class RecordingCoordinator {
         isHUDVisible = true
         installEscapeKeyMonitors()
         updateFloatingCameraPreviewWindow()
+        updateSpeakerNotesWindow()
         updateHUDMicrophoneLevelMeter()
     }
 
@@ -676,19 +724,40 @@ public final class RecordingCoordinator {
     public func hideRecordingHUD() {
         SharedFloatingTooltipWindowController.shared.hideTooltip()
         cancelCountdown()
-        isPickingTarget = false
-        stopPickerOverlay()
+        cancelTargetPicking()
         hideRecordedAreaHighlightOverlay()
         removeEscapeKeyMonitors()
         hudPanel?.orderOut(nil)
         isHUDVisible = false
         updateFloatingCameraPreviewWindow()
+        updateSpeakerNotesWindow()
         updateHUDMicrophoneLevelMeter()
     }
 
     // MARK: - Floating Live Camera Preview Window & Live HUD Microphone Meter
 
+    /// In camera mode the notes move under the built-in camera; they go back when the mode closes.
+    private func syncSpeakerNotesDocking() {
+        SpeakerNotesWindowController.shared.setDockedUnderCamera(isCameraStageActive, screen: hudPanel?.screen)
+    }
+
+    private func updateSpeakerNotesWindow() {
+        defer { syncSpeakerNotesDocking() }
+        let isActiveContext = isHUDVisible || isRecording || isCountingDown
+        if isActiveContext && showSpeakerNotes {
+            // Only shown while nothing is being captured; once shown it stays through the recording.
+            if SpeakerNotesWindowController.shared.isShown || canTurnOnSpeakerNotes {
+                SpeakerNotesWindowController.shared.show(near: hudPanel?.screen) { [weak self] in
+                    self?.showSpeakerNotes = false
+                }
+            }
+        } else {
+            SpeakerNotesWindowController.shared.hide()
+        }
+    }
+
     private func updateFloatingCameraPreviewWindow() {
+        defer { syncSpeakerNotesDocking() }
         let isActiveContext = (isHUDVisible || isRecording || isCountingDown)
 
         guard isActiveContext, let camID = selectedCameraDeviceID else {
@@ -717,17 +786,42 @@ public final class RecordingCoordinator {
             maxResolution: cameraMaxResolution
         )
 
-        guard showCameraPreview else {
+        let isStage = isCameraStageActive
+        guard showCameraPreview || isStage else {
             WarmCameraCaptureController.shared.setPreviewSurfaceHandler(nil)
             floatingCameraPreviewPanel?.orderOut(nil)
             return
         }
 
-        let previewSize = NSSize(width: 224, height: 224)
+        if floatingCameraPreviewPanel != nil && floatingCameraPreviewIsStage != isStage {
+            floatingCameraPreviewPanel?.orderOut(nil)
+            floatingCameraPreviewPanel = nil
+            floatingCameraPreviewView = nil
+        }
+
+        let screen = hudPanel?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        let vf = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let stageInset: CGFloat = 14
+        let previewSize: NSSize = {
+            guard isStage else { return NSSize(width: 224, height: 224) }
+            let dims = WarmCameraCaptureController.shared.activeDimensions
+            let aspect = dims.width > 0 && dims.height > 0 ? CGFloat(dims.width) / CGFloat(dims.height) : 16.0 / 9.0
+            let width = min(720, vf.width * 0.5)
+            return NSSize(width: width + stageInset * 2, height: width / aspect + stageInset * 2)
+        }()
         if floatingCameraPreviewPanel == nil {
-            let screen = hudPanel?.screen ?? NSScreen.main ?? NSScreen.screens.first
-            let vf = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-            let origin = NSPoint(x: vf.minX + 36, y: vf.minY + 120)
+            // With speaker notes up, the stage sits under the notes docked at the top of the screen.
+            let notesBottom = showSpeakerNotes && SpeakerNotesWindowController.shared.isShown
+                ? SpeakerNotesWindowController.dockedFrame(on: screen).minY
+                : nil
+            let origin: NSPoint
+            if !isStage {
+                origin = NSPoint(x: vf.minX + 36, y: vf.minY + 120)
+            } else if let notesBottom {
+                origin = NSPoint(x: vf.midX - previewSize.width / 2, y: max(vf.minY, notesBottom - 4 - previewSize.height))
+            } else {
+                origin = NSPoint(x: vf.midX - previewSize.width / 2, y: vf.midY - previewSize.height / 2 + vf.height * 0.06)
+            }
             let panel = DraggableHUDPanel(
                 contentRect: NSRect(origin: origin, size: previewSize),
                 styleMask: [.borderless, .nonactivatingPanel],
@@ -742,14 +836,26 @@ public final class RecordingCoordinator {
             // Crucial: Set `hasShadow = false` on the borderless window and draw the soft rounded drop shadow inside `LiveCameraPreviewHostNSView`
             // so macOS WindowServer never renders a rectangular black shadow box around the squircle corners!
             panel.hasShadow = false
-            panel.sharingType = .none // Excluded from screen recording!
+            // The bubble is kept out of screen recordings. The camera stage can show in screenshots: a camera-only
+            // recording captures no screen.
+            panel.sharingType = isStage ? .readOnly : .none
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isMovableByWindowBackground = false
 
-            let hostView = LiveCameraPreviewHostNSView(frame: NSRect(origin: .zero, size: previewSize))
+            let hostView = LiveCameraPreviewHostNSView(
+                frame: NSRect(origin: .zero, size: previewSize),
+                cornerRadius: isStage ? 18 : 42
+            )
+            if isStage {
+                let overlay = NSHostingView(rootView: CameraStageOverlayView(coordinator: self).padding(stageInset))
+                overlay.frame = hostView.bounds
+                overlay.autoresizingMask = [.width, .height]
+                hostView.addSubview(overlay)
+            }
             panel.contentView = hostView
             floatingCameraPreviewView = hostView
             floatingCameraPreviewPanel = panel
+            floatingCameraPreviewIsStage = isStage
         }
 
         WarmCameraCaptureController.shared.setPreviewSurfaceHandler { [weak self] ioSurface in
@@ -795,13 +901,13 @@ public final class RecordingCoordinator {
     }
 
     public func selectMode(_ mode: CaptureTargetMode) {
-        if selectedMode == mode && isPickingTarget {
-            isPickingTarget = false
-            stopPickerOverlay()
+        if selectedMode == mode && (isPickingTarget || isCameraStageActive) {
+            cancelTargetPicking()
             return
         }
         selectedMode = mode
         isPickingTarget = true
+        cameraStageRequested = mode == .camera
         if mode == .area, let screen = WindowDiscoveryService.screenUnderMouse() {
             let qFrame = WindowDiscoveryService.quartzFrame(for: screen)
             let w = min(1280.0, qFrame.width * 0.7)
@@ -828,9 +934,8 @@ public final class RecordingCoordinator {
                     guard let self = self, !self.isRecording else { return }
                     if self.isCountingDown {
                         self.cancelCountdown()
-                    } else if self.isPickingTarget {
-                        self.isPickingTarget = false
-                        self.stopPickerOverlay()
+                    } else if self.isPickingTarget || self.isCameraStageActive {
+                        self.cancelTargetPicking()
                     } else {
                         self.hideRecordingHUD()
                     }
@@ -845,9 +950,8 @@ public final class RecordingCoordinator {
                     guard let self = self, !self.isRecording else { return }
                     if self.isCountingDown {
                         self.cancelCountdown()
-                    } else if self.isPickingTarget {
-                        self.isPickingTarget = false
-                        self.stopPickerOverlay()
+                    } else if self.isPickingTarget || self.isCameraStageActive {
+                        self.cancelTargetPicking()
                     } else {
                         self.hideRecordingHUD()
                     }
@@ -878,7 +982,7 @@ public final class RecordingCoordinator {
         switch selectedMode {
         case .window, .area, .display:
             startPickerOverlaysAcrossAllScreens()
-        case .device:
+        case .camera:
             stopPickerOverlay()
         }
     }
@@ -958,6 +1062,14 @@ public final class RecordingCoordinator {
     /// Initiates recording: if `countdownOption != .off`, enters the Countdown bar first (`Get ready. Recording will start soon.` + `Continue (3)`).
     public func requestStartRecording() {
         guard !isRecording && !isCountingDown && !isStartingRecording else { return }
+        if selectedMode == .camera {
+            guard selectedCameraDeviceID != nil else {
+                lastErrorMessage = String(localized: "Choose a camera to record.")
+                updateHUDPanelFrameForCurrentState(animated: true)
+                return
+            }
+            cameraStageRequested = true
+        }
         isPickingTarget = false
         stopPickerOverlay()
 
@@ -1016,6 +1128,15 @@ public final class RecordingCoordinator {
         stopPickerOverlay()
         // Hide the active recording HUD (`[⏹ 0:04 | ⏸ ↺ 🗑]`) from both ScreenCaptureKit recordings and system screenshots!
         hudPanel?.sharingType = .none
+        SpeakerNotesWindowController.shared.setHiddenFromCapture(true)
+
+        if selectedMode == .camera {
+            await startCameraOnlyRecording()
+            return
+        }
+        // Before the filter is built, so it leaves the drawing panels out.
+        LiveDrawingController.shared.prepare()
+        hudPanel?.orderFrontRegardless()
 
         var startedPackageURL: URL?
         var startedTelemetry: TelemetryRecorder?
@@ -1028,6 +1149,7 @@ public final class RecordingCoordinator {
             )
             guard !shareable.displays.isEmpty else {
                 lastErrorMessage = "No capturable display found."
+                restorePostRecordingSystemState()
                 updateHUDPanelFrameForCurrentState(animated: true)
                 return
             }
@@ -1105,7 +1227,7 @@ public final class RecordingCoordinator {
                 filter = SCContentFilter(display: targetDisplay, excludingWindows: recordingUIWindows)
                 logicalBounds = selectedAreaRectQuartz
 
-            case .display, .device:
+            case .display, .camera: // `.camera` never gets here (`startCameraOnlyRecording`).
                 filter = SCContentFilter(display: targetDisplay, excludingWindows: recordingUIWindows)
                 let screen = NSScreen.screens.first(where: { WindowDiscoveryService.displayID(for: $0) == targetDisplay.displayID })
                 logicalBounds = screen.map { WindowDiscoveryService.quartzFrame(for: $0) }
@@ -1119,17 +1241,7 @@ public final class RecordingCoordinator {
             let screenScale = targetNSScreen?.backingScaleFactor ?? 2.0
 
             // Create new `.nativescreen` package bundle
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-            let timestampName = "Recording \(formatter.string(from: Date()))"
-            let packageURL = ProjectWorkspaceStore.defaultProjectsDirectory
-                .appendingPathComponent("\(timestampName).nativescreen", isDirectory: true)
-            let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
-            let telemetryDir = recordingDir.appendingPathComponent("telemetry", isDirectory: true)
-            let assetsDir = packageURL.appendingPathComponent("assets", isDirectory: true)
-
-            try FileManager.default.createDirectory(at: telemetryDir, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+            let (packageURL, recordingDir, telemetryDir) = try Self.makeRecordingPackage()
             startedPackageURL = packageURL
 
             let pixelWidth = Int(logicalBounds.width * screenScale)
@@ -1192,6 +1304,11 @@ public final class RecordingCoordinator {
                 }
             }
             telemetry.start()
+            LiveDrawingController.shared.begin(
+                captureBoundsQuartz: logicalBounds,
+                telemetryDirectory: telemetryDir,
+                timelineMs: { [weak telemetry] in telemetry?.currentTimelineMs() }
+            )
 
             try await engine.startCapture(
                 filter: filter,
@@ -1209,36 +1326,13 @@ public final class RecordingCoordinator {
             // Fallback in case the first frame arrived before or shortly after `startCapture` returns
             telemetry.markFirstVideoFrameArrived(atUptimeSec: ProcessInfo.processInfo.systemUptime)
 
-            self.captureEngine = engine
-            self.telemetryRecorder = telemetry
-            self.activePackageURL = packageURL
-            self.activeTargetMetadata = targetMeta
-            self.activeLogicalBoundsQuartz = logicalBounds
-            self.isRecording = true
-            self.isRecordingPaused = false
-            self.recordingStartUptime = ProcessInfo.processInfo.systemUptime
-            self.pauseStartUptime = nil
-            self.accumulatedPausedSeconds = 0
-            self.recordingElapsedSeconds = 0.0
-
-            updateHUDPanelFrameForCurrentState(animated: true)
-            updateRecordedAreaHighlightOverlay()
-
-            recordingTimer?.invalidate()
-            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self = self, self.isRecording, !self.isRecordingPaused else { return }
-                    let prevSecInt = Int(self.recordingElapsedSeconds)
-                    let now = ProcessInfo.processInfo.systemUptime
-                    self.recordingElapsedSeconds = max(0.0, now - self.recordingStartUptime - self.accumulatedPausedSeconds)
-                    let newSecInt = Int(self.recordingElapsedSeconds)
-                    // Only resize the HUD panel when the timer text digit count actually changes (e.g., 9:59 -> 10:00),
-                    // preventing 1Hz frame recalculations from drifting the HUD on secondary monitors!
-                    if (prevSecInt / 600) != (newSecInt / 600) {
-                        self.updateHUDPanelFrameForCurrentState(animated: false)
-                    }
-                }
-            }
+            markRecordingStarted(
+                engine: engine,
+                telemetry: telemetry,
+                packageURL: packageURL,
+                targetMeta: targetMeta,
+                logicalBounds: logicalBounds
+            )
         } catch {
             startedTelemetry?.stop()
             await startedEngine?.stopCapture()
@@ -1249,6 +1343,144 @@ public final class RecordingCoordinator {
             lastErrorMessage = error.localizedDescription
             updateHUDPanelFrameForCurrentState(animated: true)
         }
+    }
+
+    /// Shared by screen and camera-only recordings once capture is running: state, HUD and the elapsed-time timer.
+    private func markRecordingStarted(
+        engine: ScreenCaptureEngine,
+        telemetry: TelemetryRecorder?,
+        packageURL: URL,
+        targetMeta: CaptureTargetMetadata,
+        logicalBounds: CGRect?
+    ) {
+        self.captureEngine = engine
+        self.telemetryRecorder = telemetry
+        self.activePackageURL = packageURL
+        self.activeTargetMetadata = targetMeta
+        self.activeLogicalBoundsQuartz = logicalBounds
+        self.isRecording = true
+        self.isRecordingPaused = false
+        self.recordingStartUptime = ProcessInfo.processInfo.systemUptime
+        self.pauseStartUptime = nil
+        self.accumulatedPausedSeconds = 0
+        self.recordingElapsedSeconds = 0.0
+
+        updateHUDPanelFrameForCurrentState(animated: true)
+        updateRecordedAreaHighlightOverlay()
+
+        recordingTimer?.invalidate()
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, self.isRecording, !self.isRecordingPaused else { return }
+                let prevSecInt = Int(self.recordingElapsedSeconds)
+                let now = ProcessInfo.processInfo.systemUptime
+                self.recordingElapsedSeconds = max(0.0, now - self.recordingStartUptime - self.accumulatedPausedSeconds)
+                let newSecInt = Int(self.recordingElapsedSeconds)
+                // Only resize the HUD panel when the timer text digit count actually changes (e.g., 9:59 -> 10:00),
+                // preventing 1Hz frame recalculations from drifting the HUD on secondary monitors!
+                if (prevSecInt / 600) != (newSecInt / 600) {
+                    self.updateHUDPanelFrameForCurrentState(animated: false)
+                }
+            }
+        }
+    }
+
+    /// The package folders for a new recording: `<name>.nativescreen/recording/telemetry` and `assets`.
+    private static func makeRecordingPackage() throws -> (package: URL, recording: URL, telemetry: URL) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        let timestampName = "Recording \(formatter.string(from: Date()))"
+        let packageURL = ProjectWorkspaceStore.defaultProjectsDirectory
+            .appendingPathComponent("\(timestampName).nativescreen", isDirectory: true)
+        let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+        let telemetryDir = recordingDir.appendingPathComponent("telemetry", isDirectory: true)
+        try FileManager.default.createDirectory(at: telemetryDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: packageURL.appendingPathComponent("assets", isDirectory: true), withIntermediateDirectories: true)
+        return (packageURL, recordingDir, telemetryDir)
+    }
+
+    /// Records only the camera and microphone. No screen stream and no telemetry: the cursor, click and key files are
+    /// empty, the way they are in a project made from a video, and `displayVideo` names the camera movie.
+    private func startCameraOnlyRecording() async {
+        guard let cameraID = selectedCameraDeviceID else {
+            lastErrorMessage = String(localized: "Choose a camera to record.")
+            restorePostRecordingSystemState()
+            updateHUDPanelFrameForCurrentState(animated: true)
+            return
+        }
+        var startedPackageURL: URL?
+        do {
+            let folders = try Self.makeRecordingPackage()
+            startedPackageURL = folders.package
+            for name in ["cursor.jsonl", "clicks.jsonl", "keys.jsonl"] {
+                try Data().write(to: folders.telemetry.appendingPathComponent(name))
+            }
+            let dims = WarmCameraCaptureController.shared.activeDimensions
+            let targetMeta = Self.cameraTargetMetadata(
+                width: Int(dims.width),
+                height: Int(dims.height),
+                fps: WarmCameraCaptureController.shared.activeFps
+            )
+            let outputWebcamURL = folders.recording.appendingPathComponent("webcam.mp4")
+            let outputMicrophoneURL = (captureMicrophone && selectedMicrophoneDeviceID != nil)
+                ? folders.recording.appendingPathComponent("microphone.m4a")
+                : nil
+
+            try Self.encodedForDisk(RecordingMetadata(durationMs: 0.0, captureTarget: targetMeta, tracks: currentRecordingTracks()))
+                .write(to: folders.recording.appendingPathComponent("metadata.json"), options: .atomic)
+            try Data("\(ProcessInfo.processInfo.processIdentifier)".utf8)
+                .write(to: Self.inProgressMarkerURL(in: folders.package), options: .atomic)
+
+            if hideDockIcon && !ProjectWorkspaceStore.shared.hasOpenEditorWindows {
+                NSApp.setActivationPolicy(.accessory)
+                hudPanel?.orderFrontRegardless()
+            }
+
+            let engine = ScreenCaptureEngine()
+            engine.onCaptureFailed = { [weak self, weak engine] failure in
+                Task { @MainActor [weak self, weak engine] in
+                    guard let self, let engine else { return }
+                    await self.endRecordingAfterCaptureFailure(failure, engine: engine)
+                }
+            }
+            engine.startCameraOnlyCapture(
+                cameraDeviceID: cameraID,
+                cameraMaxResolution: cameraMaxResolution,
+                outputWebcamURL: outputWebcamURL,
+                microphoneDeviceID: captureMicrophone ? selectedMicrophoneDeviceID : nil,
+                outputMicrophoneURL: outputMicrophoneURL
+            )
+            markRecordingStarted(
+                engine: engine,
+                telemetry: nil,
+                packageURL: folders.package,
+                targetMeta: targetMeta,
+                logicalBounds: nil
+            )
+        } catch {
+            if let startedPackageURL {
+                try? FileManager.default.removeItem(at: startedPackageURL)
+            }
+            restorePostRecordingSystemState()
+            lastErrorMessage = error.localizedDescription
+            updateHUDPanelFrameForCurrentState(animated: true)
+        }
+    }
+
+    private static func cameraTargetMetadata(width: Int, height: Int, fps: Int) -> CaptureTargetMetadata {
+        CaptureTargetMetadata(
+            mode: .camera,
+            displayId: 0,
+            windowId: nil,
+            appBundleId: nil,
+            appName: nil,
+            windowTitle: nil,
+            logicalBounds: LogicalBounds(x: 0, y: 0, width: Double(width), height: Double(height)),
+            pixelSize: PixelDimensions(width: width, height: height),
+            scaleFactor: 1.0,
+            refreshRate: Double(fps),
+            windowBorderRadius: 0.0
+        )
     }
 
     // MARK: - Pause / Resume, Restart, and Discard Recording ( & 5!)
@@ -1266,6 +1498,7 @@ public final class RecordingCoordinator {
         }
         captureEngine?.setPaused(newPaused, atUptime: now)
         telemetryRecorder?.setPaused(newPaused, atUptime: now)
+        if newPaused { LiveDrawingController.shared.setDrawing(false) }
     }
 
     public func restartCurrentRecording() async {
@@ -1337,9 +1570,12 @@ public final class RecordingCoordinator {
     }
 
     private func restorePostRecordingSystemState() {
+        LiveDrawingController.shared.tearDown()
         hideRecordedAreaHighlightOverlay()
         hudPanel?.sharingType = .readOnly
+        SpeakerNotesWindowController.shared.setHiddenFromCapture(false)
         updateFloatingCameraPreviewWindow()
+        updateSpeakerNotesWindow()
         updateHUDMicrophoneLevelMeter()
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
@@ -1446,6 +1682,7 @@ public final class RecordingCoordinator {
         if let engine = captureEngine {
             await engine.stopCapture()
         }
+        let recordedMs = captureEngine?.recordedDurationMs ?? 0
         var durationMs = max(1000.0, captureEngine?.recordedDurationMs ?? (recordingElapsedSeconds * 1000.0))
         let failed = captureEngine?.captureFailure != nil
         captureEngine = nil
@@ -1453,17 +1690,39 @@ public final class RecordingCoordinator {
         restorePostRecordingSystemState()
 
         guard let packageURL = activePackageURL,
-              let targetMeta = activeTargetMetadata else {
+              var targetMeta = activeTargetMetadata else {
             updateHUDPanelFrameForCurrentState(animated: true)
             return nil
         }
 
         let recordingDir = packageURL.appendingPathComponent("recording", isDirectory: true)
+        let tracks = currentRecordingTracks(mode: targetMeta.mode)
+
+        if targetMeta.mode == .camera {
+            // The camera never sent a usable picture: there is nothing to edit.
+            let cameraURL = recordingDir.appendingPathComponent(tracks.displayVideo)
+            let track = try? await AVURLAsset(url: cameraURL).loadTracks(withMediaType: .video).first
+            guard let track, recordedMs > 0 || failed else {
+                try? FileManager.default.removeItem(at: packageURL)
+                activePackageURL = nil
+                activeTargetMetadata = nil
+                lastErrorMessage = String(localized: "The camera did not send any picture, so nothing was recorded.")
+                updateHUDPanelFrameForCurrentState(animated: true)
+                hudPanel?.orderFrontRegardless()
+                return nil
+            }
+            // The project is as long as the camera movie, however short (a screen recording is padded to 1 s).
+            if recordedMs > 0 { durationMs = recordedMs }
+            if let size = try? await track.load(.naturalSize), size.width > 0, size.height > 0 {
+                targetMeta.pixelSize = PixelDimensions(width: Int(size.width), height: Int(size.height))
+                targetMeta.logicalBounds = LogicalBounds(x: 0, y: 0, width: Double(size.width), height: Double(size.height))
+            }
+        }
 
         // A failed writer is never finished: the file holds only its complete 2 s fragments, so the project must not
         // be longer than what can be played back.
         if failed {
-            let asset = AVURLAsset(url: recordingDir.appendingPathComponent("display.mp4"))
+            let asset = AVURLAsset(url: recordingDir.appendingPathComponent(tracks.displayVideo))
             let playableMs = ((try? await asset.load(.duration)).map(CMTimeGetSeconds) ?? 0) * 1000.0
             guard playableMs.isFinite, playableMs >= 500 else {
                 try? FileManager.default.removeItem(at: packageURL)
@@ -1477,7 +1736,7 @@ public final class RecordingCoordinator {
         }
         writeProjectFiles(
             packageURL: packageURL,
-            metadata: RecordingMetadata(durationMs: durationMs, captureTarget: targetMeta, tracks: currentRecordingTracks())
+            metadata: RecordingMetadata(durationMs: durationMs, captureTarget: targetMeta, tracks: tracks)
         )
 
         guard opensEditor else { return durationMs }
@@ -1510,8 +1769,17 @@ public final class RecordingCoordinator {
         return try encoder.encode(value)
     }
 
-    private func currentRecordingTracks() -> RecordingTracksMetadata {
-        RecordingTracksMetadata(
+    private func currentRecordingTracks(mode: CaptureTargetMode? = nil) -> RecordingTracksMetadata {
+        if (mode ?? selectedMode) == .camera {
+            return RecordingTracksMetadata(
+                displayVideo: "webcam.mp4",
+                webcamVideo: nil,
+                microphoneAudio: (captureMicrophone && selectedMicrophoneDeviceID != nil) ? "microphone.m4a" : nil,
+                systemAudio: nil,
+                windowTelemetry: nil
+            )
+        }
+        return RecordingTracksMetadata(
             displayVideo: "display.mp4",
             webcamVideo: selectedCameraDeviceID != nil ? "webcam.mp4" : nil,
             microphoneAudio: (captureMicrophone && selectedMicrophoneDeviceID != nil) ? "microphone.m4a" : nil,
@@ -1547,6 +1815,16 @@ public final class RecordingCoordinator {
         if let defPreset = AppSettings.shared.presetForNewProject() {
             defPreset.apply(to: &doc)
         }
+        if metadata.captureTarget.mode == .camera {
+            // The face keeps the picture framed when it is cropped or zoomed (scanned once, on device).
+            doc.camera.enableFaceTracking = true
+        }
+        // What was drawn on the screen while recording, as editable annotations.
+        let drawings = JSONLinesCodec.load(LiveDrawingEvent.self, from: recordingDir.appendingPathComponent("telemetry/drawings.jsonl"))
+        doc.timeline.annotationTracks.insert(
+            contentsOf: LiveDrawingEvent.annotationTracks(from: drawings, durationMs: metadata.durationMs),
+            at: 0
+        )
         if let data = try? Self.encodedForDisk(doc) {
             try? data.write(to: packageURL.appendingPathComponent("project.json"), options: .atomic)
         }
@@ -1896,6 +2174,46 @@ public final class HUDNativeMenuPresenter: NSObject {
 
         let menuWidth: CGFloat = 324.0
 
+        // 0. Profiles: saved sets of HUD choices (`RecordingProfiles.swift`).
+        let profilesHeaderItem = NSMenuItem()
+        let profilesHeaderView = NSHostingView(rootView: HUDMenuSectionHeaderView(title: "Profiles"))
+        profilesHeaderView.sizingOptions = []
+        profilesHeaderView.autoresizingMask = [.width]
+        profilesHeaderView.frame = NSRect(x: 0, y: 0, width: menuWidth, height: 26)
+        profilesHeaderItem.view = profilesHeaderView
+        menu.addItem(profilesHeaderItem)
+        let profiles = RecordingProfileStore.shared.profiles
+        let canApply = !coordinator.isRecording && !coordinator.isCountingDown
+        for profile in profiles {
+            let item = makeCommandItem(title: profile.name, symbol: "slider.horizontal.3") {
+                coordinator.apply(profile)
+            }
+            item.title = profile.name
+            item.state = coordinator.matches(profile) ? .on : .off
+            item.isEnabled = canApply
+            menu.addItem(item)
+        }
+        let saveItem = makeCommandItem(title: "Save Current Settings as Profile...", symbol: "plus") {
+            guard let name = RecordingProfileStore.askName() else { return }
+            RecordingProfileStore.shared.save(coordinator.currentRecordingProfile(named: name))
+        }
+        menu.addItem(saveItem)
+        if !profiles.isEmpty {
+            let deleteItem = NSMenuItem(title: "Delete Profile".localizedUI, action: nil, keyEquivalent: "")
+            deleteItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
+            let submenu = NSMenu()
+            for profile in profiles {
+                let item = makeCommandItem(title: profile.name, symbol: "minus.circle") {
+                    RecordingProfileStore.shared.delete(id: profile.id)
+                }
+                item.title = profile.name
+                submenu.addItem(item)
+            }
+            deleteItem.submenu = submenu
+            menu.addItem(deleteItem)
+        }
+        menu.addItem(.separator())
+
         // 1. Section Header: "Before Recording"
         let beforeHeaderItem = NSMenuItem()
         let beforeHeaderView = NSHostingView(rootView: HUDMenuSectionHeaderView(title: "Before Recording"))
@@ -1976,6 +2294,42 @@ public final class HUDNativeMenuPresenter: NSObject {
         highlightAreaView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 36)
         highlightAreaItem.view = highlightAreaView
         menu.addItem(highlightAreaItem)
+
+        let notesItem = NSMenuItem()
+        let notesView = NSHostingView(
+            rootView: HUDSwitchMenuRowView(
+                title: "Speaker Notes",
+                isOn: Binding(
+                    get: { coordinator.showSpeakerNotes },
+                    set: { on in
+                        if !on || coordinator.canTurnOnSpeakerNotes { coordinator.showSpeakerNotes = on }
+                    }
+                ),
+                isEnabled: coordinator.showSpeakerNotes || coordinator.canTurnOnSpeakerNotes
+            )
+        )
+        notesView.sizingOptions = []
+        notesView.autoresizingMask = [.width]
+        notesView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 36)
+        notesItem.view = notesView
+        menu.addItem(notesItem)
+
+        let drawingsItem = NSMenuItem()
+        let drawingsView = NSHostingView(
+            rootView: HUDSwitchMenuRowView(
+                title: "Drawings Stay Until Cleared",
+                isOn: Binding(
+                    get: { LiveDrawingController.shared.staysUntilCleared },
+                    set: { LiveDrawingController.shared.staysUntilCleared = $0 }
+                ),
+                isEnabled: true
+            )
+        )
+        drawingsView.sizingOptions = []
+        drawingsView.autoresizingMask = [.width]
+        drawingsView.frame = NSRect(x: 0, y: 0, width: effectiveWidth, height: 36)
+        drawingsItem.view = drawingsView
+        menu.addItem(drawingsItem)
         menu.minimumWidth = effectiveWidth
 
         activeMenu = menu
@@ -2586,6 +2940,7 @@ private struct HUDCountdownSegmentedRowView: View {
 private struct HUDSwitchMenuRowView: View {
     let title: String
     @Binding var isOn: Bool
+    var isEnabled: Bool = true
 
     var body: some View {
         HStack(spacing: 14) {
@@ -2603,8 +2958,10 @@ private struct HUDSwitchMenuRowView: View {
                 .controlSize(.small)
                 .tint(Color(red: 0.04, green: 0.52, blue: 1.0))
                 .accessibilityLabel(Text(title.localizedUI))
+                .disabled(!isEnabled)
         }
         .padding(.horizontal, 14)
+        .opacity(isEnabled ? 1.0 : 0.5)
     }
 }
 
@@ -2665,6 +3022,7 @@ private struct HUDLiquidGlassBackgroundView: NSViewRepresentable {
 public struct RecordingHUDBarView: View {
     @Bindable var coordinator: RecordingCoordinator
     @Bindable private var workspace = ProjectWorkspaceStore.shared
+    @Bindable private var drawing = LiveDrawingController.shared
 
     private let buttonHeight: CGFloat = 44
 
@@ -2720,10 +3078,11 @@ public struct RecordingHUDBarView: View {
                 .frame(width: 1, height: 28)
                 .padding(.horizontal, 2)
 
-            // 2. Capture Target Mode Buttons (`Display`, `Window`, `Area`, `Device`: Uniform 44pt height, crisp white icons!)
+            // 2. Capture Target Mode Buttons (`Display`, `Window`, `Area`, `Camera`: Uniform 44pt height, crisp white icons!)
             HStack(spacing: 4) {
                 ForEach(CaptureTargetMode.allCases) { mode in
-                    let isSelected = (coordinator.isPickingTarget && coordinator.selectedMode == mode)
+                    let isSelected = coordinator.selectedMode == mode
+                        && (coordinator.isPickingTarget || (mode == .camera && coordinator.isCameraStageActive))
                     HUDInteractiveItemButton(
                         tooltip: nil,
                         isSelected: isSelected,
@@ -2849,32 +3208,34 @@ public struct RecordingHUDBarView: View {
                     }
                 }
 
-                // 3c. System Audio Button (`System audio`, `Sound from 1 app`, or `No system audio` with `tv.music.note` icon, Images 1, 2, 3, 4!)
-                let sysAudioActive = coordinator.isSystemAudioEffectivelyActive
-                HUDInteractiveItemButton(
-                    tooltip: nil,
-                    isSelected: coordinator.activeHUDMenuKind == .systemAudio,
-                    width: nil,
-                    height: buttonHeight,
-                    cornerRadius: 10,
-                    onActionWithScreenRect: { buttonScreenRect in
-                        HUDNativeMenuPresenter.shared.presentSystemAudioMenu(
-                            coordinator: coordinator,
-                            anchorButtonScreenRect: buttonScreenRect,
-                            from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
-                        )
+                // 3c. System Audio Button. A camera-only recording has no screen stream to take system audio from.
+                if coordinator.selectedMode != .camera {
+                    let sysAudioActive = coordinator.isSystemAudioEffectivelyActive
+                    HUDInteractiveItemButton(
+                        tooltip: nil,
+                        isSelected: coordinator.activeHUDMenuKind == .systemAudio,
+                        width: nil,
+                        height: buttonHeight,
+                        cornerRadius: 10,
+                        onActionWithScreenRect: { buttonScreenRect in
+                            HUDNativeMenuPresenter.shared.presentSystemAudioMenu(
+                                coordinator: coordinator,
+                                anchorButtonScreenRect: buttonScreenRect,
+                                from: NSApp.windows.first(where: { $0 is DraggableHUDPanel })
+                            )
+                        }
+                    ) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "tv.music.note")
+                                .font(.system(size: 14.5, weight: .medium))
+                            Text(coordinator.systemAudioButtonTitle)
+                                .font(.system(size: 13, weight: sysAudioActive ? .medium : .regular))
+                                .lineLimit(1)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundStyle(.white.opacity(sysAudioActive || coordinator.activeHUDMenuKind == .systemAudio ? 0.96 : 0.65))
+                        .padding(.horizontal, 12)
                     }
-                ) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "tv.music.note")
-                            .font(.system(size: 14.5, weight: .medium))
-                        Text(coordinator.systemAudioButtonTitle)
-                            .font(.system(size: 13, weight: sysAudioActive ? .medium : .regular))
-                            .lineLimit(1)
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .foregroundStyle(.white.opacity(sysAudioActive || coordinator.activeHUDMenuKind == .systemAudio ? 0.96 : 0.65))
-                    .padding(.horizontal, 12)
                 }
             }
 
@@ -3101,9 +3462,78 @@ public struct RecordingHUDBarView: View {
                         .foregroundStyle(.white.opacity(0.90))
                 }
             }
+
+            if drawing.isPrepared {
+                Rectangle()
+                    .fill(Color.white.opacity(0.20))
+                    .frame(width: 1, height: 26)
+                liveDrawingControls
+            }
         }
         .padding(.horizontal, 16)
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// Draw on the screen while recording: the toggle, then the tools, color, undo and clear while drawing.
+    private var liveDrawingControls: some View {
+        HStack(spacing: 6) {
+            HUDInteractiveItemButton(
+                tooltip: drawing.isDrawing ? "Stop drawing (Esc)" : "Draw on screen",
+                isSelected: drawing.isDrawing,
+                width: 38,
+                height: 38,
+                cornerRadius: 9
+            ) {
+                guard !coordinator.isRecordingPaused else { return }
+                drawing.setDrawing(!drawing.isDrawing)
+            } label: {
+                Image(systemName: "pencil.tip.crop.circle")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(.white.opacity(coordinator.isRecordingPaused ? 0.35 : 0.90))
+            }
+
+            if drawing.isDrawing {
+                ForEach(Array(LiveDrawingTool.allCases.enumerated()), id: \.element) { index, tool in
+                    HUDInteractiveItemButton(
+                        tooltip: "\(tool.title.localizedUI) (\(index + 1))",
+                        isSelected: drawing.tool == tool,
+                        width: 34,
+                        height: 38,
+                        cornerRadius: 9
+                    ) {
+                        drawing.tool = tool
+                    } label: {
+                        Image(systemName: tool.systemImage)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.92))
+                    }
+                }
+                HUDInteractiveItemButton(tooltip: "Color", isSelected: false, width: 34, height: 38, cornerRadius: 9) {
+                    let palette = LiveDrawingController.palette
+                    let next = ((palette.firstIndex(of: drawing.color) ?? -1) + 1) % palette.count
+                    drawing.color = palette[next]
+                } label: {
+                    Circle()
+                        .fill(Color(nsColor: NSColor(hexString: drawing.color)))
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.6), lineWidth: 1))
+                }
+                HUDInteractiveItemButton(tooltip: "Undo (⌘Z)", isSelected: false, width: 34, height: 38, cornerRadius: 9) {
+                    drawing.undo()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.90))
+                }
+                HUDInteractiveItemButton(tooltip: "Clear drawings (C)", isSelected: false, width: 34, height: 38, cornerRadius: 9) {
+                    drawing.clear()
+                } label: {
+                    Image(systemName: "eraser")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.90))
+                }
+            }
+        }
     }
 
     private func formatCompactElapsed(_ sec: TimeInterval) -> String {
@@ -3413,10 +3843,11 @@ private final class LiveCameraPreviewHostNSView: NSView {
     private let clipLayer = CALayer()
     private let recordedFrameLayer = CALayer()
     private let borderLayer = CAShapeLayer()
-    private let cornerRadius: CGFloat = 42.0
+    private let cornerRadius: CGFloat
     private let insetMargin: CGFloat = 14.0
 
-    override init(frame frameRect: NSRect) {
+    init(frame frameRect: NSRect, cornerRadius: CGFloat) {
+        self.cornerRadius = cornerRadius
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor

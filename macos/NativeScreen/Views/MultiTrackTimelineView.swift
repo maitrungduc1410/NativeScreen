@@ -270,6 +270,38 @@ public struct MultiTrackTimelineView: View {
                                             .id("track_mask_\(track.id)")
                                         }
 
+                                        ForEach(session.document.timeline.annotationTracks) { track in
+                                            let annotationHidden = track.isHidden
+                                            HStack(spacing: 6) {
+                                                Button {
+                                                    session.toggleAnnotationTrackVisibility(trackId: track.id)
+                                                } label: {
+                                                    Image(systemName: annotationHidden ? "eye.slash" : "eye")
+                                                        .accessibilityLabel(Text((annotationHidden ? "Show Track" : "Hide Track").localizedUI))
+                                                        .font(.system(size: 10, weight: .medium))
+                                                        .foregroundStyle(Color.ink.opacity(annotationHidden ? 0.28 : 0.65))
+                                                        .frame(width: 22, height: 22)
+                                                        .contentShape(Rectangle())
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Text(track.name.localizedUI)
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundStyle(Color.ink.opacity(annotationHidden ? 0.30 : 0.65))
+                                                    .lineLimit(1)
+                                                    .minimumScaleFactor(0.85)
+                                            }
+                                            .padding(.leading, 10)
+                                            .frame(width: labelColumnWidth, height: maskRowHeight, alignment: .leading)
+                                            .contentShape(Rectangle())
+                                            .contextMenu {
+                                                trackLabelMenu(isHidden: annotationHidden, toggle: { session.toggleAnnotationTrackVisibility(trackId: track.id) }) {
+                                                    session.deleteTimelineTrack(.annotation(id: track.id), displayName: track.name)
+                                                }
+                                            }
+                                            .id("track_annotation_\(track.id)")
+                                        }
+
                                         if hasVoiceoversTrack {
                                             ForEach(0..<voiceoverTrackCount, id: \.self) { voTrack in
                                                 let voHidden = session.document.timeline.isVoiceoverTrackHidden(voTrack)
@@ -446,7 +478,8 @@ public struct MultiTrackTimelineView: View {
 
                                                 // Lane 3+: Dynamic Mask Tracks (`34pt` height)
                                                 let firstMaskOrder = hasCameraLayoutsTrack ? 3 : 2
-                                                let firstVoiceoverOrder = firstMaskOrder + session.document.timeline.maskTracks.count
+                                                let firstAnnotationOrder = firstMaskOrder + session.document.timeline.maskTracks.count
+                                                let firstVoiceoverOrder = firstAnnotationOrder + session.document.timeline.annotationTracks.count
                                                 let firstShortcutOrder = firstVoiceoverOrder + voiceoverTrackCount
                                                 ForEach(Array(session.document.timeline.maskTracks.enumerated()), id: \.element.id) { trackIdx, track in
                                                     maskLaneView(
@@ -456,6 +489,17 @@ public struct MultiTrackTimelineView: View {
                                                         totalTimelineMs: totalTimelineMs
                                                     )
                                                     .modifier(splitWiggle(trackOrder: firstMaskOrder + trackIdx))
+                                                }
+
+                                                // Lane 3A: Annotation Tracks
+                                                ForEach(Array(session.document.timeline.annotationTracks.enumerated()), id: \.element.id) { trackIdx, track in
+                                                    annotationLaneView(
+                                                        track: track,
+                                                        trackIndex: trackIdx,
+                                                        contentWidth: contentWidth,
+                                                        totalTimelineMs: totalTimelineMs
+                                                    )
+                                                    .modifier(splitWiggle(trackOrder: firstAnnotationOrder + trackIdx))
                                                 }
 
                                                 // Lane 3B: Voiceovers Track
@@ -1215,6 +1259,185 @@ public struct MultiTrackTimelineView: View {
         let tStart = max(availStart, min(availEnd - desiredDur, hoverTimelineMs - desiredDur * 0.5))
         let tEnd = min(availEnd, tStart + desiredDur)
 
+        let srcStart = session.timeMapper.sourceTime(forTimelineMs: tStart).sourceMs
+        let srcEnd = session.timeMapper.sourceTime(forTimelineMs: tEnd).sourceMs
+        guard srcEnd - srcStart >= 300.0 else { return nil }
+        return (tStart, tEnd, srcStart, srcEnd)
+    }
+
+    // MARK: - Annotation Lane
+
+    private func annotationLaneView(
+        track: AnnotationTrack,
+        trackIndex: Int,
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> some View {
+        let isHidden = track.isHidden
+        let stepNumbers = track.items.contains { $0.kind == .step } ? session.annotationStepNumbers : [:]
+        let isMousePressed = (NSEvent.pressedMouseButtons != 0)
+        let addPreview = (!session.isSplitModeActive && !session.isDraggingTimelineSegment && !isMousePressed && maskTrackHoverX[track.id] != nil)
+            ? hoverAddSpan(
+                trackId: track.id,
+                sourceSpans: track.items.map { ($0.sourceStartMs, $0.sourceEndMs) },
+                contentWidth: contentWidth,
+                totalTimelineMs: totalTimelineMs
+            )
+            : nil
+
+        return ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: contentWidth, height: maskRowHeight)
+                .contentShape(Rectangle())
+
+            if let preview = addPreview {
+                let previewX = CGFloat(preview.tStartMs / totalTimelineMs) * contentWidth
+                let previewW = max(24.0, CGFloat((preview.tEndMs - preview.tStartMs) / totalTimelineMs) * contentWidth - 1.0)
+                Button {
+                    session.isPlaying = false
+                    session.seek(toTimelineMs: (preview.tStartMs + preview.tEndMs) * 0.5)
+                    session.addAnnotationInRange(trackId: track.id, sourceStartMs: preview.srcStartMs, sourceEndMs: preview.srcEndMs)
+                } label: {
+                    ZStack {
+                        SegmentBodyCanvas(palette: .annotation, isSelected: false, isPlayed: false)
+                        Image(systemName: "plus")
+                            .accessibilityLabel(Text("Add"))
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.96))
+                    }
+                    .frame(width: previewW, height: maskRowHeight)
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .offset(x: previewX)
+                .transition(.opacity.animation(.easeOut(duration: 0.12)))
+                .zIndex(5)
+            }
+
+            ForEach(track.items) { item in
+                if let (tStartMs, tEndMs) = timelineSpan(forSourceStartMs: item.sourceStartMs, sourceEndMs: item.sourceEndMs) {
+                    let xStart = CGFloat(tStartMs / totalTimelineMs) * contentWidth
+                    let blockW = max(18.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
+                    let isSelected = (session.selectedAnnotationId == item.id)
+                    let isOtherSelected = (session.selectedAnnotationId != nil && !isSelected)
+
+                    let subtitle: String = {
+                        switch item.kind {
+                        case .text: return item.displayTitle
+                        case .step: return stepNumbers[item.id].map { "#\($0)" } ?? "#"
+                        default: return item.anchor == .screen ? "On screen".localizedUI : "On frame".localizedUI
+                        }
+                    }()
+                    TimelineInteractiveSegmentView(
+                        topTitle: item.kind.title,
+                        subtitleContent: .annotation(icon: item.kind.systemImage, text: subtitle),
+                        palette: .annotation,
+                        isSelected: isSelected,
+                        isPlayed: session.playedTimelineItemIds.contains(item.id),
+                        isDimmed: isHidden || item.disabled,
+                        isDimmedBySelection: isOtherSelected,
+                        isSplitMode: session.isSplitModeActive,
+                        xOffset: xStart,
+                        width: blockW,
+                        height: maskRowHeight,
+                        totalWidth: contentWidth,
+                        trackTotalDurationMs: totalTimelineMs,
+                        startMs: tStartMs,
+                        endMs: tEndMs,
+                        allowDragMove: true,
+                        allowVerticalTrackDrag: true,
+                        snapItemId: item.id,
+                        clipDecoration: nil,
+                        onClickAtLocalX: { localX in
+                            let frac = max(0.0, min(1.0, Double(localX / max(1.0, blockW))))
+                            let clickedTimelineMs = session.hoverSkimTimelineMs ?? (tStartMs + frac * (tEndMs - tStartMs))
+                            session.isPlaying = false
+                            session.seek(toTimelineMs: clickedTimelineMs)
+                            if session.isSplitModeActive {
+                                let splitSourceMs = session.timeMapper.sourceTime(forTimelineMs: clickedTimelineMs).sourceMs
+                                session.splitAnnotation(id: item.id, atSourceMs: splitSourceMs)
+                            } else {
+                                session.selectAnnotation(item.id)
+                            }
+                        },
+                        onRightClick: { pointInView, parentView in
+                            session.selectAnnotation(item.id)
+                            NativeSegmentContextMenuPresenter.shared.presentAnnotationContextMenu(
+                                session: session,
+                                annotationId: item.id,
+                                at: pointInView,
+                                in: parentView
+                            )
+                        },
+                        onBeginInteractive: {
+                            session.selectAnnotation(item.id)
+                            session.beginInteractiveEdit()
+                        },
+                        onMoveBody: { desiredTimelineStartMs, constantTimelineDurMs in
+                            let dur = max(AnnotationItem.minDurationMs, constantTimelineDurMs)
+                            let clampedStart = max(0.0, min(totalTimelineMs - dur, desiredTimelineStartMs))
+                            let newSrcStart = session.timeMapper.sourceTime(forTimelineMs: clampedStart).sourceMs
+                            let newSrcEnd = max(
+                                newSrcStart + AnnotationItem.minDurationMs,
+                                session.timeMapper.sourceTime(forTimelineMs: clampedStart + dur).sourceMs
+                            )
+                            session.moveAnnotation(id: item.id, desiredStartMs: newSrcStart, durationMs: newSrcEnd - newSrcStart)
+                        },
+                        onResizeRange: { newTimelineStart, newTimelineEnd in
+                            session.resizeAnnotation(
+                                id: item.id,
+                                newStartMs: session.timeMapper.sourceTime(forTimelineMs: newTimelineStart).sourceMs,
+                                newEndMs: session.timeMapper.sourceTime(forTimelineMs: newTimelineEnd).sourceMs
+                            )
+                        },
+                        onMoveVerticalTracks: { trackDelta in
+                            session.moveAnnotationToTrack(id: item.id, targetTrackIndex: trackIndex + trackDelta)
+                        },
+                        onEndInteractive: {
+                            session.endInteractiveEdit()
+                        }
+                    )
+                }
+            }
+        }
+        .frame(width: contentWidth, height: maskRowHeight)
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let pt):
+                if session.isDraggingTimelineSegment || NSEvent.pressedMouseButtons != 0 {
+                    maskTrackHoverX.removeValue(forKey: track.id)
+                } else {
+                    maskTrackHoverX[track.id] = max(0.0, min(contentWidth, pt.x))
+                }
+            case .ended:
+                maskTrackHoverX.removeValue(forKey: track.id)
+            }
+        }
+    }
+
+    /// The empty span under the pointer on a track, for the hover `+` block. `maskTrackHoverX` is keyed by track id,
+    /// which is unique across mask and annotation tracks.
+    private func hoverAddSpan(
+        trackId: String,
+        sourceSpans: [(Double, Double)],
+        contentWidth: CGFloat,
+        totalTimelineMs: Double
+    ) -> (tStartMs: Double, tEndMs: Double, srcStartMs: Double, srcEndMs: Double)? {
+        guard let hoverX = maskTrackHoverX[trackId], contentWidth > 10 else { return nil }
+        let hoverTimelineMs = Double(hoverX / contentWidth) * totalTimelineMs
+        let spans = sourceSpans
+            .compactMap { timelineSpan(forSourceStartMs: $0.0, sourceEndMs: $0.1) }
+            .sorted { $0.0 < $1.0 }
+        let marginMs = Double(4.0 / contentWidth) * totalTimelineMs
+        if spans.contains(where: { hoverTimelineMs >= $0.0 - marginMs && hoverTimelineMs <= $0.1 + marginMs }) {
+            return nil
+        }
+        let availStart = spans.last(where: { $0.1 <= hoverTimelineMs })?.1 ?? 0.0
+        let availEnd = spans.first(where: { $0.0 >= hoverTimelineMs })?.0 ?? totalTimelineMs
+        guard availEnd - availStart >= 450.0 else { return nil }
+        let desiredDur = min(2800.0, availEnd - availStart)
+        let tStart = max(availStart, min(availEnd - desiredDur, hoverTimelineMs - desiredDur * 0.5))
+        let tEnd = min(availEnd, tStart + desiredDur)
         let srcStart = session.timeMapper.sourceTime(forTimelineMs: tStart).sourceMs
         let srcEnd = session.timeMapper.sourceTime(forTimelineMs: tEnd).sourceMs
         guard srcEnd - srcStart >= 300.0 else { return nil }
@@ -2737,6 +2960,29 @@ private struct SegmentShaderPalette: Equatable {
     static let mask = adaptive(dark: maskDark, light: maskLight)
     static let caption = adaptive(dark: captionDark, light: captionLight)
     static let cameraLayout = adaptive(dark: cameraLayoutDark, light: cameraLayoutLight)
+    static let annotation = adaptive(dark: annotationDark, light: annotationLight)
+
+    /// Annotation (`#A6422A`, coral): the color an arrow is by default.
+    static let annotationDark = SegmentShaderPalette(
+        fillTop: Color(red: 0.651, green: 0.259, blue: 0.165),
+        fillBottom: Color(red: 0.851, green: 0.380, blue: 0.255),
+        innerEdgeGlow: Color(red: 0.520, green: 0.200, blue: 0.125).opacity(0.80),
+        activeInnerEdgeGlow: Color(red: 0.520, green: 0.200, blue: 0.125).opacity(0.50),
+        playedInnerEdgeGlow: Color(red: 0.651, green: 0.259, blue: 0.165).opacity(0.50),
+        ringBorder: Color(red: 0.980, green: 0.780, blue: 0.720),
+        playedRingBorder: Color(red: 0.851, green: 0.380, blue: 0.255),
+        selectedOuterOutline: Color(red: 0.900, green: 0.450, blue: 0.320).opacity(0.80)
+    )
+    static let annotationLight = SegmentShaderPalette(
+        fillTop: Color(red: 0.894, green: 0.420, blue: 0.290),
+        fillBottom: Color(red: 0.957, green: 0.565, blue: 0.447),
+        innerEdgeGlow: Color(red: 0.700, green: 0.280, blue: 0.170).opacity(0.35),
+        activeInnerEdgeGlow: Color(red: 0.700, green: 0.280, blue: 0.170).opacity(0.22),
+        playedInnerEdgeGlow: Color(red: 0.894, green: 0.420, blue: 0.290).opacity(0.35),
+        ringBorder: Color(red: 1.000, green: 0.860, blue: 0.810),
+        playedRingBorder: Color(red: 0.957, green: 0.565, blue: 0.447),
+        selectedOuterOutline: Color(red: 0.920, green: 0.470, blue: 0.330).opacity(0.85)
+    )
 
     private static func adaptive(dark: SegmentShaderPalette, light: SegmentShaderPalette) -> SegmentShaderPalette {
         SegmentShaderPalette(
@@ -2846,6 +3092,7 @@ private enum SegmentSubtitleContent: Equatable {
     case clip(durationText: String, speedText: String)
     case zoom(scaleText: String, modeText: String)
     case mask(text: String)
+    case annotation(icon: String, text: String)
     case voiceover(volumeText: String, volumeIcon: String)
 }
 
@@ -3163,6 +3410,8 @@ private struct TimelineInteractiveSegmentView: View {
             return iconWidth + 3.5 + textWidth(scaleText, size: 12.0) + 8.0 + iconWidth + 3.5 + textWidth(modeText, size: 12.0)
         case .mask(let text):
             return 11.0 + 5.0 + min(textWidth(text.localizedUI, size: 11.5), shortestTruncatedTextWidth)
+        case .annotation(_, let text):
+            return iconWidth + 4.0 + min(textWidth(text, size: 11.5), shortestTruncatedTextWidth)
         case .voiceover(let volumeText, _):
             return iconWidth + 3.5 + textWidth("Microphone".localizedUI, size: 11.5) + 7.0
                 + iconWidth + 3.0 + textWidth(volumeText, size: 11.5)
@@ -3179,6 +3428,8 @@ private struct TimelineInteractiveSegmentView: View {
             parts += [scaleText, modeText.localizedUI]
         case .mask(let text):
             parts.append(text.localizedUI)
+        case .annotation(_, let text):
+            parts.append(text)
         case .voiceover(let volumeText, _):
             parts += ["Microphone".localizedUI, volumeText]
         }
@@ -3232,6 +3483,16 @@ private struct TimelineInteractiveSegmentView: View {
                     .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(.white.opacity(0.96))
             }
+            .lineLimit(1)
+
+        case .annotation(let icon, let text):
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text(text)
+                    .font(.system(size: 11.5, weight: .regular))
+            }
+            .foregroundStyle(.white.opacity(0.96))
             .lineLimit(1)
 
         case .voiceover(let volumeText, let volumeIcon):

@@ -388,6 +388,63 @@ public final class NativeSegmentContextMenuPresenter: NSObject {
         popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
     }
 
+    // MARK: - 3a. Annotation Context Menu
+
+    public func presentAnnotationContextMenu(
+        session: ProjectSession,
+        annotationId: String,
+        at pointInView: NSPoint,
+        in parentView: NSView
+    ) {
+        guard let item = session.annotation(id: annotationId) else { return }
+        let menu = NSMenu(title: String(localized: "Annotation Context Menu"))
+        menu.autoenablesItems = false
+        retainedTargets.removeAll()
+
+        menu.addItem(makeCommandItem(title: "Split at playhead", keyEquivalent: "c", modifiers: []) {
+            session.splitAnnotation(id: annotationId, atSourceMs: session.currentSourceTimeMs)
+        })
+        menu.addItem(makeCommandItem(title: item.disabled ? "Enable" : "Disable", keyEquivalent: "d", modifiers: []) {
+            session.updateAnnotation(id: annotationId) { $0.disabled.toggle() }
+        })
+        menu.addItem(makeCommandItem(
+            title: item.anchor == .screen ? "Pin to frame" : "Pin to screen",
+            keyEquivalent: "",
+            modifiers: []
+        ) {
+            session.setAnnotationAnchor(id: annotationId, anchor: item.anchor == .screen ? .canvas : .screen)
+        })
+
+        menu.addItem(.separator())
+
+        for move in ProjectSession.AnnotationLayerMove.allCases {
+            menu.addItem(makeCommandItem(title: move.title, keyEquivalent: "", modifiers: []) {
+                session.moveAnnotationLayer(id: annotationId, move)
+            })
+        }
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeCommandItem(title: "Duplicate", keyEquivalent: "d", modifiers: [.command]) {
+            session.duplicateAnnotation(id: annotationId)
+        })
+        menu.addItem(makeCommandItem(title: "Copy", keyEquivalent: "c", modifiers: [.command]) {
+            session.copyAnnotation(id: annotationId)
+        })
+        menu.addItem(makeCommandItem(title: "Cut to clipboard", keyEquivalent: "x", modifiers: [.command]) {
+            session.cutAnnotation(id: annotationId)
+        })
+
+        menu.addItem(.separator())
+
+        menu.addItem(makeDestructiveCommandItem(title: "Remove", symbolName: "delete.left") {
+            session.deleteAnnotation(id: annotationId)
+        })
+
+        activeMenu = menu
+        popUpTimelineMenuAboveCursor(menu: menu, at: pointInView, in: parentView)
+    }
+
     // MARK: - 3b. Present Keyboard Shortcut Block Native Context Menu
 
     public func presentCaptionContextMenu(

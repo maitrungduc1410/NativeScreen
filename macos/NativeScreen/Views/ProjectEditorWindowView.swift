@@ -23,6 +23,7 @@ public struct ProjectEditorWindowView: View {
     @State private var isShowingExportSheet = false
     @State private var isShowingCommandMenu = false
     @State private var isShowingPresetsPopover = false
+    @State private var isShowingAnnotationPopover = false
     @State private var exportConfig = HardwareVideoExporter.ExportConfiguration()
     private var isExporting: Bool {
         get { session.isExportingFromEditor }
@@ -494,6 +495,27 @@ public struct ProjectEditorWindowView: View {
                                             isActive: session.pendingAddMaskType == .spotlight
                                         ) {
                                             session.beginInteractiveMaskSelection(type: .spotlight, style: .dim)
+                                        }
+                                    }
+
+                                    // Group 2B: Annotations, one button that opens the list of kinds
+                                    quickDockIconButton(
+                                        icon: "pencil.tip.crop.circle.badge.plus",
+                                        tooltip: "Add annotation",
+                                        isActive: isShowingAnnotationPopover
+                                    ) {
+                                        isShowingAnnotationPopover.toggle()
+                                    }
+                                    .popover(isPresented: $isShowingAnnotationPopover, arrowEdge: .trailing) {
+                                        AnnotationKindPopoverView { kind in
+                                            isShowingAnnotationPopover = false
+                                            if kind == .image {
+                                                if let url = AnnotationImagePicker.chooseImage() {
+                                                    session.addImageAnnotation(from: url)
+                                                }
+                                            } else {
+                                                session.addAnnotationAtPlayhead(kind: kind)
+                                            }
                                         }
                                     }
 
@@ -1111,6 +1133,10 @@ public struct ProjectEditorWindowView: View {
             case 8: // 'C' key: Split at current time (or Copy with ⌘C; ⌥⌘C is `Quick export to clipboard` in the menu)
                 let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 if flags == .command {
+                    if let aId = session.selectedAnnotationId {
+                        session.copyAnnotation(id: aId)
+                        return nil
+                    }
                     if let mId = session.selectedMaskId {
                         session.copyMaskToClipboard(id: mId)
                         return nil
@@ -1137,6 +1163,10 @@ public struct ProjectEditorWindowView: View {
             case 2: // 'D' key: Disable selected (or Duplicate with ⌘D)
                 let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 if flags.contains(.command) {
+                    if let aId = session.selectedAnnotationId {
+                        session.duplicateAnnotation(id: aId)
+                        return nil
+                    }
                     if let zId = session.selectedZoomId {
                         session.duplicateZoom(id: zId)
                         return nil
@@ -1150,6 +1180,10 @@ public struct ProjectEditorWindowView: View {
             case 7: // 'X' key with ⌘X: Cut to clipboard
                 let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 if flags.contains(.command) {
+                    if let aId = session.selectedAnnotationId {
+                        session.cutAnnotation(id: aId)
+                        return nil
+                    }
                     if let mId = session.selectedMaskId {
                         session.cutMaskToClipboard(id: mId)
                         return nil
@@ -1255,7 +1289,7 @@ public struct ProjectEditorWindowView: View {
                 return event
 
             case 29: // `⌘ 0` Device Frame
-                if flags == .command {
+                if flags == .command && session.inspectorTabAvailability(.deviceFrame).canApply {
                     session.clearTimelineSelection()
                     session.selectedInspectorTab = .deviceFrame
                     return nil
@@ -1561,6 +1595,7 @@ private struct AnimatableAspectCanvasContainer: View, Animatable {
             InteractiveMaskCanvasOverlayView(session: session, canvasSize: fittedSize)
             CaptionHitTargetsView(session: session, canvasSize: fittedSize)
             ShortcutKeycapHitTargetsView(session: session, canvasSize: fittedSize)
+            AnnotationCanvasOverlayView(session: session, canvasSize: fittedSize)
 
             ReelModeSafeZoneOverlayView(session: session, canvasSize: fittedSize)
                 .opacity(session.isReelModeActive ? 1.0 : 0.0)
@@ -2098,6 +2133,33 @@ private struct CommandMenuOverlayView: View {
             })
         }
 
+        // 3B. Annotations
+        items.append(EditorCommandItem(id: "addTextAnnotation", group: "Annotations", title: "Add text", icon: "textformat") {
+            session.addAnnotationAtPlayhead(kind: .text)
+        })
+        items.append(EditorCommandItem(id: "addArrowAnnotation", group: "Annotations", title: "Add arrow", icon: "arrow.up.right") {
+            session.addAnnotationAtPlayhead(kind: .arrow)
+        })
+        items.append(EditorCommandItem(id: "addRectangleAnnotation", group: "Annotations", title: "Add rectangle", icon: "rectangle") {
+            session.addAnnotationAtPlayhead(kind: .rectangle)
+        })
+        items.append(EditorCommandItem(id: "addEllipseAnnotation", group: "Annotations", title: "Add ellipse", icon: "circle") {
+            session.addAnnotationAtPlayhead(kind: .ellipse)
+        })
+        items.append(EditorCommandItem(id: "addStepAnnotation", group: "Annotations", title: "Add step", icon: "1.circle") {
+            session.addAnnotationAtPlayhead(kind: .step)
+        })
+        if let annotationId = session.selectedAnnotationId {
+            for move in ProjectSession.AnnotationLayerMove.allCases {
+                items.append(EditorCommandItem(id: "annotationLayer-\(move.rawValue)", group: "Annotations", title: move.title, icon: move.systemImage) {
+                    session.moveAnnotationLayer(id: annotationId, move)
+                })
+            }
+            items.append(EditorCommandItem(id: "duplicateAnnotation", group: "Annotations", title: "Duplicate", icon: "plus.square.on.square") {
+                session.duplicateAnnotation(id: annotationId)
+            })
+        }
+
         // 4. Masks
         items.append(EditorCommandItem(
             id: "addSensitiveDataMask",
@@ -2285,7 +2347,7 @@ private struct CommandMenuOverlayView: View {
             session.promptImportVoiceoverAudioFile()
         })
 
-        items.append(EditorCommandItem(
+        if !session.isCameraOnlyRecording { items.append(EditorCommandItem(
             id: "toggleDeviceMockup",
             group: "Device",
             title: session.document.frameStyle.deviceMockup.enabled ? "Disable device mockup" : "Use device mockup",
@@ -2293,7 +2355,7 @@ private struct CommandMenuOverlayView: View {
         ) {
             session.mutate { $0.frameStyle.deviceMockup.enabled.toggle() }
             session.selectedInspectorTab = .deviceFrame
-        })
+        }) }
 
         // 7. Export & Project
         items.append(EditorCommandItem(
@@ -3267,6 +3329,69 @@ private struct ExportingFullOverlayView: View {
         .onReceive(clockTimer) { _ in
             nowUptimeMs = ProcessInfo.processInfo.systemUptime * 1000.0
         }
+    }
+}
+
+// MARK: - 6B. Add Annotation Popover
+
+/// The kinds of annotation, each with a line on what it is for. Picking one adds it at the playhead.
+private struct AnnotationKindPopoverView: View {
+    let onPick: (AnnotationKind) -> Void
+    @State private var hoveredKind: AnnotationKind?
+
+    private func detail(_ kind: AnnotationKind) -> String {
+        switch kind {
+        case .text: return "A label or callout"
+        case .arrow: return "Points at something"
+        case .rectangle: return "Frames an area"
+        case .ellipse: return "Circles an area"
+        case .step: return "A numbered badge"
+        case .image: return "A logo or a picture"
+        case .pen: return "A freehand stroke"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(AnnotationKind.allCases.filter(\.isAddable)) { kind in
+                Button {
+                    onPick(kind)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: kind.systemImage)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.92))
+                            .frame(width: 30, height: 30)
+                            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.ink.opacity(0.06)))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(kind.title.localizedUI)
+                                .font(.system(size: 13.0, weight: .regular))
+                                .foregroundStyle(.ink.opacity(0.95))
+                            Text(detail(kind).localizedUI)
+                                .font(.system(size: 11.5, weight: .regular))
+                                .foregroundStyle(.ink.opacity(0.5))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.ink.opacity(hoveredKind == kind ? 0.06 : 0.0))
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { hoveredKind = kind } else if hoveredKind == kind { hoveredKind = nil }
+                }
+                .accessibilityLabel(Text(kind.title.localizedUI))
+                .accessibilityHint(Text(detail(kind).localizedUI))
+            }
+        }
+        .padding(10)
+        .frame(width: 260)
+        .background(Color.surface(red: 0.08, green: 0.08, blue: 0.10))
     }
 }
 

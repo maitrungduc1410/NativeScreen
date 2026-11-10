@@ -102,7 +102,10 @@ public final class TelemetryRecorder {
             self?.handleNSEvent(event)
         }
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            self?.handleNSEvent(event)
+            // Drawing on the screen is not a click or a shortcut in the recording (the strokes are saved on their own).
+            if !(event.window is LiveDrawingPanel) {
+                self?.handleNSEvent(event)
+            }
             return event
         }
     }
@@ -123,6 +126,11 @@ public final class TelemetryRecorder {
             clicksAppender.close()
             keysAppender.close()
         }
+    }
+
+    /// The recording time now (ms, pauses removed), on the cursor's clock. Nil before the first frame.
+    public func currentTimelineMs() -> Double? {
+        queue.sync { elapsedMs() }
     }
 
     private func elapsedMs() -> Double? {

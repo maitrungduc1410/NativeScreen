@@ -6,16 +6,31 @@ public enum CaptureTargetMode: String, Codable, CaseIterable, Identifiable, Send
     case display = "display"
     case window = "window"
     case area = "area"
-    case device = "device"
+    /// Only the camera: no screen is captured. `tracks.displayVideo` names the camera movie, which the editor treats as
+    /// the main picture, and `tracks.webcamVideo` is null.
+    case camera = "camera"
 
     public var id: String { rawValue }
+
+    /// Older recordings and profiles may say `device`, a mode that recorded the whole display (an iPhone is recorded as
+    /// a window, through iPhone Mirroring).
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if let mode = Self(rawValue: raw) {
+            self = mode
+        } else if raw == "device" {
+            self = .display
+        } else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown capture mode \(raw)"))
+        }
+    }
 
     public var title: String {
         switch self {
         case .display: return String(localized: "Display")
         case .window: return String(localized: "Window")
         case .area: return String(localized: "Area")
-        case .device: return String(localized: "Device")
+        case .camera: return String(localized: "Camera")
         }
     }
 
@@ -24,7 +39,7 @@ public enum CaptureTargetMode: String, Codable, CaseIterable, Identifiable, Send
         case .display: return "dock.rectangle"
         case .window: return "macwindow"
         case .area: return "viewfinder.rectangular"
-        case .device: return "iphone"
+        case .camera: return "person.crop.rectangle"
         }
     }
 }

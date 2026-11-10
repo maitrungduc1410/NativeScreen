@@ -487,7 +487,22 @@ public struct ClickEffectConfig: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// A cursor picture the user chose, copied into the package. `hotspot01` is the tip, from the picture's top left.
+public struct CustomCursorImage: Codable, Equatable, Hashable, Sendable {
+    public var imagePath: String
+    public var hotspot01: Point01
+
+    public init(imagePath: String, hotspot01: Point01) {
+        self.imagePath = imagePath
+        self.hotspot01 = hotspot01
+    }
+}
+
 public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
+    /// Replaces the arrow (and every shape when `alwaysUsePointer` is on). Other shapes keep the theme's.
+    public var customPointer: CustomCursorImage?
+    /// Replaces the pointing hand.
+    public var customHand: CustomCursorImage?
     public var hidden: Bool
     public var scale: Double
     public var themeId: String
@@ -566,10 +581,14 @@ public struct CursorConfig: Codable, Equatable, Hashable, Sendable {
         case optimizeCursorChanges
         case keepInSyncWithHovers
         case clickEffect
+        case customPointer
+        case customHand
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.customPointer = try container.decodeIfPresent(CustomCursorImage.self, forKey: .customPointer)
+        self.customHand = try container.decodeIfPresent(CustomCursorImage.self, forKey: .customHand)
         self.hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
         self.scale = try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.6
         let theme = CursorThemePreset.migrateLegacyTheme(
@@ -604,6 +623,48 @@ public enum CameraBackgroundMode: String, Codable, CaseIterable, Identifiable, S
     case image
 
     public var id: String { rawValue }
+}
+
+/// How the person is separated from the room, wherever the camera's background is removed (cutout, background blur or
+/// image).
+public enum CameraBackgroundRemoval: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// On-device person segmentation: works in any room.
+    case ai = "ai"
+    /// A color key on a green or blue backdrop: sharper edges, only the backdrop is removed.
+    case greenScreen = "green-screen"
+
+    public var id: String { rawValue }
+}
+
+/// How the picture of a camera-only recording sits on the canvas.
+public enum CameraOnlyFraming: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// Fitted inside the padding, with the frame style's corners, shadow and inset, over the background.
+    case framed = "framed"
+    /// Fills the canvas edge to edge; what does not fit is cropped, around the face when face tracking is on.
+    case fullFrame = "full-frame"
+    /// The person, cut out of the room, filling the canvas over the background.
+    case cutout = "cutout"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .framed: return "Framed"
+        case .fullFrame: return "Full frame"
+        case .cutout: return "Cutout"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .framed: return "rectangle.inset.filled"
+        case .fullFrame: return "rectangle.fill"
+        case .cutout: return "person.crop.rectangle"
+        }
+    }
+
+    /// Fills the canvas (no padding, corners or shadow).
+    public var fillsCanvas: Bool { self != .framed }
 }
 
 public enum CameraLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -748,6 +809,18 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
     /// A `CameraStickerCatalog` id.
     public var stickerId: String?
     public var delayAdjustmentMs: Double
+    /// Camera-only recordings (`captureTarget.mode == camera`): how the picture is framed.
+    public var cameraOnlyFraming: CameraOnlyFraming
+    public var backgroundRemoval: CameraBackgroundRemoval
+    /// Green screen: the backdrop color (`#RRGGBB`), how far around it is removed, how soft the edge is, and how much of
+    /// its tint is taken off the person (all 0...1).
+    public var chromaKeyColor: String
+    public var chromaSimilarity: Double
+    public var chromaSmoothness: Double
+    public var chromaSpill: Double
+
+    public static let greenScreenColor = "#00B140"
+    public static let blueScreenColor = "#0047BB"
 
     public init(
         enabled: Bool = true,
@@ -784,7 +857,13 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         backgroundImagePath: String? = nil,
         backgroundImageName: String? = nil,
         stickerId: String? = nil,
-        delayAdjustmentMs: Double = 0.0
+        delayAdjustmentMs: Double = 0.0,
+        cameraOnlyFraming: CameraOnlyFraming = .framed,
+        backgroundRemoval: CameraBackgroundRemoval = .ai,
+        chromaKeyColor: String = CameraConfig.greenScreenColor,
+        chromaSimilarity: Double = 0.4,
+        chromaSmoothness: Double = 0.3,
+        chromaSpill: Double = 0.5
     ) {
         self.enabled = enabled
         self.layoutMode = layoutMode
@@ -821,6 +900,12 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         self.backgroundImageName = backgroundImageName
         self.stickerId = stickerId
         self.delayAdjustmentMs = delayAdjustmentMs
+        self.cameraOnlyFraming = cameraOnlyFraming
+        self.backgroundRemoval = backgroundRemoval
+        self.chromaKeyColor = chromaKeyColor
+        self.chromaSimilarity = chromaSimilarity
+        self.chromaSmoothness = chromaSmoothness
+        self.chromaSpill = chromaSpill
     }
 
     enum CodingKeys: String, CodingKey {
@@ -832,6 +917,8 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         case colorGradePreset, customLUTRelativePath, customColorPresets, selectedCustomColorPresetID, colorGradeIntensity
         case sharpen01, cropRect01, enableFaceTracking, delayAdjustmentMs
         case faceTrackingZoom, backgroundMode, backgroundImagePath, backgroundImageName, stickerId
+        case cameraOnlyFraming
+        case backgroundRemoval, chromaKeyColor, chromaSimilarity, chromaSmoothness, chromaSpill
     }
 
     public init(from decoder: Decoder) throws {
@@ -871,6 +958,12 @@ public struct CameraConfig: Codable, Equatable, Hashable, Sendable {
         self.backgroundImageName = try container.decodeIfPresent(String.self, forKey: .backgroundImageName)
         self.stickerId = try container.decodeIfPresent(String.self, forKey: .stickerId)
         self.delayAdjustmentMs = try container.decodeIfPresent(Double.self, forKey: .delayAdjustmentMs) ?? 0.0
+        self.cameraOnlyFraming = try container.decodeIfPresent(CameraOnlyFraming.self, forKey: .cameraOnlyFraming) ?? .framed
+        self.backgroundRemoval = try container.decodeIfPresent(CameraBackgroundRemoval.self, forKey: .backgroundRemoval) ?? .ai
+        self.chromaKeyColor = try container.decodeIfPresent(String.self, forKey: .chromaKeyColor) ?? Self.greenScreenColor
+        self.chromaSimilarity = try container.decodeIfPresent(Double.self, forKey: .chromaSimilarity) ?? 0.4
+        self.chromaSmoothness = try container.decodeIfPresent(Double.self, forKey: .chromaSmoothness) ?? 0.3
+        self.chromaSpill = try container.decodeIfPresent(Double.self, forKey: .chromaSpill) ?? 0.5
     }
 }
 
@@ -2065,6 +2158,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
     public var cameraLayouts: [CameraLayoutSegment]
     public var isCameraLayoutsTrackHidden: Bool
     public var maskTracks: [MaskTrack]
+    public var annotationTracks: [AnnotationTrack]
     public var voiceovers: [VoiceoverSegment]
     public var isVoiceoversTrackHidden: Bool
     public var hiddenVoiceoverTracks: [Int]
@@ -2078,6 +2172,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         cameraLayouts: [CameraLayoutSegment] = [],
         isCameraLayoutsTrackHidden: Bool = false,
         maskTracks: [MaskTrack] = [],
+        annotationTracks: [AnnotationTrack] = [],
         voiceovers: [VoiceoverSegment] = [],
         isVoiceoversTrackHidden: Bool = false,
         hiddenVoiceoverTracks: [Int] = [],
@@ -2090,6 +2185,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         self.cameraLayouts = cameraLayouts
         self.isCameraLayoutsTrackHidden = isCameraLayoutsTrackHidden
         self.maskTracks = maskTracks
+        self.annotationTracks = annotationTracks
         self.voiceovers = voiceovers
         self.isVoiceoversTrackHidden = isVoiceoversTrackHidden
         self.hiddenVoiceoverTracks = hiddenVoiceoverTracks
@@ -2099,7 +2195,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case slices, zooms, isZoomTrackHidden, cameraLayouts, isCameraLayoutsTrackHidden
-        case maskTracks, voiceovers, isVoiceoversTrackHidden, hiddenVoiceoverTracks, isShortcutsTrackHidden, dismissedTypingSuggestionStarts
+        case maskTracks, annotationTracks, voiceovers, isVoiceoversTrackHidden, hiddenVoiceoverTracks, isShortcutsTrackHidden, dismissedTypingSuggestionStarts
     }
 
     public init(from decoder: Decoder) throws {
@@ -2110,6 +2206,7 @@ public struct TimelineConfig: Codable, Equatable, Hashable, Sendable {
         self.cameraLayouts = try container.decodeIfPresent([CameraLayoutSegment].self, forKey: .cameraLayouts) ?? []
         self.isCameraLayoutsTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isCameraLayoutsTrackHidden) ?? false
         self.maskTracks = try container.decodeIfPresent([MaskTrack].self, forKey: .maskTracks) ?? []
+        self.annotationTracks = try container.decodeIfPresent([AnnotationTrack].self, forKey: .annotationTracks) ?? []
         self.voiceovers = try container.decodeIfPresent([VoiceoverSegment].self, forKey: .voiceovers) ?? []
         self.isVoiceoversTrackHidden = try container.decodeIfPresent(Bool.self, forKey: .isVoiceoversTrackHidden) ?? false
         self.hiddenVoiceoverTracks = try container.decodeIfPresent([Int].self, forKey: .hiddenVoiceoverTracks) ?? []

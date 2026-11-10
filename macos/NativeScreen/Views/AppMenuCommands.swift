@@ -95,7 +95,9 @@ struct AppMenuCommands: Commands {
         CommandGroup(replacing: .pasteboard) {
             Button("Cut") {
                 if !Self.sendToTextResponder(#selector(NSText.cut(_:))), let session {
-                    if let id = session.selectedMaskId {
+                    if let id = session.selectedAnnotationId {
+                        session.cutAnnotation(id: id)
+                    } else if let id = session.selectedMaskId {
                         session.cutMaskToClipboard(id: id)
                     } else if let id = session.selectedZoomId {
                         session.cutZoomToClipboard(id: id)
@@ -106,7 +108,9 @@ struct AppMenuCommands: Commands {
             .disabled(session?.isExportRunning == true)
             Button("Copy") {
                 if !Self.sendToTextResponder(#selector(NSText.copy(_:))), let session {
-                    if let id = session.selectedMaskId {
+                    if let id = session.selectedAnnotationId {
+                        session.copyAnnotation(id: id)
+                    } else if let id = session.selectedMaskId {
                         session.copyMaskToClipboard(id: id)
                     } else if let id = session.selectedZoomId {
                         session.copyZoomToClipboard(id: id)

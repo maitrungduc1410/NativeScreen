@@ -23,6 +23,7 @@ public final class MetalFrameCompositor {
     private var cachedWallpaperCIImage: CIImage?
     private var cachedWallpaperDecodePixels = 0
     private var syntheticScreenTexture: CIImage?
+    private let annotationRenderer = AnnotationRenderer()
 
     // Smooth GPU Background Crossfade & Texture Cache
     private struct BackgroundIdentityKey: Equatable {
@@ -129,7 +130,7 @@ public final class MetalFrameCompositor {
         let canvasRect = CGRect(origin: .zero, size: outputSize)
         let eval = session.trajectorySolver.evaluate(atSourceMs: sourceTimeMs)
         let cursorState = eval.cursor
-        let cameraState = eval.camera
+        let cameraState = session.evaluatedCamera(atSourceMs: sourceTimeMs)
 
         // --- PASS 1: Cached Background Layer (Mesh / Wallpaper / Gradient / Solid + Crossfade + Blur) ---
         var composite = renderBackgroundLayer(doc: doc, session: session, canvasRect: canvasRect)
@@ -145,14 +146,19 @@ public final class MetalFrameCompositor {
             cropRect01: crop01
         )
 
+        // A camera-only picture changes every frame and its styling (background, grade) is not in the cache key.
+        let isCameraOnly = session.isCameraOnlyRecording
         let maskedScreen: CIImage
-        if maskCacheKey == lastMaskedScreenKey, let cached = cachedMaskedScreenImage {
+        if !isCameraOnly, maskCacheKey == lastMaskedScreenKey, let cached = cachedMaskedScreenImage {
             maskedScreen = cached
         } else {
-            let rawScreen = (sourceVideoFrame ?? fallbackSyntheticScreenImage(size: CGSize(
+            var rawScreen = (sourceVideoFrame ?? fallbackSyntheticScreenImage(size: CGSize(
                 width: max(640, session.metadata.captureTarget.pixelSize.width),
                 height: max(400, session.metadata.captureTarget.pixelSize.height)
             )))
+            if isCameraOnly, let sourceVideoFrame {
+                rawScreen = cameraOnlyPicture(sourceVideoFrame, session: session, isRealtimePreview: isRealtimePreview)
+            }
             let screenExtent = rawScreen.extent
 
             var computed = applyMultiTrackMasks(
@@ -230,7 +236,9 @@ public final class MetalFrameCompositor {
             scaledScreen = maskedScreen.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
         }
 
-        let baseRadius = doc.frameStyle.deviceMockup.enabled
+        // A camera-only picture that fills the canvas has no frame: no corners, inset or shadow.
+        let fillsCanvas = isCameraOnly && doc.camera.cameraOnlyFraming.fillsCanvas
+        let baseRadius = fillsCanvas ? 0.0 : session.usesDeviceMockup
             ? (doc.frameStyle.deviceMockup.deviceId?.contains("iphone") == true ? 34.0 : 14.0)
             : doc.frameStyle.borderRadius
         let scaledRadius = CGFloat(baseRadius) * (outputSize.height / 900.0)
@@ -247,7 +255,7 @@ public final class MetalFrameCompositor {
         )
 
         // Device Mockup Bezel
-        if doc.frameStyle.deviceMockup.enabled {
+        if session.usesDeviceMockup {
             if let bezelImg = renderDeviceMockupBezel(
                 screenRect: screenFrameRect,
                 canvasRect: canvasRect,
@@ -256,7 +264,7 @@ public final class MetalFrameCompositor {
             ) {
                 positionedScreen = zoomed(bezelImg).composited(over: positionedScreen)
             }
-        } else if doc.frameStyle.inset.enabled && doc.frameStyle.inset.size > 0.1 {
+        } else if !fillsCanvas && doc.frameStyle.inset.enabled && doc.frameStyle.inset.size > 0.1 {
             // Screen Inset Border (`Inset` toggle in Background tab)
             let insetPx = CGFloat(doc.frameStyle.inset.size) * (outputSize.height / 900.0) * drawScale
             let outerInsetRect = drawnScreenRect.insetBy(dx: -insetPx, dy: -insetPx)
@@ -273,7 +281,7 @@ public final class MetalFrameCompositor {
         // Fast GPU Rounded-Rectangle Drop Shadow (`Classic` vs `Directional` + `Distance`, `Angle`, `Blur`)
         // Crucial: Materialized once into a concrete GPU `MTLTexture`-backed `CIImage` so CoreImage NEVER re-runs
         // the 4K Gaussian blur filter graph on every single video frame!
-        if doc.frameStyle.shadow.enabled && doc.frameStyle.shadow.intensity > 0.01 {
+        if !fillsCanvas && doc.frameStyle.shadow.enabled && doc.frameStyle.shadow.intensity > 0.01 {
             let shadowKey = ShadowCacheKey(
                 screenRect: screenFrameRect,
                 canvasRect: canvasRect,
@@ -313,19 +321,48 @@ public final class MetalFrameCompositor {
             }
         }
 
+        // --- PASS 3B: Annotations pinned to the recording ---
+        // Placed with the same crop and zoom as the screen, and drawn before the cursor so the pointer stays on top.
+        // They join the screen layer, so the camera motion blur below moves them with what they point at.
+        // The text being typed into on the canvas is shown by the field itself.
+        let editingAnnotationId = isRealtimePreview ? session.editingAnnotationTextId : nil
+        let activeAnnotations = session.activeAnnotations(atSourceMs: sourceTimeMs).filter { $0.id != editingAnnotationId }
+        let stepNumbers = activeAnnotations.contains { $0.kind == .step } ? session.annotationStepNumbers : [:]
+        let screenAnnotations = activeAnnotations.filter { $0.anchor == .screen }
+        if !screenAnnotations.isEmpty {
+            positionedScreen = annotationRenderer.composite(
+                screenAnnotations,
+                over: positionedScreen,
+                sourceTimeMs: sourceTimeMs,
+                canvasRect: canvasRect,
+                stepNumbers: stepNumbers,
+                packageURL: session.packageURL
+            ) { _, p01 in
+                let u = CGFloat((p01.x - crop01.x) / max(0.0001, crop01.width))
+                let v = CGFloat((p01.y - crop01.y) / max(0.0001, crop01.height))
+                let unzoomed = CGPoint(
+                    x: screenFrameRect.minX + u * screenFrameRect.width,
+                    y: screenFrameRect.minY + (1.0 - v) * screenFrameRect.height
+                )
+                return cameraTransform.map { unzoomed.applying($0) } ?? unzoomed
+            }
+        }
+
         // --- PASS 4: Cursor Sprite & Click Ripple in Screen Space ---
         let activeSlice = session.document.timeline.slices.first {
             sourceTimeMs >= $0.sourceStartMs && sourceTimeMs <= $0.sourceEndMs
         } ?? session.currentActiveSlice
         let hideCursorInSlice = activeSlice?.hideCursor ?? false
-        if !hideCursorInSlice && cursorState.opacity > 0.01 {
+        // No cursor recorded (camera-only recordings, projects made from a video): nothing to draw.
+        if session.hasRecordedCursor && !hideCursorInSlice && cursorState.opacity > 0.01 {
             positionedScreen = renderCursorAndRipple(
                 over: positionedScreen,
                 canvasRect: cameraTransform == nil ? canvasRect : zoomedMargin,
                 screenFrameRect: drawnScreenRect,
                 cursorState: cursorState,
                 cursorConfig: doc.cursor,
-                canvasScale: outputSize.height / 900.0 * drawScale
+                canvasScale: outputSize.height / 900.0 * drawScale,
+                packageURL: session.packageURL
             )
         }
 
@@ -350,7 +387,7 @@ public final class MetalFrameCompositor {
             && doc.motion.motionBlurIntensity > 0.02
             && sourceTimeMs > 8.0 {
             let prevSourceMs = max(0.0, sourceTimeMs - 16.67)
-            let prevCam = session.trajectorySolver.evaluate(atSourceMs: prevSourceMs).camera
+            let prevCam = session.evaluatedCamera(atSourceMs: prevSourceMs)
             let blurStrength = CGFloat(min(1.0, max(0.0, doc.motion.motionBlurIntensity)))
 
             func zoomedScreenRectInCanvas(for cam: SpringTrajectorySolver.CameraFrameState) -> CGRect {
@@ -411,6 +448,25 @@ public final class MetalFrameCompositor {
                 colorFringe: CGFloat(max(0.55, cameraState.loupeConfig.chromaticAberration)),
                 presence: CGFloat(cameraState.loupePresence01)
             )
+        }
+
+        // --- PASS 5C: Annotations pinned to the output frame ---
+        let canvasAnnotations = activeAnnotations.filter { $0.anchor == .canvas }
+        if !canvasAnnotations.isEmpty {
+            composite = annotationRenderer.composite(
+                canvasAnnotations,
+                over: composite,
+                sourceTimeMs: sourceTimeMs,
+                canvasRect: canvasRect,
+                stepNumbers: stepNumbers,
+                packageURL: session.packageURL
+            ) { _, p01 in
+                CGPoint(
+                    x: canvasRect.minX + CGFloat(p01.x) * canvasRect.width,
+                    y: canvasRect.minY + CGFloat(1.0 - p01.y) * canvasRect.height
+                )
+            }
+            .cropped(to: canvasRect)
         }
 
         // --- PASS 6: 3D Keyboard Shortcut Keycaps + Camera & Captions Overlay (For Video/GIF/Still-Frame Export!) ---
@@ -996,7 +1052,8 @@ public final class MetalFrameCompositor {
         screenFrameRect: CGRect,
         cursorState: SpringTrajectorySolver.CursorFrameState,
         cursorConfig: CursorConfig,
-        canvasScale: CGFloat
+        canvasScale: CGFloat,
+        packageURL: URL
     ) -> CIImage {
         var result = image
         let cx = screenFrameRect.minX + CGFloat(cursorState.position01.x) * screenFrameRect.width
@@ -1028,7 +1085,9 @@ public final class MetalFrameCompositor {
         }
 
         // 2. High-DPI Vector Cursor Sprite (With Set + Variant + Always-Use-Pointer support!)
-        let (rawSprite, hotspot01) = CursorSpriteProvider.shared.ciCursorImage(
+        let custom = CursorSpriteProvider.customImage(for: cursorState.cursorType, config: cursorConfig)
+            .flatMap { CursorSpriteProvider.shared.customCursorImage($0, packageURL: packageURL) }
+        let (rawSprite, hotspot01) = custom ?? CursorSpriteProvider.shared.ciCursorImage(
             themeId: cursorConfig.themeId,
             variantId: cursorConfig.variantId,
             alwaysUsePointer: cursorConfig.alwaysUsePointer,
@@ -1673,7 +1732,7 @@ public final class MetalFrameCompositor {
             if isSplit {
                 return splitGeo.screenRect
             }
-            let padding: CGFloat = doc.frameStyle.deviceMockup.enabled
+            let padding: CGFloat = session.usesDeviceMockup
                 ? max(0.08, CGFloat(doc.canvas.paddingRatio))
                 : CGFloat(doc.canvas.paddingRatio)
             return Self.calculateFittedScreenRect(sourceSize: screenSourceSize, inCanvas: canvasRect, paddingRatio: padding)
@@ -1700,6 +1759,55 @@ public final class MetalFrameCompositor {
     /// Placement at `sourceTimeMs`, blending from the previous layout for `stageTransitionMs` after a change on the
     /// timeline. Depends only on the project and the time, so preview and export produce the same frames.
     static func resolvedStageLayout(
+        session: ProjectSession,
+        sourceTimeMs: Double,
+        canvasRect: CGRect,
+        screenSourceSize: CGSize,
+        zoomScale: Double
+    ) -> StageLayout {
+        var stage = timelineStageLayout(
+            session: session,
+            sourceTimeMs: sourceTimeMs,
+            canvasRect: canvasRect,
+            screenSourceSize: screenSourceSize,
+            zoomScale: zoomScale
+        )
+        if session.isCameraOnlyRecording && session.document.camera.cameraOnlyFraming.fillsCanvas {
+            stage.screenRect = cameraOnlyFillRect(
+                session: session,
+                sourceTimeMs: sourceTimeMs,
+                canvasRect: canvasRect,
+                sourceSize: screenSourceSize
+            )
+        }
+        return stage
+    }
+
+    /// A camera-only picture covering the canvas. With a face found, the face sits at the horizontal center and a
+    /// little above the middle; the picture never uncovers the canvas edges.
+    private static func cameraOnlyFillRect(
+        session: ProjectSession,
+        sourceTimeMs: Double,
+        canvasRect: CGRect,
+        sourceSize: CGSize
+    ) -> CGRect {
+        let scale = max(canvasRect.width / max(1.0, sourceSize.width), canvasRect.height / max(1.0, sourceSize.height))
+        let width = sourceSize.width * scale
+        let height = sourceSize.height * scale
+        var x = canvasRect.midX - width * 0.5
+        var y = canvasRect.midY - height * 0.5
+        if let face = session.cameraOnlyFaceCenter01(atSourceMs: sourceTimeMs) {
+            x = canvasRect.midX - face.x * width
+            // Bottom-left origin: the face's height from the bottom is `(1 - y) * height`.
+            y = canvasRect.midY + canvasRect.height * 0.08 - (1.0 - face.y) * height
+        }
+        x = min(canvasRect.minX, max(canvasRect.maxX - width, x))
+        y = min(canvasRect.minY, max(canvasRect.maxY - height, y))
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// Placement from the timeline's layout segments, with transitions.
+    private static func timelineStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
         canvasRect: CGRect,
@@ -2034,6 +2142,7 @@ public final class MetalFrameCompositor {
         let camCfg = key.config
         let isCutout = !key.isFullscreenCamera && camCfg.layoutMode == .cutout
         guard key.isCameraVisible, isCutout || camCfg.backgroundMode != .original,
+              camCfg.backgroundRemoval == .ai,
               !segmentedWebcamFrames.contains(where: {
                   $0.frame === webcamFrame && $0.crop == camCfg.cropRect01 && $0.mirror == camCfg.mirror
               }) else { return }
@@ -2056,6 +2165,27 @@ public final class MetalFrameCompositor {
         }
     }
 
+    /// The main picture of a camera-only recording: mirror, background and color grade from the camera settings, and
+    /// only the person for the cutout framing. Cropping is the canvas crop and stickers belong to the camera layer.
+    private func cameraOnlyPicture(_ frame: CIImage, session: ProjectSession, isRealtimePreview: Bool) -> CIImage {
+        var camCfg = session.document.camera
+        camCfg.cropRect01 = .full
+        camCfg.stickerId = nil
+        let customPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
+            camCfg.customColorPresets.first(where: { $0.id == id })
+        }
+        return prepareRecordedWebcamFrame(
+            frame,
+            packageURL: session.packageURL,
+            camCfg: camCfg,
+            customPreset: customPreset,
+            webcamMs: 0,
+            faceTrack: nil,
+            isCutoutMode: camCfg.cameraOnlyFraming == .cutout,
+            isRealtimePreview: isRealtimePreview
+        )
+    }
+
     private func prepareRecordedWebcamFrame(
         _ frame: CIImage,
         packageURL: URL,
@@ -2072,9 +2202,16 @@ public final class MetalFrameCompositor {
         let wantsBackground = !isCutoutMode && camCfg.backgroundMode != .original
         var personMask: CIImage?
         if isCutoutMode || wantsBackground {
-            personMask = isRealtimePreview
-                ? realtimePersonSegmenter.latestMask(segmenting: img, frameIdentity: frameIdentity)
-                : exportPersonMask(for: img, sourceFrame: frame, camCfg: camCfg)
+            if camCfg.backgroundRemoval == .greenScreen {
+                // A color key is exact per frame and cheap, so preview and export key the same frame the same way.
+                let chroma = ChromaKey.Settings(camera: camCfg)
+                personMask = ChromaKey.personMask(for: img, settings: chroma)
+                img = ChromaKey.removingSpill(from: img, settings: chroma)
+            } else {
+                personMask = isRealtimePreview
+                    ? realtimePersonSegmenter.latestMask(segmenting: img, frameIdentity: frameIdentity)
+                    : exportPersonMask(for: img, sourceFrame: frame, camCfg: camCfg)
+            }
         }
         if isCutoutMode, let personMask {
             img = LocalOnDeviceMediaIntelligence.applyPersonCutout(

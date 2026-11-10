@@ -80,7 +80,7 @@
     },
     {
       "name": "get_project",
-      "description": "The project document as JSON (canvas, background, frameStyle, cursor, camera, motion, audio, captions, timeline) plus info: durations, what was recorded (camera, microphone, system audio, cursor, keystrokes), the playhead and info.slices with each clip's source and timeline range. The transcript words (captions.segments) are left out unless include_transcript is true.",
+      "description": "The project document as JSON (canvas, background, frameStyle, cursor, camera, motion, audio, captions, timeline) plus info: durations, the capture mode, what was recorded (camera, microphone, system audio, cursor, keystrokes), the playhead and info.slices with each clip's source and timeline range. The transcript words (captions.segments) are left out unless include_transcript is true.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -104,16 +104,18 @@
     },
     {
       "name": "add_item",
-      "description": "Adds a timeline item and returns its id. zoom, mask, camera_layout, caption and shortcut need sourceStartMs and sourceEndMs. mask goes on trackId or the first mask track free at that time (a new track if none). caption goes on trackId, on a new track when trackId is \"new\", or on the first caption track (created if needed). shortcut is a custom keystroke on trackId or the first shortcut track. shortcut_track adds an empty track; caption_track adds a track holding one \"New caption\" at the playhead, because a caption track is never empty (to start a track with your own caption, add a caption with trackId \"new\"). properties is a merge patch applied to the new item, e.g. {\"scale\":2.2,\"mode\":\"manual\",\"manualCenter01\":{\"x\":0.3,\"y\":0.4}} for a zoom.",
+      "description": "Adds a timeline item and returns its id. zoom, mask, annotation, camera_layout, caption and shortcut need sourceStartMs and sourceEndMs. mask goes on trackId or the first mask track free at that time (a new track if none). annotation (text or an arrow drawn over the video, see annotationKind) goes the same way on the annotation tracks and starts in the middle of what is visible at sourceStartMs; set position01 (text) or from01/to01 (arrow) in properties. With anchor \"screen\" (the default) those points use the recording's coordinates like masks and follow zooms; with anchor \"canvas\" they are 0...1 of the output frame. caption goes on trackId, on a new track when trackId is \"new\", or on the first caption track (created if needed). shortcut is a custom keystroke on trackId or the first shortcut track. shortcut_track adds an empty track; caption_track adds a track holding one \"New caption\" at the playhead, because a caption track is never empty (to start a track with your own caption, add a caption with trackId \"new\"). properties is a merge patch applied to the new item, e.g. {\"scale\":2.2,\"mode\":\"manual\",\"manualCenter01\":{\"x\":0.3,\"y\":0.4}} for a zoom.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "project": { "$ref": "#/definitions/project" },
-          "kind": { "type": "string", "enum": ["zoom", "mask", "camera_layout", "caption", "shortcut", "caption_track", "shortcut_track"] },
+          "kind": { "type": "string", "enum": ["zoom", "mask", "annotation", "camera_layout", "caption", "shortcut", "caption_track", "shortcut_track"] },
           "sourceStartMs": { "type": "number" },
           "sourceEndMs": { "type": "number" },
           "trackId": { "type": "string" },
-          "text": { "type": "string", "description": "caption: its text." },
+          "text": { "type": "string", "description": "caption or text annotation: its text." },
+          "imagePath": { "type": "string", "description": "image annotation: an image file on this Mac, copied into the project." },
+          "annotationKind": { "type": "string", "enum": ["text", "arrow", "rectangle", "ellipse", "step", "image", "pen"], "description": "annotation: what it draws. Default text. image needs imagePath. rectangle, ellipse and pen are sized by size01 around position01 and zoom with the recording when pinned to the screen; steps number themselves in time order. pen is a freehand stroke: points01 inside its box (0...1, top-left), optional pointTimesMs (one per point, ms after the first) so the draw animation replays it at that speed, and highlighter for a wide see-through marker. Strokes drawn on the screen while recording arrive as pen, arrow and rectangle items on a Live drawing track." },
           "maskType": { "type": "string", "enum": ["blur", "spotlight"], "description": "mask: blur hides sensitive data, spotlight highlights. Default blur." },
           "rect01": {
             "type": "object",
@@ -130,12 +132,12 @@
     },
     {
       "name": "update_item",
-      "description": "Changes one timeline item or track with a JSON Merge Patch against its JSON in get_project. Kinds: slice (timeline.slices: speed, volumes, muted, hideCursor, source range), zoom (timeline.zooms), mask (items inside timeline.maskTracks), camera_layout (timeline.cameraLayouts), voiceover (timeline.voiceovers; fileOffsetMs is where it starts in its audio file), caption (captions.captionBlocks; {\"text\": \"...\"} sets the caption text), caption_track, mask_track, shortcut_track, custom_shortcut (captions.customShortcuts). One undo step.",
+      "description": "Changes one timeline item or track with a JSON Merge Patch against its JSON in get_project. Kinds: slice (timeline.slices: speed, volumes, muted, hideCursor, source range), zoom (timeline.zooms), mask (items inside timeline.maskTracks), annotation (items inside timeline.annotationTracks; {\"layer\": \"front\" | \"forward\" | \"backward\" | \"back\"} moves it between layers, the first track drawing on top), camera_layout (timeline.cameraLayouts), voiceover (timeline.voiceovers; fileOffsetMs is where it starts in its audio file), caption (captions.captionBlocks; {\"text\": \"...\"} sets the caption text), caption_track, mask_track, annotation_track, shortcut_track, custom_shortcut (captions.customShortcuts). One undo step.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "project": { "$ref": "#/definitions/project" },
-          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "camera_layout", "voiceover", "caption", "caption_track", "mask_track", "shortcut_track", "custom_shortcut"] },
+          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "annotation", "camera_layout", "voiceover", "caption", "caption_track", "mask_track", "annotation_track", "shortcut_track", "custom_shortcut"] },
           "id": { "type": "string" },
           "patch": { "type": "object" }
         },
@@ -144,12 +146,12 @@
     },
     {
       "name": "delete_item",
-      "description": "Deletes a timeline item or a whole track with everything on it. Item kinds: slice, zoom, mask, camera_layout, voiceover, caption, shortcut (a shortcut cluster id from get_project info.shortcuts). Track kinds: caption_track, mask_track and shortcut_track (id is the track's id), voiceover_track (id is the track index, 0 based), camera_layouts_track (id is ignored). One undo step.",
+      "description": "Deletes a timeline item or a whole track with everything on it. Item kinds: slice, zoom, mask, annotation, camera_layout, voiceover, caption, shortcut (a shortcut cluster id from get_project info.shortcuts). Track kinds: caption_track, mask_track, annotation_track and shortcut_track (id is the track's id), voiceover_track (id is the track index, 0 based), camera_layouts_track (id is ignored). One undo step.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "project": { "$ref": "#/definitions/project" },
-          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "camera_layout", "voiceover", "caption", "shortcut", "caption_track", "mask_track", "shortcut_track", "voiceover_track", "camera_layouts_track"] },
+          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "annotation", "camera_layout", "voiceover", "caption", "shortcut", "caption_track", "mask_track", "annotation_track", "shortcut_track", "voiceover_track", "camera_layouts_track"] },
           "id": { "type": "string" }
         },
         "required": ["kind"]
@@ -158,12 +160,12 @@
     },
     {
       "name": "split_item",
-      "description": "Splits a clip, zoom, mask, caption, camera layout or voiceover in two at a timeline time. Splitting a slice and deleting one half is how to cut a part of the recording.",
+      "description": "Splits a clip, zoom, mask, annotation, caption, camera layout or voiceover in two at a timeline time. Splitting a slice and deleting one half is how to cut a part of the recording.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "project": { "$ref": "#/definitions/project" },
-          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "caption", "camera_layout", "voiceover"] },
+          "kind": { "type": "string", "enum": ["slice", "zoom", "mask", "annotation", "caption", "camera_layout", "voiceover"] },
           "id": { "type": "string" },
           "atTimelineMs": { "type": "number" }
         },
@@ -264,14 +266,14 @@
     },
     {
       "name": "start_recording",
-      "description": "Starts a screen recording of a display, a window or an area, with the recording bar and the countdown from Settings (the user sees it). Returns at once; the recording runs until control_recording stop. Omitted options keep the recording bar's current choice.",
+      "description": "Starts a recording of a display, a window, an area or only the camera, with the recording bar and the countdown from Settings (the user sees it). A camera recording captures no screen and no system audio; in its project the camera is the main picture (info.captureMode is camera). Returns at once; the recording runs until control_recording stop. Omitted options keep the recording bar's current choice.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "target": {
             "type": "object",
             "properties": {
-              "type": { "type": "string", "enum": ["display", "window", "area"] },
+              "type": { "type": "string", "enum": ["display", "window", "area", "camera"] },
               "displayId": { "type": "integer", "description": "display: from list_capture_targets. Default the main display." },
               "windowId": { "type": "integer", "description": "window: from list_capture_targets." },
               "rect": {

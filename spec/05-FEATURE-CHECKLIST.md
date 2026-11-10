@@ -123,6 +123,11 @@
 - [x] **Export on macOS** keeps segmentation, audio and frame rendering off the main thread (`spec/06` ADR-71).
 - [x] **Cursor kinds on macOS** (I-beam, hand, crosshair) are recorded (`spec/06` ADR-73).
   - [ ] **Windows:** write `pointingHand` for `IDC_HAND`, and read a recorded `pointer` as the hand in `OverlayRasterizer.MapKind`.
+- [x] **Annotations on macOS, phase 1:** text and arrow tracks on the timeline, pinned to the screen (follow zoom and pan) or to the frame, drawn at output resolution, fade in and out, edited on the canvas (move, scale text, arrow ends and curve) and in the inspector, and through MCP (`spec/02`, `spec/06` ADR-75).
+  - [x] Phase 2: rectangle, ellipse and numbered steps; rotation; layers (bring to front, forward, backward, send to back); pop, rise and draw-on animations; typing text on the canvas; copy, cut, paste and duplicate.
+  - [x] Phase 3: keyframes, snapping to recorded clicks (new items and drags), images, style presets (built-in and saved, apply to one or all), typewriter and slide.
+  - [x] The left dock has one `Add annotation` button with a popover of the kinds.
+  - [ ] **Windows:** port Passes 3B and 5C (`spec/07`, every kind including `pen`), the editor (canvas handles, inspector, styles, layers, keyframes, snapping, clipboard), the annotation MCP tools, repacking of overlapping tracks on open, then add conformance fixtures (`windows/HANDOFF.md`, 2026-11-10).
 - [x] **Releases and updates:** manual GitHub Actions release (`docs/releasing.md`, ADR-53) builds a signed, notarized DMG and a Sparkle appcast for macOS and a Velopack installer for Windows, as a draft release. `Check for Updates...` in the app menu and menu bar menu, `Check for updates automatically` in Settings > General (release builds only).
   - [x] Windows: Velopack startup hook and update check in the app (see `windows/HANDOFF.md`).
   - [ ] Windows code signing (SignPath Foundation).
@@ -137,6 +142,8 @@
 - [x] Solid masks have a color: swatch picker and hex field in the mask inspector (`solidColor`, optional).
 - [x] Timeline segment labels collapse as a segment narrows: details, then title, animated (`spec/04`).
 - [x] Camera background (blur, image) and face stickers, applied in the editor; real face tracking (`spec/06` ADR-58, on Windows ADR-60).
+- [x] **Green screen (macOS):** `Remove background with: AI / Green screen` in Camera Style. A color key replaces segmentation for the cutout, the camera background and camera-only Cutout, with backdrop color (detected from the top of the picture at the playhead, Green and Blue presets, or picked on screen), similarity, smoothness and spill removal (`spec/07` §7.4, `spec/06` ADR-78).
+  - [ ] **Windows:** the same cubes as 3D textures (or the per-pixel formula), the same inspector controls.
 - [x] Minimum macOS is 14 (`spec/06` ADR-57). Run on a real macOS 14 machine: preview background and recording bar fixes in ADR-62.
 - [x] Clip speed menu goes up to 10x (6x, 8x, 10x added).
 - [x] **Fix:** mask handles matched the drawn mask only without padding; they now use the compositor's stage rect and the crop (`spec/06` ADR-55).
@@ -185,8 +192,21 @@
   - [x] Interactive `Edit by transcript` inspector: one-click `Remove N filler words` (`"um"`, `"uh"`, ...), one-click `Tighten N pauses` (`··· 1.3s`), and per-word `Cut video`, `Cut transcript`, and `Restore`.
 - [ ] **Window Bounds Tracking:**
   - [ ] Dynamically adjust frame size if the recorded window was resized or moved during capture (`window.jsonl`).
-- [ ] **Speaker Notes / Teleprompter:**
-  - [ ] Floating window visible only to the presenter (excluded from `ScreenCaptureKit` stream) while recording.
+- [x] **Draw on screen while recording (macOS):** a draw button in the recording bar opens pen, highlighter, arrow and rectangle (keys 1 to 4), a color, undo (⌘Z) and clear (C or Delete); Esc stops drawing. The strokes show on clear panels the capture leaves out, fade together 3 s after drawing stops (or stay until cleared, an option in the bar's menu), are saved to `telemetry/drawings.jsonl`, and become editable annotations: strokes of one tool and color in one burst are one multi-stroke item, packed onto as few `Live drawing` tracks as things shown at once, replaying at the speed they were drawn. Overlapping annotation tracks in older projects are split on open (`spec/02` §3.5, `spec/06` ADR-79).
+  - [ ] **Windows:** topmost clear windows per monitor with `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, `WM_POINTER` input, Direct2D for the live strokes, the same `drawings.jsonl` and conversion, the tools in the recording bar, and `pen` annotations in the compositor (`spec/07`). Not InkCanvas/InkToolbar: their ink would not match the exported frames.
+- [x] **Speaker Notes / Teleprompter (macOS):** a floating notes window only the presenter sees, turned on in the HUD's options (`Speaker Notes`). It edits as text or scrolls as a prompter (speed, text size, back to top, tap to pause), starts scrolling from the top when recording starts and pauses with the recording; Space plays and pauses it. It shows in screenshots between recordings and is hidden from capture while recording. Notes, size and speed persist. It can be turned on only between recordings, so the capture always leaves it out (`spec/06` ADR-76).
+  - [ ] **Windows:** the same window, `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` while recording and `WDA_NONE` otherwise (Windows can switch at any time, so it can also be turned on mid-recording), and the docking under the camera in camera mode.
+- [x] **Custom cursor pictures (macOS):** the Cursor inspector takes a picture for the arrow and one for the hand, copied into the project, with the tip set by clicking the picture (`spec/02`, `spec/07`).
+  - [ ] **Windows:** the same in `OverlayRasterizer` and the cursor inspector.
+- [x] **Recording profiles (macOS):** the HUD's options menu saves the capture mode (and area), camera, microphone, system audio and recording options as a named profile, applies one in a click (checked when the HUD matches it) and deletes them. Devices that are not connected are skipped.
+  - [ ] **Windows:** the same on the Windows recording bar.
+- [x] **No device mode (macOS):** the recording bar's `Device` button is gone; an iPhone or iPad is recorded as a window through iPhone Mirroring. `"device"` in older recordings and profiles reads as `display` (`spec/06` ADR-80).
+  - [ ] **Windows:** drop `Device` from the recording bar if shown, and read `"device"` as `Display` (`CaptureTargetMode` in `Enums.cs`), alongside the new `"camera"`.
+- [x] **Camera-only recording (macOS):** a `Camera` mode in the recording bar records the camera and microphone with no screen, from a large preview with the record button. In the editor the camera is the main picture: framed, zoomed, cropped, masked and captioned like a screen, styled with the camera's mirror, background and color grade. Camera layouts, device frames, the cursor and shortcuts do not apply. MCP `start_recording` takes `target.type: camera` (`spec/02`, `spec/06` ADR-77).
+  - [x] Framing in the Camera Layout tab: `Framed` (padding, corners, shadow), `Full frame` (edge to edge) and `Cutout` (the person over the background), with edge softness and inset for the cutout.
+  - [x] `Keep my face centered` (on for new camera-only projects): the face track is scanned from the main picture; Full frame and Cutout crop around the face and zooms center on it. `Make a vertical video (9:16)` switches the canvas to 9:16 with Full frame and face tracking.
+  - [x] Speaker notes dock at the top center of the screen, under the built-in camera, while the Camera mode is open, with the preview below them; they go back to their own place when the mode closes.
+  - [ ] **Windows:** the same mode on the Windows recording bar (Media Foundation camera capture as the timeline clock), the editor reading `captureTarget.mode: camera`, the three framings, face-centered crop and zoom, and the docked notes.
 
 ---
 

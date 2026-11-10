@@ -759,11 +759,18 @@ public struct ProjectPreset: Codable, Equatable, Identifiable, Sendable {
         doc.background = background
         doc.frameStyle = frameStyle
         doc.cursor = cursor
-        let existingCamEnabled = doc.camera.enabled
-        let existingCamCrop = doc.camera.cropRect01
+        let existing = doc.camera
         doc.camera = camera
-        doc.camera.enabled = existingCamEnabled
-        doc.camera.cropRect01 = existingCamCrop
+        doc.camera.enabled = existing.enabled
+        doc.camera.cropRect01 = existing.cropRect01
+        // Settings that belong to how this recording was made (the room behind the presenter, a camera-only framing),
+        // not to a look: a preset from another project must not switch green screen on or reframe the picture.
+        doc.camera.backgroundRemoval = existing.backgroundRemoval
+        doc.camera.chromaKeyColor = existing.chromaKeyColor
+        doc.camera.chromaSimilarity = existing.chromaSimilarity
+        doc.camera.chromaSmoothness = existing.chromaSmoothness
+        doc.camera.chromaSpill = existing.chromaSpill
+        doc.camera.cameraOnlyFraming = existing.cameraOnlyFraming
         doc.motion = motion
         doc.audio.microphoneAudioPreset = audio.microphoneAudioPreset
     }

@@ -331,6 +331,7 @@ final class MCPToolbox {
                 "width": session.metadata.captureTarget.pixelSize.width,
                 "height": session.metadata.captureTarget.pixelSize.height,
             ],
+            "captureMode": session.metadata.captureTarget.mode.rawValue,
             "recorded": [
                 "camera": session.hasRecordedCamera,
                 "microphone": session.microphoneAudioFileURL != nil,
@@ -367,6 +368,7 @@ final class MCPToolbox {
         var ids = Set(doc.timeline.zooms.map(\.id))
         ids.formUnion(doc.timeline.cameraLayouts.map(\.id))
         ids.formUnion(doc.timeline.maskTracks.flatMap { $0.items.map(\.id) })
+        ids.formUnion(doc.timeline.annotationTracks.flatMap { $0.items.map(\.id) })
         ids.formUnion(doc.captions.captionBlocks.map(\.id))
         ids.formUnion(doc.captions.customShortcuts.map(\.id))
         return ids
@@ -412,6 +414,13 @@ final class MCPToolbox {
             if let trackId = args.string("trackId"), let track = doc.timeline.maskTracks.first(where: { $0.id == trackId }) {
                 try Self.requireFree(track.items.map { ($0.id, $0.sourceStartMs, $0.sourceEndMs) }, start, clampedEnd, what: "mask on that track")
             }
+        case "annotation":
+            if let trackId = args.string("trackId") {
+                guard let track = doc.timeline.annotationTracks.first(where: { $0.id == trackId }) else {
+                    throw MCPToolError("No annotation track \(trackId).")
+                }
+                try Self.requireFree(track.items.map { ($0.id, $0.sourceStartMs, $0.sourceEndMs) }, start, clampedEnd, what: "annotation on that track")
+            }
         default:
             break
         }
@@ -423,6 +432,38 @@ final class MCPToolbox {
         case "mask":
             guard clampedEnd - start >= 300 else { throw MCPToolError("A mask must last at least 300 ms.") }
             newID = try addMask(session, args: args, start: start, end: clampedEnd)
+        case "annotation":
+            guard clampedEnd - start >= AnnotationItem.minDurationMs else { throw MCPToolError("An annotation must last at least 220 ms.") }
+            let annotationKind = try args.string("annotationKind").map { value -> AnnotationKind in
+                guard let kind = AnnotationKind(rawValue: value) else {
+                    throw MCPToolError("Unknown annotationKind \(value). Allowed: \(AnnotationKind.allCases.map(\.rawValue).joined(separator: ", "))")
+                }
+                return kind
+            } ?? .text
+            if let trackId = args.string("trackId") {
+                session.addAnnotationInRange(trackId: trackId, sourceStartMs: start, sourceEndMs: clampedEnd)
+                newID = session.selectedAnnotationId
+                if let newID, session.annotation(id: newID)?.kind != annotationKind {
+                    session.updateAnnotation(id: newID) { $0.kind = annotationKind }
+                }
+            } else {
+                session.addAnnotationInTimeRange(kind: annotationKind, sourceStartMs: start, sourceEndMs: clampedEnd)
+                newID = session.selectedAnnotationId
+            }
+            if let newID, let text = args.string("text") {
+                session.updateAnnotation(id: newID) { $0.text = text }
+            }
+            if let newID, let imagePath = args.string("imagePath") {
+                let url = URL(fileURLWithPath: (imagePath as NSString).expandingTildeInPath)
+                guard FileManager.default.fileExists(atPath: url.path), let stored = session.importAnnotationImage(from: url) else {
+                    session.deleteAnnotation(id: newID)
+                    throw MCPToolError("No image at \(imagePath).")
+                }
+                session.updateAnnotation(id: newID) {
+                    $0.imagePath = stored
+                    if $0.kind != .image { $0.kind = .image }
+                }
+            }
         case "camera_layout":
             let type = try args.string("layoutType").map { value -> CameraTimelineLayoutType in
                 guard let type = CameraTimelineLayoutType(rawValue: value) else {
@@ -548,6 +589,14 @@ final class MCPToolbox {
             session.updateCaptionText(id: id, text: text)
             if patch.isEmpty { return }
         }
+        if kind == "annotation", let layer = patch.removeValue(forKey: "layer") {
+            guard let name = layer as? String, let move = ProjectSession.AnnotationLayerMove(rawValue: name) else {
+                throw MCPToolError("layer must be one of: front, forward, backward, back.")
+            }
+            guard session.annotation(id: id) != nil else { throw MCPToolError("No annotation with id \(id).") }
+            session.moveAnnotationLayer(id: id, move)
+            if patch.isEmpty { return }
+        }
         var doc = session.document
         switch kind {
         case "slice": try patchElement(&doc.timeline.slices, id: id, patch: patch)
@@ -564,6 +613,12 @@ final class MCPToolbox {
                 throw MCPToolError("No mask with id \(id).")
             }
             try patchElement(&doc.timeline.maskTracks[t].items, id: id, patch: patch)
+        case "annotation_track": try patchElement(&doc.timeline.annotationTracks, id: id, patch: patch)
+        case "annotation":
+            guard let t = doc.timeline.annotationTracks.firstIndex(where: { $0.items.contains { $0.id == id } }) else {
+                throw MCPToolError("No annotation with id \(id).")
+            }
+            try patchElement(&doc.timeline.annotationTracks[t].items, id: id, patch: patch)
         default:
             throw MCPToolError("Unknown kind: \(kind)")
         }
@@ -573,6 +628,11 @@ final class MCPToolbox {
         try Self.requireNoOverlaps(doc.timeline.cameraLayouts.map { ($0.id, $0.sourceStartMs, $0.sourceEndMs) }, what: "camera layout", involving: id)
         for track in doc.timeline.maskTracks {
             try Self.requireNoOverlaps(track.items.map { ($0.id, $0.sourceStartMs, $0.sourceEndMs) }, what: "mask", involving: id)
+        }
+        for t in doc.timeline.annotationTracks.indices {
+            doc.timeline.annotationTracks[t].items.sort { $0.sourceStartMs < $1.sourceStartMs }
+            let items = doc.timeline.annotationTracks[t].items
+            try Self.requireNoOverlaps(items.map { ($0.id, $0.sourceStartMs, $0.sourceEndMs) }, what: "annotation", involving: id)
         }
         for track in doc.captions.captionTracks {
             try Self.requireNoOverlaps(
@@ -605,6 +665,12 @@ final class MCPToolbox {
         case "mask":
             try require(doc.timeline.maskTracks.contains { $0.items.contains { $0.id == id } })
             session.deleteMask(maskId: id)
+        case "annotation":
+            try require(session.annotation(id: id) != nil)
+            session.deleteAnnotation(id: id)
+        case "annotation_track":
+            guard let track = doc.timeline.annotationTracks.first(where: { $0.id == id }) else { return try notFound(kind, id) }
+            session.deleteTimelineTrack(.annotation(id: id), displayName: track.name)
         case "camera_layout":
             try require(doc.timeline.cameraLayouts.contains { $0.id == id })
             session.deleteCameraLayout(id: id)
@@ -659,6 +725,7 @@ final class MCPToolbox {
         case "slice": session.splitSlice(id: id, atTimelineMs: timelineMs)
         case "zoom": session.splitZoom(id: id, atSourceMs: sourceMs)
         case "mask": session.splitMask(id: id, atSourceMs: sourceMs)
+        case "annotation": session.splitAnnotation(id: id, atSourceMs: sourceMs)
         case "caption": session.splitCaption(id: id, atSourceMs: sourceMs)
         case "camera_layout": session.splitCameraLayout(id: id, atSourceMs: sourceMs)
         case "voiceover": session.splitVoiceover(id: id, atSourceMs: sourceMs)
@@ -831,6 +898,8 @@ final class MCPToolbox {
             "cursor.clickEffect.visualStyle": values(ClickEffectStyle.self),
             "cursor.rotationMode": values(CursorRotationMode.self),
             "camera.layoutMode": values(CameraLayoutMode.self),
+            "camera.cameraOnlyFraming": values(CameraOnlyFraming.self),
+            "camera.backgroundRemoval": values(CameraBackgroundRemoval.self),
             "camera.aspectRatioPreset": values(CameraAspectRatioPreset.self),
             "camera.colorGradePreset": values(CameraColorGradePreset.self),
             "camera.shape": values(CameraShape.self),
@@ -846,6 +915,10 @@ final class MCPToolbox {
             "timeline.zooms[].presentation": values(ZoomPresentation.self),
             "timeline.maskTracks[].items[].type": values(MaskType.self),
             "timeline.maskTracks[].items[].style": values(MaskStyle.self),
+            "timeline.annotationTracks[].items[].kind": values(AnnotationKind.self),
+            "timeline.annotationTracks[].items[].anchor": values(AnnotationAnchor.self),
+            "timeline.annotationTracks[].items[].enter and .exit": values(AnnotationAnimation.self),
+            "timeline.annotationTracks[].items[].textBackground": values(AnnotationTextBackground.self),
             "timeline.cameraLayouts[].layoutType": values(CameraTimelineLayoutType.self),
             "timeline.voiceovers[].attachMode": values(VoiceoverAttachMode.self),
         ]
@@ -1012,8 +1085,13 @@ final class MCPToolbox {
             else { throw MCPToolError("target.rect needs x, y, width and height (at least 64 points).") }
             recorder.selectedMode = .area
             recorder.selectedAreaRectQuartz = CGRect(x: x, y: y, width: w, height: h)
+        case "camera":
+            recorder.selectedMode = .camera
+            guard recorder.selectedCameraDeviceID != nil else {
+                throw MCPToolError("A camera recording needs a camera: pass cameraId (from list_capture_targets).")
+            }
         default:
-            throw MCPToolError("target.type must be display, window or area.")
+            throw MCPToolError("target.type must be display, window, area or camera.")
         }
 
         // A countdown asked for here applies to this recording only, not to the user's setting.

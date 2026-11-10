@@ -31,6 +31,20 @@ audio), `captureTarget.mode` is `display` with the movie's pixel size and `scale
 `null`, and `cursor.jsonl` / `clicks.jsonl` / `keys.jsonl` are empty files. Readers must treat an empty `cursor.jsonl` as
 "no cursor recorded": zooms are `manual` (`manualCenter01`) and the cursor layer is not drawn.
 
+`captureTarget.mode` is `display`, `window`, `area` or `camera`. Older files may say `device`, which readers treat as
+`display` (that mode recorded the whole display).
+
+**Camera-only recordings** (the `Camera` mode of the recording bar) capture no screen. `captureTarget.mode` is `camera`,
+`displayId` is `0`, `pixelSize` and `logicalBounds` are the camera picture's size with `scaleFactor: 1`, and `refreshRate` is
+the camera frame rate. `tracks.displayVideo` is `webcam.mp4` (the camera movie, the main picture), `tracks.webcamVideo`,
+`tracks.systemAudio` and `tracks.windowTelemetry` are `null`, and the telemetry files are empty, as above. The camera
+movie starts at the first usable camera frame and the microphone counts from it. Readers treat the main picture as a
+camera: `camera` styling (mirror, background, color grade, sharpen) applies to it, and there is no camera layer.
+The device frame (`frameStyle.deviceMockup`) is ignored for these recordings. `camera.cameraOnlyFraming` (`framed`
+default, `full-frame`, `cutout`) sets how it sits on the canvas, and
+`camera.enableFaceTracking` (on for new camera-only projects) keeps the face centered when the picture is cropped or zoomed,
+using `assets/face-track.json` scanned from the main picture.
+
 > **Track names come from `metadata.json`.** Readers must open the files named in `tracks` (`displayVideo`, `webcamVideo`,
 > `microphoneAudio`, `systemAudio`) instead of assuming the names above. `systemAudio` usually points at the display video
 > file because the system audio track is muxed into it. Imported projects may use `.mov` or other container extensions.
@@ -89,6 +103,37 @@ Recorded if the user moves or resizes the target window while recording in Windo
 ```jsonl
 {"t":0.0,"x":120,"y":80,"w":1280,"h":800}
 ```
+
+### 3.5. `recording/telemetry/drawings.jsonl`
+What was drawn on the screen while recording (optional; screen recordings only). A `stroke` has a `tool` (`pen`,
+`highlighter`, `arrow`, `rectangle`), a `color`, `points` as `[x, y, ms after t]` normalized like the cursor, and
+`fadeAfterMs` (null: stays until cleared; one value for the whole recording, taken when it starts). `clear` ends every stroke still shown; `undo` ends the newest one. `t` is the
+recording time the stroke started, pauses removed.
+```jsonl
+{"type":"stroke","t":1520.0,"tool":"pen","color":"#FF3B30","points":[[0.31,0.42,0],[0.33,0.41,16]],"fadeAfterMs":3000}
+{"type":"clear","t":6100.0}
+```
+When the project is made (and when an interrupted recording is recovered) the strokes become annotations on `Live drawing`
+tracks at the top:
+- **Bursts.** Replaying the log in the order it was written (a stroke at `t` + its last point time), each stroke belongs to the
+  clear epoch it was drawn in. In start order, a stroke starts a new burst when its epoch differs from the previous stroke's,
+  or when it starts more than the previous stroke's `fadeAfterMs` after the latest finish in the burst. A burst ends
+  `fadeAfterMs` after its latest finish (at the end of the recording when null), or at the `clear` that ends its epoch,
+  whichever is first: strokes drawn without a long enough pause leave together, as on screen.
+- **Items.** In a burst, the `pen` strokes of one tool and color are one `pen` item: the points of every stroke in order,
+  `pointTimesMs` measured from the first stroke's `t` (never decreasing), and `strokeStarts` at the first point of each later
+  stroke; bounding box as `position01`/`size01`, `highlighter` set for the highlighter, `enter: draw`, `exit: fade`, 300 ms.
+  `arrow` is an arrow from the first to the last point with `bend: 0`, and `rectangle` a rectangle over them with
+  `cornerRatio: 0.006` (`enter: draw`, `exit: fade`, the drawing time as `animationMs`, 120...600). A stroke that was undone
+  is an item of its own that ends at the `undo`.
+- **Constants.** `strokeRatio` is 0.005 for the pen, 0.022 for the highlighter and 0.006 for arrows and rectangles; the
+  color is the stroke's; `anchor` is `screen`. An item starts at `max(0, min(t, duration - 220))` and lasts at least 220 ms.
+- **Tracks.** Items are packed in start order onto the first track whose last item has ended (20 ms of overlap allowed), or a new one (`Live drawing`,
+  `Live drawing 2`...), so there are as many tracks as things shown at once.
+
+Items on one annotation track never overlap by more than 20 ms (the tolerance drags, layer moves and duplicates use). A
+project opened with items overlapping more than that on a track has that track repacked the same way (the first keeps its
+id and name).
 
 ---
 
@@ -186,6 +231,8 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
     }
   },
   "cursor": {
+    "customPointer": { "imagePath": "assets/cursors/arrow.png", "hotspot01": { "x": 0.0, "y": 0.0 } },
+    "customHand": null,
     "hidden": false,
     "scale": 1.6,
     "themeId": "classic-dark",
@@ -230,7 +277,13 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
     "backgroundImagePath": "assets/camera-bg-1a2b3c4d.jpg",
     "stickerId": "crown",
     "enableFaceTracking": false,
-    "faceTrackingZoom": 1.3
+    "faceTrackingZoom": 1.3,
+    "cameraOnlyFraming": "framed",
+    "backgroundRemoval": "ai",
+    "chromaKeyColor": "#00B140",
+    "chromaSimilarity": 0.4,
+    "chromaSmoothness": 0.3,
+    "chromaSpill": 0.5
   },
   "motion": {
     "cameraSpring": {
@@ -396,6 +449,70 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
 1. **`timeline.maskTracks` (Multi-Track Masks with Keyframes):** Instead of a flat single-track array where masks cannot overlap comfortably, `maskTracks` allows **unlimited parallel tracks of Blur / Pixelate / Spotlight regions**, and each mask item supports `keyframes` so a blur box can smoothly move when the user scrolls the page!
 2. **Face track:** `assets/face-track.json` holds where the largest face is in `webcam.mp4`, written once when a sticker or face tracking is first used and safe to delete (it is scanned again). `{"version": 1, "webcamDurationMs": n, "samples": [[timeMs, faceX, faceY, faceW, faceH, eyeAx, eyeAy, eyeBx, eyeBy, noseX, noseY, mouthX, mouthY], ...]}`, normalized to the raw webcam frame, top-left origin, every other frame; moments with no face have no sample.
 2. **Self-Contained `assets/` Directory:** Copying the active wallpaper (`assets/background.jpg`) into the `.nativescreen` bundle ensures 100% cross-platform visual parity when opening a Mac project on Windows.
+
+### Custom cursors
+
+`cursor.customPointer` and `cursor.customHand` (both optional) replace the arrow and the pointing hand with a picture the user chose, copied into `assets/cursors/`. `hotspot01` is the tip, from the picture's top left. With `alwaysUsePointer`, `customPointer` is used for every shape. Other shapes (I-beam, crosshair, grab) keep the theme's sprite, and a missing file falls back to the theme.
+
+### Annotation tracks
+
+`timeline.annotationTracks` holds what is drawn over the video: text, arrows, shapes, steps, images and pen strokes. Like masks, items on one track never overlap, times are source times (`sourceStartMs`, `sourceEndMs`), and an empty track is removed. Every item keeps every field whatever its `kind`, so changing the kind or patching one field never loses the rest.
+
+```json
+"annotationTracks": [
+  {
+    "id": "annotation-track-1",
+    "name": "Annotations",
+    "isHidden": false,
+    "items": [
+      {
+        "id": "annotation-1",
+        "sourceStartMs": 1000.0,
+        "sourceEndMs": 4000.0,
+        "kind": "arrow",
+        "anchor": "screen",
+        "text": "",
+        "position01": { "x": 0.5, "y": 0.5 },
+        "fontSizeRatio": 0.042,
+        "maxWidthRatio": 0.5,
+        "bold": true,
+        "textBackground": "solid",
+        "backgroundColor": "#16161D",
+        "from01": { "x": 0.30, "y": 0.80 },
+        "to01": { "x": 0.42, "y": 0.65 },
+        "bend": 0.18,
+        "strokeRatio": 0.007,
+        "size01": { "width": 0.22, "height": 0.12 },
+        "rotationDegrees": 0.0,
+        "fillOpacity": 0.0,
+        "cornerRatio": 0.012,
+        "imagePath": "",
+        "keyframes": [],
+        "points01": [],
+        "pointTimesMs": [],
+        "highlighter": false,
+        "strokeStarts": [],
+        "color": "#FF5A36",
+        "enter": "fade",
+        "exit": "fade",
+        "animationMs": 250.0,
+        "disabled": false
+      }
+    ]
+  }
+]
+```
+
+- `kind`: `text` (draws `text` in a box centered on `position01`), `arrow` (from `from01` to `to01`), `rectangle` or `ellipse` (sized by `size01` around `position01`, in the same units as the points, so a screen-pinned shape zooms with what it frames), `step` (a numbered badge at `position01`, `fontSizeRatio` setting its size), `image` (the file at `imagePath`, relative to the package and copied into `assets/annotations/`, `maxWidthRatio` of the frame wide at its own aspect, `cornerRatio` rounding its corners), or `pen` (a freehand stroke: `points01` inside its `size01` box around `position01`, 0...1 from the box's top left, `pointTimesMs` one per point in ms after the first, `strokeStarts` the indices where the pen went down again, `highlighter` for a wide see-through marker). Steps are numbered 1, 2, 3... by `sourceStartMs`, then by layer, skipping disabled items and hidden tracks.
+- Layers: the first track draws on top. Moving an item up or down a layer moves it to the neighboring track when that track is free at its time, or to a new track inserted next to it.
+- `rotationDegrees`: clockwise about the center, `-180...180`. Arrows ignore it.
+- `keyframes`: optional `{ sourceMs, position01, from01, to01, size01, rotationDegrees }` sorted by time. With any, they replace the item's own geometry: it holds the first before it and the last after it, and eases between neighbors with smoothstep (rotation the shorter way round). Moving an item in time moves its keyframes; splitting gives each half a keyframe at the cut.
+- `fillOpacity` (0...1) fills a rectangle or ellipse with `color`; `cornerRatio` is a rectangle's corner radius as a share of the frame's shorter side (0...0.1).
+- `anchor`: `screen` points are in full-frame recording coordinates, the same as masks, so the item follows zoom, pan, crop and layout. `canvas` points are 0...1 of the output frame.
+- Sizes are shares of the output frame, never of the zoomed recording: `fontSizeRatio` and `strokeRatio` of its shorter side, `maxWidthRatio` (where lines wrap) of its width. A zoom moves an item but does not enlarge it.
+- `bend` moves the arrow's middle sideways by that share of its length, to the left of the direction of travel when positive (`-0.8...0.8`).
+- `enter` and `exit`: `none`, `fade`, `pop` (from 60% scale, overshooting on the way in), `rise` (from below on the way in, upward on the way out), `slide` (from the left on the way in, to the right on the way out), `draw` (the line draws on and off; other kinds fade instead) or `typewriter` (text appears one character at a time and is erased on the way out; other kinds fade instead), each lasting `animationMs`, capped at half the item.
+- Ranges on load: `fontSizeRatio` 0.015...0.2, `maxWidthRatio` 0.1...1, `strokeRatio` 0.002...0.03, `animationMs` 0...1500, each side of `size01` 0.01...1.5. Missing fields take the defaults above (text color `#FFFFFF`).
 
 ### Caption tracks
 

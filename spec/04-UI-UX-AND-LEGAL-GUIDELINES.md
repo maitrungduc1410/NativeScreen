@@ -23,7 +23,11 @@
      - `Display` (`display`): Full screen capture.
      - `Window` (`macwindow`): Interactive single-window picker. Includes the app's own editor windows, so editing can be demoed.
      - `Area` (`viewfinder`): Interactive drag-to-crop rectangle with size presets (`16:9`, `9:16`, `1:1`).
-     - `Device` (`iphone`): Connected iOS device capture (Phase 3).
+     - `Camera` (`person.crop.rectangle`): Only the camera, no screen. Opens a large camera preview (thirds grid, camera name,
+       a warning when no microphone is selected, `Start recording`) that stays up through the countdown and the recording.
+       The system audio selector is hidden in this mode.
+     - There is no device mode: an iPhone or iPad is recorded as a window through iPhone Mirroring, with the cursor,
+       clicks and auto zoom like any app (`spec/06` ADR-80).
   3. **Input Toggles:**
      - Camera selector (`video` / `video.slash`)
      - Microphone selector (`mic` / `mic.slash` + live input level meter)

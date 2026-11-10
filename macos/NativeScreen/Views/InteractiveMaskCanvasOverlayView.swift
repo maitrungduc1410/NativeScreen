@@ -32,6 +32,7 @@ public struct InteractiveMaskCanvasOverlayView: View {
                         session.cancelInteractiveMaskSelection()
                     } else {
                         session.selectedMaskId = nil
+                        session.selectedAnnotationId = nil
                         session.selectedInspectorTab = .background
                     }
                 }
@@ -42,7 +43,7 @@ public struct InteractiveMaskCanvasOverlayView: View {
                 // would re-evaluate this overlay on every frame.
                 let srcMs = session.currentSourceTimeMs
                 let activeMasks = session.activeMasks(atSourceMs: srcMs)
-                let eval = session.trajectorySolver.evaluate(atSourceMs: srcMs)
+                let camera = session.evaluatedCamera(atSourceMs: srcMs)
                 let crop = session.document.canvas.cropRect01
                 let stage = MetalFrameCompositor.resolvedStageLayout(
                     session: session,
@@ -52,14 +53,14 @@ public struct InteractiveMaskCanvasOverlayView: View {
                         width: max(16.0, CGFloat(max(640, session.metadata.captureTarget.pixelSize.width)) * CGFloat(crop.width)),
                         height: max(16.0, CGFloat(max(400, session.metadata.captureTarget.pixelSize.height)) * CGFloat(crop.height))
                     ),
-                    zoomScale: eval.camera.scale
+                    zoomScale: camera.scale
                 )
                 let transform = CanvasCoordinateTransform(
                     canvasSize: canvasSize,
                     screenRectBottomLeft: stage.screenRect,
                     cropRect01: crop,
-                    cameraCenter01: eval.camera.isLoupeMode ? .center : eval.camera.center01,
-                    cameraScale: eval.camera.isLoupeMode ? 1.0 : eval.camera.scale
+                    cameraCenter01: camera.isLoupeMode ? .center : camera.center01,
+                    cameraScale: camera.isLoupeMode ? 1.0 : camera.scale
                 )
                 let videoRect = transform.visibleScreenRect
                 // 1. Existing Mask Interactive Handles

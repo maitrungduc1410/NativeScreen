@@ -101,6 +101,9 @@ public struct InspectorSidebarView: View {
                     } else if let voiceoverId = session.selectedVoiceoverId,
                               let voSeg = session.document.timeline.voiceovers.first(where: { $0.id == voiceoverId }) {
                         voiceoverSegmentEditor(voiceover: voSeg)
+                    } else if let annotationId = session.selectedAnnotationId,
+                              let annotationItem = session.annotation(id: annotationId) {
+                        annotationEditor(item: annotationItem)
                     } else if let shortcutId = session.selectedShortcutId,
                               let cluster = session.detectedShortcutClusters.first(where: { $0.id == shortcutId }) {
                         shortcutSegmentEditor(cluster: cluster)
@@ -111,7 +114,11 @@ public struct InspectorSidebarView: View {
                         case .cursor:
                             cursorInspector
                         case .cameraLayout:
-                            cameraLayoutInspector
+                            if session.isCameraOnlyRecording {
+                                cameraOnlyLayoutInspector
+                            } else {
+                                cameraLayoutInspector
+                            }
                         case .cameraStyle:
                             cameraStyleInspector
                         case .captions:
@@ -1191,6 +1198,20 @@ public struct InspectorSidebarView: View {
                     }
                 }
 
+                // 2B. Custom cursor pictures
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Custom cursor")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.ink.opacity(0.92))
+                    customCursorRow(title: "Arrow", slot: .pointer, image: cursor.customPointer)
+                    customCursorRow(title: "Hand", slot: .hand, image: cursor.customHand)
+                    if cursor.customPointer != nil || cursor.customHand != nil {
+                        Text("Click the picture to set the tip. Other shapes keep the style above.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 // 3. Always use pointer cursor
                 inspectorToggleRow(
                     title: "Always use pointer cursor",
@@ -1992,6 +2013,102 @@ public struct InspectorSidebarView: View {
     // MARK: - Camera background and sticker
 
     @ViewBuilder
+    /// How the person is separated from the room for the cutout and a camera background: on-device AI, or a color key
+    /// on a green or blue backdrop.
+    private func cameraBackgroundRemovalSection(_ cam: CameraConfig) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Remove background with")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.ink.opacity(0.92))
+
+            Picker("", selection: Binding(
+                get: { cam.backgroundRemoval },
+                set: { removal in
+                    if removal == .greenScreen {
+                        Task { await session.useGreenScreen() }
+                    } else {
+                        session.mutate { $0.camera.backgroundRemoval = removal }
+                    }
+                }
+            )) {
+                Text("AI").tag(CameraBackgroundRemoval.ai)
+                Text("Green screen").tag(CameraBackgroundRemoval.greenScreen)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel(Text("Remove background with"))
+            .labelsHidden()
+
+            if cam.backgroundRemoval == .greenScreen {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color(nsColor: NSColor(hexString: cam.chromaKeyColor)))
+                        .frame(width: 22, height: 22)
+                        .overlay(Circle().strokeBorder(Color.ink.opacity(0.18), lineWidth: 1))
+                        .accessibilityLabel(Text("Backdrop color"))
+                    Text("Backdrop color")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.ink.opacity(0.85))
+                    Spacer(minLength: 0)
+                    InstantTooltipButton(tooltip: "Green", edge: .top, size: 28, cornerRadius: 7, action: {
+                        session.mutate { $0.camera.chromaKeyColor = CameraConfig.greenScreenColor }
+                    }) {
+                        Circle().fill(Color(nsColor: NSColor(hexString: CameraConfig.greenScreenColor))).frame(width: 14, height: 14)
+                    }
+                    InstantTooltipButton(tooltip: "Blue", edge: .top, size: 28, cornerRadius: 7, action: {
+                        session.mutate { $0.camera.chromaKeyColor = CameraConfig.blueScreenColor }
+                    }) {
+                        Circle().fill(Color(nsColor: NSColor(hexString: CameraConfig.blueScreenColor))).frame(width: 14, height: 14)
+                    }
+                    InstantTooltipButton(tooltip: "Detect from the video", edge: .top, size: 28, cornerRadius: 7, action: {
+                        Task { await session.useGreenScreen() }
+                    }) {
+                        Image(systemName: "wand.and.stars").font(.system(size: 12.5)).foregroundStyle(.ink.opacity(0.85))
+                    }
+                    InstantTooltipButton(tooltip: "Pick a color on screen", edge: .top, size: 28, cornerRadius: 7, action: {
+                        NSColorSampler().show { picked in
+                            guard let picked, let hex = picked.sRGBHexString else { return }
+                            session.mutate { $0.camera.chromaKeyColor = hex }
+                        }
+                    }) {
+                        Image(systemName: "eyedropper").font(.system(size: 12.5)).foregroundStyle(.ink.opacity(0.85))
+                    }
+                }
+
+                coalescedSlider(
+                    title: "Similarity",
+                    value: Binding(
+                        get: { cam.chromaSimilarity },
+                        set: { v in session.mutate { $0.camera.chromaSimilarity = v } }
+                    ),
+                    range: 0.0...1.0,
+                    defaultValue: 0.4
+                )
+                coalescedSlider(
+                    title: "Smoothness",
+                    value: Binding(
+                        get: { cam.chromaSmoothness },
+                        set: { v in session.mutate { $0.camera.chromaSmoothness = v } }
+                    ),
+                    range: 0.0...1.0,
+                    defaultValue: 0.3
+                )
+                coalescedSlider(
+                    title: "Spill removal",
+                    value: Binding(
+                        get: { cam.chromaSpill },
+                        set: { v in session.mutate { $0.camera.chromaSpill = v } }
+                    ),
+                    range: 0.0...1.0,
+                    defaultValue: 0.5
+                )
+                Text("Used wherever the background is removed: the cutout, and a blurred or replaced background.")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.ink.opacity(0.42))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     private func cameraBackgroundSection(_ cam: CameraConfig) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Background")
@@ -2571,6 +2688,142 @@ public struct InspectorSidebarView: View {
 
     // MARK: - 5B. Camera Layout Inspector
 
+    /// Camera-only recordings: how the picture is framed, face tracking, and a shortcut to a vertical video.
+    @ViewBuilder
+    private var cameraOnlyLayoutInspector: some View {
+        let cam = session.document.camera
+        let canvas = session.document.canvas
+        let isVertical = canvas.aspectRatioMode == .preset && canvas.aspectRatioPreset == .vertical9x16
+
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Framing")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.ink.opacity(0.92))
+
+                HStack(spacing: 8) {
+                    ForEach(CameraOnlyFraming.allCases) { framing in
+                        cameraOnlyFramingCard(framing, isSelected: cam.cameraOnlyFraming == framing) {
+                            session.mutate { $0.camera.cameraOnlyFraming = framing }
+                        }
+                    }
+                }
+            }
+
+            inspectorDivider
+
+            inspectorToggleRow(
+                title: "Keep my face centered",
+                icon: "person.fill.viewfinder",
+                description: "Full frame and Cutout crop around your face, and zooms center on it. Done locally, no data is sent to the server.",
+                isOn: Binding(
+                    get: { cam.enableFaceTracking },
+                    set: { v in session.mutate { $0.camera.enableFaceTracking = v } }
+                )
+            )
+            if cam.enableFaceTracking { faceScanStatusRow }
+
+            if cam.cameraOnlyFraming == .cutout {
+                inspectorDivider
+                coalescedSlider(
+                    title: "Edge softness",
+                    value: Binding(
+                        get: { cam.cutoutEdgeSoftness },
+                        set: { v in session.mutate { $0.camera.cutoutEdgeSoftness = v } }
+                    ),
+                    range: 0.0...1.0,
+                    defaultValue: 0.20
+                )
+                coalescedSlider(
+                    title: "Edge inset",
+                    value: Binding(
+                        get: { cam.cutoutEdgeInset },
+                        set: { v in session.mutate { $0.camera.cutoutEdgeInset = v } }
+                    ),
+                    range: 0.0...1.0,
+                    defaultValue: 0.0
+                )
+            }
+
+            if !isVertical {
+                inspectorDivider
+                VStack(alignment: .leading, spacing: 8) {
+                    inspectorPillOptionButton(title: "Make a vertical video (9:16)", isSelected: false) {
+                        session.mutate {
+                            $0.canvas.aspectRatioMode = .preset
+                            $0.canvas.aspectRatioPreset = .vertical9x16
+                            if $0.camera.cameraOnlyFraming == .framed { $0.camera.cameraOnlyFraming = .fullFrame }
+                            $0.camera.enableFaceTracking = true
+                        }
+                    }
+                    Text("Fills a 9:16 frame and follows your face, for shorts and reels.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.ink.opacity(0.42))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func cameraOnlyFramingCard(
+        _ framing: CameraOnlyFraming,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    LinearGradient(
+                        colors: [Color(red: 0.14, green: 0.15, blue: 0.24), Color(red: 0.08, green: 0.09, blue: 0.14)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    switch framing {
+                    case .framed:
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color(red: 0.62, green: 0.64, blue: 0.70))
+                            .padding(10)
+                            .overlay {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(Color(red: 0.20, green: 0.21, blue: 0.26))
+                                    .offset(y: 6)
+                            }
+                            .clipped()
+                    case .fullFrame:
+                        Color(red: 0.62, green: 0.64, blue: 0.70)
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(Color(red: 0.20, green: 0.21, blue: 0.26))
+                            .offset(y: 12)
+                    case .cutout:
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.93))
+                            .shadow(color: .black.opacity(0.6), radius: 1.5)
+                            .offset(y: 12)
+                    }
+                }
+                .frame(height: 68)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(isSelected ? Color.ink.opacity(0.65) : Color.clear, lineWidth: 2.0)
+                        .padding(-3)
+                )
+
+                Text(framing.label.localizedUI)
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundStyle(.ink.opacity(isSelected ? 0.85 : 0.45))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
     @ViewBuilder
     private var cameraLayoutInspector: some View {
         let cam = session.document.camera
@@ -2991,14 +3244,21 @@ public struct InspectorSidebarView: View {
         let _ = webcamThumbnailRevision
         let cam = session.document.camera
         let hasCrop = (cam.cropRect01 != .full)
+        // Camera-only recordings style the main picture: stickers, face tracking and delay follow the camera layer,
+        // and cropping is the canvas crop.
+        let isCameraOnly = session.isCameraOnlyRecording
 
         VStack(alignment: .leading, spacing: 22) {
             if cam.layoutMode != .cutout {
                 cameraBackgroundSection(cam)
                 inspectorDivider
             }
-            cameraStickerSection(cam)
+            cameraBackgroundRemovalSection(cam)
             inspectorDivider
+            if !isCameraOnly {
+                cameraStickerSection(cam)
+                inspectorDivider
+            }
 
             // 1. `Color grading` 7x2 Thumbnail Grid (`Original` + 12 Filmic Looks + Custom Presets + `+` Menu Button)
             VStack(alignment: .leading, spacing: 10) {
@@ -3158,45 +3418,25 @@ public struct InspectorSidebarView: View {
             inspectorDivider
 
             // 3. `Crop` (`crop` + `"Crop camera"` / `"Edit crop"` + `"Reset"`: Opens Standalone Camera Crop Window)
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "crop")
-                        .font(.system(size: 13.5, weight: .regular))
-                        .foregroundStyle(.ink.opacity(0.88))
-                    Text("Crop")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.ink.opacity(0.92))
-                }
-
-                HStack(spacing: 8) {
-                    Button {
-                        ProjectWorkspaceStore.shared.presentCameraCropWindow(for: session)
-                    } label: {
-                        Text(hasCrop ? "Edit crop" : "Crop camera")
+            if !isCameraOnly {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "crop")
+                            .font(.system(size: 13.5, weight: .regular))
+                            .foregroundStyle(.ink.opacity(0.88))
+                        Text("Crop")
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.92))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.ink.opacity(0.04))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
-                            )
-                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
-                    .buttonStyle(.plain)
 
-                    if hasCrop {
+                    HStack(spacing: 8) {
                         Button {
-                            session.mutate { $0.camera.cropRect01 = .full }
+                            ProjectWorkspaceStore.shared.presentCameraCropWindow(for: session)
                         } label: {
-                            Text("Reset")
+                            Text(hasCrop ? "Edit crop" : "Crop camera")
                                 .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.ink.opacity(0.85))
-                                .padding(.horizontal, 14)
+                                .foregroundStyle(.ink.opacity(0.92))
+                                .frame(maxWidth: .infinity)
                                 .frame(height: 36)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -3209,11 +3449,33 @@ public struct InspectorSidebarView: View {
                                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
+
+                        if hasCrop {
+                            Button {
+                                session.mutate { $0.camera.cropRect01 = .full }
+                            } label: {
+                                Text("Reset")
+                                    .font(.system(size: 13, weight: .regular))
+                                    .foregroundStyle(.ink.opacity(0.85))
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 36)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(Color.ink.opacity(0.04))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color.ink.opacity(0.08), lineWidth: 1)
+                                    )
+                                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
-            }
 
-            inspectorDivider
+                inspectorDivider
+            }
 
             // 4. `Mirror horizontally` & `Face tracking` (100% On-Device Vision)
             inspectorToggleRow(
@@ -3226,64 +3488,66 @@ public struct InspectorSidebarView: View {
                 )
             )
 
-            inspectorToggleRow(
-                title: "Face tracking",
-                icon: "person.fill.viewfinder",
-                description: "NativeScreen will adjust the camera picture to center it on your face. Done locally, no data is sent to the server.",
-                isOn: Binding(
-                    get: { cam.enableFaceTracking },
-                    set: { v in session.mutate { $0.camera.enableFaceTracking = v } }
-                )
-            )
-
-            if cam.enableFaceTracking {
-                coalescedSlider(
-                    title: "Zoom",
-                    value: Binding(
-                        get: { cam.faceTrackingZoom },
-                        set: { v in session.mutate { $0.camera.faceTrackingZoom = v } }
-                    ),
-                    range: 1.0...2.0,
-                    defaultValue: 1.3
-                )
-                if cam.stickerId == nil { faceScanStatusRow }
-            }
-
-            inspectorDivider
-
-            // 5. `Advanced` (`Camera delay` -200ms ... +200ms)
-            inspectorCollapsibleSection(
-                title: "Advanced",
-                isExpanded: $isAdvancedCameraStyleExpanded
-            ) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform.and.person.filled")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.ink.opacity(0.85))
-                        Text("Camera delay (\(Int(round(cam.delayAdjustmentMs))) ms)")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(.ink.opacity(0.92))
-                    }
-
-                    Text("If your lips look out of sync with your voice, raise it when they move after the words, lower it when they move before.")
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.ink.opacity(0.42))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    coalescedSliderRowOnly(
-                        value: Binding(
-                            get: { cam.delayAdjustmentMs },
-                            set: { v in session.mutate { $0.camera.delayAdjustmentMs = (v / 5.0).rounded() * 5.0 } }
-                        ),
-                        range: -200.0...200.0,
-                        defaultValue: 0.0
+            if !isCameraOnly {
+                inspectorToggleRow(
+                    title: "Face tracking",
+                    icon: "person.fill.viewfinder",
+                    description: "NativeScreen will adjust the camera picture to center it on your face. Done locally, no data is sent to the server.",
+                    isOn: Binding(
+                        get: { cam.enableFaceTracking },
+                        set: { v in session.mutate { $0.camera.enableFaceTracking = v } }
                     )
+                )
+
+                if cam.enableFaceTracking {
+                    coalescedSlider(
+                        title: "Zoom",
+                        value: Binding(
+                            get: { cam.faceTrackingZoom },
+                            set: { v in session.mutate { $0.camera.faceTrackingZoom = v } }
+                        ),
+                        range: 1.0...2.0,
+                        defaultValue: 1.3
+                    )
+                    if cam.stickerId == nil { faceScanStatusRow }
+                }
+
+                inspectorDivider
+
+                // 5. `Advanced` (`Camera delay` -200ms ... +200ms)
+                inspectorCollapsibleSection(
+                    title: "Advanced",
+                    isExpanded: $isAdvancedCameraStyleExpanded
+                ) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "waveform.and.person.filled")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.ink.opacity(0.85))
+                            Text("Camera delay (\(Int(round(cam.delayAdjustmentMs))) ms)")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(.ink.opacity(0.92))
+                        }
+
+                        Text("If your lips look out of sync with your voice, raise it when they move after the words, lower it when they move before.")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.ink.opacity(0.42))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        coalescedSliderRowOnly(
+                            value: Binding(
+                                get: { cam.delayAdjustmentMs },
+                                set: { v in session.mutate { $0.camera.delayAdjustmentMs = (v / 5.0).rounded() * 5.0 } }
+                            ),
+                            range: -200.0...200.0,
+                            defaultValue: 0.0
+                        )
+                    }
                 }
             }
         }
         .onAppear {
-            if let url = session.webcamVideoFileURL {
+            if let url = isCameraOnly ? session.videoFileURL : session.webcamVideoFileURL {
                 GradedWebcamPortraitView.preloadFirstFrameIfNeeded(from: url) {
                     webcamThumbnailRevision &+= 1
                 }
@@ -7129,3 +7393,444 @@ private struct CaptionPositionPad: View {
         .accessibilityValue(Text("Left \(Int((position01.x * 100).rounded()))% · Top \(Int((position01.y * 100).rounded()))%"))
     }
 }
+
+// MARK: - Annotation Editor
+
+extension InspectorSidebarView {
+    func annotationEditor(item: AnnotationItem) -> some View {
+        let id = item.id
+        func binding<T>(_ keyPath: WritableKeyPath<AnnotationItem, T>) -> Binding<T> {
+            Binding(
+                get: { session.annotation(id: id)?[keyPath: keyPath] ?? item[keyPath: keyPath] },
+                set: { value in session.updateAnnotation(id: id) { $0[keyPath: keyPath] = value } }
+            )
+        }
+        func scaled(_ keyPath: WritableKeyPath<AnnotationItem, Double>, by factor: Double, clamp: @escaping (Double) -> Double) -> Binding<Double> {
+            Binding(
+                get: { (session.annotation(id: id)?[keyPath: keyPath] ?? item[keyPath: keyPath]) * factor },
+                set: { value in session.updateAnnotation(id: id) { $0[keyPath: keyPath] = clamp(value / factor) } }
+            )
+        }
+        func label(_ text: String) -> some View {
+            Text(text.localizedUI)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        func colorRow(_ title: String, _ keyPath: WritableKeyPath<AnnotationItem, String>) -> some View {
+            VStack(alignment: .leading, spacing: 6) {
+                label(title)
+                HStack(spacing: 8) {
+                    ColorSwatchPickerButton(hexColor: binding(keyPath))
+                    HexInputBox(hexColor: binding(keyPath), width: 112)
+                }
+            }
+        }
+        func wideButton(_ title: String, icon: String, isDestructive: Bool = false, action: @escaping () -> Void) -> some View {
+            Button(action: action) {
+                HStack(spacing: 7) {
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .regular))
+                    Text(title.localizedUI)
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(isDestructive ? Color(red: 1.0, green: 0.35, blue: 0.35) : .ink.opacity(0.92))
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.ink.opacity(0.035)))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.ink.opacity(0.08), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        func animationPicker(_ title: String, _ keyPath: WritableKeyPath<AnnotationItem, AnnotationAnimation>) -> some View {
+            HStack {
+                label(title)
+                Spacer()
+                Picker("", selection: binding(keyPath)) {
+                    ForEach(AnnotationAnimation.allCases.filter { $0.isOffered(for: item.kind) }) { animation in
+                        Text(animation.title.localizedUI).tag(animation)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel(Text(title.localizedUI))
+            }
+        }
+
+        return VStack(alignment: .leading, spacing: 20) {
+            Button {
+                withAnimation(.easeOut(duration: 0.14)) { session.selectedAnnotationId = nil }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text("Close annotation editor")
+                        .font(.system(size: 13, weight: .regular))
+                }
+                .foregroundStyle(.ink.opacity(0.92))
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.ink.opacity(0.04)))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.ink.opacity(0.08), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            HStack {
+                label("Style")
+                Spacer()
+                Menu {
+                    Section("Built-in") {
+                        ForEach(AnnotationStyle.builtIn) { style in
+                            Button(style.name.localizedUI) { session.applyAnnotationStyle(style, to: id) }
+                        }
+                    }
+                    if !AnnotationStyleStore.shared.saved.isEmpty {
+                        Section("Saved") {
+                            ForEach(AnnotationStyleStore.shared.saved) { style in
+                                Button(style.name) { session.applyAnnotationStyle(style, to: id) }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("Save this style...") {
+                        if let name = AnnotationImagePicker.askStyleName(), let current = session.annotation(id: id) {
+                            AnnotationStyleStore.shared.save(AnnotationStyle(name: name, from: current))
+                        }
+                    }
+                    Button("Apply this style to all annotations") {
+                        if let current = session.annotation(id: id) {
+                            session.applyAnnotationStyleToAll(AnnotationStyle(name: "", from: current))
+                        }
+                    }
+                    if !AnnotationStyleStore.shared.saved.isEmpty {
+                        Menu("Delete saved style") {
+                            ForEach(AnnotationStyleStore.shared.saved) { style in
+                                Button(style.name, role: .destructive) { AnnotationStyleStore.shared.delete(id: style.id) }
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Styles", systemImage: "paintpalette")
+                }
+                .fixedSize()
+                .accessibilityLabel(Text("Style"))
+            }
+
+            HStack {
+                label("Type")
+                Spacer()
+                Picker("", selection: binding(\.kind)) {
+                    ForEach(AnnotationKind.allCases.filter { $0.isAddable || $0 == item.kind }) { kind in
+                        Label(kind.title.localizedUI, systemImage: kind.systemImage).tag(kind)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel(Text("Type"))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                label("Pin to")
+                Picker("", selection: Binding(
+                    get: { session.annotation(id: id)?.anchor ?? item.anchor },
+                    set: { session.setAnnotationAnchor(id: id, anchor: $0) }
+                )) {
+                    Text("Screen").tag(AnnotationAnchor.screen)
+                    Text("Frame").tag(AnnotationAnchor.canvas)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel(Text("Pin to"))
+                Text(item.anchor == .screen
+                     ? "Follows what it points at when the video zooms or pans."
+                     : "Stays in the same place in the frame.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            switch item.kind {
+            case .text:
+                VStack(alignment: .leading, spacing: 6) {
+                    label("Text")
+                    TextField("Add your text", text: binding(\.text), axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(1...6)
+                    Text("Double-click the text on the preview to type there.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                coalescedSlider(
+                    title: "Font size",
+                    value: scaled(\.fontSizeRatio, by: 100, clamp: AnnotationItem.clampedFontSize),
+                    range: 1.5...20,
+                    defaultValue: 4.2
+                )
+                coalescedSlider(
+                    title: "Maximum width",
+                    value: scaled(\.maxWidthRatio, by: 100, clamp: AnnotationItem.clampedMaxWidth),
+                    range: 10...100,
+                    defaultValue: 50
+                )
+                Toggle("Bold", isOn: binding(\.bold))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                colorRow("Text color", \.color)
+                VStack(alignment: .leading, spacing: 6) {
+                    label("Background")
+                    Picker("", selection: binding(\.textBackground)) {
+                        Text("None").tag(AnnotationTextBackground.none)
+                        Text("Solid").tag(AnnotationTextBackground.solid)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accessibilityLabel(Text("Background"))
+                    if item.textBackground == .solid {
+                        HStack(spacing: 8) {
+                            ColorSwatchPickerButton(hexColor: binding(\.backgroundColor))
+                            HexInputBox(hexColor: binding(\.backgroundColor), width: 112)
+                        }
+                    }
+                }
+            case .arrow:
+                colorRow("Color", \.color)
+                coalescedSlider(
+                    title: "Thickness",
+                    value: scaled(\.strokeRatio, by: 1000, clamp: AnnotationItem.clampedStroke),
+                    range: 2...30,
+                    defaultValue: 7
+                )
+                coalescedSlider(
+                    title: "Curve",
+                    value: scaled(\.bend, by: 100, clamp: AnnotationItem.clampedBend),
+                    range: -80...80,
+                    defaultValue: 18
+                )
+            case .rectangle, .ellipse:
+                colorRow("Color", \.color)
+                coalescedSlider(
+                    title: "Thickness",
+                    value: scaled(\.strokeRatio, by: 1000, clamp: AnnotationItem.clampedStroke),
+                    range: 2...30,
+                    defaultValue: 7
+                )
+                coalescedSlider(
+                    title: "Fill",
+                    value: scaled(\.fillOpacity, by: 100, clamp: { min(1, max(0, $0)) }),
+                    range: 0...100,
+                    defaultValue: 0
+                )
+                if item.kind == .rectangle {
+                    coalescedSlider(
+                        title: "Corner radius",
+                        value: scaled(\.cornerRatio, by: 1000, clamp: AnnotationItem.clampedCorner),
+                        range: 0...100,
+                        defaultValue: 12
+                    )
+                }
+            case .pen:
+                colorRow("Color", \.color)
+                coalescedSlider(
+                    title: "Thickness",
+                    value: scaled(\.strokeRatio, by: 1000, clamp: AnnotationItem.clampedStroke),
+                    range: 2...30,
+                    defaultValue: item.highlighter ? 20 : 5
+                )
+                Toggle("Highlighter", isOn: binding(\.highlighter))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+            case .image:
+                wideButton("Replace image...", icon: "photo") {
+                    if let url = AnnotationImagePicker.chooseImage() {
+                        session.replaceAnnotationImage(id: id, from: url)
+                    }
+                }
+                coalescedSlider(
+                    title: "Width",
+                    value: scaled(\.maxWidthRatio, by: 100, clamp: AnnotationItem.clampedMaxWidth),
+                    range: 10...100,
+                    defaultValue: 25
+                )
+                coalescedSlider(
+                    title: "Corner radius",
+                    value: scaled(\.cornerRatio, by: 1000, clamp: AnnotationItem.clampedCorner),
+                    range: 0...100,
+                    defaultValue: 10
+                )
+            case .step:
+                colorRow("Color", \.color)
+                coalescedSlider(
+                    title: "Size",
+                    value: scaled(\.fontSizeRatio, by: 100, clamp: AnnotationItem.clampedFontSize),
+                    range: 1.5...12,
+                    defaultValue: 3.6
+                )
+                Text("Steps are numbered in the order they appear.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            if item.kind.canRotate {
+                coalescedSlider(
+                    title: "Rotation",
+                    value: Binding(
+                        get: { session.annotation(id: id)?.rotationDegrees ?? item.rotationDegrees },
+                        set: { v in session.updateAnnotation(id: id) { $0.rotationDegrees = AnnotationItem.normalizedRotation(v) } }
+                    ),
+                    range: -180...180,
+                    defaultValue: 0
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    label("Motion")
+                    Spacer()
+                    Text(item.keyframes.isEmpty
+                         ? "Still".localizedUI
+                         : String(format: "%lld keyframes".localizedUI, item.keyframes.count))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                wideButton("Add keyframe at playhead", icon: "diamond") { session.addAnnotationKeyframe(id: id) }
+                if !item.keyframes.isEmpty {
+                    ForEach(Array(item.keyframes.enumerated()), id: \.offset) { index, keyframe in
+                        HStack(spacing: 8) {
+                            Image(systemName: "diamond.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color(red: 0.62, green: 0.55, blue: 1.0))
+                            Button {
+                                session.isPlaying = false
+                                if let timelineMs = session.timeMapper.timelineTime(forSourceMs: keyframe.sourceMs) {
+                                    session.seek(toTimelineMs: timelineMs)
+                                }
+                            } label: {
+                                Text(String(format: "%.2fs", keyframe.sourceMs / 1000))
+                                    .font(.system(size: 12).monospacedDigit())
+                                    .foregroundStyle(.ink.opacity(0.9))
+                            }
+                            .buttonStyle(.plain)
+                            .help(Text("Go to keyframe"))
+                            Spacer()
+                            Button {
+                                session.removeAnnotationKeyframe(id: id, at: index)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.ink.opacity(0.6))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text("Remove keyframe"))
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.ink.opacity(0.03)))
+                    }
+                    Button("Remove all keyframes") { session.clearAnnotationKeyframes(id: id) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                    Text("While keyframes exist, moving the item on the preview changes the keyframe at the playhead.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                animationPicker("Appear", \.enter)
+                animationPicker("Disappear", \.exit)
+                if item.enter != .none || item.exit != .none {
+                    coalescedSlider(
+                        title: "Animation length (ms)",
+                        value: Binding(
+                            get: { session.annotation(id: id)?.animationMs ?? item.animationMs },
+                            set: { v in session.updateAnnotation(id: id) { $0.animationMs = AnnotationItem.clampedAnimation(v) } }
+                        ),
+                        range: 0...1500,
+                        defaultValue: 250
+                    )
+                }
+            }
+
+            VStack(spacing: 8) {
+                wideButton("Duplicate", icon: "plus.square.on.square") { session.duplicateAnnotation(id: id) }
+                wideButton("Remove annotation", icon: "trash", isDestructive: true) { session.deleteAnnotation(id: id) }
+            }
+        }
+    }
+}
+
+// MARK: - Custom Cursor Rows
+
+extension InspectorSidebarView {
+    /// A picture well (click to set the tip) with Choose and Remove buttons.
+    func customCursorRow(title: String, slot: ProjectSession.CustomCursorSlot, image: CustomCursorImage?) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(CursorStyleHorizontalCardView.tileFill)
+                if let image, let picture = NSImage(contentsOf: session.packageURL.appendingPathComponent(image.imagePath)) {
+                    GeometryReader { geo in
+                        let side = min(geo.size.width, geo.size.height) - 12
+                        let aspect = picture.size.width / max(1, picture.size.height)
+                        let size = aspect >= 1 ? CGSize(width: side, height: side / aspect) : CGSize(width: side * aspect, height: side)
+                        let origin = CGPoint(x: (geo.size.width - size.width) / 2, y: (geo.size.height - size.height) / 2)
+                        ZStack(alignment: .topLeading) {
+                            Image(nsImage: picture)
+                                .resizable()
+                                .interpolation(.high)
+                                .frame(width: size.width, height: size.height)
+                                .offset(x: origin.x, y: origin.y)
+                            Circle()
+                                .stroke(Color(red: 0.44, green: 0.34, blue: 0.98), lineWidth: 2)
+                                .background(Circle().fill(Color.white.opacity(0.85)))
+                                .frame(width: 8, height: 8)
+                                .offset(
+                                    x: origin.x + CGFloat(image.hotspot01.x) * size.width - 4,
+                                    y: origin.y + CGFloat(image.hotspot01.y) * size.height - 4
+                                )
+                                .allowsHitTesting(false)
+                        }
+                        .contentShape(Rectangle())
+                        .gesture(
+                            SpatialTapGesture().onEnded { event in
+                                session.setCustomCursorHotspot(slot, Point01(
+                                    x: Double((event.location.x - origin.x) / max(1, size.width)),
+                                    y: Double((event.location.y - origin.y) / max(1, size.height))
+                                ))
+                            }
+                        )
+                    }
+                    .padding(2)
+                } else {
+                    Image(systemName: slot == .pointer ? "cursorarrow" : "hand.point.up.left")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.ink.opacity(0.35))
+                }
+            }
+            .frame(width: 56, height: 56)
+            .accessibilityLabel(Text(title.localizedUI))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title.localizedUI)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.ink.opacity(0.8))
+                HStack(spacing: 6) {
+                    Button(image == nil ? "Choose image..." : "Replace...") {
+                        if let url = AnnotationImagePicker.chooseImage() {
+                            session.setCustomCursor(slot, from: url)
+                        }
+                    }
+                    .controlSize(.small)
+                    if image != nil {
+                        Button("Remove") { session.removeCustomCursor(slot) }
+                            .controlSize(.small)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+

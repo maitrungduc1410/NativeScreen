@@ -424,6 +424,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private var pauseIntervals: [PauseInterval] = []
     /// Time of the first screen frame, after pauses are removed. Every track counts from it (ADR-69).
     private var timelineOriginPTS: CMTime = .invalid
+    /// Camera-only recording: no screen stream, so the first camera frame starts the timeline instead.
+    private var isCameraPrimary = false
 
     /// Where a sample at `pts` falls on the shared timeline. `nil` before the first screen frame: it is not part of the recording.
     private func timelineTime(forPTS pts: CMTime) -> CMTime? {
@@ -608,6 +610,30 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         }
     }
 
+    /// Records only the camera (and microphone). The first usable camera frame is time zero for every track, the way
+    /// the first screen frame is in a screen recording.
+    public func startCameraOnlyCapture(
+        cameraDeviceID: String,
+        cameraMaxResolution: CameraMaxResolutionOption,
+        outputWebcamURL: URL,
+        microphoneDeviceID: String?,
+        outputMicrophoneURL: URL?
+    ) {
+        isCameraPrimary = true
+        recordedDurationMs = 0
+        pauseLock.lock()
+        pauseIntervals = []
+        timelineOriginPTS = .invalid
+        pauseLock.unlock()
+        setupAndStartAVCaptureDevices(
+            cameraDeviceID: cameraDeviceID,
+            cameraMaxResolution: cameraMaxResolution,
+            outputWebcamURL: outputWebcamURL,
+            microphoneDeviceID: microphoneDeviceID,
+            outputMicrophoneURL: outputMicrophoneURL
+        )
+    }
+
     private func setupAndStartAVCaptureDevices(
         cameraDeviceID: String?,
         cameraMaxResolution: CameraMaxResolutionOption,
@@ -774,6 +800,11 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             avDeviceQueue.async {
                 let group = DispatchGroup()
+                if self.isCameraPrimary, self.lastAppendedWebcamPTS.isValid {
+                    // The last frame is shown for one frame length.
+                    let fps = Double(max(1, WarmCameraCaptureController.shared.activeFps))
+                    self.recordedDurationMs = (CMTimeGetSeconds(self.lastAppendedWebcamPTS) + 1.0 / fps) * 1000.0
+                }
                 if let wWriter = self.webcamWriter {
                     let wInput = self.webcamVideoInput
                     let wAdaptor = self.webcamPixelBufferAdaptor
@@ -949,13 +980,21 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         let rawPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         guard rawPTS.isValid, let pausedOffset = pausedOffset(forHostPTS: rawPTS) else { return }
-        guard var framePTS = timelineTime(forPTS: CMTimeSubtract(rawPTS, pausedOffset)) else { return }
+        let unpausedPTS = CMTimeSubtract(rawPTS, pausedOffset)
+        // Guard against cold-start ISP black frames if the user started recording within milliseconds of selecting a camera
+        if !isWebcamSessionStarted,
+           WarmCameraCaptureController.shared.isCameraAdjustingOrCold && Self.isFrameNearBlack(sampleBuffer) {
+            return
+        }
+        if isCameraPrimary && !isWebcamSessionStarted {
+            pauseLock.lock()
+            timelineOriginPTS = unpausedPTS
+            pauseLock.unlock()
+            onFirstVideoFrameArrived?(CMTimeGetSeconds(rawPTS))
+        }
+        guard var framePTS = timelineTime(forPTS: unpausedPTS) else { return }
 
         if !isWebcamSessionStarted {
-            // Guard against cold-start ISP black frames if the user started recording within milliseconds of selecting a camera
-            if WarmCameraCaptureController.shared.isCameraAdjustingOrCold && Self.isFrameNearBlack(sampleBuffer) {
-                return
-            }
             wWriter.startSession(atSourceTime: .zero)
             isWebcamSessionStarted = true
         }

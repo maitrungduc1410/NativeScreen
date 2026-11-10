@@ -250,6 +250,37 @@ public final class CursorSpriteProvider {
         return nsImg
     }
 
+    /// The custom picture for a recorded cursor kind, if the user set one for it.
+    public static func customImage(for cursorType: String, config: CursorConfig) -> CustomCursorImage? {
+        if config.alwaysUsePointer { return config.customPointer }
+        switch shared.mapTelemetryCursorKind(cursorType) {
+        case "pointer": return config.customPointer
+        case "pointinghand": return config.customHand
+        default: return nil
+        }
+    }
+
+    /// A custom cursor rasterized like a theme sprite: a 256 px square with the picture's hotspot at the same spot in
+    /// the square, the picture filling 72% of it, about what a theme arrow fills of its view box. Nil when the file is
+    /// missing, so the theme sprite is used instead.
+    public func customCursorImage(_ custom: CustomCursorImage, packageURL: URL) -> (image: CIImage, hotspot01: Point01)? {
+        let cacheKey = "custom__\(custom.imagePath)__\(custom.hotspot01.x)__\(custom.hotspot01.y)"
+        lock.lock()
+        if let cached = ciCache[cacheKey] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        guard let picture = NSImage(contentsOf: packageURL.appendingPathComponent(custom.imagePath)),
+              picture.size.width > 0, picture.size.height > 0 else { return nil }
+        let cg = rasterizeNSImage(picture, pixelSize: 256, extraScale: 0.72, hotspot01: custom.hotspot01, centerInPreviewBox: false)
+        let result = (image: CIImage(cgImage: cg), hotspot01: custom.hotspot01)
+        lock.lock()
+        ciCache[cacheKey] = result
+        lock.unlock()
+        return result
+    }
+
     private func mapTelemetryCursorKind(_ rawKind: String) -> String {
         switch rawKind {
         // `pointer` here is a recorded kind, the hand that both recorders wrote before following `spec/02`.

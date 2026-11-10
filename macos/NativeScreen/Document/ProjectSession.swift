@@ -80,6 +80,10 @@ public final class ProjectSession: Identifiable {
     public var selectedZoomId: String?
     public var selectedCameraLayoutId: String?
     public var selectedMaskId: String?
+    public var selectedAnnotationId: String?
+    /// The text annotation being typed into on the canvas. The compositor skips it, so the field is not drawn twice.
+    public var editingAnnotationTextId: String?
+    public var copiedAnnotation: AnnotationItem?
     public var selectedVoiceoverId: String?
     public var selectedCaptionId: String?
     public var selectedShortcutId: String? {
@@ -244,6 +248,12 @@ public final class ProjectSession: Identifiable {
     ) {
         var cleanedDoc = document
         cleanedDoc.timeline.maskTracks.removeAll { $0.items.isEmpty }
+        // Items on an annotation track must not overlap, or dragging one pushes it away. Older live drawings could.
+        cleanedDoc.timeline.annotationTracks = cleanedDoc.timeline.annotationTracks.flatMap { track in
+            track.hasOverlaps
+                ? AnnotationTrack.packed(track.items, id: track.id, name: track.name, isHidden: track.isHidden)
+                : [track]
+        }
 
         self.packageURL = packageURL
         self.document = cleanedDoc
@@ -476,6 +486,12 @@ public final class ProjectSession: Identifiable {
                 next.timeline.maskTracks[idx].name = idx == 0 ? "Masks" : "Masks \(idx + 1)"
             }
         }
+        if next.timeline.annotationTracks != document.timeline.annotationTracks {
+            next.timeline.annotationTracks.removeAll { $0.items.isEmpty }
+            for idx in next.timeline.annotationTracks.indices {
+                next.timeline.annotationTracks[idx].name = AnnotationTrack.defaultName(index: idx)
+            }
+        }
         if next.captions.captionTracks != document.captions.captionTracks || next.captions.captionBlocks != document.captions.captionBlocks {
             next.captions.removeEmptyCaptionTracks()
             if next.captions.captionTracks.isEmpty, !document.captions.captionTracks.isEmpty {
@@ -641,6 +657,9 @@ public final class ProjectSession: Identifiable {
         for track in timeline.maskTracks {
             for item in track.items where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
         }
+        for track in timeline.annotationTracks {
+            for item in track.items where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
+        }
         for item in timeline.cameraLayouts where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
         for item in timeline.voiceovers where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
         for item in document.captions.captionBlocks where isUnderPlayhead(item.sourceStartMs, item.sourceEndMs) { played.insert(item.id) }
@@ -709,6 +728,7 @@ public final class ProjectSession: Identifiable {
             pendingAddMaskStyle = resolvedStyle
             selectedZoomId = nil
             selectedShortcutId = nil
+            selectedAnnotationId = nil
             selectedInspectorTab = .masks
         }
         renderRevision &+= 1
@@ -785,6 +805,7 @@ public final class ProjectSession: Identifiable {
         selectedMaskId = nil
         selectedVoiceoverId = nil
         selectedShortcutId = nil
+        selectedAnnotationId = nil
         pendingAddMaskType = nil
         renderRevision &+= 1
     }
@@ -797,6 +818,7 @@ public final class ProjectSession: Identifiable {
         selectedMaskId = nil
         selectedVoiceoverId = nil
         selectedShortcutId = nil
+        selectedAnnotationId = nil
         pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .zoom
@@ -812,6 +834,7 @@ public final class ProjectSession: Identifiable {
         selectedMaskId = nil
         selectedVoiceoverId = nil
         selectedShortcutId = nil
+        selectedAnnotationId = nil
         pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .cameraLayout
@@ -827,6 +850,7 @@ public final class ProjectSession: Identifiable {
         selectedCameraLayoutId = nil
         selectedVoiceoverId = nil
         selectedShortcutId = nil
+        selectedAnnotationId = nil
         if id != nil {
             selectedInspectorTab = .masks
         }
@@ -841,6 +865,7 @@ public final class ProjectSession: Identifiable {
         selectedCameraLayoutId = nil
         selectedMaskId = nil
         selectedShortcutId = nil
+        selectedAnnotationId = nil
         pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .audio
@@ -856,6 +881,7 @@ public final class ProjectSession: Identifiable {
         selectedCameraLayoutId = nil
         selectedMaskId = nil
         selectedVoiceoverId = nil
+        selectedAnnotationId = nil
         pendingAddMaskType = nil
         if id != nil {
             selectedInspectorTab = .shortcuts
@@ -871,6 +897,7 @@ public final class ProjectSession: Identifiable {
         selectedMaskId = nil
         selectedVoiceoverId = nil
         selectedShortcutId = nil
+        selectedAnnotationId = nil
         pendingAddMaskType = nil
         renderRevision &+= 1
     }
@@ -891,6 +918,10 @@ public final class ProjectSession: Identifiable {
         }
         if let layoutId = selectedCameraLayoutId {
             deleteCameraLayout(id: layoutId)
+            return
+        }
+        if let annotationId = selectedAnnotationId {
+            deleteAnnotation(id: annotationId)
             return
         }
         if let maskId = selectedMaskId {
@@ -1813,8 +1844,15 @@ public final class ProjectSession: Identifiable {
     // MARK: - Face track
 
     public var needsFaceTrack: Bool {
-        hasRecordedCamera && document.camera.enabled
+        if isCameraOnlyRecording { return document.camera.enableFaceTracking }
+        return hasRecordedCamera && document.camera.enabled
             && (document.camera.stickerId != nil || document.camera.enableFaceTracking)
+    }
+
+    /// The movie the face track is scanned from: the camera layer, or the main picture of a camera-only recording
+    /// (both share the timeline's clock, so track times are source times).
+    private var faceTrackSourceURL: URL? {
+        isCameraOnlyRecording ? videoFileURL : webcamVideoFileURL
     }
 
     /// Whether a finished scan found no face in the webcam recording.
@@ -1828,7 +1866,7 @@ public final class ProjectSession: Identifiable {
 
     /// Loads the saved face track, or scans the webcam once. Does nothing until a feature needs it.
     public func ensureFaceTrack() {
-        guard needsFaceTrack, faceTrack == nil, faceScanTask == nil, let webcamURL = webcamVideoFileURL else { return }
+        guard needsFaceTrack, faceTrack == nil, faceScanTask == nil, let webcamURL = faceTrackSourceURL else { return }
         let fileURL = faceTrackFileURL
         faceScanTask = Task { [weak self] in
             let loaded = await Self.loadFaceTrack(at: fileURL)
@@ -2241,6 +2279,7 @@ public final class ProjectSession: Identifiable {
     public func copyZoomToClipboard(id: String) {
         if let found = document.timeline.zooms.first(where: { $0.id == id }) {
             copiedZoomBlock = found
+            copiedAnnotation = nil
             showToast("Zoom range copied")
         }
     }
@@ -2248,6 +2287,7 @@ public final class ProjectSession: Identifiable {
     public func cutZoomToClipboard(id: String) {
         if let found = document.timeline.zooms.first(where: { $0.id == id }) {
             copiedZoomBlock = found
+            copiedAnnotation = nil
         }
         deleteZoom(zoomId: id)
         showToast("Zoom range copied")
@@ -2284,6 +2324,7 @@ public final class ProjectSession: Identifiable {
         for track in document.timeline.maskTracks {
             if let found = track.items.first(where: { $0.id == id }) {
                 copiedMaskItem = found
+                copiedAnnotation = nil
                 showToast("Mask copied")
                 return
             }
@@ -2294,6 +2335,7 @@ public final class ProjectSession: Identifiable {
         for track in document.timeline.maskTracks {
             if let found = track.items.first(where: { $0.id == id }) {
                 copiedMaskItem = found
+                copiedAnnotation = nil
                 break
             }
         }
@@ -2302,6 +2344,10 @@ public final class ProjectSession: Identifiable {
     }
 
     public func pasteFromClipboard() {
+        if copiedAnnotation != nil {
+            pasteAnnotation()
+            return
+        }
         let srcMs = currentSourceTimeMs
         let maxDur = metadata.durationMs
         if let copiedZoom = copiedZoomBlock {
@@ -2365,6 +2411,10 @@ public final class ProjectSession: Identifiable {
             splitCameraLayout(id: layoutId, atSourceMs: srcMs)
             return
         }
+        if let annotationId = selectedAnnotationId {
+            splitAnnotation(id: annotationId, atSourceMs: srcMs)
+            return
+        }
         if let maskId = selectedMaskId {
             splitMask(id: maskId, atSourceMs: srcMs)
             return
@@ -2378,6 +2428,10 @@ public final class ProjectSession: Identifiable {
 
     /// Toggles `disabled` on the selected Zoom, Camera Layout, Voiceover, or Mask when pressing `D`.
     public func toggleDisableSelectedShortcut() {
+        if let annotationId = selectedAnnotationId {
+            updateAnnotation(id: annotationId) { $0.disabled.toggle() }
+            return
+        }
         if let voId = selectedVoiceoverId {
             toggleVoiceoverDisabled(id: voId)
             return
@@ -3209,6 +3263,7 @@ public final class ProjectSession: Identifiable {
     public enum DeletableTimelineTrack: Equatable {
         case cameraLayouts
         case mask(id: String)
+        case annotation(id: String)
         case voiceover(index: Int)
         case shortcut(id: String)
         case caption(id: String)
@@ -3225,6 +3280,14 @@ public final class ProjectSession: Identifiable {
             }
         case .mask(let id):
             deleteMaskTrack(trackId: id)
+        case .annotation(let id):
+            if let selected = selectedAnnotationId,
+               document.timeline.annotationTracks.first(where: { $0.id == id })?.items.contains(where: { $0.id == selected }) == true {
+                selectedAnnotationId = nil
+            }
+            mutate { doc in
+                doc.timeline.annotationTracks.removeAll { $0.id == id }
+            }
         case .voiceover(let index):
             guard !isRecordingVoiceover else { return }
             if let selected = selectedVoiceoverId,
@@ -3594,7 +3657,8 @@ public final class ProjectSession: Identifiable {
         }
         let lookup = RecordingFileLookup(
             packageURL: packageURL,
-            webcam: find(metadata.tracks.webcamVideo, fallback: "webcam.mp4"),
+            // In a camera-only recording the camera movie is the main picture (`displayVideo`), not a camera layer.
+            webcam: isCameraOnlyRecording ? nil : find(metadata.tracks.webcamVideo, fallback: "webcam.mp4"),
             microphone: find(metadata.tracks.microphoneAudio, fallback: "microphone.m4a")
         )
         cachedRecordingFiles = lookup
@@ -3605,8 +3669,15 @@ public final class ProjectSession: Identifiable {
 
     public var microphoneAudioFileURL: URL? { recordingFiles.microphone }
 
+    /// Recorded camera layer (shown over the screen). False for a camera-only recording, where the camera is the screen.
     public var hasRecordedCamera: Bool {
-        metadata.tracks.webcamVideo != nil || webcamVideoFileURL != nil
+        !isCameraOnlyRecording && (metadata.tracks.webcamVideo != nil || webcamVideoFileURL != nil)
+    }
+
+    /// Recorded in camera mode: the main picture is the camera, styled with the camera settings (mirror, background,
+    /// color grade) and framed, zoomed and cropped like a screen.
+    public var isCameraOnlyRecording: Bool {
+        metadata.captureTarget.mode == .camera
     }
 
     public var hasRecordedMicrophone: Bool {
@@ -3622,8 +3693,14 @@ public final class ProjectSession: Identifiable {
             let hasCursor = !cursorEvents.isEmpty
             return (hasCursor, hasCursor ? nil : "There is no mouse cursor recorded")
         case .cameraLayout:
+            if isCameraOnlyRecording {
+                return (true, nil)
+            }
             return (hasRecordedCamera, hasRecordedCamera ? nil : "No camera recorded")
         case .cameraStyle:
+            if isCameraOnlyRecording {
+                return (true, nil)
+            }
             if !hasRecordedCamera {
                 return (false, "No camera recorded")
             }
@@ -3643,6 +3720,9 @@ public final class ProjectSession: Identifiable {
         case .zoom:
             return (true, nil)
         case .deviceFrame:
+            if isCameraOnlyRecording {
+                return (false, "Device frames are for screen recordings")
+            }
             return (true, nil)
         case .masks:
             return (true, nil)

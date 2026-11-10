@@ -89,6 +89,17 @@ All numbers below come from `composeFrame`. `S = canvasScale = outputHeight / 90
 - **Orientation:** every path keeps the background upright: the bake, the crossfade and export (`spec/06` ADR-32).
 
 ### Pass 2: Masks on the source screen (`applyMultiTrackMasks`)
+**Camera-only recordings** (`captureTarget.mode == camera`): first the source frame goes through the camera preparation of §7
+(mirror unless `camera.mirror`, background, color grade, sharpen) with `cropRect01` treated as full and no sticker, then
+everything below applies as to a screen. There is no camera layer in Pass 6. With `cameraOnlyFraming` `cutout` the picture
+is the person cutout (§7.3) over a transparent background.
+
+For `full-frame` and `cutout` the screen rect of Pass 3 is the aspect fill of the canvas: scale `max(cw/sw, ch/sh)`; with a
+face track and `enableFaceTracking`, the face point `f` (framing center, flipped in x unless `mirror`, mapped into the canvas
+crop) sits at `x = canvasMidX - f.x * w` and `y = canvasMidY + 0.08 * ch - (1 - f.y) * h` (bottom-left origin), else centered;
+then clamped so the rect covers the canvas. Corner radius is 0 and there is no inset or shadow. Zoom center with face
+tracking: `p = min(1, (scale - 1) / 0.25)`, face clamped to `[0.5/scale, 1 - 0.5/scale]`, `center = solver + (face - solver) * p`.
+
 Applied in source-video pixels, before scaling and zoom. For each active mask, rect = keyframe-interpolated `rect01`,
 min 8 px, clipped to the frame. Corner radius `min(min(w, h) / 2, cornerRadius * sourceHeight / 900)`.
 - **Blur:** `sigma = max(4, intensity * 0.92)`, computed at quarter resolution: crop the rect padded by `2.4 * sigma`,
@@ -114,7 +125,50 @@ Then apply `canvas.cropRect01` (min 16 px).
   rect, canvas, radius, shadow config). Never blur at 4K per frame.
 - **Device mockup:** port `renderDeviceMockupBezel` with Direct2D (same rects, radii, colors, gradients, even-odd fill).
 
+### Pass 3B: Annotations pinned to the screen (`AnnotationRenderer`)
+Items with `anchor: "screen"` active at the frame time, last track first (the first track draws on top). A point `p` maps to the cropped screen rect
+(`u = (p.x - crop.x) / crop.w`, `v = (p.y - crop.y) / crop.h`), then through the classic zoom transform, so it lands on the same
+pixel of the recording. They join the positioned screen before the cursor, so motion blur moves them with it.
+- **Text:** system font (bold or medium) at `fontSizeRatio * shortestCanvasSide`, centered, wrapped at
+  `maxWidthRatio * canvasWidth - 2 * padX`. Solid background: padding `(0.55, 0.32) em`, radius `0.42 em`, shadow black 30%
+  blur `0.30 em` offset `0.05 em` down. No background: padding `(0.12, 0.06) em`, the text casts the shadow (black 55%, blur
+  `0.18 em`). The box is centered on the point, origin rounded to whole pixels.
+- **Arrow:** stroke `w = strokeRatio * shortestCanvasSide`. Control point = midpoint + left normal * `bend * length`. Head length
+  `min(0.45 * length, max(3.6 w, 6))`, half width `0.62 * headLength`, along control → head. The quadratic shaft ends `0.6 * headLength`
+  before the tip, round caps; the head is filled and stroked at `0.6 w`. Both cast one shadow: black 38%, blur `1.6 w`,
+  offset `0.35 w` down. Only the part within the canvas grown by `4 w` is drawn.
+- **Rectangle and ellipse:** center from `position01`; half width and height are the distances from the center to the mapped
+  points `position01 ± (size01.width / 2, 0)` and `(0, size01.height / 2)`. Rotated by `rotationDegrees` clockwise. Stroke as an
+  arrow's, rectangle corner radius `min(cornerRatio * shortestSide, halfW, halfH)`, fill `color` at `fillOpacity`, same shadow.
+- **Pen:** in the rectangle's local frame (same center, half sizes and rotation), point `q` is at
+  `(-halfW + 2 halfW q.x, halfH - 2 halfH q.y)` (y up). The points are split into strokes at `strokeStarts`; each stroke moves to
+  its first point, adds a quadratic curve to the midpoint of each next pair with the point as control, then a line to its last
+  point (two points: one line; one point: a dot).
+  Round caps and joins, stroke as an arrow's and the same shadow. `highlighter`: butt caps, no shadow, the whole stroke drawn
+  at alpha 0.42 as one layer. Drawing on with `pointTimesMs`: the stroke shows the points up to
+  `(sourceMs - sourceStartMs) / lastTime` of its drawing time, the last segment interpolated unless the next point starts a
+  new stroke, unrelated to `animationMs` (the exit still fades over `animationMs`). Without times, `draw` uses `s(p)` of the
+  points' indices instead of a length.
+- **Step:** circle of diameter `round(1.75 * fontSizeRatio * shortestSide)` in `color`, shadow black 40% blur `0.18 d` offset
+  `0.04 d` down, white ring at 92% of width `0.065 d` inside the edge, number in bold rounded type at `0.56 d` (`0.46 d` from 10),
+  black when the color's luminance is above 0.62, otherwise white.
+- **Image:** width `round(maxWidthRatio * canvasWidth)`, height from the picture's aspect (decoded once, EXIF orientation
+  applied, at most 4096 px; a missing file is a 16:9 gray box). Clipped to a rounded rect of radius
+  `min(cornerRatio * shortestSide, half the shorter side)`; the clipped picture casts a shadow from its own alpha, black 35%,
+  blur `0.6 m`, offset `0.15 m` down, where `m = ceil(0.06 * max(w, h))`. High quality resampling.
+- **Text, steps, images and shapes** rotate by `rotationDegrees` about their center.
+- **Keyframes:** geometry is resolved at the frame time before anything is drawn (`spec/02`).
+- **Animations** over `span = min(animationMs, duration / 2)`, with `p` going 0 → 1 on the way in and 1 → 0 on the way out
+  (smoothstep `s`): `fade` multiplies opacity by `s(p)`; `pop` multiplies opacity by `s(min(1, 1.6 p))` and scales about the
+  center by `0.6 + 0.4 * easeOutBack(p)` entering, `0.6 + 0.4 * s(p)` leaving; `rise` multiplies opacity by `s(p)` and moves
+  the item `0.035 * shortestSide * (1 - easeOutCubic(p))` down entering, up leaving; `slide` multiplies opacity by `s(p)` and
+  moves it `0.06 * shortestSide * (1 - easeOutCubic(p))` left entering, right leaving; `typewriter` shows the first
+  `ceil(p * characterCount)` characters of a text, the rest laid out but transparent so lines do not reflow (other kinds fade); `draw` strokes the first `s(p)` of the
+  line's length (an arrow's head fades in over the last 20%, a shape's fill follows `s(p)`), and fades text and steps.
+  Opacity is applied to alpha only.
+
 ### Pass 4: Click effect and cursor (`renderCursorAndRipple`)
+Skipped when `cursor.jsonl` is empty (camera-only recordings, projects made from a video).
 Cursor position = screen rect + `position01` (top-left normalized).
 - **Circle click effect** while `activeClickProgress = p` is set: filled white disc, radius `max(4, 46 * S * cursor.scale * p)`,
   alpha `(1 - p) * 0.72 * cursorOpacity * 0.65`.
@@ -125,6 +179,10 @@ Cursor position = screen rect + `position01` (top-left normalized).
   `w = exp(-3.5 b^2) * smoothstep(0, 0.03 L, d)` where `b = (d - front) / (0.042 L)`, skipped when `|b| > 3`. Waves add up.
   Displacement is `radial * strength * w * 0.013 L`, sampled at `pixel - displacement`. Red and blue sample a further
   `radial * |strength| * w * (1 - w) * 4 * 0.0035 L` to either side of green.
+- **Custom sprite:** when `cursor.customPointer` applies (arrow kinds, or every kind with `alwaysUsePointer`) or
+  `cursor.customHand` applies (the hand), draw that picture into a 256 px square scaled to fit and then by 0.72, placed so its
+  `hotspot01` lands on the same fraction of the square, and use it like a theme sprite with that hotspot. A missing file
+  uses the theme sprite.
 - **Sprite:** rasterize the theme SVG once per (theme, variant, kind) at 256 px (Direct2D `ID2D1SvgDocument`). Height
   `32 * S * cursor.scale`, hotspot from the file name (percent of the 100×100 view box), rotation `rotationRadians`
   about the hotspot, alpha `opacity`. For a non-pointer kind, choose the sprite as in `spec/06` ADR-29.
@@ -140,6 +198,9 @@ same sample counts: 8 in playback, 24 in export, `pixelsPerSample` 10 / 3). Cond
 `composeFrame` (instant-zoom window, paused last frame, loupe mode, `motionBlurIntensity > 0.02`). The lens runs over the
 whole composite when `loupePresence01 > 0.005` and `loupeScale > 1.002`, radius `max(48, max(w, h) * radius01)` of the
 screen rect.
+
+### Pass 5C: Annotations pinned to the frame
+Items with `anchor: "canvas"`, drawn as in Pass 3B with points at `p * canvasSize`, after the lens and before the camera.
 
 ### Pass 6: Overlays (camera, captions, keycaps)
 Drawn in this order, in both preview and export (the preview draws everything in the compositor; there is no XAML overlay).
@@ -225,3 +286,17 @@ downloaded on demand (`spec/04`, `spec/06` ADR-60), 320 px on the long side in t
 like `applyPersonCutout`: stretch the mask to the frame, erode by `clamp(edgeInset * 10, 1, 12)` px when `edgeInset > 0.01`,
 blur with `sigma = clamp(edgeSoftness * 10, 0.5, 14)` when `edgeSoftness > 0.01`, then use it as alpha. In the live preview,
 segment asynchronously and use the newest mask (never block the render thread); exports segment every frame.
+
+### 7.4. Green screen
+With `camera.backgroundRemoval == "green-screen"` the mask comes from the backdrop color instead of segmentation, in the
+preview and in exports alike, and is post-processed exactly as in §7.3. Both steps are 64³ color cubes over sRGB values
+(`CIColorCubeWithColorSpace`, trilinear), built once per setting, with entries at `r, g, b = i / 63` (red varying fastest).
+The mask is taken from the cropped and mirrored picture before the spill step. For a color `c` and the key `k`
+(`chromaKeyColor`):
+- BT.601 chroma: `cb = -0.168736 r - 0.331264 g + 0.5 b`, `cr = 0.5 r - 0.418688 g - 0.081312 b`; `d` is the distance
+  between the chroma of `c` and of `k`.
+- Mask: `low = 0.02 + 0.30 * chromaSimilarity`, `high = low + 0.005 + 0.20 * chromaSmoothness`,
+  `alpha = smoothstep((d - low) / (high - low))` (0 is backdrop, 1 is the person).
+- Spill, applied to the picture before the color grade: the key's strongest channel (green unless blue or red is
+  larger in `k`) is lowered toward the larger of the other two by `chromaSpill`:
+  `ch = ch - (ch - max(others)) * chromaSpill` when `ch > max(others)`.
