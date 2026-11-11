@@ -91,6 +91,30 @@ On a test machine (this installs a certificate and an app, so not on a build mac
    No failures are allowed.
 4. Check the items in the `windows/HANDOFF.md` entry "Microsoft Store: an MSIX build next to the Velopack installer".
 
+### Store listing
+
+The Store page text and images for all 15 UI languages are in `windows/store-listing/` (see its README).
+
+1. Partner Center > the submission > Store listings > **Import listings** > **Upload folder**, and pick
+   `windows/store-listing` itself. Keep the folder name: every image path in `listing.csv` starts with `store-listing/`,
+   because the upload sends each file as `<folder name>/<path>` and matches the CSV exactly. Without that prefix the
+   import fails with "We couldn't process this .csv file" and no details. A CSV with text only (no image paths) imports
+   either way.
+2. Start from a fresh **Export listings** when Partner Center adds fields, and copy the values over. Keep the `Field`,
+   `ID` and `Type` columns as exported, and save as UTF-8 with BOM and CRLF line ends. The descriptions are one
+   paragraph: line breaks inside a cell were not tried after the first failed imports.
+3. How it was made: the text comes from the website copy in `site/src/i18n/<language>.ts` (`lede`, the feature headings
+   and paragraphs, `desc` as the short description), plus 7 search terms per language. The screenshots are a recording of
+   `tools/demo-page` (made-up data) opened in an app window without an address bar, styled with zooms, captions and
+   annotations, then opened with `NS_LANGUAGE=<id>` for each language with the caption and annotation text translated.
+   The editor, Captions, a selected annotation and the Export panel are captured at 12.6 s.
+
+**Restricted capabilities** asks why the app needs runFullTrust, in at most 500 characters:
+
+```text
+Native Screen is a WinUI 3 desktop screen recorder (packaged Win32, not UWP). It uses Windows.Graphics.Capture, WASAPI loopback for system audio, Media Foundation for camera, microphone and encoding, and Direct3D 11. During a recording it uses low-level mouse and keyboard hooks to save clicks and shortcuts for auto-zooms and keystroke overlays. It shows a tray icon. Everything runs on the device; nothing is uploaded.
+```
+
 ### Notes for certification
 
 Paste this into Partner Center > Submission options > **Notes for certification**:

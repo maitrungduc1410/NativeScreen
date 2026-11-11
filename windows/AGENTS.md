@@ -75,6 +75,7 @@ Work is split between two agents on two machines. Know which one you are.
 | Timeline zoom cost (Windows) | Run the app with `NS_TIMELINE_ZOOM_STATS=<file>`. Each zoom step appends the zoom, the relayout ms and the total ms. |
 | UI in another language (Windows) | Run the app with `NS_LANGUAGE=<id>` (`en`, `cs`, `de`, `es`, `fr`, `it`, `pt-BR`, `tr`, `vi`, `ru`, `ar`, `ja`, `ko`, `zh-Hans`, `zh-Hant`) for one run. |
 | Build the MSIX (Windows) | `powershell windows/scripts/package-msix.ps1` builds the Store package (`NS_STORE`, no updater) with the local test identity into `windows/artifacts/msix` and checks its images, native libraries and data files. Store identity and version: `-IdentityName -Publisher -PublisherDisplayName -Version` (`docs/releasing.md`). |
+| Store listing (Windows) | `windows/store-listing/`: `listing.csv`, screenshots per language and logos, imported with Partner Center > Store listings > Import listings > **Upload folder**. Every image path in the CSV must start with the folder name (`store-listing/...`), or the import fails with no details (`docs/releasing.md`, Store listing). |
 | Redraw the Store tiles (Windows) | `powershell windows/scripts/make-store-assets.ps1` (from the macOS app icon, into `Assets/Store`) |
 | Regenerate conformance fixtures (macOS) | `"Native Screen.app/Contents/MacOS/Native Screen" --generate-conformance conformance` |
 
