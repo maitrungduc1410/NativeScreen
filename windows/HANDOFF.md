@@ -27,6 +27,19 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-11, Long recordings: free disk space guard (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** macOS `ScreenCaptureEngine.swift` (repeated frames on a still screen) and `RecordingCoordinator.swift` (free disk space before and during a recording). Three new keys in the shared `Localizable.xcstrings`, translated into all 15 languages. Specs: `spec/06` ADR-83, `spec/05` (a `Windows` line under "Long recordings on macOS").
+- **Port:**
+  1. Repeated frames: nothing to do. `ScreenRecorder.RepeatLastFrame` already writes the last frame every 250 ms on a still screen; macOS now does the same every 1 s.
+  2. Before a recording, in `RecordingHudWindow.StartRecording` before `RecordingPackage.Create`: read the free space of the volume holding `AppSettings.Shared.ProjectsDirectory` (`DriveInfo` of its root, or `GetDiskFreeSpaceExW` for a network path; walk up to the nearest existing folder first). Under 2,000,000,000 bytes, do not start: set `mcpLastError` and show a warning message box titled `Not enough disk space` with `There is not enough free disk space to record. Free up at least 2 GB and try again.` If the free space cannot be read, start as before. An MCP start shows no box: it fails with that message as the tool error.
+  3. While recording: every 5 s, off the UI thread, read it again for the package's volume. Under 500,000,000 bytes, end the recording the way `EndAfterFailure` does (`StopAndOpen`, then the `Recording stopped` box) with the reason `The disk is almost full.` and no details line. Skip the check while paused.
+- **Built on macOS:** the app builds. Before the change, an 11 minute display recording kept memory flat (77 to 114 MB) and a `kill -9` left 670 of 672 s readable. After it, with real frames dropped after 3 s to stand in for a still screen, a `kill -9` at 23 s left a 22.5 s file with a repeated frame every 1 to 1.5 s (it would have ended at 3 s before). The disk thresholds were checked by reading code only.
+- **How to verify:** on a nearly full drive (or a small VHD set as the projects folder) with under 2 GB free, Record shows the box and nothing is created. With between 2 GB and 2.5 GB free, record a busy screen until it stops by itself: the box says how much was saved, the project opens, and `display.mp4`, `metadata.json` and `project.json` are complete.
+- **Risks / unsure:** `DriveInfo.AvailableFreeSpace` honors user quotas, which is what we want. A projects folder on a network share may report no value; the guard must then let the recording start.
+
+
 ## 2026-11-11, Seven more UI languages: Arabic, Czech, Italian, Korean, Russian, Turkish, Traditional Chinese (macOS done, Windows port pending)
 
 ### Writer

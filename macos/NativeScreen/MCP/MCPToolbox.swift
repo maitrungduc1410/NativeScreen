@@ -1102,9 +1102,12 @@ final class MCPToolbox {
             }
             recorder.countdownOption = option
         }
-        recorder.requestStartRecording()
+        let started = recorder.requestStartRecording(showsAlerts: false)
         let countdown = recorder.countdownOption.rawValue
         recorder.countdownOption = savedCountdown
+        guard started else {
+            throw MCPToolError(recorder.lastErrorMessage ?? "The recording could not be started.")
+        }
         return [
             "started": true,
             "mode": recorder.selectedMode.rawValue,

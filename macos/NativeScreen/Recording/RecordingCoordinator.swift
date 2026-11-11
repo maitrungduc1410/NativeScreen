@@ -1060,13 +1060,18 @@ public final class RecordingCoordinator {
     // MARK: - Countdown & Start / Pause / Restart / Discard / Stop Recording
 
     /// Initiates recording: if `countdownOption != .off`, enters the Countdown bar first (`Get ready. Recording will start soon.` + `Continue (3)`).
-    public func requestStartRecording() {
-        guard !isRecording && !isCountingDown && !isStartingRecording else { return }
+    /// - Parameter showsAlerts: false for automation (MCP): a problem is left in `lastErrorMessage` instead of a modal alert.
+    /// - Returns: false when the recording was not started (already busy, no camera, or not enough disk space).
+    @discardableResult
+    public func requestStartRecording(showsAlerts: Bool = true) -> Bool {
+        guard !isRecording && !isCountingDown && !isStartingRecording else { return false }
+        // Checked once, here: every way to start a recording comes through this function.
+        guard hasDiskSpaceToStartRecording(showsAlert: showsAlerts) else { return false }
         if selectedMode == .camera {
             guard selectedCameraDeviceID != nil else {
                 lastErrorMessage = String(localized: "Choose a camera to record.")
                 updateHUDPanelFrameForCurrentState(animated: true)
-                return
+                return false
             }
             cameraStageRequested = true
         }
@@ -1096,6 +1101,7 @@ public final class RecordingCoordinator {
         } else {
             Task { await startRecordingImmediately() }
         }
+        return true
     }
 
     /// Cancels an active pre-recording countdown and returns the HUD to the idle bar.
@@ -1381,8 +1387,77 @@ public final class RecordingCoordinator {
                 if (prevSecInt / 600) != (newSecInt / 600) {
                     self.updateHUDPanelFrameForCurrentState(animated: false)
                 }
+                self.checkDiskSpaceWhileRecording(now: now)
             }
         }
+    }
+
+    // MARK: - Free disk space (ADR-83)
+
+    /// A recording does not start with less free space than this (about half an hour of a busy Retina screen).
+    private static let minimumFreeBytesToStart: Int64 = 2_000_000_000
+    /// Below this the recording stops by itself, leaving room to finish the files and write the project.
+    private static let minimumFreeBytesWhileRecording: Int64 = 500_000_000
+    private static let diskSpaceCheckInterval: TimeInterval = 5
+    private var lastDiskSpaceCheckUptime: TimeInterval = 0
+    private var isCheckingDiskSpace = false
+
+    /// Free bytes on the volume that holds `url` (or its nearest existing folder). Nil when the system cannot say.
+    nonisolated private static func freeDiskBytes(near url: URL) -> Int64? {
+        var candidate = url
+        while !FileManager.default.fileExists(atPath: candidate.path), candidate.pathComponents.count > 1 {
+            candidate = candidate.deletingLastPathComponent()
+        }
+        let values = try? candidate.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage
+    }
+
+    /// False, after telling the user (or only setting `lastErrorMessage`), when the projects folder's disk is too full
+    /// to start a recording. One quick volume query on the main thread, once per start.
+    private func hasDiskSpaceToStartRecording(showsAlert: Bool) -> Bool {
+        guard let free = Self.freeDiskBytes(near: ProjectWorkspaceStore.defaultProjectsDirectory),
+              free < Self.minimumFreeBytesToStart else { return true }
+        let message = String(localized: "There is not enough free disk space to record. Free up at least 2 GB and try again.")
+        lastErrorMessage = message
+        updateHUDPanelFrameForCurrentState(animated: true)
+        guard showsAlert else { return false }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Not enough disk space")
+        alert.informativeText = message
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+        return false
+    }
+
+    /// Every few seconds, off the main thread: a disk that is filling up ends the recording cleanly instead of
+    /// letting the writers fail.
+    private func checkDiskSpaceWhileRecording(now: TimeInterval) {
+        guard !isCheckingDiskSpace, now - lastDiskSpaceCheckUptime >= Self.diskSpaceCheckInterval,
+              let packageURL = activePackageURL, let engine = captureEngine else { return }
+        let engineID = ObjectIdentifier(engine)
+        lastDiskSpaceCheckUptime = now
+        isCheckingDiskSpace = true
+        Task.detached(priority: .utility) { [weak self] in
+            let free = Self.freeDiskBytes(near: packageURL)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.isCheckingDiskSpace = false
+                guard let free, free < Self.minimumFreeBytesWhileRecording,
+                      self.isRecording, self.captureEngine.map(ObjectIdentifier.init) == engineID else { return }
+                Task { await self.endRecordingForLowDiskSpace() }
+            }
+        }
+    }
+
+    private func endRecordingForLowDiskSpace() async {
+        guard isRecording else { return }
+        let savedMs = await stopRecordingAndOpenEditor()
+        showRecordingStoppedAlert(
+            reason: String(localized: "The disk is almost full."),
+            details: nil,
+            savedMs: savedMs
+        )
     }
 
     /// The package folders for a new recording: `<name>.nativescreen/recording/telemetry` and `assets`.
@@ -1650,6 +1725,11 @@ public final class RecordingCoordinator {
             reason = String(localized: "The microphone audio could not be written.")
             details = d
         }
+        showRecordingStoppedAlert(reason: reason, details: details, savedMs: savedMs)
+    }
+
+    /// Says why a recording ended by itself and how much of it was kept.
+    private func showRecordingStoppedAlert(reason: String, details: String?, savedMs: Double?) {
         lastErrorMessage = reason
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -1662,7 +1742,7 @@ public final class RecordingCoordinator {
         } else {
             outcome = String(localized: "Nothing could be saved.")
         }
-        alert.informativeText = "\(reason) \(outcome)\n\n\(details)"
+        alert.informativeText = details.map { "\(reason) \(outcome)\n\n\($0)" } ?? "\(reason) \(outcome)"
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
     }

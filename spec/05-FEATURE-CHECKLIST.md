@@ -121,6 +121,8 @@
 - [x] **GIF export on macOS** streams to disk and stores only what changed, so memory stays flat (`spec/06` ADR-68).
 - [x] **Camera and microphone on macOS** start at the first screen frame (`spec/06` ADR-69).
 - [x] **Interrupted recordings on macOS** are recovered at the next launch, and quitting saves and asks like closing a window (`spec/06` ADR-70).
+- [x] **Long recordings on macOS** keep writing fragments on a still screen, refuse to start under 2 GB free and stop cleanly under 500 MB (`spec/06` ADR-83).
+  - [ ] **Windows:** the same disk space guard (`windows/HANDOFF.md`, 2026-11-11). Repeated frames already exist.
 - [x] **Export on macOS** keeps segmentation, audio and frame rendering off the main thread (`spec/06` ADR-71).
 - [x] **Cursor kinds on macOS** (I-beam, hand, crosshair) are recorded (`spec/06` ADR-73).
   - [x] **Windows:** write `pointingHand` for `IDC_HAND`, and read a recorded `pointer` as the hand in `OverlayRasterizer.MapKind`.

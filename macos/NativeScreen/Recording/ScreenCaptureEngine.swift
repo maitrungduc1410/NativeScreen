@@ -408,6 +408,14 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     /// rest of the recording is lost (spec/06 ADR-54).
     private static let crashSafeFragmentInterval = CMTime(seconds: 2.0, preferredTimescale: 600)
 
+    /// ScreenCaptureKit sends no frames while the screen is still, and a writer with no new samples finishes no fragments.
+    /// A crash during a long still stretch would then cut the screen video, and the recovered project with every other
+    /// track, back to the last change. The last frame is repeated after this long without one (ADR-83).
+    private static let keepAliveInterval: TimeInterval = 1.0
+    private var keepAliveTimer: DispatchSourceTimer?
+    /// `systemUptime` of the last screen sample written, real or repeated. Read and written on `videoQueue` only.
+    private var lastScreenAppendUptime: TimeInterval = 0
+
     private var isWritingSessionStarted = false
     private var firstSampleTime: CMTime = .invalid
     private var lastSampleTime: CMTime = .zero
@@ -598,6 +606,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         self.stream = scStream
         try await scStream.startCapture()
+        startKeepAliveTimer()
 
         if cameraDeviceID != nil || microphoneDeviceID != nil {
             setupAndStartAVCaptureDevices(
@@ -763,17 +772,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private func holdLastFrame(until endTime: CMTime) {
         guard let sample = lastVideoSample,
               let input = videoInput,
-              CMTimeGetSeconds(CMTimeSubtract(endTime, lastSampleTime)) > 1.0 / 60.0 else { return }
-        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: endTime, decodeTimeStamp: .invalid)
-        var held: CMSampleBuffer?
-        CMSampleBufferCreateCopyWithNewTiming(
-            allocator: kCFAllocatorDefault,
-            sampleBuffer: sample,
-            sampleTimingEntryCount: 1,
-            sampleTimingArray: &timing,
-            sampleBufferOut: &held
-        )
-        guard let held else { return }
+              CMTimeGetSeconds(CMTimeSubtract(endTime, lastSampleTime)) > 1.0 / 60.0,
+              let held = Self.sampleBuffer(sample, presentedAt: endTime) else { return }
         var waitedMs = 0
         while !input.isReadyForMoreMediaData, waitedMs < 500 {
             Thread.sleep(forTimeInterval: 0.01)
@@ -784,10 +784,61 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         }
     }
 
+    /// A copy of a one-frame sample shown at `pts`. The picture is shared, not copied.
+    private static func sampleBuffer(_ sample: CMSampleBuffer, presentedAt pts: CMTime) -> CMSampleBuffer? {
+        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: pts, decodeTimeStamp: .invalid)
+        var copy: CMSampleBuffer?
+        CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sample,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &copy
+        )
+        return copy
+    }
+
+    private func startKeepAliveTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: videoQueue)
+        timer.schedule(deadline: .now() + Self.keepAliveInterval, repeating: Self.keepAliveInterval / 2, leeway: .milliseconds(100))
+        timer.setEventHandler { [weak self] in
+            self?.repeatLastFrameIfIdle()
+        }
+        timer.resume()
+        keepAliveTimer = timer
+    }
+
+    /// On `videoQueue`. Writes the last frame again at the current time when the screen has sent nothing for a while.
+    private func repeatLastFrameIfIdle() {
+        guard isWritingSessionStarted,
+              let writer = assetWriter, writer.status == .writing,
+              let sample = lastVideoSample,
+              let input = videoInput, input.isReadyForMoreMediaData else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastScreenAppendUptime >= Self.keepAliveInterval else { return }
+        // The clock the stream stamps its frames with; a pause in progress writes nothing.
+        let hostNow = CMClockGetTime(CMClockGetHostTimeClock())
+        guard let offset = pausedOffset(forHostPTS: hostNow) else { return }
+        let pts = CMTimeSubtract(hostNow, offset)
+        guard CMTimeCompare(pts, lastSampleTime) > 0,
+              let repeated = Self.sampleBuffer(sample, presentedAt: pts) else { return }
+        if input.append(repeated) {
+            lastSampleTime = pts
+            lastScreenAppendUptime = now
+        } else {
+            reportFailure(.screenWriter(Self.describe(writer.error)))
+        }
+    }
+
     public func stopCapture() async {
         failureLock.lock()
         isStopping = true
         failureLock.unlock()
+        // No repeat may land after the stop time: the video would outlast the microphone and the telemetry.
+        videoQueue.sync {
+            keepAliveTimer?.cancel()
+            keepAliveTimer = nil
+        }
         let endTime = videoEndTime(atUptime: ProcessInfo.processInfo.systemUptime)
         if let activeStream = stream {
             try? await activeStream.stopCapture()
@@ -907,8 +958,14 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             let rawPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             guard let pausedOffset = pausedOffset(forHostPTS: rawPTS) else { return }
 
-            let adjustedBuffer = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: pausedOffset) ?? sampleBuffer
-            let pts = CMSampleBufferGetPresentationTimeStamp(adjustedBuffer)
+            var adjustedBuffer = Self.adjustSampleBufferTime(sampleBuffer, bySubtracting: pausedOffset) ?? sampleBuffer
+            var pts = CMSampleBufferGetPresentationTimeStamp(adjustedBuffer)
+            // A repeated frame can be written after this frame was captured but before it got here. Times must rise,
+            // so the change shows a millisecond after the repeat instead of being lost.
+            if isWritingSessionStarted, CMTimeCompare(pts, lastSampleTime) <= 0 {
+                pts = CMTimeAdd(lastSampleTime, CMTime(value: 1, timescale: 1000))
+                adjustedBuffer = Self.sampleBuffer(adjustedBuffer, presentedAt: pts) ?? adjustedBuffer
+            }
 
             if !isWritingSessionStarted {
                 writer.startSession(atSourceTime: pts)
@@ -923,10 +980,14 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
                 let resolvedOriginSec = (frameUptimeSec > 1.0 && abs(nowUptime - frameUptimeSec) < 10.0) ? frameUptimeSec : nowUptime
                 onFirstVideoFrameArrived?(resolvedOriginSec)
             }
-            lastSampleTime = pts
+            // Kept even when the encoder is busy and the frame is skipped, so the next repeat shows the latest picture.
+            // The times only move for a frame that reached the file.
             lastVideoSample = adjustedBuffer
-
-            if let vInput = videoInput, vInput.isReadyForMoreMediaData, !vInput.append(adjustedBuffer) {
+            guard let vInput = videoInput, vInput.isReadyForMoreMediaData else { return }
+            if vInput.append(adjustedBuffer) {
+                lastSampleTime = pts
+                lastScreenAppendUptime = ProcessInfo.processInfo.systemUptime
+            } else {
                 reportFailure(.screenWriter(Self.describe(writer.error)))
             }
 
