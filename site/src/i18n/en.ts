@@ -10,6 +10,7 @@ export default {
   navSections: "Sections",
   navTimeline: "Timeline",
   navPolish: "Polish",
+  navDraw: "Draw",
   navCamera: "Camera",
   navAgents: "AI agents",
   navDownload: "Download",
@@ -66,6 +67,14 @@ export default {
   keyH: "Shortcuts people can follow",
   keyP: "Keyboard shortcuts you press appear as keycaps, on their own track, so viewers see how you got there.",
   keyAria: "Keyboard shortcuts shown as keycaps while a command menu is used",
+
+  drH: "Point at things, live or later.",
+  drawH: "Draw while you talk",
+  drawP: "Press a key during a recording and draw on the screen with a pen, a highlighter, arrows or boxes. People watching live see it as you present, and every stroke lands in the editor as an annotation you can still change.",
+  drawAria: "A pen stroke and a highlighter drawn over a web app during a recording, fading out after a moment",
+  annH: "Annotations that draw themselves in",
+  annP: "Add text, arrows, shapes and images on their own tracks. They draw in and fade out right on time, and the top track sits in front.",
+  annAria: "Text, an arrow and a box appearing over a recording one after another",
 
   camH2: "Change the room after you've left it.",
   camH3: "A new background, and a sticker that follows you",
@@ -137,4 +146,5 @@ export default {
   source: "Source",
   report: "Report an issue",
   spec: "Specification",
+  privacy: "Privacy",
 };

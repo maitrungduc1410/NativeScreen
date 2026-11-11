@@ -157,7 +157,7 @@ public final class MetalFrameCompositor {
                 height: max(400, session.metadata.captureTarget.pixelSize.height)
             )))
             if isCameraOnly, let sourceVideoFrame {
-                rawScreen = cameraOnlyPicture(sourceVideoFrame, session: session, isRealtimePreview: isRealtimePreview)
+                rawScreen = cameraOnlyPicture(sourceVideoFrame, session: session, sourceTimeMs: sourceTimeMs, isRealtimePreview: isRealtimePreview)
             }
             let screenExtent = rawScreen.extent
 
@@ -1783,23 +1783,26 @@ public final class MetalFrameCompositor {
         return stage
     }
 
-    /// A camera-only picture covering the canvas. With a face found, the face sits at the horizontal center and a
-    /// little above the middle; the picture never uncovers the canvas edges.
+    /// A camera-only picture covering the canvas. With a face found, the picture is enlarged by the face tracking zoom
+    /// and the face's framing center (which sits below the eyes) goes to the middle, as in the camera layer; the
+    /// picture never uncovers the canvas edges.
     private static func cameraOnlyFillRect(
         session: ProjectSession,
         sourceTimeMs: Double,
         canvasRect: CGRect,
         sourceSize: CGSize
     ) -> CGRect {
-        let scale = max(canvasRect.width / max(1.0, sourceSize.width), canvasRect.height / max(1.0, sourceSize.height))
+        let face = session.cameraOnlyFaceCenter01(atSourceMs: sourceTimeMs)
+        let zoom = face == nil ? 1.0 : min(2.0, max(1.0, session.document.camera.faceTrackingZoom))
+        let scale = zoom * max(canvasRect.width / max(1.0, sourceSize.width), canvasRect.height / max(1.0, sourceSize.height))
         let width = sourceSize.width * scale
         let height = sourceSize.height * scale
         var x = canvasRect.midX - width * 0.5
         var y = canvasRect.midY - height * 0.5
-        if let face = session.cameraOnlyFaceCenter01(atSourceMs: sourceTimeMs) {
+        if let face {
             x = canvasRect.midX - face.x * width
             // Bottom-left origin: the face's height from the bottom is `(1 - y) * height`.
-            y = canvasRect.midY + canvasRect.height * 0.08 - (1.0 - face.y) * height
+            y = canvasRect.midY - (1.0 - face.y) * height
         }
         x = min(canvasRect.minX, max(canvasRect.maxX - width, x))
         y = min(canvasRect.minY, max(canvasRect.maxY - height, y))
@@ -2165,12 +2168,12 @@ public final class MetalFrameCompositor {
         }
     }
 
-    /// The main picture of a camera-only recording: mirror, background and color grade from the camera settings, and
-    /// only the person for the cutout framing. Cropping is the canvas crop and stickers belong to the camera layer.
-    private func cameraOnlyPicture(_ frame: CIImage, session: ProjectSession, isRealtimePreview: Bool) -> CIImage {
+    /// The main picture of a camera-only recording: mirror, background, color grade and sticker from the camera
+    /// settings, and only the person for the cutout framing. Cropping is the canvas crop. The face track is scanned
+    /// from this movie, so its times are source times.
+    private func cameraOnlyPicture(_ frame: CIImage, session: ProjectSession, sourceTimeMs: Double, isRealtimePreview: Bool) -> CIImage {
         var camCfg = session.document.camera
         camCfg.cropRect01 = .full
-        camCfg.stickerId = nil
         let customPreset = camCfg.selectedCustomColorPresetID.flatMap { id in
             camCfg.customColorPresets.first(where: { $0.id == id })
         }
@@ -2179,8 +2182,8 @@ public final class MetalFrameCompositor {
             packageURL: session.packageURL,
             camCfg: camCfg,
             customPreset: customPreset,
-            webcamMs: 0,
-            faceTrack: nil,
+            webcamMs: sourceTimeMs,
+            faceTrack: session.faceTrack,
             isCutoutMode: camCfg.cameraOnlyFraming == .cutout,
             isRealtimePreview: isRealtimePreview
         )

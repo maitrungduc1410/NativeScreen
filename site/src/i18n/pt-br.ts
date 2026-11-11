@@ -10,6 +10,7 @@ export default {
   navSections: "Seções",
   navTimeline: "Linha do tempo",
   navPolish: "Acabamento",
+  navDraw: "Desenho",
   navCamera: "Câmera",
   navAgents: "Agentes de IA",
   navDownload: "Baixar",
@@ -66,6 +67,14 @@ export default {
   keyH: "Atalhos fáceis de acompanhar",
   keyP: "Os atalhos de teclado que você usa aparecem como teclas, em uma faixa própria, para quem assiste ver como você chegou ali.",
   keyAria: "Atalhos de teclado mostrados como teclas enquanto um menu de comandos é usado",
+
+  drH: "Aponte para o que importa, ao vivo ou depois.",
+  drawH: "Desenhe enquanto fala",
+  drawP: "Aperte uma tecla durante a gravação e desenhe na tela com caneta, marca-texto, setas ou caixas. Quem assiste ao vivo vê na hora, e cada traço chega ao editor como uma anotação que você ainda pode mudar.",
+  drawAria: "Um traço de caneta e um de marca-texto sobre um app web durante a gravação, sumindo depois de um instante",
+  annH: "Anotações que se desenham sozinhas",
+  annP: "Adicione texto, setas, formas e imagens em faixas próprias. Elas se desenham e somem na hora certa, e a faixa de cima fica na frente.",
+  annAria: "Texto, uma seta e uma caixa aparecendo um depois do outro sobre uma gravação",
 
   camH2: "Mude de ambiente depois de ter gravado.",
   camH3: "Um fundo novo e uma figurinha que segue você",
@@ -137,4 +146,5 @@ export default {
   source: "Código-fonte",
   report: "Relatar um problema",
   spec: "Especificação",
+  privacy: "Privacidade",
 };

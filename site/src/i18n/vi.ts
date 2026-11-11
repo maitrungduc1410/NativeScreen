@@ -10,6 +10,7 @@ export default {
   navSections: "Các mục",
   navTimeline: "Timeline",
   navPolish: "Hiệu ứng",
+  navDraw: "Vẽ",
   navCamera: "Camera",
   navAgents: "AI Agent",
   navDownload: "Tải về",
@@ -66,6 +67,14 @@ export default {
   keyH: "Phím tắt ai xem cũng hiểu",
   keyP: "Phím tắt bạn bấm hiện thành các nút phím trên track riêng, để người xem biết bạn đã làm thế nào.",
   keyAria: "Phím tắt hiện thành các nút phím trong lúc dùng menu lệnh",
+
+  drH: "Chỉ vào chỗ cần nói, ngay lúc quay hoặc lúc sửa.",
+  drawH: "Vẽ ngay khi đang nói",
+  drawP: "Bấm một phím khi đang quay rồi vẽ lên màn hình bằng bút, bút dạ quang, mũi tên hoặc khung. Người đang xem thấy ngay lúc bạn trình bày, và mỗi nét vẽ vào editor thành một chú thích bạn vẫn sửa được.",
+  drawAria: "Một nét bút và một nét bút dạ quang vẽ lên web app trong lúc quay, mờ dần sau một lúc",
+  annH: "Chú thích tự vẽ ra",
+  annP: "Thêm chữ, mũi tên, hình và ảnh trên các track riêng. Chúng hiện ra và mờ đi đúng lúc, track trên cùng nằm phía trước.",
+  annAria: "Chữ, mũi tên và khung lần lượt hiện ra trên bản ghi",
 
   camH2: "Đổi phòng sau khi đã quay xong.",
   camH3: "Nền mới, và sticker bám theo bạn",
@@ -137,4 +146,5 @@ export default {
   source: "Mã nguồn",
   report: "Báo lỗi",
   spec: "Đặc tả",
+  privacy: "Quyền riêng tư",
 };

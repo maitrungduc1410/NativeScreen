@@ -10,6 +10,7 @@ export default {
   navSections: "Secciones",
   navTimeline: "Línea de tiempo",
   navPolish: "Acabado",
+  navDraw: "Dibujo",
   navCamera: "Cámara",
   navAgents: "Agentes de IA",
   navDownload: "Descargar",
@@ -66,6 +67,14 @@ export default {
   keyH: "Atajos que se pueden seguir",
   keyP: "Los atajos de teclado que pulsas aparecen como teclas, en su propia pista, para que quien mira vea cómo llegaste ahí.",
   keyAria: "Atajos de teclado mostrados como teclas mientras se usa un menú de comandos",
+
+  drH: "Señala lo que importa, en directo o después.",
+  drawH: "Dibuja mientras hablas",
+  drawP: "Pulsa una tecla durante la grabación y dibuja en la pantalla con lápiz, resaltador, flechas o recuadros. Quien te ve en directo lo ve mientras presentas, y cada trazo llega al editor como una anotación que todavía puedes cambiar.",
+  drawAria: "Un trazo de lápiz y uno de resaltador sobre una aplicación web durante la grabación, que se desvanecen al poco",
+  annH: "Anotaciones que se dibujan solas",
+  annP: "Añade texto, flechas, formas e imágenes en sus propias pistas. Se dibujan y desaparecen justo a tiempo, y la pista de arriba queda delante.",
+  annAria: "Texto, una flecha y un recuadro aparecen uno tras otro sobre una grabación",
 
   camH2: "Cambia de habitación cuando ya te has ido.",
   camH3: "Un fondo nuevo y un sticker que te sigue",
@@ -137,4 +146,5 @@ export default {
   source: "Código fuente",
   report: "Informar de un problema",
   spec: "Especificación",
+  privacy: "Privacidad",
 };

@@ -1816,8 +1816,10 @@ public final class RecordingCoordinator {
             defPreset.apply(to: &doc)
         }
         if metadata.captureTarget.mode == .camera {
-            // The face keeps the picture framed when it is cropped or zoomed (scanned once, on device).
+            // The face keeps the picture framed when it is cropped or zoomed (scanned once, on device). No extra zoom:
+            // the camera picture is the whole video.
             doc.camera.enableFaceTracking = true
+            doc.camera.faceTrackingZoom = 1.0
         }
         // What was drawn on the screen while recording, as editable annotations.
         let drawings = JSONLinesCodec.load(LiveDrawingEvent.self, from: recordingDir.appendingPathComponent("telemetry/drawings.jsonl"))

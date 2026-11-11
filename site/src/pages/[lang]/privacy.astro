@@ -1,0 +1,11 @@
+---
+import Privacy from "../../components/Privacy.astro";
+import { locales } from "../../i18n";
+
+export function getStaticPaths() {
+  return locales.slice(1).map((locale) => ({ params: { lang: locale.slug }, props: { locale } }));
+}
+
+const { locale } = Astro.props;
+---
+<Privacy locale={locale} />

@@ -7,13 +7,20 @@ import Foundation
 public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     case system = ""
     case english = "en"
+    case czech = "cs"
     case german = "de"
     case spanish = "es"
     case french = "fr"
+    case italian = "it"
     case portuguese = "pt-BR"
+    case turkish = "tr"
     case vietnamese = "vi"
+    case russian = "ru"
+    case arabic = "ar"
     case japanese = "ja"
+    case korean = "ko"
     case chinese = "zh-Hans"
+    case traditionalChinese = "zh-Hant"
 
     public var id: String { rawValue }
 
@@ -22,13 +29,20 @@ public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .system: String(localized: "System")
         case .english: "English"
+        case .czech: "Čeština"
         case .german: "Deutsch"
         case .spanish: "Español"
         case .french: "Français"
+        case .italian: "Italiano"
         case .portuguese: "Português (Brasil)"
+        case .turkish: "Türkçe"
         case .vietnamese: "Tiếng Việt"
+        case .russian: "Русский"
+        case .arabic: "العربية"
         case .japanese: "日本語"
+        case .korean: "한국어"
         case .chinese: "简体中文"
+        case .traditionalChinese: "繁體中文"
         }
     }
 

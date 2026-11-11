@@ -32,6 +32,18 @@
       "comment" : "Privacy prompt shown by macOS",
       "extractionState" : "extracted_with_value",
       "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يستخدم Native Screen الكاميرا لتسجيل صورة المقدّم فوق الشاشة."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen používá kameru k nahrání překrytí s přednášejícím."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -56,16 +68,40 @@
             "value" : "Native Screen utilise votre caméra pour enregistrer une incrustation du présentateur."
           }
         },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen usa la fotocamera per registrare il relatore in sovrimpressione."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Native Screen はプレゼンターのオーバーレイを収録するためにカメラを使用します。"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen은 발표자 오버레이를 녹화하기 위해 카메라를 사용합니다."
+          }
+        },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "O Native Screen usa sua câmera para gravar uma sobreposição do apresentador."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen использует камеру, чтобы записывать ведущего поверх экрана."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen, sunucu katmanını kaydetmek için kameranızı kullanır."
           }
         },
         "vi" : {
@@ -78,6 +114,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Native Screen 使用你的摄像头录制演讲者画中画。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 使用你的相機錄製講者疊加畫面。"
           }
         }
       }
@@ -98,6 +140,18 @@
       "comment" : "Privacy prompt shown by macOS",
       "extractionState" : "extracted_with_value",
       "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يستخدم Native Screen الميكروفون لتسجيل التعليقات الصوتية."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen používá mikrofon k nahrávání komentářů."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -122,16 +176,40 @@
             "value" : "Native Screen utilise votre micro pour enregistrer des voix off."
           }
         },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen usa il microfono per registrare le voci fuori campo."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Native Screen はナレーションを収録するためにマイクを使用します。"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen은 보이스오버를 녹음하기 위해 마이크를 사용합니다."
+          }
+        },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "O Native Screen usa seu microfone para gravar narrações."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen использует микрофон для записи закадрового голоса."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen, seslendirme kaydetmek için mikrofonunuzu kullanır."
           }
         },
         "vi" : {
@@ -145,6 +223,12 @@
             "state" : "translated",
             "value" : "Native Screen 使用你的麦克风录制旁白。"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 使用你的麥克風錄製旁白。"
+          }
         }
       }
     },
@@ -152,6 +236,18 @@
       "comment" : "Privacy prompt shown by macOS",
       "extractionState" : "stale",
       "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يسجّل Native Screen شاشتك أو النافذة المحددة لإنشاء عروض المنتجات."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen nahrává vaši obrazovku nebo vybrané okno a vytváří z nich ukázky produktů."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -176,16 +272,40 @@
             "value" : "Native Screen enregistre votre écran ou la fenêtre choisie pour créer des démos de produit."
           }
         },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen registra lo schermo o la finestra scelta per creare demo di prodotto."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Native Screen は製品デモを作成するために画面または選択したウインドウを収録します。"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen은 제품 데모를 만들기 위해 화면이나 선택한 창을 녹화합니다."
+          }
+        },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "O Native Screen grava sua tela ou a janela selecionada para criar demonstrações de produto."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen записывает экран или выбранное окно, чтобы создавать демо продуктов."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen, ürün tanıtımları oluşturmak için ekranınızı veya seçtiğiniz pencereyi kaydeder."
           }
         },
         "vi" : {
@@ -199,6 +319,12 @@
             "state" : "translated",
             "value" : "Native Screen 录制你的屏幕或所选窗口来制作产品演示。"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 會錄製你的螢幕或所選視窗，用來製作產品展示。"
+          }
         }
       }
     },
@@ -206,6 +332,18 @@
       "comment" : "Privacy prompt shown by macOS",
       "extractionState" : "extracted_with_value",
       "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يستخدم Native Screen التعرف على الكلام على الجهاز لإنشاء الترجمات محليًا."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen používá rozpoznávání řeči na zařízení k místnímu vytváření titulků."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -230,16 +368,40 @@
             "value" : "Native Screen utilise la reconnaissance vocale sur l’appareil pour générer les sous-titres localement."
           }
         },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen usa il riconoscimento vocale sul dispositivo per creare i sottotitoli in locale."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Native Screen はデバイス上の音声認識を使って字幕をローカルで生成します。"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen은 기기 내 음성 인식으로 자막을 로컬에서 생성합니다."
+          }
+        },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "O Native Screen usa o reconhecimento de fala no dispositivo para gerar legendas localmente."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen использует распознавание речи на устройстве, чтобы создавать субтитры локально."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen, altyazıları yerel olarak oluşturmak için cihazdaki konuşma tanımayı kullanır."
           }
         },
         "vi" : {
@@ -252,6 +414,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Native Screen 使用设备端语音识别在本机生成字幕。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Screen 使用裝置上的語音辨識在本機產生字幕。"
           }
         }
       }

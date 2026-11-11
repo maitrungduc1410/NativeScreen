@@ -39,11 +39,12 @@ audio), `captureTarget.mode` is `display` with the movie's pixel size and `scale
 the camera frame rate. `tracks.displayVideo` is `webcam.mp4` (the camera movie, the main picture), `tracks.webcamVideo`,
 `tracks.systemAudio` and `tracks.windowTelemetry` are `null`, and the telemetry files are empty, as above. The camera
 movie starts at the first usable camera frame and the microphone counts from it. Readers treat the main picture as a
-camera: `camera` styling (mirror, background, color grade, sharpen) applies to it, and there is no camera layer.
+camera: `camera` styling (mirror, background, color grade, sharpen, sticker) applies to it, and there is no camera layer.
 The device frame (`frameStyle.deviceMockup`) is ignored for these recordings. `camera.cameraOnlyFraming` (`framed`
 default, `full-frame`, `cutout`) sets how it sits on the canvas, and
 `camera.enableFaceTracking` (on for new camera-only projects) keeps the face centered when the picture is cropped or zoomed,
-using `assets/face-track.json` scanned from the main picture.
+using `assets/face-track.json` scanned from the main picture. `camera.faceTrackingZoom` enlarges the `full-frame` and
+`cutout` picture around the face (new camera-only projects start at `1.0`). The same scan places `camera.stickerId`.
 
 > **Track names come from `metadata.json`.** Readers must open the files named in `tracks` (`displayVideo`, `webcamVideo`,
 > `microphoneAudio`, `systemAudio`) instead of assuming the names above. `systemAudio` usually points at the display video

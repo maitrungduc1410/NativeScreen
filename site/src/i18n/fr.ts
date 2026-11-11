@@ -10,6 +10,7 @@ export default {
   navSections: "Sections",
   navTimeline: "Timeline",
   navPolish: "Finitions",
+  navDraw: "Dessin",
   navCamera: "Caméra",
   navAgents: "Agents IA",
   navDownload: "Télécharger",
@@ -66,6 +67,14 @@ export default {
   keyH: "Des raccourcis faciles à suivre",
   keyP: "Les raccourcis clavier que vous utilisez s’affichent sous forme de touches, sur leur propre piste, pour que les spectateurs voient chaque manipulation.",
   keyAria: "Raccourcis clavier affichés sous forme de touches pendant l’utilisation d’un menu de commandes",
+
+  drH: "Montrez du doigt, en direct ou après coup.",
+  drawH: "Dessinez pendant que vous parlez",
+  drawP: "Appuyez sur une touche pendant l’enregistrement et dessinez à l’écran au stylo, au surligneur, avec des flèches ou des cadres. Ceux qui regardent en direct le voient pendant votre présentation, et chaque trait arrive dans l’éditeur sous forme d’annotation que vous pouvez encore modifier.",
+  drawAria: "Un trait de stylo et un surlignage dessinés sur une application web pendant l’enregistrement, qui s’estompent après un instant",
+  annH: "Des annotations qui se dessinent toutes seules",
+  annP: "Ajoutez du texte, des flèches, des formes et des images sur leurs propres pistes. Elles se dessinent et s’effacent au bon moment, et la piste du haut passe devant.",
+  annAria: "Du texte, une flèche et un cadre apparaissent l’un après l’autre sur un enregistrement",
 
   camH2: "Changez de décor une fois le tournage terminé.",
   camH3: "Un nouvel arrière-plan et un sticker qui vous suit",
@@ -137,4 +146,5 @@ export default {
   source: "Code source",
   report: "Signaler un problème",
   spec: "Spécification",
+  privacy: "Confidentialité",
 };

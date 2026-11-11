@@ -6,6 +6,13 @@ import de from "./de";
 import fr from "./fr";
 import es from "./es";
 import ptBr from "./pt-br";
+import zhHant from "./zh-hant";
+import ko from "./ko";
+import it from "./it";
+import ru from "./ru";
+import cs from "./cs";
+import tr from "./tr";
+import ar from "./ar";
 
 export type Dict = typeof en;
 
@@ -15,11 +22,18 @@ export const locales = [
   { slug: "en", lang: "en", og: "en_US", name: "English", dict: en },
   { slug: "vi", lang: "vi", og: "vi_VN", name: "Tiếng Việt", dict: vi },
   { slug: "zh-hans", lang: "zh-Hans", og: "zh_CN", name: "简体中文", dict: zhHans },
+  { slug: "zh-hant", lang: "zh-Hant", og: "zh_TW", name: "繁體中文", dict: zhHant },
   { slug: "ja", lang: "ja", og: "ja_JP", name: "日本語", dict: ja },
+  { slug: "ko", lang: "ko", og: "ko_KR", name: "한국어", dict: ko },
   { slug: "de", lang: "de", og: "de_DE", name: "Deutsch", dict: de },
   { slug: "fr", lang: "fr", og: "fr_FR", name: "Français", dict: fr },
   { slug: "es", lang: "es", og: "es_ES", name: "Español", dict: es },
+  { slug: "it", lang: "it", og: "it_IT", name: "Italiano", dict: it },
   { slug: "pt-br", lang: "pt-BR", og: "pt_BR", name: "Português (Brasil)", dict: ptBr },
+  { slug: "ru", lang: "ru", og: "ru_RU", name: "Русский", dict: ru },
+  { slug: "cs", lang: "cs", og: "cs_CZ", name: "Čeština", dict: cs },
+  { slug: "tr", lang: "tr", og: "tr_TR", name: "Türkçe", dict: tr },
+  { slug: "ar", lang: "ar", og: "ar_AR", name: "العربية", dict: ar, dir: "rtl" },
 ] as const;
 
 export type Locale = (typeof locales)[number];

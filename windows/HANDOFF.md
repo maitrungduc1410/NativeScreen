@@ -27,6 +27,33 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-11, Seven more UI languages: Arabic, Czech, Italian, Korean, Russian, Turkish, Traditional Chinese (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** every key of the shared `Localizable.xcstrings` (Windows-only `manual` keys included) now has `ar`, `cs`, `it`, `ko`, `ru`, `tr` and `zh-Hant`; `InfoPlist.xcstrings` has them for the privacy prompts. macOS: `AppLanguage` cases, `knownRegions`. Specs: `spec/06` ADR-44 (two bullets), `spec/05` Localization with a Windows line. No Swift logic changed.
+- **Port (no translation work, the catalog is shared):**
+  1. `Loc.Languages`: add `("cs", "Čeština")`, `("it", "Italiano")`, `("tr", "Türkçe")`, `("ru", "Русский")`, `("ar", "العربية")`, `("ko", "한국어")`, `("zh-Hant", "繁體中文")`. macOS order: English, Čeština, Deutsch, Español, Français, Italiano, Português (Brasil), Türkçe, Tiếng Việt, Русский, العربية, 日本語, 한국어, 简体中文, 繁體中文.
+  2. `Loc.Match`: `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` now return `zh-Hant` instead of `en`. The primary-subtag lookup covers the rest once they are in `Languages`.
+  3. `Package.appxmanifest`: a `<Resource>` for each new id, and update the `spec/06` ADR-81 bullet that says "eight".
+  4. `windows/AGENTS.md`: the `NS_LANGUAGE` id list.
+  5. Arabic is right to left. The macOS editor keeps a left-to-right arrangement (timeline, preview, inspector on the right) and only the text runs right to left inside its controls; the recording bar mirrors because SwiftUI does it by itself. On Windows keep `FlowDirection` left to right for the editor and check that Arabic text runs right to left inside text controls (WinUI orders each run by its content). Mirroring the recording bar is optional.
+- **Built on macOS:** the app builds with 15 `.lproj` folders. Launched in Arabic and in Russian: recording bar and editor checked by eye, no truncation beyond the background-type tabs, which already scroll in German. Every translation keeps the source's format specifiers (checked by script).
+- **How to verify:** `NS_LANGUAGE=ar`, `ru`, `zh-Hant` and `ko` for one run each: menus, inspector, timeline labels and dialogs translated, nothing cut off in the recording bar and the export panel; Windows-only strings (File Explorer, `Ctrl` hints) translated too. With the system language set to Chinese (Taiwan), the app starts in Traditional Chinese.
+- **Risks / unsure:** the longest new languages are Russian and Czech; fixed-width labels on Windows may need the same shrink-to-fit treatment as German. Arabic punctuation and numbers inside `%@` substitutions are left to the text engine.
+
+## 2026-11-11, Camera-only: stickers, one face tracking setting (macOS done, Windows port pending)
+
+### Writer
+- **Scope:** macOS `MetalFrameCompositor.swift` (`cameraOnlyPicture`, `cameraOnlyFillRect`), `ProjectSession.needsFaceTrack`, `RecordingCoordinator` (new camera-only project), `InspectorSidebarView.swift` (Camera Style, camera-only Layout). Specs: `spec/02` camera-only paragraph, `spec/05` camera-only items, `spec/06` ADR-77, `spec/07` Pass 2. No file format change.
+- **Port:**
+  1. Stickers on the camera-only picture: keep `stickerId` in the camera preparation of the main picture and place it from the face track at the source time (that track is scanned from the main movie). A sticker alone starts the scan, as for the camera layer.
+  2. Camera Style shows Sticker, `Face tracking` and its Zoom slider for camera-only projects too. Remove `Keep my face centered` from the camera-only Camera Layout tab; it was the same `enableFaceTracking` under another name. Camera crop and Advanced (delay) stay hidden.
+  3. `cameraOnlyFillRect`: with a face, multiply the fill scale by `clamp(faceTrackingZoom, 1, 2)`, and drop the 8% lift: `y = canvasMidY - (1 - f.y) * h` (`spec/07` Pass 2).
+  4. New camera-only projects: `enableFaceTracking: true` and `faceTrackingZoom: 1.0`.
+- **Built on macOS:** the app builds. Checked over MCP on a copy of a real camera-only recording: the dog sticker in Framed, Full frame (zoom 1.0 and 1.6) and Cutout frames, head and sticker inside the frame at 1.6x.
+- **How to verify:** open a camera-only project, pick a sticker in Camera Style: it follows the face in all three framings, in the preview and in an export. Full frame at Zoom 1.6 keeps the head in frame. The Camera Layout tab has no face toggle.
+- **Risks / unsure:** projects made before this keep `faceTrackingZoom` 1.3 if a preset or older default set it, so they now open a little tighter in Full frame and Cutout.
+
 ## 2026-11-10, Annotations, live drawing, camera-only recording, green screen, speaker notes, custom cursors, profiles; no Device mode (macOS done, Windows port pending)
 
 ### Writer

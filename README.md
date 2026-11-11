@@ -20,8 +20,8 @@ See it move on the [website](https://nativescreen.app/).
 
 ## Why Native Screen
 
-- **A real multi-track timeline.** Zooms, blur and spotlight masks, captions and keyboard shortcuts each get their own
-  tracks, as many as you need. Overlap two blurs, stack caption lines, drag items between tracks, snap everything to
+- **A real multi-track timeline.** Zooms, blur and spotlight masks, annotations, captions and keyboard shortcuts each
+  get their own tracks, as many as you need. Overlap two blurs, stack caption lines, drag items between tracks, snap everything to
   edges and the playhead.
 - **Automatic polish.** Zooms follow your clicks and typing, the cursor glides instead of shaking, and motion blur
   makes fast moves look filmed.
@@ -32,8 +32,8 @@ See it move on the [website](https://nativescreen.app/).
   still.
 - **Let an AI agent do the editing.** Claude, Codex, Cursor and other MCP clients can record, edit, restyle and export
   through the app. Every change lands in the editor you see and can be undone.
-- **Light and dark**, and **eight languages**: English, Tiếng Việt, 简体中文, 日本語, Deutsch, Français, Español and
-  Português (Brasil).
+- **Light and dark**, and **15 languages**: English, العربية, Čeština, Deutsch, Español, Français, Italiano, 日本語,
+  한국어, Português (Brasil), Русский, Türkçe, Tiếng Việt, 简体中文 and 繁體中文.
 
 ![A timeline with zoom, mask, shortcut and caption tracks](site/public/assets/shots/timeline.jpg)
 
@@ -42,6 +42,11 @@ See it move on the [website](https://nativescreen.app/).
 **Record**
 - Whole display, one window or a selected area, at native resolution and up to 60 fps.
 - Camera, microphone and system audio as separate tracks. Pause and resume.
+- Camera only: record just yourself, with a framed preview before you start.
+- Draw on the screen while recording: pen, highlighter, arrows and boxes. Every stroke becomes an annotation you can
+  edit afterwards.
+- Speaker notes that only you can see, kept out of the recording.
+- Recording profiles to save a setup and come back to it.
 - Crash safe: the recording is written in small pieces, so a lost take can be recovered.
 
 **Edit**
@@ -49,9 +54,13 @@ See it move on the [website](https://nativescreen.app/).
 - Zoom track with automatic and manual zooms, or a loupe that magnifies one spot.
 - Blur and spotlight masks on as many tracks as you need, plus automatic detection of emails, keys and faces.
 - Keyboard shortcuts shown as 3D keycaps on their own tracks.
+- Annotations: text, arrows, shapes, images and pen strokes that draw themselves in, with layers you can reorder.
 - Wallpapers, gradients, padding, shadows, device frames, crop, and aspect ratios for every platform with safe zones
   for Reels, TikTok and Shorts.
-- Camera layouts, styles and background removal.
+- Camera layouts, styles and background removal, with AI or a green screen.
+- Camera-only videos: framed, full frame or a cutout of you, with the same backgrounds and stickers, kept centered on
+  your face. Vertical in one click.
+- Custom cursors.
 - Undo everything. Presets to reuse a look across projects.
 
 **Captions and transcript**

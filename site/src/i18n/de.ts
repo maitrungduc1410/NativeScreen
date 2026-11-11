@@ -10,6 +10,7 @@ export default {
   navSections: "Abschnitte",
   navTimeline: "Timeline",
   navPolish: "Feinschliff",
+  navDraw: "Zeichnen",
   navCamera: "Kamera",
   navAgents: "KI-Agenten",
   navDownload: "Download",
@@ -66,6 +67,14 @@ export default {
   keyH: "Tastenkürzel, denen man folgen kann",
   keyP: "Gedrückte Tastenkürzel erscheinen als Tasten auf einer eigenen Spur, damit Zuschauer sehen, wie du dorthin gekommen bist.",
   keyAria: "Tastenkürzel werden als Tasten eingeblendet, während ein Befehlsmenü benutzt wird",
+
+  drH: "Zeig auf Dinge, live oder später.",
+  drawH: "Zeichnen, während du sprichst",
+  drawP: "Drück während der Aufnahme eine Taste und zeichne mit Stift, Textmarker, Pfeilen oder Rahmen auf den Bildschirm. Wer live zuschaut, sieht es sofort, und jeder Strich landet als Anmerkung im Editor, die du noch ändern kannst.",
+  drawAria: "Ein Stiftstrich und ein Textmarker über einer Web-App während der Aufnahme, die nach einem Moment verblassen",
+  annH: "Anmerkungen, die sich selbst zeichnen",
+  annP: "Füge Text, Pfeile, Formen und Bilder auf eigenen Spuren hinzu. Sie zeichnen sich pünktlich ein und blenden wieder aus, die oberste Spur liegt vorne.",
+  annAria: "Text, ein Pfeil und ein Rahmen erscheinen nacheinander über einer Aufnahme",
 
   camH2: "Wechsle den Raum, nachdem du ihn verlassen hast.",
   camH3: "Ein neuer Hintergrund und ein Sticker, der dir folgt",
@@ -137,4 +146,5 @@ export default {
   source: "Quellcode",
   report: "Problem melden",
   spec: "Spezifikation",
+  privacy: "Datenschutz",
 };

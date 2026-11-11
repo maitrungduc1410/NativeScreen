@@ -1844,7 +1844,7 @@ public final class ProjectSession: Identifiable {
     // MARK: - Face track
 
     public var needsFaceTrack: Bool {
-        if isCameraOnlyRecording { return document.camera.enableFaceTracking }
+        if isCameraOnlyRecording { return document.camera.stickerId != nil || document.camera.enableFaceTracking }
         return hasRecordedCamera && document.camera.enabled
             && (document.camera.stickerId != nil || document.camera.enableFaceTracking)
     }

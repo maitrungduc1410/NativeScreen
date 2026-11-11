@@ -186,7 +186,8 @@
 - [x] **Timeline snapping:** dragged and trimmed items stick to edges on every track, the playhead and clip boundaries, with a purple guide line; toggle next to the split button and in `View`, on by default (`spec/06` ADR-43).
 - [x] **Track label menu:** right-click a track's label to hide or show it, or delete it with everything on it (one undo step, with a toast). Every track except Clip and Zoom can be deleted (`spec/06` ADR-50).
 - [x] **Per-slice audio volume:** `Microphone volume` and `System audio volume` sliders in the clip context menu, each applied only to that slice (`spec/06` ADR-47).
-- [x] **Localization:** English, Vietnamese, Simplified Chinese, Japanese, German, French, Spanish and Brazilian Portuguese, with a language picker in `Settings > General` (`spec/06` ADR-44).
+- [x] **Localization:** English, Arabic, Czech, German, Spanish, French, Italian, Japanese, Korean, Brazilian Portuguese, Russian, Turkish, Vietnamese, Simplified and Traditional Chinese, with a language picker in `Settings > General` (`spec/06` ADR-44).
+  - [ ] **Windows:** the seven added languages in the picker, the system-language match and the Store manifest; Arabic text right to left inside a left-to-right layout.
 - [x] **Caption tracks:** multiple tracks on the timeline; move, trim, split and add captions, drag them between tracks, per-caption style with `Apply to all captions in this track`, 2D `Caption position` pad.
 - [x] **AI Auto-Captions & Edit by Transcript (100% Local On-Device Speech-to-Text):**
   - [x] On-device transcription using Apple `Speech` framework (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`) with language selector, custom `Keyterms` prompt, and `.srt` export.
@@ -206,7 +207,8 @@
   - [x] **Windows:** drop `Device` from the recording bar if shown, and read `"device"` as `Display` (`CaptureTargetMode` in `Enums.cs`), alongside the new `"camera"`.
 - [x] **Camera-only recording (macOS):** a `Camera` mode in the recording bar records the camera and microphone with no screen, from a large preview with the record button. In the editor the camera is the main picture: framed, zoomed, cropped, masked and captioned like a screen, styled with the camera's mirror, background and color grade. Camera layouts, device frames, the cursor and shortcuts do not apply. MCP `start_recording` takes `target.type: camera` (`spec/02`, `spec/06` ADR-77).
   - [x] Framing in the Camera Layout tab: `Framed` (padding, corners, shadow), `Full frame` (edge to edge) and `Cutout` (the person over the background), with edge softness and inset for the cutout.
-  - [x] `Keep my face centered` (on for new camera-only projects): the face track is scanned from the main picture; Full frame and Cutout crop around the face and zooms center on it. `Make a vertical video (9:16)` switches the canvas to 9:16 with Full frame and face tracking.
+  - [x] `Face tracking` in Camera Style (on for new camera-only projects, zoom 1.0): the face track is scanned from the main picture; Full frame and Cutout crop around the face, enlarged by the Zoom slider, and zooms center on it. `Make a vertical video (9:16)` switches the canvas to 9:16 with Full frame and face tracking.
+  - [x] Stickers on the camera-only picture, placed from the same face track.
   - [x] Speaker notes dock at the top center of the screen, under the built-in camera, while the Camera mode is open, with the preview below them; they go back to their own place when the mode closes.
   - [x] **Windows:** the same mode on the Windows recording bar (Media Foundation camera capture as the timeline clock), the editor reading `captureTarget.mode: camera`, the three framings, face-centered crop and zoom, and the docked notes.
 

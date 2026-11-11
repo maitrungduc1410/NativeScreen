@@ -2688,7 +2688,8 @@ public struct InspectorSidebarView: View {
 
     // MARK: - 5B. Camera Layout Inspector
 
-    /// Camera-only recordings: how the picture is framed, face tracking, and a shortcut to a vertical video.
+    /// Camera-only recordings: how the picture is framed and a shortcut to a vertical video. Face tracking is in Camera
+    /// Style, as for the camera layer.
     @ViewBuilder
     private var cameraOnlyLayoutInspector: some View {
         let cam = session.document.camera
@@ -2710,18 +2711,6 @@ public struct InspectorSidebarView: View {
                 }
             }
 
-            inspectorDivider
-
-            inspectorToggleRow(
-                title: "Keep my face centered",
-                icon: "person.fill.viewfinder",
-                description: "Full frame and Cutout crop around your face, and zooms center on it. Done locally, no data is sent to the server.",
-                isOn: Binding(
-                    get: { cam.enableFaceTracking },
-                    set: { v in session.mutate { $0.camera.enableFaceTracking = v } }
-                )
-            )
-            if cam.enableFaceTracking { faceScanStatusRow }
 
             if cam.cameraOnlyFraming == .cutout {
                 inspectorDivider
@@ -3244,8 +3233,8 @@ public struct InspectorSidebarView: View {
         let _ = webcamThumbnailRevision
         let cam = session.document.camera
         let hasCrop = (cam.cropRect01 != .full)
-        // Camera-only recordings style the main picture: stickers, face tracking and delay follow the camera layer,
-        // and cropping is the canvas crop.
+        // Camera-only recordings style the main picture. Cropping is the canvas crop and there is no camera delay to
+        // adjust, since the camera is the picture.
         let isCameraOnly = session.isCameraOnlyRecording
 
         VStack(alignment: .leading, spacing: 22) {
@@ -3255,10 +3244,8 @@ public struct InspectorSidebarView: View {
             }
             cameraBackgroundRemovalSection(cam)
             inspectorDivider
-            if !isCameraOnly {
-                cameraStickerSection(cam)
-                inspectorDivider
-            }
+            cameraStickerSection(cam)
+            inspectorDivider
 
             // 1. `Color grading` 7x2 Thumbnail Grid (`Original` + 12 Filmic Looks + Custom Presets + `+` Menu Button)
             VStack(alignment: .leading, spacing: 10) {
@@ -3488,30 +3475,30 @@ public struct InspectorSidebarView: View {
                 )
             )
 
-            if !isCameraOnly {
-                inspectorToggleRow(
-                    title: "Face tracking",
-                    icon: "person.fill.viewfinder",
-                    description: "NativeScreen will adjust the camera picture to center it on your face. Done locally, no data is sent to the server.",
-                    isOn: Binding(
-                        get: { cam.enableFaceTracking },
-                        set: { v in session.mutate { $0.camera.enableFaceTracking = v } }
-                    )
+            inspectorToggleRow(
+                title: "Face tracking",
+                icon: "person.fill.viewfinder",
+                description: "NativeScreen will adjust the camera picture to center it on your face. Done locally, no data is sent to the server.",
+                isOn: Binding(
+                    get: { cam.enableFaceTracking },
+                    set: { v in session.mutate { $0.camera.enableFaceTracking = v } }
                 )
+            )
 
-                if cam.enableFaceTracking {
-                    coalescedSlider(
-                        title: "Zoom",
-                        value: Binding(
-                            get: { cam.faceTrackingZoom },
-                            set: { v in session.mutate { $0.camera.faceTrackingZoom = v } }
-                        ),
-                        range: 1.0...2.0,
-                        defaultValue: 1.3
-                    )
-                    if cam.stickerId == nil { faceScanStatusRow }
-                }
+            if cam.enableFaceTracking {
+                coalescedSlider(
+                    title: "Zoom",
+                    value: Binding(
+                        get: { cam.faceTrackingZoom },
+                        set: { v in session.mutate { $0.camera.faceTrackingZoom = v } }
+                    ),
+                    range: 1.0...2.0,
+                    defaultValue: isCameraOnly ? 1.0 : 1.3
+                )
+                if cam.stickerId == nil { faceScanStatusRow }
+            }
 
+            if !isCameraOnly {
                 inspectorDivider
 
                 // 5. `Advanced` (`Camera delay` -200ms ... +200ms)

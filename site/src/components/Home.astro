@@ -1,6 +1,7 @@
 ---
 import "../styles/site.css";
 import { locales, dictOf, pathOf, urlOf, ogImageOf, SITE, type Locale } from "../i18n";
+import { privacyPathOf } from "../i18n/privacy";
 
 interface Props {
   locale: Locale;
@@ -34,7 +35,7 @@ const jsonLd = {
 };
 ---
 <!doctype html>
-<html lang={locale.lang}>
+<html lang={locale.lang} dir={"dir" in locale ? locale.dir : "ltr"}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -42,13 +43,12 @@ const jsonLd = {
     <script is:inline>
       // Only the English home page redirects. Language pages are always shown as linked, and crawlers stay here.
       (function () {
-        var pages = { en: "/", vi: "/vi/", zh: "/zh-hans/", ja: "/ja/", de: "/de/", fr: "/fr/", es: "/es/", pt: "/pt-br/" };
-        var saved = { "zh-hans": "zh", "pt-br": "pt" };
+        var pages = { en: "/", vi: "/vi/", zh: "/zh-hans/", zht: "/zh-hant/", ja: "/ja/", ko: "/ko/", de: "/de/", fr: "/fr/", es: "/es/", it: "/it/", pt: "/pt-br/", ru: "/ru/", cs: "/cs/", tr: "/tr/", ar: "/ar/" };
+        var saved = { "zh-hans": "zh", "zh-hant": "zht", "pt-br": "pt" };
         function fromTag(tag) {
           tag = tag.toLowerCase();
           var base = tag.split("-")[0];
-          // Only Simplified Chinese is available, so Traditional readers move on to their next language.
-          if (base === "zh" && /^zh-(tw|hk|mo|hant)/.test(tag)) return null;
+          if (base === "zh" && /^zh-(tw|hk|mo|hant)/.test(tag)) return "zht";
           return pages[base] ? base : null;
         }
         try {
@@ -115,6 +115,7 @@ const jsonLd = {
     <nav class="nav" aria-label={t.navSections}>
       <a href="#timeline">{t.navTimeline}</a>
       <a href="#polish">{t.navPolish}</a>
+      <a href="#draw">{t.navDraw}</a>
       <a href="#camera">{t.navCamera}</a>
       <a href="#agents">{t.navAgents}</a>
       <a href="#download">{t.navDownload}</a>
@@ -163,7 +164,7 @@ const jsonLd = {
     <dl>
       <div><dt>0</dt><dd>{t.f0}</dd></div>
       <div><dt>2</dt><dd>{t.f1}</dd></div>
-      <div><dt>8</dt><dd>{t.f2}</dd></div>
+      <div><dt>{locales.length}</dt><dd>{t.f2}</dd></div>
       <div><dt>MIT</dt><dd>{t.f3}</dd></div>
     </dl>
   </section>
@@ -249,9 +250,36 @@ const jsonLd = {
     </div>
   </section>
 
-  <section class="chapter wrap" id="camera">
+  <section class="chapter wrap" id="draw">
     <header class="chapter-head">
       <span class="num">03</span>
+      <h2>{t.drH}</h2>
+    </header>
+    <div class="features">
+      <article class="feature">
+        <div class="feature-text">
+          <h3>{t.drawH}</h3>
+          <p>{t.drawP}</p>
+        </div>
+        <div class="feature-media">
+          <video class="media" src="/assets/demos/draw-live.mp4" muted loop playsinline preload="none" data-autoplay aria-label={t.drawAria}></video>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-text">
+          <h3>{t.annH}</h3>
+          <p>{t.annP}</p>
+        </div>
+        <div class="feature-media">
+          <video class="media" src="/assets/demos/annotations.mp4" muted loop playsinline preload="none" data-autoplay aria-label={t.annAria}></video>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="chapter wrap" id="camera">
+    <header class="chapter-head">
+      <span class="num">04</span>
       <h2>{t.camH2}</h2>
     </header>
     <div class="features">
@@ -276,7 +304,7 @@ const jsonLd = {
 
   <section class="chapter wrap" id="formats">
     <header class="chapter-head">
-      <span class="num">04</span>
+      <span class="num">05</span>
       <h2>{t.fmtH}</h2>
     </header>
     <div class="cols">
@@ -300,7 +328,7 @@ const jsonLd = {
 
   <section class="chapter wrap" id="captions">
     <header class="chapter-head">
-      <span class="num">05</span>
+      <span class="num">06</span>
       <h2>{t.capH}</h2>
     </header>
     <div class="cols">
@@ -317,7 +345,7 @@ const jsonLd = {
 
   <section class="chapter wrap" id="agents">
     <header class="chapter-head">
-      <span class="num">06</span>
+      <span class="num">07</span>
       <h2>{t.aiH}</h2>
     </header>
     <div class="cols">
@@ -338,7 +366,7 @@ const jsonLd = {
 
   <section class="chapter wrap" id="yours">
     <header class="chapter-head">
-      <span class="num">07</span>
+      <span class="num">08</span>
       <h2>{t.yourH}</h2>
     </header>
     <div class="native">
@@ -411,7 +439,7 @@ const jsonLd = {
 
 <footer class="footer wrap">
   <p>{t.footer}</p>
-  <p><a href={repo}>{t.source}</a> · <a href={`${repo}/issues`}>{t.report}</a> · <a href={`${repo}/tree/master/spec`}>{t.spec}</a></p>
+  <p><a href={repo}>{t.source}</a> · <a href={`${repo}/issues`}>{t.report}</a> · <a href={`${repo}/tree/master/spec`}>{t.spec}</a> · <a href={privacyPathOf(locale.slug)}>{t.privacy}</a></p>
 </footer>
 
 <script>

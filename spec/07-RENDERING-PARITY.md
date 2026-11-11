@@ -90,13 +90,15 @@ All numbers below come from `composeFrame`. `S = canvasScale = outputHeight / 90
 
 ### Pass 2: Masks on the source screen (`applyMultiTrackMasks`)
 **Camera-only recordings** (`captureTarget.mode == camera`): first the source frame goes through the camera preparation of §7
-(mirror unless `camera.mirror`, background, color grade, sharpen) with `cropRect01` treated as full and no sticker, then
+(mirror unless `camera.mirror`, background, color grade, sharpen, sticker placed from the face track at the source time)
+with `cropRect01` treated as full, then
 everything below applies as to a screen. There is no camera layer in Pass 6. With `cameraOnlyFraming` `cutout` the picture
 is the person cutout (§7.3) over a transparent background.
 
 For `full-frame` and `cutout` the screen rect of Pass 3 is the aspect fill of the canvas: scale `max(cw/sw, ch/sh)`; with a
-face track and `enableFaceTracking`, the face point `f` (framing center, flipped in x unless `mirror`, mapped into the canvas
-crop) sits at `x = canvasMidX - f.x * w` and `y = canvasMidY + 0.08 * ch - (1 - f.y) * h` (bottom-left origin), else centered;
+face track and `enableFaceTracking`, the scale is multiplied by `clamp(faceTrackingZoom, 1, 2)` and the face point `f`
+(framing center, flipped in x unless `mirror`, mapped into the canvas crop) sits at `x = canvasMidX - f.x * w` and
+`y = canvasMidY - (1 - f.y) * h` (bottom-left origin), else centered;
 then clamped so the rect covers the canvas. Corner radius is 0 and there is no inset or shadow. Zoom center with face
 tracking: `p = min(1, (scale - 1) / 0.25)`, face clamped to `[0.5/scale, 1 - 0.5/scale]`, `center = solver + (face - solver) * p`.
 

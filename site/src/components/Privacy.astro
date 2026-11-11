@@ -1,0 +1,129 @@
+---
+import "../styles/site.css";
+import { locales, dictOf, pathOf, SITE, type Locale } from "../i18n";
+import { privacyOf, privacyPathOf, POLICY_DATE } from "../i18n/privacy";
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = dictOf(locale);
+const p = privacyOf(locale);
+const repo = "https://github.com/maitrungduc1410/NativeScreen";
+const html = (s: string) => s.replaceAll("{repo}", repo);
+const date = new Intl.DateTimeFormat(locale.lang, { dateStyle: "long", timeZone: "UTC" }).format(POLICY_DATE);
+const url = SITE + privacyPathOf(locale.slug);
+---
+<!doctype html>
+<html lang={locale.lang} dir={"dir" in locale ? locale.dir : "ltr"}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{p.title}</title>
+  <meta name="description" content={p.desc}>
+  <link rel="canonical" href={url}>
+  {locales.map((l) => <link rel="alternate" hreflang={l.lang} href={SITE + privacyPathOf(l.slug)}>)}
+  <link rel="alternate" hreflang="x-default" href={SITE + privacyPathOf("en")}>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f3ee">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141312">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Native Screen">
+  <meta property="og:url" content={url}>
+  <meta property="og:title" content={p.title}>
+  <meta property="og:description" content={p.desc}>
+  <meta property="og:locale" content={locale.og}>
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="apple-touch-icon" href="/assets/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <script is:inline>
+    try { const t = localStorage.getItem("ns-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-row">
+    <a class="wordmark" href={pathOf(locale.slug)} aria-label={t.homeAria}>
+      <img src="/assets/icon.png" alt="" width="28" height="28">
+      <span>Native Screen</span>
+    </a>
+    <a class="back" href={pathOf(locale.slug)}>{p.back}</a>
+    <details class="lang-menu">
+      <summary aria-label={t.language}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+        <span class="lang-name">{locale.name}</span>
+      </summary>
+      <ul>
+        {locales.map((l) => (
+          <li><a href={privacyPathOf(l.slug)} hreflang={l.lang} lang={l.lang} data-lang-link={l.slug} aria-current={l.slug === locale.slug ? "page" : undefined}>{l.name}</a></li>
+        ))}
+      </ul>
+    </details>
+  </div>
+</header>
+
+<main class="wrap legal">
+  <p class="kicker">{p.updated.replace("{date}", date)}</p>
+  <h1>{p.h1}</h1>
+  {p.note && <p class="note" set:html={p.note}></p>}
+  <p class="lede">{p.lede}</p>
+  <p set:html={html(p.scope)}></p>
+
+  <h2>{p.stayH}</h2>
+  <p>{p.stayP}</p>
+  <ul>{p.stayList.map((item) => <li>{item}</li>)}</ul>
+  <p>{p.onDevice}</p>
+  <p>{p.keys}</p>
+
+  <h2>{p.permH}</h2>
+  <p>{p.permP}</p>
+  <div>
+    <table>
+      <thead><tr>{p.permCols.map((c) => <th>{c}</th>)}</tr></thead>
+      <tbody>{p.perms.map(([name, why]) => <tr><td>{name}</td><td>{why}</td></tr>)}</tbody>
+    </table>
+  </div>
+
+  <h2>{p.leaveH}</h2>
+  <p>{p.leaveP}</p>
+  <div>
+    <table>
+      <thead><tr>{p.leaveCols.map((c) => <th>{c}</th>)}</tr></thead>
+      <tbody>{p.leave.map(([when, where, what]) => <tr><td>{when}</td><td>{where}</td><td set:html={html(what)}></td></tr>)}</tbody>
+    </table>
+  </div>
+
+  <h3>{p.agentsH}</h3>
+  <p set:html={html(p.agentsP)}></p>
+
+  <h2>{p.notH}</h2>
+  <ul>{p.notList.map((item) => <li>{item}</li>)}</ul>
+
+  <h2>{p.webH}</h2>
+  <p>{p.webP}</p>
+
+  <h2>{p.kidsH}</h2>
+  <p>{p.kidsP}</p>
+
+  <h2>{p.choiceH}</h2>
+  <p>{p.choiceP}</p>
+
+  <h2>{p.changesH}</h2>
+  <p set:html={html(p.changesP)}></p>
+
+  <h2>{p.contactH}</h2>
+  <p set:html={html(p.contactP)}></p>
+</main>
+
+<footer class="footer wrap">
+  <p>{t.footer}</p>
+  <p><a href={repo}>{t.source}</a> · <a href={`${repo}/issues`}>{t.report}</a></p>
+</footer>
+
+<script>
+  import "../scripts/main.js";
+</script>
+</body>
+</html>
