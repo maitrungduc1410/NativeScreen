@@ -111,6 +111,9 @@ public sealed partial class EditorWindow : Window
         };
         inspector = new InspectorPanel(session, InspectorScroller, InspectorBody, source.HasCamera, tools);
         tools.Changed += inspector.Rebuild;
+        // Downloads belong to the app: every open editor shows the same progress, check mark and Delete.
+        ModelDownloads.Changed += inspector.Rebuild;
+        ModelDownloads.ProgressChanged += inspector.ShowModelProgress;
         inspector.SeekRequested = SeekTo;
         inspector.CameraCropRequested = OpenCameraCrop;
         timeline = new TimelineView(session, TimelineHost) { Tools = tools };
@@ -936,6 +939,8 @@ public sealed partial class EditorWindow : Window
         session.TrajectorySolved -= TrajectorySolved;
         session.SelectionChanged -= SelectionChanged;
         tools.Changed -= inspector.Rebuild;
+        ModelDownloads.Changed -= inspector.Rebuild;
+        ModelDownloads.ProgressChanged -= inspector.ShowModelProgress;
         tools.FaceTrackChanged -= FaceEffectsChanged;
         tools.PreviewMasks.MaskUpdated -= PersonMaskUpdated;
         Root.PreviewKeyDown -= RootKeyDown;

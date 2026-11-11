@@ -10,17 +10,27 @@ namespace NativeScreen.App;
 /// </summary>
 internal static partial class Loc
 {
-    /// <summary>The languages the catalog has, each with its own name for the picker. Empty id means the system language.</summary>
+    /// <summary>
+    /// The languages the catalog has, each with its own name for the picker, in the macOS order. Empty id means the system
+    /// language. Arabic text runs right to left inside its controls; the editor keeps its left-to-right layout (spec/06 ADR-44).
+    /// </summary>
     public static readonly (string Id, string Name)[] Languages =
     [
         ("en", "English"),
-        ("vi", "Tiếng Việt"),
-        ("zh-Hans", "简体中文"),
-        ("ja", "日本語"),
+        ("cs", "Čeština"),
         ("de", "Deutsch"),
-        ("fr", "Français"),
         ("es", "Español"),
-        ("pt-BR", "Português (Brasil)")
+        ("fr", "Français"),
+        ("it", "Italiano"),
+        ("pt-BR", "Português (Brasil)"),
+        ("tr", "Türkçe"),
+        ("vi", "Tiếng Việt"),
+        ("ru", "Русский"),
+        ("ar", "العربية"),
+        ("ja", "日本語"),
+        ("ko", "한국어"),
+        ("zh-Hans", "简体中文"),
+        ("zh-Hant", "繁體中文")
     ];
 
     private static Dictionary<string, string>? table;
@@ -204,7 +214,7 @@ internal static partial class Loc
         var lower = tag.ToLowerInvariant();
         if (lower.StartsWith("zh", StringComparison.Ordinal))
         {
-            return lower.Contains("hant") || lower.EndsWith("-tw", StringComparison.Ordinal) || lower.EndsWith("-hk", StringComparison.Ordinal) || lower.EndsWith("-mo", StringComparison.Ordinal) ? "en" : "zh-Hans";
+            return lower.Contains("hant") || lower.EndsWith("-tw", StringComparison.Ordinal) || lower.EndsWith("-hk", StringComparison.Ordinal) || lower.EndsWith("-mo", StringComparison.Ordinal) ? "zh-Hant" : "zh-Hans";
         }
 
         if (lower.StartsWith("pt", StringComparison.Ordinal))

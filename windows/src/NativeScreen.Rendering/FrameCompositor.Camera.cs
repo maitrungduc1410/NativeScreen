@@ -52,7 +52,7 @@ public sealed partial class FrameCompositor
             width = known.Width;
             height = known.Height;
             isCutOut = known.IsCutOut;
-            return cameraOnly ? known.View : DrawnSticker(known.View, request, width, height);
+            return DrawnSticker(known.View, request, width, height, cameraOnly);
         }
 
         var view = GradedCamera(webcam, webcamWidth, webcamHeight, config, crop, request.PackageDirectory, keyed, out width, out height, out var keyMask);
@@ -76,7 +76,7 @@ public sealed partial class FrameCompositor
         }
 
         preparedCamera = webcamFrame is { } shown ? (shown, config, mask, cutoutLayout, cameraOnly, view, width, height, isCutOut) : null;
-        return cameraOnly ? view : DrawnSticker(view, request, width, height);
+        return DrawnSticker(view, request, width, height, cameraOnly);
     }
 
     private RenderLayer SoftPersonMask(PersonMask mask, CameraConfig config, int width, int height)
@@ -259,7 +259,11 @@ public sealed partial class FrameCompositor
         return (view, image.Width, image.Height);
     }
 
-    private ID3D11ShaderResourceView DrawnSticker(ID3D11ShaderResourceView view, ComposeRequest request, int width, int height)
+    /// <param name="cameraOnly">
+    /// The main picture of a camera-only recording: no crop and no delay, since the face track was scanned from that movie and
+    /// its times are source times (spec/07 Pass 2).
+    /// </param>
+    private ID3D11ShaderResourceView DrawnSticker(ID3D11ShaderResourceView view, ComposeRequest request, int width, int height, bool cameraOnly)
     {
         var config = request.Document.Camera;
         if (config.StickerId is not { } id || CameraStickerCatalog.Find(id) is not { } sticker || request.FaceTrack is not { } track)
@@ -267,15 +271,17 @@ public sealed partial class FrameCompositor
             return view;
         }
 
-        if (track.PointsAt(Math.Max(0, request.SourceMs + config.DelayAdjustmentMs)) is not { } face || StickerArt(sticker) is not { } art)
+        var delay = cameraOnly ? 0 : config.DelayAdjustmentMs;
+        if (track.PointsAt(Math.Max(0, request.SourceMs + delay)) is not { } face || StickerArt(sticker) is not { } art)
         {
             return view;
         }
 
         var flipped = !config.Mirror;
+        var crop = cameraOnly ? Rect01.Full : config.CropRect01;
         FacePoint InImage(FacePoint point)
         {
-            var mapped = CameraEffects.Mapped(point, config.CropRect01, flipped);
+            var mapped = CameraEffects.Mapped(point, crop, flipped);
             return new FacePoint(mapped.X * width, mapped.Y * height);
         }
 

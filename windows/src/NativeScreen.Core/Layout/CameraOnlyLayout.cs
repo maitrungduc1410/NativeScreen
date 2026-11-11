@@ -26,12 +26,14 @@ public static class CameraOnlyLayout
     }
 
     /// <summary>
-    /// The picture covering the canvas (top-down). With a face, the face sits at the horizontal center and 8% of the canvas
-    /// above the middle; the picture never uncovers the canvas edges.
+    /// The picture covering the canvas (top-down). With a face, the picture is enlarged by the face tracking zoom (1...2) and
+    /// the face's framing center, which sits below the eyes, goes to the middle, as in the camera layer; the picture never
+    /// uncovers the canvas edges (spec/07 Pass 2).
     /// </summary>
-    public static PixelRect FillRect(double canvasWidth, double canvasHeight, double sourceWidth, double sourceHeight, Point01? face)
+    public static PixelRect FillRect(double canvasWidth, double canvasHeight, double sourceWidth, double sourceHeight, Point01? face, double faceZoom = 1)
     {
-        var scale = Math.Max(canvasWidth / Math.Max(1, sourceWidth), canvasHeight / Math.Max(1, sourceHeight));
+        var zoom = face is null ? 1 : Math.Clamp(faceZoom, 1, 2);
+        var scale = zoom * Math.Max(canvasWidth / Math.Max(1, sourceWidth), canvasHeight / Math.Max(1, sourceHeight));
         var width = sourceWidth * scale;
         var height = sourceHeight * scale;
         var x = canvasWidth * 0.5 - width * 0.5;
@@ -39,7 +41,7 @@ public static class CameraOnlyLayout
         if (face is { } f)
         {
             x = canvasWidth * 0.5 - f.X * width;
-            y = canvasHeight * 0.5 - canvasHeight * 0.08 - f.Y * height;
+            y = canvasHeight * 0.5 - f.Y * height;
         }
 
         x = Math.Min(0, Math.Max(canvasWidth - width, x));

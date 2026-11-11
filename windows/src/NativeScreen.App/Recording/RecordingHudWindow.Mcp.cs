@@ -88,7 +88,7 @@ public sealed partial class RecordingHudWindow
         hud.Reveal();
         hud.CancelPicking();
         hud.UpdateDevices();
-        hud.BeginCountdown(target, countdownSeconds);
+        hud.BeginCountdown(target, countdownSeconds, fromAgent: true);
     }
 
     internal static async Task<string> McpPause(bool pause)

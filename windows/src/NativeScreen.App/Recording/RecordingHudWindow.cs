@@ -1112,8 +1112,14 @@ public sealed partial class RecordingHudWindow : Window
     // MARK: Countdown
 
     /// <param name="seconds">A countdown for this recording only, as an agent can ask; otherwise the setting.</param>
-    private void BeginCountdown(CaptureTarget chosen, int? seconds = null)
+    /// <param name="fromAgent">An agent's start: a refusal is the tool's error instead of a message box.</param>
+    private void BeginCountdown(CaptureTarget chosen, int? seconds = null, bool fromAgent = false)
     {
+        if (!EnoughDiskToStart(fromAgent))
+        {
+            return;
+        }
+
         pending = chosen;
         countdownTotal = seconds ?? AppSettings.Shared.CountdownSeconds;
         if (countdownTotal <= 0)
@@ -1159,6 +1165,62 @@ public sealed partial class RecordingHudWindow : Window
             countdownTimer.Stop();
             _ = StartRecording();
         }
+    }
+
+    /// <summary>
+    /// Checked once per start, before the countdown (spec/06 ADR-83): under 2 GB free on the projects volume nothing is
+    /// created. When the free space cannot be read, the recording starts as before.
+    /// </summary>
+    private bool EnoughDiskToStart(bool fromAgent)
+    {
+        if (DiskSpace.FreeBytes(AppSettings.Shared.ProjectsDirectory) is not { } free || free >= DiskSpace.MinimumToStart)
+        {
+            return true;
+        }
+
+        var message = Loc.T("There is not enough free disk space to record. Free up at least 2 GB and try again.");
+        mcpLastError = message;
+        if (fromAgent)
+        {
+            throw new McpToolException(message);
+        }
+
+        var title = Loc.T("Not enough disk space");
+        _ = Task.Run(() => MessageBoxW(0, message, title, MessageBoxWarningTopmost));
+        return false;
+    }
+
+    private CancellationTokenSource? diskWatch;
+
+    /// <summary>
+    /// Every 5 s while recording, off the UI thread: under 500 MB free the recording ends as after a failure, with what was
+    /// written saved and opened. Skipped while paused, since nothing is written then.
+    /// </summary>
+    private void WatchDiskSpace(string directory, IRecordingEngine engine)
+    {
+        diskWatch?.Cancel();
+        var cancel = new CancellationTokenSource();
+        diskWatch = cancel;
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                try
+                {
+                    await Task.Delay(5000, cancel.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                if (!Volatile.Read(ref isPaused) && DiskSpace.FreeBytes(directory) is { } free && free < DiskSpace.MinimumToKeepRecording)
+                {
+                    DispatcherQueue.TryEnqueue(() => _ = EndRecording(engine, Loc.T("The disk is almost full."), null));
+                    return;
+                }
+            }
+        });
     }
 
     private void CancelCountdown()
@@ -1224,6 +1286,7 @@ public sealed partial class RecordingHudWindow : Window
             }
 
             startedAt = DateTime.UtcNow;
+            WatchDiskSpace(directory, created);
             drawingsStay = AppSettings.Shared.DrawingsStayUntilCleared;
             notes?.RecordingStarted();
             pausedTotal = TimeSpan.Zero;
@@ -1328,6 +1391,8 @@ public sealed partial class RecordingHudWindow : Window
     private async Task StopRecorder()
     {
         tick.Stop();
+        diskWatch?.Cancel();
+        diskWatch = null;
         recordedArea?.Dispose();
         recordedArea = null;
         DisposeDrawing();
@@ -1353,7 +1418,20 @@ public sealed partial class RecordingHudWindow : Window
     }
 
     /// <summary>The captured window went away or a writer failed: keep what was written, open it, and say why the recording stopped.</summary>
-    private async Task EndAfterFailure(IRecordingEngine engine, CaptureFailure failure)
+    private Task EndAfterFailure(IRecordingEngine engine, CaptureFailure failure) =>
+        EndRecording(
+            engine,
+            Loc.T(failure.Kind switch
+            {
+                CaptureFailureKind.Stream => "The recorded window or display is no longer available.",
+                CaptureFailureKind.ScreenWriter => "The screen video could not be written.",
+                CaptureFailureKind.WebcamWriter => "The camera video could not be written.",
+                _ => "The microphone audio could not be written."
+            }),
+            failure.Details);
+
+    /// <summary>Ends the recording as Stop does, then says why it stopped and how much was saved.</summary>
+    private async Task EndRecording(IRecordingEngine engine, string reason, string? details)
     {
         if (recorder != engine || busy)
         {
@@ -1361,13 +1439,6 @@ public sealed partial class RecordingHudWindow : Window
         }
 
         var savedMs = await StopAndOpen();
-        var reason = Loc.T(failure.Kind switch
-        {
-            CaptureFailureKind.Stream => "The recorded window or display is no longer available.",
-            CaptureFailureKind.ScreenWriter => "The screen video could not be written.",
-            CaptureFailureKind.WebcamWriter => "The camera video could not be written.",
-            _ => "The microphone audio could not be written."
-        });
         mcpLastError = reason;
         var outcome = Loc.T("Nothing could be saved.");
         if (savedMs is { } ms)
@@ -1377,7 +1448,7 @@ public sealed partial class RecordingHudWindow : Window
         }
 
         // A message box and not a dialog: the recording bar is too small to host one. Off the UI thread, so the app keeps running.
-        var text = $"{reason} {outcome}\n\n{failure.Details}";
+        var text = details is { Length: > 0 } ? $"{reason} {outcome}\n\n{details}" : $"{reason} {outcome}";
         var title = Loc.T("Recording stopped");
         _ = Task.Run(() => MessageBoxW(0, text, title, MessageBoxWarningTopmost));
     }
@@ -1466,6 +1537,7 @@ public sealed partial class RecordingHudWindow : Window
             {
                 // As on macOS: the preset first, then a camera-only project keeps the face centered (spec/06 ADR-77).
                 document.Camera.EnableFaceTracking = true;
+                document.Camera.FaceTrackingZoom = 1;
             }
 
             File.WriteAllText(path, ProjectJson.Serialize(document));

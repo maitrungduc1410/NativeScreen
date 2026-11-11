@@ -123,7 +123,6 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
 
     public PreviewPersonMasks PreviewMasks { get; } = new();
 
-    public bool IsDownloadingPersonModel { get; private set; }
 
     public event Action? FaceTrackChanged;
 
@@ -336,28 +335,36 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
     }
 
-    /// <summary>Runs only when the person pressed Download.</summary>
-    public async Task DownloadPersonModel()
+    /// <summary>Runs only when the person pressed Download. Progress and Cancel are shown where the button was.</summary>
+    public async Task DownloadModel(DownloadableModel model)
     {
-        if (IsDownloadingPersonModel)
+        var (installed, error) = await ModelDownloads.Download(model);
+        if (error is not null)
         {
-            return;
+            toast(Loc.F("Download failed: %@", error));
         }
+        else if (!installed)
+        {
+            toast("Download cancelled");
+        }
+        else if (model == DownloadableModel.Person)
+        {
+            // The camera background and cutout can now separate the person.
+            FaceTrackChanged?.Invoke();
+        }
+    }
 
-        IsDownloadingPersonModel = true;
-        Report("Downloading...");
-        try
+    /// <summary>Removes a downloaded model; it is downloaded again when needed.</summary>
+    public void DeleteModel(DownloadableModel model)
+    {
+        if (ModelDownloads.Delete(model) is not null)
         {
-            await PersonSegmentationModel.DownloadAsync(null, CancellationToken.None);
+            toast("The model is in use and could not be deleted.");
         }
-        catch (Exception exception) when (exception is IOException or HttpRequestException or UnauthorizedAccessException)
+        else if (model == DownloadableModel.Person)
         {
-            toast($"Download failed: {exception.Message}");
+            FaceTrackChanged?.Invoke();
         }
-
-        IsDownloadingPersonModel = false;
-        Report(null);
-        FaceTrackChanged?.Invoke();
     }
 
     public static string PresetsDirectory { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "Presets");
@@ -986,7 +993,20 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                     return;
                 }
 
-                await model.DownloadAsync(new Progress<double>(share => Report($"Downloading the speech model • {share:P0}")), cancel.Token);
+                // Shown with Cancel next to the Model choice; Stop cancels it too.
+                var speech = DownloadableModel.Speech(model);
+                Report("Downloading the speech model");
+                (bool Installed, string? Error) downloaded;
+                using (cancel.Token.Register(() => ModelDownloads.Cancel(speech)))
+                {
+                    downloaded = await ModelDownloads.Download(speech);
+                }
+
+                if (!downloaded.Installed)
+                {
+                    toast(downloaded.Error is { } reason ? Loc.F("Download failed: %@", reason) : "Download cancelled");
+                    return;
+                }
             }
 
             Report("Transcribing...");

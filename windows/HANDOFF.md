@@ -40,6 +40,13 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Risks / unsure:** `DriveInfo.AvailableFreeSpace` honors user quotas, which is what we want. A projects folder on a network share may report no value; the guard must then let the recording start.
 
 
+### Verifier
+- **Result:** PASS for build and tests; the thresholds were not exercised on a nearly full drive.
+- **verify.ps1:** Release x64 build, 0 warnings. Core 321, Rendering 34, Media 29 passed (new `DiskSpaceTests`: the volume is read from the nearest existing parent).
+- **Changes made:** `NativeScreen.Media/DiskSpace.cs` (`GetDiskFreeSpaceExW`, so a share or a mounted folder works; quotas count; null when unreadable, which lets the recording start). `RecordingHudWindow`: checked before the countdown rather than in `StartRecording`, so a refused start never shows a countdown; an agent start throws the message as the tool error instead of a box. A 5 s background loop reads the package volume while recording (not while paused) and ends through the same path as a failure, with no details line; `StopRecorder` cancels it.
+- **Spec updates:** none; the `spec/05` Windows line stays open until the thresholds are tried on a full drive.
+- **Next:** with a small VHD as the projects folder, check the refusal box and the stop at 500 MB by hand.
+
 ## 2026-11-11, Seven more UI languages: Arabic, Czech, Italian, Korean, Russian, Turkish, Traditional Chinese (macOS done, Windows port pending)
 
 ### Writer
@@ -54,6 +61,11 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **How to verify:** `NS_LANGUAGE=ar`, `ru`, `zh-Hant` and `ko` for one run each: menus, inspector, timeline labels and dialogs translated, nothing cut off in the recording bar and the export panel; Windows-only strings (File Explorer, `Ctrl` hints) translated too. With the system language set to Chinese (Taiwan), the app starts in Traditional Chinese.
 - **Risks / unsure:** the longest new languages are Russian and Czech; fixed-width labels on Windows may need the same shrink-to-fit treatment as German. Arabic punctuation and numbers inside `%@` substitutions are left to the text engine.
 
+### Verifier
+- **Result:** PASS for build and tests; not looked at in the running app yet.
+- **Changes made:** `Loc.Languages` in the macOS order with the seven new ids, `Loc.Match` maps zh-Hant, zh-TW, zh-HK and zh-MO to `zh-Hant`, `Package.appxmanifest` lists all 15, `windows/AGENTS.md` `NS_LANGUAGE` ids, `spec/06` ADR-81 says fifteen. The editor keeps `FlowDirection` left to right; nothing was mirrored. The catalog has 1107 of 1112 keys in every new language, as for Vietnamese.
+- **Next:** `NS_LANGUAGE=ar`, `ru`, `zh-Hant`, `ko` for one run each: recording bar, export panel and inspector for cut-off text. Rebuild the Store package so the listing shows the new languages.
+
 ## 2026-11-11, Camera-only: stickers, one face tracking setting (macOS done, Windows port pending)
 
 ### Writer
@@ -66,6 +78,11 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Built on macOS:** the app builds. Checked over MCP on a copy of a real camera-only recording: the dog sticker in Framed, Full frame (zoom 1.0 and 1.6) and Cutout frames, head and sticker inside the frame at 1.6x.
 - **How to verify:** open a camera-only project, pick a sticker in Camera Style: it follows the face in all three framings, in the preview and in an export. Full frame at Zoom 1.6 keeps the head in frame. The Camera Layout tab has no face toggle.
 - **Risks / unsure:** projects made before this keep `faceTrackingZoom` 1.3 if a preset or older default set it, so they now open a little tighter in Full frame and Cutout.
+
+### Verifier
+- **Result:** PASS for build and tests; no camera-only frame was checked by eye.
+- **Changes made:** `DrawnSticker` takes `cameraOnly` (no crop, no delay: the track is in source times) and runs for the main picture too, cached picture included. `CameraOnlyLayout.FillRect` multiplies the fill scale by `clamp(faceTrackingZoom, 1, 2)` when a face is found and drops the 8% lift; `StageLayoutEngine` passes the zoom. New camera-only projects get zoom 1.0 (`RecordingPackage.Finish`, and again after the default preset). Camera Style shows the sticker, `Face tracking` and Zoom (default 1.0 for camera-only) for both kinds; `Keep my face centered` is gone from Camera Layout. `EditorTools.NeedsFaceTrack` already started the scan for a sticker alone.
+- **Next:** on a camera-only recording, a sticker in Framed, Full frame (zoom 1.0 and 1.6) and Cutout, in the preview and an export.
 
 ## 2026-11-10, Annotations, live drawing, camera-only recording, green screen, speaker notes, custom cursors, profiles; no Device mode (macOS done, Windows port pending)
 

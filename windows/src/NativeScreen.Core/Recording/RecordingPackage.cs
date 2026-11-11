@@ -62,6 +62,12 @@ public static class RecordingPackage
         document.Camera.Enabled = hasWebcam && !cameraOnly;
         // New camera-only projects keep the face centered when cropped or zoomed.
         document.Camera.EnableFaceTracking = cameraOnly;
+        if (cameraOnly)
+        {
+            // No extra zoom: the camera picture is the whole video.
+            document.Camera.FaceTrackingZoom = 1;
+        }
+
         document.Timeline.AnnotationTracks = LiveDrawingTracks(recording, duration);
         document.Timeline.Slices = [new ClipSlice { Id = EditorSession.NewId(), SourceStartMs = 0, SourceEndMs = duration, Speed = 1 }];
         document.Timeline.Zooms = autoCreateZooms ? AutoZoomClusterGenerator.GenerateZooms(clicks, keys, duration, 1.8) : [];

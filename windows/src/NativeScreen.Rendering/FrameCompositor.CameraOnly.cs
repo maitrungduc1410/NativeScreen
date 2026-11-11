@@ -13,7 +13,7 @@ public sealed partial class FrameCompositor
             : solved;
 
     /// <summary>
-    /// The main picture through the camera preparation (mirror, background, grade, sharpen; no camera crop or sticker), the
+    /// The main picture through the camera preparation (mirror, background, grade, sharpen, sticker; no camera crop), the
     /// person alone for the Cutout framing. The masked-screen caches are skipped: the picture's styling is not in their key.
     /// </summary>
     private ComposeRequest WithCameraOnlyPicture(ComposeRequest request, ID3D11ShaderResourceView main)

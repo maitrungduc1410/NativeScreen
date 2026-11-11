@@ -73,7 +73,7 @@ Work is split between two agents on two machines. Know which one you are.
 | Leaks after closing an editor (Windows) | Run the app with `NS_MEMORY_STATS=<file>`. 2, 6 and 15 s after each close it collects garbage and appends memory and the editor objects still alive (`none` is the goal). |
 | MCP tool errors (Windows) | Run the app with `NS_MCP_TRACE=<file>`. Every tool failure other than a plain refusal is appended with its stack. Clients reach the app with `NativeScreen.App.exe --mcp` once `Settings > AI Agents` is on. |
 | Timeline zoom cost (Windows) | Run the app with `NS_TIMELINE_ZOOM_STATS=<file>`. Each zoom step appends the zoom, the relayout ms and the total ms. |
-| UI in another language (Windows) | Run the app with `NS_LANGUAGE=<id>` (`vi`, `zh-Hans`, `ja`, `de`, `fr`, `es`, `pt-BR`, `en`) for one run. |
+| UI in another language (Windows) | Run the app with `NS_LANGUAGE=<id>` (`en`, `cs`, `de`, `es`, `fr`, `it`, `pt-BR`, `tr`, `vi`, `ru`, `ar`, `ja`, `ko`, `zh-Hans`, `zh-Hant`) for one run. |
 | Build the MSIX (Windows) | `powershell windows/scripts/package-msix.ps1` builds the Store package (`NS_STORE`, no updater) with the local test identity into `windows/artifacts/msix` and checks its images, native libraries and data files. Store identity and version: `-IdentityName -Publisher -PublisherDisplayName -Version` (`docs/releasing.md`). |
 | Redraw the Store tiles (Windows) | `powershell windows/scripts/make-store-assets.ps1` (from the macOS app icon, into `Assets/Store`) |
 | Regenerate conformance fixtures (macOS) | `"Native Screen.app/Contents/MacOS/Native Screen" --generate-conformance conformance` |

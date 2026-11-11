@@ -28,30 +28,50 @@ public sealed record WhisperModel(string Tier, string FileName, string SizeText,
     {
         System.IO.Directory.CreateDirectory(Directory);
         var partial = LocalPath + ".part";
-        using var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-        using var response = await client.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancel);
-        response.EnsureSuccessStatusCode();
-        await using (var source = await response.Content.ReadAsStreamAsync(cancel))
-        await using (var target = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, FileOptions.Asynchronous))
+        try
         {
-            var buffer = new byte[1 << 16];
-            var written = 0L;
-            int read;
-            while ((read = await source.ReadAsync(buffer, cancel)) > 0)
+            using var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            using var response = await client.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancel);
+            response.EnsureSuccessStatusCode();
+            await using (var source = await response.Content.ReadAsStreamAsync(cancel))
+            await using (var target = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, FileOptions.Asynchronous))
             {
-                await target.WriteAsync(buffer.AsMemory(0, read), cancel);
-                written += read;
-                progress?.Report(written / (double)Bytes);
+                var buffer = new byte[1 << 16];
+                var written = 0L;
+                int read;
+                while ((read = await source.ReadAsync(buffer, cancel)) > 0)
+                {
+                    await target.WriteAsync(buffer.AsMemory(0, read), cancel);
+                    written += read;
+                    progress?.Report(written / (double)Bytes);
+                }
             }
-        }
 
-        if (new FileInfo(partial).Length != Bytes)
+            if (new FileInfo(partial).Length != Bytes)
+            {
+                File.Delete(partial);
+                throw new IOException("The download was incomplete.");
+            }
+
+            File.Move(partial, LocalPath, overwrite: true);
+        }
+        catch (Exception)
         {
-            File.Delete(partial);
-            throw new IOException("The download was incomplete.");
+            // A cancelled or failed download leaves nothing behind.
+            TryDelete(partial);
+            throw;
         }
+    }
 
-        File.Move(partial, LocalPath, overwrite: true);
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }
 

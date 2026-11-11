@@ -33,6 +33,13 @@
     <Resource Language="fr" />
     <Resource Language="es" />
     <Resource Language="pt-BR" />
+    <Resource Language="cs" />
+    <Resource Language="it" />
+    <Resource Language="tr" />
+    <Resource Language="ru" />
+    <Resource Language="ar" />
+    <Resource Language="ko" />
+    <Resource Language="zh-Hant" />
   </Resources>
   <Applications>
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">

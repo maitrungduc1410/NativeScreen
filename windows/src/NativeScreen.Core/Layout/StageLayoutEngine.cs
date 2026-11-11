@@ -88,7 +88,7 @@ public sealed class StageLayoutEngine
         var layout = Resolved(document, sourceMs, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, hasRecordedCamera, cameraHiddenBySilence, cameraOnly);
         // A camera-only picture that fills the canvas replaces the screen rect, so every user of the stage agrees (spec/06 ADR-77).
         var screenRect = cameraOnly && document.Camera.CameraOnlyFraming.FillsCanvas()
-            ? CameraOnlyLayout.FillRect(canvasWidth, canvasHeight, sourceWidth, sourceHeight, CameraOnlyLayout.FaceCenter01(document, faceTrack, sourceMs))
+            ? CameraOnlyLayout.FillRect(canvasWidth, canvasHeight, sourceWidth, sourceHeight, CameraOnlyLayout.FaceCenter01(document, faceTrack, sourceMs), document.Camera.FaceTrackingZoom)
             : TopLeft(layout.Screen, canvasHeight);
         return new StageFrame
         {

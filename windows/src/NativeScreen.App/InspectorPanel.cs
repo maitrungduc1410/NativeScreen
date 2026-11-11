@@ -63,6 +63,7 @@ internal sealed partial class InspectorPanel
 
         var offset = scroller.VerticalOffset;
         body.Children.Clear();
+        modelProgress.Clear();
         if (session.SelectedAnnotation is { } annotation)
         {
             AnnotationEditor(annotation);
@@ -596,11 +597,8 @@ internal sealed partial class InspectorPanel
 
         CameraBackgroundRemovalSection();
         AddDivider();
-        if (!cameraOnly)
-        {
-            CameraStickerSection();
-            AddDivider();
-        }
+        CameraStickerSection();
+        AddDivider();
 
         var looks = Doc.Camera.ColorGradePreset;
         var wrap = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 92, ItemHeight = 44 };
@@ -669,19 +667,21 @@ internal sealed partial class InspectorPanel
         Add(Slider("Sharpen", () => Doc.Camera.Sharpen01, (d, v) => d.Camera.Sharpen01 = v, 0, 1, 0));
         AddDivider();
         Add(Toggle("Mirror horizontally", null, () => Doc.Camera.Mirror, (d, v) => d.Camera.Mirror = v));
-        if (cameraOnly)
-        {
-            return;
-        }
-
+        // One face tracking setting for both kinds of project; for a camera-only one the Zoom enlarges Full frame and Cutout.
         Add(Toggle("Face tracking", null, () => Doc.Camera.EnableFaceTracking, (d, v) => d.Camera.EnableFaceTracking = v));
         if (Doc.Camera.EnableFaceTracking)
         {
-            Add(Slider("Zoom", () => Doc.Camera.FaceTrackingZoom, (d, v) => d.Camera.FaceTrackingZoom = v, 1, 2, 1.3));
+            Add(Slider("Zoom", () => Doc.Camera.FaceTrackingZoom, (d, v) => d.Camera.FaceTrackingZoom = v, 1, 2, cameraOnly ? 1 : 1.3));
             if (Doc.Camera.StickerId is null)
             {
                 FaceScanStatus();
             }
+        }
+
+        if (cameraOnly)
+        {
+            // The camera is the picture: there is no delay to adjust.
+            return;
         }
 
         Add(Collapsible("Advanced", () => Slider("Camera delay", () => Doc.Camera.DelayAdjustmentMs, (d, v) => d.Camera.DelayAdjustmentMs = v, -200, 200, 0)));
@@ -715,7 +715,10 @@ internal sealed partial class InspectorPanel
         Add(Note("Used wherever the background is removed: the cutout, and a blurred or replaced background."));
     }
 
-    /// <summary>The Camera Layout tab of a camera-only recording: how the main picture sits on the canvas (spec/06 ADR-77).</summary>
+    /// <summary>
+    /// The Camera Layout tab of a camera-only recording: how the main picture sits on the canvas (spec/06 ADR-77). Face tracking
+    /// is in Camera Style, as for the camera layer.
+    /// </summary>
     private void CameraOnlyLayout()
     {
         var camera = Doc.Camera;
@@ -723,13 +726,6 @@ internal sealed partial class InspectorPanel
             ("Framed", camera.CameraOnlyFraming == CameraOnlyFraming.Framed, () => Edit(d => d.Camera.CameraOnlyFraming = CameraOnlyFraming.Framed)),
             ("Full frame", camera.CameraOnlyFraming == CameraOnlyFraming.FullFrame, () => Edit(d => d.Camera.CameraOnlyFraming = CameraOnlyFraming.FullFrame)),
             ("Cutout", camera.CameraOnlyFraming == CameraOnlyFraming.Cutout, () => Edit(d => d.Camera.CameraOnlyFraming = CameraOnlyFraming.Cutout)))));
-        AddDivider();
-        Add(Toggle("Keep my face centered", "Full frame and Cutout crop around your face, and zooms center on it. Done locally, no data is sent to the server.", () => Doc.Camera.EnableFaceTracking, (d, v) => d.Camera.EnableFaceTracking = v));
-        if (camera.EnableFaceTracking)
-        {
-            FaceScanStatus();
-        }
-
         if (camera.CameraOnlyFraming == CameraOnlyFraming.Cutout)
         {
             AddDivider();
@@ -804,17 +800,59 @@ internal sealed partial class InspectorPanel
         Add(Slider("Edge inset", () => Doc.Camera.CutoutEdgeInset, (d, v) => d.Camera.CutoutEdgeInset = v, 0, 1, 0));
     }
 
-    private void PersonModelRow()
+    private void PersonModelRow() => ModelRow(
+        DownloadableModel.Person,
+        "Separating you from the background needs a model, downloaded once from huggingface.co. Your video stays on this device.");
+
+    private readonly Dictionary<string, (ProgressBar Bar, TextBlock Label)> modelProgress = [];
+
+    private static string DownloadingText(double share) => Loc.F("Downloading • %@", share.ToString("P0", System.Globalization.CultureInfo.CurrentCulture));
+
+    /// <summary>
+    /// Where a model is needed: Download with its size; while downloading, its progress and Cancel; once on this device, a
+    /// check mark and Delete. <paramref name="inUse"/> keeps Delete off while the model is being read.
+    /// </summary>
+    private void ModelRow(DownloadableModel model, string explanation, bool inUse = false)
     {
-        if (PersonSegmentationModel.IsInstalled)
+        if (ModelDownloads.Progress(model) is { } share)
         {
+            var label = Note(DownloadingText(share));
+            var bar = new ProgressBar { Minimum = 0, Maximum = 1, Value = share };
+            modelProgress[model.Key] = (bar, label);
+            var cancel = Action("Cancel", () => ModelDownloads.Cancel(model));
+            Add(Stack(6, label, bar, cancel));
             return;
         }
 
-        Add(Note("Separating you from the background needs a model, downloaded once from huggingface.co. Your video stays on this device."));
-        Add(tools.IsDownloadingPersonModel
-            ? Note("Downloading...")
-            : Action(Loc.T("Download (%@)").Replace("%@", PersonSegmentationModel.SizeText, StringComparison.Ordinal), () => _ = tools.DownloadPersonModel()));
+        if (model.IsInstalled())
+        {
+            var done = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+            done.Children.Add(Ui.Icon("", 13, new SolidColorBrush(Windows.UI.Color.FromArgb(255, 48, 178, 92))));
+            done.Children.Add(Ui.Text(Loc.F("Model downloaded (%@)", model.SizeText), 12, "Ink60"));
+            var delete = Ui.Option("Delete", false, inUse ? null : () => tools.DeleteModel(model));
+            delete.Padding = new Thickness(10, 3, 10, 3);
+            var row = new Grid { ColumnSpacing = 8 };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(delete, 1);
+            row.Children.Add(done);
+            row.Children.Add(delete);
+            Add(row);
+            return;
+        }
+
+        Add(Note(explanation));
+        Add(Action(Loc.F("Download (%@)", model.SizeText), () => _ = tools.DownloadModel(model)));
+    }
+
+    /// <summary>Moves a shown progress bar in place: rebuilding the inspector for each step would interrupt a slider being dragged.</summary>
+    public void ShowModelProgress(string key, double share)
+    {
+        if (modelProgress.TryGetValue(key, out var shown))
+        {
+            shown.Bar.Value = share;
+            shown.Label.Text = DownloadingText(share);
+        }
     }
 
     private void CameraStickerSection()
@@ -1184,6 +1222,10 @@ internal sealed partial class InspectorPanel
             ("Base", captions.WhisperModelTier == "base", () => Edit(d => d.Captions.WhisperModelTier = "base")),
             ("Small", captions.WhisperModelTier == "small", () => Edit(d => d.Captions.WhisperModelTier = "small")),
             ("Medium", captions.WhisperModelTier == "medium", () => Edit(d => d.Captions.WhisperModelTier = "medium")))));
+        ModelRow(
+            DownloadableModel.Speech(WhisperModel.ForTier(captions.WhisperModelTier)),
+            "Transcripts run on this device. The model is downloaded once from huggingface.co; your audio is never uploaded.",
+            inUse: tools.IsTranscribing);
         if (tools.IsTranscribing)
         {
             Add(Note(tools.Status ?? "Transcribing"));
