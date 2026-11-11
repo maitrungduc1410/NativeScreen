@@ -50,6 +50,13 @@ public sealed partial class EditorWindow
         ExportOverlay.Visibility = Visibility.Visible;
     }
 
+    /// <summary>The estimator writes English ("55 seconds"); seconds have a catalog entry, minutes stay as they are, as on macOS.</summary>
+    private static string LocalizedDuration(string english)
+    {
+        var parts = english.Split(' ');
+        return parts.Length == 2 && parts[1] == "seconds" ? Loc.F("%@ seconds", parts[0]) : Loc.T(english);
+    }
+
     private static Grid ExportColumns(UIElement left, UIElement right)
     {
         var grid = new Grid { ColumnSpacing = 36 };
@@ -294,7 +301,7 @@ public sealed partial class EditorWindow
         cancel.Padding = new Thickness(16, 0, 16, 0);
         Grid.SetColumn(cancel, 3);
         row.Children.Add(cancel);
-        var start = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = exportToClipboard ? "Export to clipboard" : "Export to file...", Height = 38, CornerRadius = new CornerRadius(9) };
+        var start = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = Loc.T(exportToClipboard ? "Export to clipboard" : "Export to file..."), Height = 38, CornerRadius = new CornerRadius(9) };
         start.Click += (_, _) => _ = StartExport();
         Grid.SetColumn(start, 4);
         row.Children.Add(start);
@@ -303,7 +310,8 @@ public sealed partial class EditorWindow
         var aspect = session.Document.Canvas.EffectiveAspectRatio(source.SourceWidth, source.SourceHeight);
         var time = ExportEstimator.DurationString(exportSettings, aspect, session.DurationMs);
         var size = ExportEstimator.SizeString(exportSettings, aspect, session.DurationMs);
-        var estimate = Ui.Text($"Estimation: Export time {time}, Output size {size}", 12.5, "Ink45");
+        // A filled-in sentence has no catalog entry: translate the pattern, then fill it.
+        var estimate = Ui.Text(Loc.F("Estimation: Export time %@, Output size %@", LocalizedDuration(time), size), 12.5, "Ink45");
         estimate.HorizontalAlignment = HorizontalAlignment.Right;
         footer.Children.Add(estimate);
         if (exportSettings.Format == ExportFormat.Gif)

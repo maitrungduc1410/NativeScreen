@@ -1251,8 +1251,8 @@ internal sealed partial class InspectorPanel
         AddDivider();
         var fillers = TranscriptEditing.PresentFillers(Doc).Count;
         var pauses = TranscriptEditing.TightenablePauses(Doc).Count;
-        Add(Action($"Remove {fillers} filler words", fillers == 0 ? null : () => session.Mutate(document => TranscriptEditing.RemoveFillers(document, session.SourceDurationMs))));
-        Add(Action($"Tighten {pauses} pauses", pauses == 0 ? null : () => session.Mutate(TranscriptEditing.TightenPauses)));
+        Add(Action(fillers == 1 ? Loc.T("Remove 1 filler word") : Loc.F("Remove %lld filler words", fillers), fillers == 0 ? null : () => session.Mutate(document => TranscriptEditing.RemoveFillers(document, session.SourceDurationMs))));
+        Add(Action(pauses == 1 ? Loc.T("Tighten 1 pause") : Loc.F("Tighten %lld pauses", pauses), pauses == 0 ? null : () => session.Mutate(TranscriptEditing.TightenPauses)));
         var words = new WordWrapPanel();
         var ordered = Doc.Captions.Segments.OrderBy(item => item.SourceStartMs).ToList();
         var showDeleted = Doc.Captions.ShowDeletedTextInTranscript;
@@ -1320,7 +1320,7 @@ internal sealed partial class InspectorPanel
         if (musicPath is not null && tools.LoadingTrack is null)
         {
             var title = Path.GetFileNameWithoutExtension(musicPath).Replace("bg-", "");
-            Add(Action($"{(tools.IsPreviewingMusic ? "Stop" : "Play")} {title}", tools.ToggleMusicPreview));
+            Add(Action(Loc.F(tools.IsPreviewingMusic ? "Stop %@" : "Play %@", title), tools.ToggleMusicPreview));
         }
 
         if (Doc.Audio.BackgroundMusic.RelativePath is null)
@@ -1395,7 +1395,7 @@ internal sealed partial class InspectorPanel
             ("Right", style.DockPosition == ShortcutDockPosition.Right, () => Edit(d => Writing(d).DockPosition = ShortcutDockPosition.Right)))));
         if (style.DockPosition is ShortcutDockPosition.Left or ShortcutDockPosition.Right)
         {
-            Add(Note($"Keycaps are stacked vertically along the {style.DockPosition.ToString().ToLowerInvariant()} edge."));
+            Add(Note(Loc.F("Keycaps are stacked vertically along the %@ edge.", Loc.T(style.DockPosition.ToString().ToLowerInvariant()))));
         }
 
         Add(Slider("Horizontal offset", () => target(Doc).OffsetX, (d, v) => Writing(d).OffsetX = v, -0.45, 0.45, 0));

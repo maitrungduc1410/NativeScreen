@@ -353,7 +353,7 @@ public sealed partial class EditorWindow : Window
         foreach (var (preset, name, ratio) in AspectPresets)
         {
             var target = preset;
-            AspectMenu.Items.Add(Menu($"{name}  {ratio}", () => session.Mutate(document =>
+            AspectMenu.Items.Add(Menu($"{Loc.T(name)}  {ratio}", () => session.Mutate(document =>
             {
                 document.Canvas.AspectRatioMode = AspectRatioMode.Preset;
                 document.Canvas.AspectRatioPreset = target;
@@ -590,7 +590,7 @@ public sealed partial class EditorWindow : Window
         else
         {
             var match = AspectPresets.FirstOrDefault(item => item.Preset == document.Canvas.AspectRatioPreset);
-            AspectName.Text = match.Name ?? "Custom";
+            AspectName.Text = Loc.T(match.Name ?? "Custom");
             AspectRatio.Text = match.Ratio ?? "";
         }
     }
