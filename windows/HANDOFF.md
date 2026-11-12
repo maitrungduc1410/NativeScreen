@@ -27,6 +27,32 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-12, Camera layout segments animate out before their end
+
+### Writer
+- **Bug:** a layout segment (say `Fullscreen camera`) animated in when the playhead entered it, but the way out only started after the playhead had left it, so the camera stayed fullscreen past the segment's right edge. Both platforms ran every stage transition for 380 ms after the change point.
+- **Fix (macOS, `MetalFrameCompositor.swift` `timelineStageLayout`):**
+  1. Unchanged: a change behind the playhead blends in from the previous layout over 380 ms, found by the binary search. New: when the change is the start of a segment, the length is `segmentTransitionMs(segment) = min(380, max(1, (end - start) / 2))`.
+  2. Skip step 1 when the change is leaving a segment that "animates its exit": the segment active at `lo` animates its exit and no segment is active at `hi`.
+  3. New: if a segment is active at `t` and animates its exit, with `d = segmentTransitionMs(segment)` and `exitStart = end - d`, when `t > exitStart` blend the step 1 result toward `Raw(StageKey(end + 0.5))` with `Ease((t - exitStart) / d)`.
+  - `animatesExit(segment)`: `segment.end < recordingDurationMs - 1` and no enabled segment is active at `end + 0.5` (back to back segments keep the old behavior: the next one animates in).
+  - Silence and voiceover hides are unchanged.
+- **Conformance:** regenerated on macOS. All 26 existing cases give the same `stage.json` as before. New case `conformance/cases/camera-layout-exit` (default overlay, `Fullscreen camera` 1000 to 3000 ms, `Split screen` 4000 to 4400 ms): fullscreen is reached at 1400, half way back at 2800, normal at 3000; the 400 ms split peaks at 4200 and is back to normal at 4400. `conformance/README.md` lists it. `spec/06` updated.
+- **Port (Windows):** `NativeScreen.Core/Layout/StageLayoutEngine.cs` `Resolve` (the method with the `TransitionMs` binary search): the same three steps. It needs the recording duration; pass it in from the callers (preview and export) next to `hasRecordedCamera`. `ActiveLayout(document, t)` already matches `activeCameraLayoutSegment` (inclusive end, skips disabled, nil when the track is hidden).
+- **How to verify:** `verify.ps1`: `ConformanceTests` and `FrameFixtureTests` pick up `camera-layout-exit` by folder, so they fail until the port is in and pass after. In the app: add a `Fullscreen camera` segment in the middle of a camera project and scrub out of its right edge: the camera is back in its corner when the playhead reaches the edge, and stays there after it.
+- **Open VERIFY items:** none beyond the above.
+
+## 2026-11-12, Quick dock: camera layouts behind one button
+
+### Writer
+- **Scope:** in a project with a camera, the quick dock left of the preview had 5 camera layout buttons, which made it too tall. macOS now shows one `Add camera layout` button (icon `person.crop.rectangle.badge.plus`) that opens a popover, the same pattern as `Add annotation`. Each row has the layout's icon, its name (`Camera overlay`, `Split screen`, `Camera cutout`, `Fullscreen camera`, `Only screen`) and one line on what it does. Picking a row closes the popover and calls `addCameraLayoutAtPlayhead`. Without a camera the button is hidden, as before. `ProjectEditorWindowView.swift`: the annotation popover's rows moved into a shared `QuickDockPickerList`, used by both popovers. `spec/05` updated.
+- **New keys** in `Localizable.xcstrings` (manual, all 15 languages): `Add camera layout`, `Camera in a corner of the screen`, `Screen and camera side by side`, `You over the screen, background removed`, `Only the camera, full frame`, `Hides the camera`. `%@ layout` is no longer used on macOS; leave the key (Windows `Camera overlay layout` and friends are separate keys, also left as they are).
+- **Built on macOS:** `xcodebuild ... Debug build`: BUILD SUCCEEDED. Not clicked through in the app yet.
+- **Port (Windows):** `EditorWindow.xaml.cs` `BuildQuickDock()`: replace the 5 `Ui.IconButton` camera buttons with one `CameraLayoutDockButton()`, built like `AnnotationDockButton()`: tooltip `Add camera layout`, a `MenuFlyout` with one `MenuFlyoutItem` per `CameraTimelineLayoutType` in the order above, `Text = Loc.T(<name>)`, `Icon` = the glyph the old button for that layout used, click calls `session.AddCameraLayoutAtPlayhead(type)`. Keep it inside `if (source.HasCamera)`. Pick a Segoe Fluent glyph for the dock button that reads as "camera layout" (a person or video icon). Optional: show the detail line as each item's tooltip (`ToolTipService.SetToolTip(item, Loc.T(detail))`).
+- **How to verify:** open a project recorded with a camera: the dock has one camera button between zooms and masks. Click it: a flyout lists the 5 layouts with icons. Pick each one: a segment of that type is added at the playhead on the `Layouts` track and the flyout closes. Open a project without a camera: no camera button. Switch the UI language (for example to Vietnamese): the tooltip and items are translated.
+- **Open VERIFY items:** none beyond the steps above.
+- **Risks / unsure:** none known.
+
 ## 2026-11-12, Untranslated text sweep (macOS done, Windows list below)
 
 ### Writer

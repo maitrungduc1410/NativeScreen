@@ -24,6 +24,7 @@ public struct ProjectEditorWindowView: View {
     @State private var isShowingCommandMenu = false
     @State private var isShowingPresetsPopover = false
     @State private var isShowingAnnotationPopover = false
+    @State private var isShowingCameraLayoutPopover = false
     @State private var exportConfig = HardwareVideoExporter.ExportConfiguration()
     private var isExporting: Bool {
         get { session.isExportingFromEditor }
@@ -465,16 +466,19 @@ public struct ProjectEditorWindowView: View {
                                         }
                                     }
 
-                                    // Group 1B: Camera Layouts
+                                    // Group 1B: Camera layouts, one button that opens the list (only with a camera)
                                     if session.hasRecordedCamera {
-                                        VStack(spacing: 0) {
-                                            ForEach(CameraTimelineLayoutType.allCases) { layoutType in
-                                                quickDockIconButton(
-                                                    icon: layoutType.quickDockIcon,
-                                                    tooltip: String(localized: "\(layoutType.label) layout")
-                                                ) {
-                                                    session.addCameraLayoutAtPlayhead(type: layoutType)
-                                                }
+                                        quickDockIconButton(
+                                            icon: "person.crop.rectangle.badge.plus",
+                                            tooltip: "Add camera layout",
+                                            isActive: isShowingCameraLayoutPopover
+                                        ) {
+                                            isShowingCameraLayoutPopover.toggle()
+                                        }
+                                        .popover(isPresented: $isShowingCameraLayoutPopover, arrowEdge: .trailing) {
+                                            CameraLayoutPopoverView { layoutType in
+                                                isShowingCameraLayoutPopover = false
+                                                session.addCameraLayoutAtPlayhead(type: layoutType)
                                             }
                                         }
                                     }
@@ -3333,14 +3337,70 @@ private struct ExportingFullOverlayView: View {
     }
 }
 
-// MARK: - 6B. Add Annotation Popover
+// MARK: - 6B. Quick Dock Pickers (annotation kinds, camera layouts)
 
-/// The kinds of annotation, each with a line on what it is for. Picking one adds it at the playhead.
+/// A list of choices, each with an icon, a title and a line on what it is for. Picking one calls `onPick`.
+/// Titles and details arrive already translated.
+private struct QuickDockPickerList<Item: Identifiable & Hashable>: View {
+    let items: [Item]
+    let icon: (Item) -> String
+    let title: (Item) -> String
+    let detail: (Item) -> String
+    let onPick: (Item) -> Void
+    @State private var hovered: Item?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(items) { item in
+                Button {
+                    onPick(item)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: icon(item))
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.92))
+                            .frame(width: 30, height: 30)
+                            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.ink.opacity(0.06)))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(title(item))
+                                .font(.system(size: 13.0, weight: .regular))
+                                .foregroundStyle(.ink.opacity(0.95))
+                            Text(detail(item))
+                                .font(.system(size: 11.5, weight: .regular))
+                                .foregroundStyle(.ink.opacity(0.5))
+                                // Always shown in full. The list is wide enough that the longest detail in any of the
+                                // 15 languages takes at most two lines (about 254 pt at this size, 222 pt per line).
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.ink.opacity(hovered == item ? 0.06 : 0.0))
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { hovered = item } else if hovered == item { hovered = nil }
+                }
+                .accessibilityLabel(Text(title(item)))
+                .accessibilityHint(Text(detail(item)))
+            }
+        }
+        .padding(10)
+        .frame(width: 300)
+        .background(Color.surface(red: 0.08, green: 0.08, blue: 0.10))
+    }
+}
+
+/// The kinds of annotation. Picking one adds it at the playhead.
 private struct AnnotationKindPopoverView: View {
     let onPick: (AnnotationKind) -> Void
-    @State private var hoveredKind: AnnotationKind?
 
-    private func detail(_ kind: AnnotationKind) -> String {
+    private static func detail(_ kind: AnnotationKind) -> String {
         switch kind {
         case .text: return "A label or callout"
         case .arrow: return "Points at something"
@@ -3353,46 +3413,38 @@ private struct AnnotationKindPopoverView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(AnnotationKind.allCases.filter(\.isAddable)) { kind in
-                Button {
-                    onPick(kind)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: kind.systemImage)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.ink.opacity(0.92))
-                            .frame(width: 30, height: 30)
-                            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.ink.opacity(0.06)))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(kind.title.localizedUI)
-                                .font(.system(size: 13.0, weight: .regular))
-                                .foregroundStyle(.ink.opacity(0.95))
-                            Text(detail(kind).localizedUI)
-                                .font(.system(size: 11.5, weight: .regular))
-                                .foregroundStyle(.ink.opacity(0.5))
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 8)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.ink.opacity(hoveredKind == kind ? 0.06 : 0.0))
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    if hovering { hoveredKind = kind } else if hoveredKind == kind { hoveredKind = nil }
-                }
-                .accessibilityLabel(Text(kind.title.localizedUI))
-                .accessibilityHint(Text(detail(kind).localizedUI))
-            }
+        QuickDockPickerList(
+            items: AnnotationKind.allCases.filter(\.isAddable),
+            icon: \.systemImage,
+            title: { $0.title.localizedUI },
+            detail: { Self.detail($0).localizedUI },
+            onPick: onPick
+        )
+    }
+}
+
+/// The camera layouts. Picking one adds a layout segment at the playhead (only shown when the project has a camera).
+private struct CameraLayoutPopoverView: View {
+    let onPick: (CameraTimelineLayoutType) -> Void
+
+    private static func detail(_ type: CameraTimelineLayoutType) -> String {
+        switch type {
+        case .cameraOverlay: return "Camera in a corner of the screen"
+        case .splitScreen: return "Screen and camera side by side"
+        case .cutoutCamera: return "You over the screen, background removed"
+        case .fullscreenCamera: return "Only the camera, full frame"
+        case .screenOnly: return "Hides the camera"
         }
-        .padding(10)
-        .frame(width: 260)
-        .background(Color.surface(red: 0.08, green: 0.08, blue: 0.10))
+    }
+
+    var body: some View {
+        QuickDockPickerList(
+            items: CameraTimelineLayoutType.allCases,
+            icon: \.quickDockIcon,
+            title: { $0.label },
+            detail: { Self.detail($0).localizedUI },
+            onPick: onPick
+        )
     }
 }
 

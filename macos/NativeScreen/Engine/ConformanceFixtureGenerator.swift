@@ -252,6 +252,16 @@ enum ConformanceFixtureGenerator {
             ]
         })
 
+        // Leaving a segment with a gap after it animates before the segment's end; a short segment splits its length
+        // between the way in and the way out.
+        cases.append(cameraCase(id: "camera-layout-exit") { doc in
+            doc.camera.layoutMode = .overlay
+            doc.timeline.cameraLayouts = [
+                CameraLayoutSegment(id: "layout-1", sourceStartMs: 1000, sourceEndMs: 3000, layoutType: .fullscreenCamera),
+                CameraLayoutSegment(id: "layout-2", sourceStartMs: 4000, sourceEndMs: 4400, layoutType: .splitScreen)
+            ]
+        })
+
         cases.append(captionCase(id: "captions-dark", theme: .dark, reveal: .wordByWord, growth: .expanding, animation: .slideIn))
         cases.append(captionCase(id: "captions-light", theme: .light, reveal: .lineByLine, growth: .fullLine, animation: .fadeIn))
 

@@ -1756,8 +1756,8 @@ public final class MetalFrameCompositor {
     /// How long a timeline layout change (segment boundary, silence hide, voiceover hide) takes to animate.
     private static let stageTransitionMs = 380.0
 
-    /// Placement at `sourceTimeMs`, blending from the previous layout for `stageTransitionMs` after a change on the
-    /// timeline. Depends only on the project and the time, so preview and export produce the same frames.
+    /// Placement at `sourceTimeMs`, blended across layout changes on the timeline (see `timelineStageLayout`).
+    /// Depends only on the project and the time, so preview and export produce the same frames.
     static func resolvedStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
@@ -1810,6 +1810,10 @@ public final class MetalFrameCompositor {
     }
 
     /// Placement from the timeline's layout segments, with transitions.
+    /// A change animates over `stageTransitionMs` after it happens (entering a layout segment, silence or voiceover
+    /// hides), except leaving a layout segment: that animates over the segment's last `stageTransitionMs`, so the
+    /// layout is back to normal exactly when the playhead leaves the segment, mirroring how it enters at the start.
+    /// A segment shorter than two transitions splits its length between the way in and the way out.
     private static func timelineStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
@@ -1817,28 +1821,66 @@ public final class MetalFrameCompositor {
         screenSourceSize: CGSize,
         zoomScale: Double
     ) -> StageLayout {
+        func raw(_ key: StageLayout.Key) -> StageLayout {
+            Self.rawStageLayout(key: key, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
+        }
         let keyNow = Self.stageKey(session: session, at: sourceTimeMs)
-        let current = Self.rawStageLayout(key: keyNow, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
-        let windowStart = sourceTimeMs - Self.stageTransitionMs
-        guard windowStart > 0 else { return current }
-        let keyBefore = Self.stageKey(session: session, at: windowStart)
-        guard keyBefore != keyNow else { return current }
+        var stage = raw(keyNow)
 
-        // Binary-search the change point inside the window (to ~1 ms).
-        var lo = windowStart
-        var hi = sourceTimeMs
-        while hi - lo > 1.0 {
-            let mid = (lo + hi) * 0.5
-            if Self.stageKey(session: session, at: mid) == keyNow {
-                hi = mid
-            } else {
-                lo = mid
+        // 1. Blend in from the layout before a change behind the playhead.
+        let windowStart = sourceTimeMs - Self.stageTransitionMs
+        if windowStart > 0 {
+            let keyBefore = Self.stageKey(session: session, at: windowStart)
+            if keyBefore != keyNow {
+                // Binary-search the change point inside the window (to ~1 ms).
+                var lo = windowStart
+                var hi = sourceTimeMs
+                while hi - lo > 1.0 {
+                    let mid = (lo + hi) * 0.5
+                    if Self.stageKey(session: session, at: mid) == keyNow {
+                        hi = mid
+                    } else {
+                        lo = mid
+                    }
+                }
+                // Leaving a segment already animated before its end (step 2).
+                let leftSegment = session.activeCameraLayoutSegment(atSourceMs: lo)
+                let isAnimatedExit = (leftSegment.map { Self.animatesExit(session: session, segment: $0) } ?? false)
+                    && session.activeCameraLayoutSegment(atSourceMs: hi) == nil
+                if !isAnimatedExit {
+                    var duration = Self.stageTransitionMs
+                    if let entered = session.activeCameraLayoutSegment(atSourceMs: hi), abs(entered.sourceStartMs - hi) <= 2.0 {
+                        duration = Self.segmentTransitionMs(entered)
+                    }
+                    let previous = raw(Self.stageKey(session: session, at: lo))
+                    stage = StageLayout.blend(previous, stage, StageLayout.ease(CGFloat((sourceTimeMs - hi) / duration)))
+                }
             }
         }
-        let previousKey = Self.stageKey(session: session, at: lo)
-        let previous = Self.rawStageLayout(key: previousKey, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
-        let progress = StageLayout.ease(CGFloat((sourceTimeMs - hi) / Self.stageTransitionMs))
-        return StageLayout.blend(previous, current, progress)
+
+        // 2. Blend out toward the layout after a segment that ends just ahead of the playhead.
+        if let segment = session.activeCameraLayoutSegment(atSourceMs: sourceTimeMs),
+           Self.animatesExit(session: session, segment: segment) {
+            let duration = Self.segmentTransitionMs(segment)
+            let exitStart = segment.sourceEndMs - duration
+            if sourceTimeMs > exitStart {
+                let next = raw(Self.stageKey(session: session, at: segment.sourceEndMs + 0.5))
+                stage = StageLayout.blend(stage, next, StageLayout.ease(CGFloat((sourceTimeMs - exitStart) / duration)))
+            }
+        }
+        return stage
+    }
+
+    /// Transition length at either end of a layout segment.
+    private static func segmentTransitionMs(_ segment: CameraLayoutSegment) -> Double {
+        min(Self.stageTransitionMs, max(1.0, (segment.sourceEndMs - segment.sourceStartMs) * 0.5))
+    }
+
+    /// Whether leaving `segment` animates inside it: not when the next segment starts right at its end (that one
+    /// animates in), and not at the end of the recording (there is nothing after it).
+    private static func animatesExit(session: ProjectSession, segment: CameraLayoutSegment) -> Bool {
+        segment.sourceEndMs < session.metadata.durationMs - 1.0
+            && session.activeCameraLayoutSegment(atSourceMs: segment.sourceEndMs + 0.5) == nil
     }
 
     // Live preview spring state (edits glide; playback and scrubbing follow the timeline exactly).

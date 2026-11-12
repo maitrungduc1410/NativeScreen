@@ -163,7 +163,7 @@
 
 - [x] **Webcam Overlay, Layouts & Color Grading (`Camera Layout` & `Camera Style`):**
   - [x] Simultaneous webcam recording (`AVCaptureSession`) saved to `recording/webcam.mp4` + live floating camera preview bubble (`Show camera preview` in HUD).
-  - [x] 3 Default Layout modes (`Camera overlay`, `Split screen`, and `Camera cutout`) + dedicated `Layouts` timeline track & Quick Dock buttons with 5 per-segment layout types (`Camera overlay`, `Split screen`, `Camera cutout`, `Fullscreen camera`, `Only screen`), 8-point perimeter `Camera Position` dot grid, `Camera aspect ratio` (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`), and `Camera Size` slider.
+  - [x] 3 Default Layout modes (`Camera overlay`, `Split screen`, and `Camera cutout`) + dedicated `Layouts` timeline track & one Quick Dock `Add camera layout` button (a popover, like `Add annotation`) with 5 per-segment layout types (`Camera overlay`, `Split screen`, `Camera cutout`, `Fullscreen camera`, `Only screen`), 8-point perimeter `Camera Position` dot grid, `Camera aspect ratio` (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`), and `Camera Size` slider.
   - [x] Auto-shrink webcam bubble (`Make smaller during zoom` / `scaleWhenZoomed`) when the main screen zooms in.
   - [x] 13 built-in filmic color grading looks (`Original`, `Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`) + custom `.cube` 3D LUT loader, `Sharpen`, interactive `Crop camera` modal, `Mirror horizontally`, `Face tracking` (100% local via `Vision`), and `Camera delay` (`-200ms ... +200ms`).
   - [x] **AI Person Cutout:** Real-time background removal using macOS native `Vision` framework (`VNGeneratePersonSegmentationRequest`: 0MB model bloat!).
