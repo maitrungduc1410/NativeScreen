@@ -765,7 +765,7 @@ public sealed partial class RecordingHudWindow : Window
         ? "No system audio"
         : systemAudioAllApps
             ? "System audio"
-            : systemAudioApps.Count == 1 ? "Sound from 1 app" : $"Sound from {systemAudioApps.Count} apps";
+            : systemAudioApps.Count == 1 ? "Sound from 1 app" : Loc.F("Sound from %lld apps", systemAudioApps.Count);
 
     /// <summary>Windows without process loopback gets the first switch only, since an app could not be recorded on its own there.</summary>
     private StackPanel SystemAudioMenu(IReadOnlyList<AudioAppInfo> apps)
@@ -1131,7 +1131,7 @@ public sealed partial class RecordingHudWindow : Window
         countdownStarted = DateTime.UtcNow;
         bar.Children.Clear();
         bar.Spacing = 14;
-        bar.Children.Add(Item(Ui.Icon("", 20, Ui.Rgb(1, 1, 1, 0.92)), "Cancel countdown (Esc)", CancelCountdown, 36, 36));
+        bar.Children.Add(Item(Ui.Icon("", 20, Ui.Rgb(1, 1, 1, 0.92)), "Cancel countdown (ESC)", CancelCountdown, 36, 36));
         bar.Children.Add(Separator());
         bar.Children.Add(Label("Get ready. Recording will start soon.", 14, 0.62, true));
         bar.Children.Add(Separator());
@@ -1428,7 +1428,7 @@ public sealed partial class RecordingHudWindow : Window
                 CaptureFailureKind.WebcamWriter => "The camera video could not be written.",
                 _ => "The microphone audio could not be written."
             }),
-            failure.Details);
+            Loc.T(failure.Details));
 
     /// <summary>Ends the recording as Stop does, then says why it stopped and how much was saved.</summary>
     private async Task EndRecording(IRecordingEngine engine, string reason, string? details)

@@ -188,7 +188,7 @@ internal sealed class SegmentMenu
         if (same.Count >= 2)
         {
             var allVisible = same.All(item => !SegmentEdits.IsShortcutHidden(session.Document, item));
-            menu.Check($"Show every {cluster.Label}", allVisible, () => session.SetEveryShortcutWithLabelHidden(cluster, allVisible));
+            menu.Check(Loc.F("Show every %@", cluster.Label), allVisible, () => session.SetEveryShortcutWithLabelHidden(cluster, allVisible));
         }
 
         var allHidden = all.Count > 0 && all.All(item => SegmentEdits.IsShortcutHidden(session.Document, item));

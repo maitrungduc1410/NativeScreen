@@ -508,7 +508,8 @@ public sealed partial class EditorWindow
             Canvas.SetTop(edges[2], y + h / 2 - 17);
             Canvas.SetLeft(edges[3], x + w - 3);
             Canvas.SetTop(edges[3], y + h / 2 - 17);
-            readout.Text = $"Size {Math.Round((right - left) * width)} × {Math.Round((bottom - top) * height)}    Position {Math.Round(left * width)} {Math.Round(top * height)}";
+            readout.Text = Loc.F("Size %lld × %lld", (long)Math.Round((right - left) * width), (long)Math.Round((bottom - top) * height))
+                + "    " + Loc.T("Position") + $" {Math.Round(left * width)} {Math.Round(top * height)}";
         };
 
         // Dragging inside the frame moves the crop without changing its size.
@@ -737,7 +738,7 @@ internal static class Projects
                 {
                     XamlRoot = xamlRoot,
                     RequestedTheme = AppTheme.Current,
-                    Title = $"Could not create a project from {Path.GetFileName(file)}",
+                    Title = Loc.F("Could not create a project from “%@”", Path.GetFileName(file)),
                     Content = exception.Message,
                     CloseButtonText = Loc.T("OK")
                 }.ShowAsync();

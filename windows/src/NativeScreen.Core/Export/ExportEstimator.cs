@@ -122,7 +122,34 @@ public static class ExportEstimator
         return FormatRange(typical * 0.35, typical * 1.60);
     }
 
-    public static string DurationString(ExportSettings config, double aspect, double durationMs)
+    /// <summary>The estimate in English ("19 seconds", "1 hour 5 minutes"), as the conformance fixtures have it.</summary>
+    public static string DurationString(ExportSettings config, double aspect, double durationMs) =>
+        DescribeDuration(DurationSeconds(config, aspect, durationMs), (key, count) => key.Replace("%@", count.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
+
+    /// <summary>
+    /// Seconds as text, one unit key at a time: `1 second` / `%@ seconds`, `1 minute` / `%@ minutes`, `1 hour` / `%@ hours`,
+    /// joined with a space ("1 hour 5 minutes"). The UI passes a translating <paramref name="unit"/>; the keys are shared
+    /// with macOS (spec/06 ADR-44).
+    /// </summary>
+    public static string DescribeDuration(int seconds, Func<string, int, string> unit)
+    {
+        string Unit(int count, string one, string many) => unit(count == 1 ? one : many, count);
+        if (seconds < 60)
+        {
+            return Unit(seconds, "1 second", "%@ seconds");
+        }
+
+        var minutes = (int)Math.Round(seconds / 60.0, MidpointRounding.AwayFromZero);
+        if (minutes < 60)
+        {
+            return Unit(minutes, "1 minute", "%@ minutes");
+        }
+
+        var hours = Unit(minutes / 60, "1 hour", "%@ hours");
+        return minutes % 60 > 0 ? hours + " " + Unit(minutes % 60, "1 minute", "%@ minutes") : hours;
+    }
+
+    public static int DurationSeconds(ExportSettings config, double aspect, double durationMs)
     {
         var (width, height) = config.OutputSize(aspect);
         var seconds = Math.Max(0.5, durationMs / 1000.0);
@@ -135,13 +162,7 @@ public static class ExportEstimator
             estimate = Math.Max(1, (int)Math.Round(estimate * 1.2, MidpointRounding.AwayFromZero));
         }
 
-        if (estimate < 60)
-        {
-            return estimate == 1 ? "1 second" : $"{estimate} seconds";
-        }
-
-        var minutes = (int)Math.Round(estimate / 60.0, MidpointRounding.AwayFromZero);
-        return minutes == 1 ? "1 minute" : $"{minutes} minutes";
+        return estimate;
     }
 
     public static List<ExportEstimate> Rows(ProjectDocument document, int sourceWidth, int sourceHeight, double durationMs)

@@ -151,7 +151,7 @@ internal sealed partial class PreviewOverlay
             IsHitTestVisible = false,
             Child = new TextBlock
             {
-                Text = $"Drag to select the area for the new {(type == MaskType.Blur ? "sensitive data" : "highlight")} mask",
+                Text = Loc.T(type == MaskType.Blur ? "Drag to select the area for the new sensitive data mask" : "Drag to select the area for the new highlight mask"),
                 FontSize = 12.5,
                 Foreground = new SolidColorBrush(Colors.White)
             }
@@ -235,7 +235,7 @@ internal sealed partial class PreviewOverlay
         var at = session.SourceAtPlayhead;
         var face = session.IsCameraOnly ? CameraOnlyLayout.FaceCenter01(document, session.FaceTrack, at) : null;
         var camera = CameraOnlyLayout.FaceCentered(trajectory.Evaluate(at).Camera, face);
-        var stage = new StageLayoutEngine().Resolve(document, at, width, height, Math.Max(16, sourceWidth * crop.Width), Math.Max(16, sourceHeight * crop.Height), camera.Scale, hasCamera, cameraOnly: session.IsCameraOnly, faceTrack: session.FaceTrack);
+        var stage = new StageLayoutEngine().Resolve(document, at, width, height, Math.Max(16, sourceWidth * crop.Width), Math.Max(16, sourceHeight * crop.Height), camera.Scale, hasCamera, trajectory.DurationMs, cameraOnly: session.IsCameraOnly, faceTrack: session.FaceTrack);
         return camera.IsLoupeMode
             ? new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, Point01.Center, 1)
             : new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, camera.Center01, camera.Scale);

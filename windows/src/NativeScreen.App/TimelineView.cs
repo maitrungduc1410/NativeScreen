@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Text;
@@ -1028,7 +1029,7 @@ internal sealed class TimelineView
                 foreach (var speed in new[] { 2.0, 3, 4, 6, 8 })
                 {
                     var value = speed;
-                    var apply = new MenuFlyoutItem { Text = $"Speed up typing {value:0}x" };
+                    var apply = new MenuFlyoutItem { Text = Loc.F("Speed up typing %@x", value.ToString("0", CultureInfo.CurrentCulture)) };
                     apply.Click += (_, _) => session.Mutate(document => TypingSuggestionEdits.Apply(document, target, value));
                     menu.Items.Add(apply);
                 }
@@ -1096,7 +1097,7 @@ internal sealed class TimelineView
                     voiceoverWaveIds[block] = id;
                 }
 
-                Ui.Tip(block, $"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}");
+                Ui.Tip(block, Loc.F("Voiceover at %@", Ui.Timecode(voiceover.SourceStartMs)));
                 block.RightTapped += (_, args) =>
                 {
                     args.Handled = true;

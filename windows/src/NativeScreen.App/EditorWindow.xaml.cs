@@ -251,7 +251,7 @@ public sealed partial class EditorWindow : Window
     private void BuildAppMenu()
     {
         var file = new MenuFlyoutSubItem { Text = Loc.T("File") };
-        file.Items.Add(Menu("Open project", () => _ = OpenProjectCommand()));
+        file.Items.Add(Menu("Open project...", () => _ = OpenProjectCommand()));
         file.Items.Add(RecentMenu());
         file.Items.Add(Menu("Create project from video", () => _ = ImportVideoCommand()));
         file.Items.Add(Menu("Create interactive showcase project", () => _ = Projects.Open(ShowcaseProject.WritePackage(AppSettings.Shared.ProjectsDirectory), Root.XamlRoot)));
@@ -281,7 +281,7 @@ public sealed partial class EditorWindow : Window
         export.Items.Add(Menu("Export", ShowExportOverlay, "Ctrl+E"));
         export.Items.Add(Menu("Quick export to clipboard", () => _ = QuickExportToClipboard()));
         export.Items.Add(Menu("Export current frame as image", ShowFrameExportOverlay));
-        export.Items.Add(Menu("Extract raw recording files", source.PackagePath is null ? null : () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{Path.Combine(source.PackagePath, "recording")}\"") { UseShellExecute = true })));
+        export.Items.Add(Menu("Extract raw recording files...", source.PackagePath is null ? null : () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{Path.Combine(source.PackagePath, "recording")}\"") { UseShellExecute = true })));
         var view = new MenuFlyoutSubItem { Text = Loc.T("View") };
         foreach (var (tab, _) in TabIcons)
         {
@@ -435,12 +435,7 @@ public sealed partial class EditorWindow : Window
             Ui.IconButton(Ui.Icon("", 16), "Loupe zoom", () => session.AddZoomAtPlayhead(ZoomPresentation.Loupe))));
         if (source.HasCamera)
         {
-            QuickDock.Children.Add(DockGroup(
-                Ui.IconButton(Ui.Icon("", 16), "Camera overlay layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.CameraOverlay)),
-                Ui.IconButton(Ui.Icon("", 16), "Split screen layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.SplitScreen)),
-                Ui.IconButton(Ui.Icon("", 16), "Camera cutout layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.CutoutCamera)),
-                Ui.IconButton(Ui.Icon("", 16), "Fullscreen camera layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.FullscreenCamera)),
-                Ui.IconButton(Ui.Icon("", 16), "Only screen layout", () => session.AddCameraLayoutAtPlayhead(CameraTimelineLayoutType.ScreenOnly))));
+            QuickDock.Children.Add(DockGroup(CameraLayoutDockButton()));
         }
 
         QuickDock.Children.Add(DockGroup(
@@ -451,6 +446,32 @@ public sealed partial class EditorWindow : Window
             Ui.IconButton(Ui.Icon("", 16), "Add shortcut", () => session.AddCustomShortcut(null, session.SourceAtPlayhead)),
             Ui.IconButton(Ui.Icon("\uE8BD", 16), "Add caption track", () => session.AddCaptionTrack()),
             VoiceoverDockButton()));
+    }
+
+    /// <summary>One dock button with a menu of the camera layouts, each added as a segment at the playhead (macOS: a popover).</summary>
+    private Button CameraLayoutDockButton()
+    {
+        Button? button = null;
+        button = Ui.IconButton(Ui.Icon("", 16), "Add camera layout", () =>
+        {
+            var menu = new MenuFlyout();
+            foreach (var (type, glyph, name, detail) in (ReadOnlySpan<(CameraTimelineLayoutType, string, string, string)>)[
+                (CameraTimelineLayoutType.CameraOverlay, "", "Camera overlay", "Camera in a corner of the screen"),
+                (CameraTimelineLayoutType.SplitScreen, "", "Split screen", "Screen and camera side by side"),
+                (CameraTimelineLayoutType.CutoutCamera, "", "Camera cutout", "You over the screen, background removed"),
+                (CameraTimelineLayoutType.FullscreenCamera, "", "Fullscreen camera", "Only the camera, full frame"),
+                (CameraTimelineLayoutType.ScreenOnly, "", "Only screen", "Hides the camera")])
+            {
+                var chosen = type;
+                var item = new MenuFlyoutItem { Text = Loc.T(name), Icon = new FontIcon { Glyph = glyph } };
+                ToolTipService.SetToolTip(item, Loc.T(detail));
+                item.Click += (_, _) => session.AddCameraLayoutAtPlayhead(chosen);
+                menu.Items.Add(item);
+            }
+
+            menu.ShowAt(button!);
+        });
+        return button;
     }
 
     /// <summary>One dock button with a menu of the kinds that can be added (a pen stroke only comes from drawing).</summary>
@@ -641,7 +662,7 @@ public sealed partial class EditorWindow : Window
         catch (AggregateException exception) when (exception.InnerException is IOException or UnauthorizedAccessException)
         {
             hasUnsavedChanges = true;
-            ShowToast($"Could not save the project: {exception.InnerException.Message}");
+            ShowToast(Loc.F("Could not save the project: %@", exception.InnerException.Message));
             return false;
         }
     }
@@ -655,7 +676,7 @@ public sealed partial class EditorWindow : Window
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             hasUnsavedChanges = true;
-            ShowToast($"Could not save the project: {exception.Message}");
+            ShowToast(Loc.F("Could not save the project: %@", exception.Message));
         }
     }
 
@@ -792,7 +813,7 @@ public sealed partial class EditorWindow : Window
         }
         catch (SharpGen.Runtime.SharpGenException exception)
         {
-            ShowToast($"Could not open {track}: {exception.Message}");
+            ShowToast(Loc.F("Could not open %1$@: %2$@", track, exception.Message));
             return null;
         }
     }

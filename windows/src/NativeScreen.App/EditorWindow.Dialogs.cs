@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -50,12 +51,9 @@ public sealed partial class EditorWindow
         ExportOverlay.Visibility = Visibility.Visible;
     }
 
-    /// <summary>The estimator writes English ("55 seconds"); seconds have a catalog entry, minutes stay as they are, as on macOS.</summary>
-    private static string LocalizedDuration(string english)
-    {
-        var parts = english.Split(' ');
-        return parts.Length == 2 && parts[1] == "seconds" ? Loc.F("%@ seconds", parts[0]) : Loc.T(english);
-    }
+    /// <summary>The estimated export time in the UI language, built from the same unit keys as macOS ("2 phút", "1 giờ 5 phút").</summary>
+    private static string LocalizedDuration(int seconds) =>
+        ExportEstimator.DescribeDuration(seconds, (key, count) => Loc.F(key, count.ToString(CultureInfo.CurrentCulture)));
 
     private static Grid ExportColumns(UIElement left, UIElement right)
     {
@@ -308,7 +306,7 @@ public sealed partial class EditorWindow
         footer.Children.Add(row);
 
         var aspect = session.Document.Canvas.EffectiveAspectRatio(source.SourceWidth, source.SourceHeight);
-        var time = ExportEstimator.DurationString(exportSettings, aspect, session.DurationMs);
+        var time = ExportEstimator.DurationSeconds(exportSettings, aspect, session.DurationMs);
         var size = ExportEstimator.SizeString(exportSettings, aspect, session.DurationMs);
         // A filled-in sentence has no catalog entry: translate the pattern, then fill it.
         var estimate = Ui.Text(Loc.F("Estimation: Export time %@, Output size %@", LocalizedDuration(time), size), 12.5, "Ink45");
@@ -385,7 +383,7 @@ public sealed partial class EditorWindow
             }
             else
             {
-                ShowToast($"Exported {fileName}");
+                ShowToast(Loc.F("Exported %@", fileName));
             }
         }
         catch (OperationCanceledException)
@@ -394,7 +392,7 @@ public sealed partial class EditorWindow
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
-            ShowToast($"Export failed: {exception.Message}");
+            ShowToast(Loc.F("Export failed: %@", exception.Message));
         }
         finally
         {
@@ -414,7 +412,7 @@ public sealed partial class EditorWindow
         ExportCard.Padding = new Thickness(28, 26, 28, 26);
         ExportBody.Children.Clear();
         ExportBody.Spacing = 14;
-        var title = Ui.Text("Exporting video • 0%", 19, "Ink95", true);
+        var title = Ui.Text(Loc.F("Exporting video • %@", 0.0.ToString("P0", CultureInfo.CurrentCulture)), 19, "Ink95", true);
         title.HorizontalAlignment = HorizontalAlignment.Center;
         var bar = new ProgressBar { Minimum = 0, Maximum = 1, Value = 0, Width = 320, Height = 6, HorizontalAlignment = HorizontalAlignment.Center };
         var time = Ui.Text("Preparing export...", 13.5, "Ink60");
@@ -429,10 +427,10 @@ public sealed partial class EditorWindow
         return share =>
         {
             bar.Value = share;
-            title.Text = $"Exporting video • {share:P0}";
+            title.Text = Loc.F("Exporting video • %@", share.ToString("P0", CultureInfo.CurrentCulture));
             var elapsed = DateTime.UtcNow - started;
             var left = share > 0 ? elapsed * (1 / share - 1) : TimeSpan.Zero;
-            time.Text = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00} • {(int)left.TotalMinutes:00}:{left.Seconds:00} left";
+            time.Text = Loc.F("%@ • %@ left", $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00}", $"{(int)left.TotalMinutes:00}:{left.Seconds:00}");
         };
     }
 
@@ -579,7 +577,7 @@ public sealed partial class EditorWindow
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
-            ShowToast($"Could not render the preview: {exception.Message}");
+            ShowToast(Loc.F("Could not render the preview: %@", exception.Message));
         }
     }
 
@@ -593,8 +591,7 @@ public sealed partial class EditorWindow
             var replace = new ContentDialog
             {
                 XamlRoot = Root.XamlRoot,
-                Title = $"\"{Path.GetFileName(path)}\" already exists",
-                Content = Loc.T("Do you want to replace it?"),
+                Content = Loc.F("“%@” already exists. Do you want to replace it?", Path.GetFileName(path)),
                 PrimaryButtonText = Loc.T("Replace"),
                 CloseButtonText = Loc.T("Cancel"),
                 DefaultButton = ContentDialogButton.Close
@@ -619,7 +616,7 @@ public sealed partial class EditorWindow
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
             ExportOverlay.Visibility = Visibility.Collapsed;
-            ShowToast($"Export failed: {exception.Message}");
+            ShowToast(Loc.F("Export failed: %@", exception.Message));
         }
         finally
         {

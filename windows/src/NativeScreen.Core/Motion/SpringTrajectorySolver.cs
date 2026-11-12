@@ -144,12 +144,16 @@ public sealed class SpringTrajectorySolver
     /// <summary>False for camera-only recordings and projects made from a video: no cursor is drawn (spec/07 Pass 4).</summary>
     public bool HasRecordedCursor { get; }
 
+    /// <summary>The recording's length (`metadata.json` `durationMs`), which the stage needs to tell a segment's end from the recording's.</summary>
+    public double DurationMs { get; }
+
     public SpringTrajectorySolver(
         double durationMs,
         IReadOnlyList<CursorSampleEvent> cursorEvents,
         IReadOnlyList<ClickEvent> clickEvents,
         ProjectDocument document)
     {
+        DurationMs = durationMs;
         HasRecordedCursor = cursorEvents.Count > 0;
         var totalDuration = Math.Max(100, durationMs);
         var totalSteps = Math.Max(2, (int)Math.Ceiling(totalDuration / stepMs) + 1);

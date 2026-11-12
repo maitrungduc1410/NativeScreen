@@ -311,7 +311,7 @@ internal sealed class TargetOverlay : IDisposable
     {
         if (hovered is not { } window)
         {
-            DrawHint("Move the pointer over a window");
+            DrawHint(Loc.T("Move the pointer over a window"));
             return;
         }
 
@@ -324,8 +324,8 @@ internal sealed class TargetOverlay : IDisposable
         using var title = Text(window.AppName, 20, FontWeight.Bold);
         var sizeText = $"{window.Bounds.Width} × {window.Bounds.Height}";
         using var sizeLayout = Text(sizeText, 13, FontWeight.Regular);
-        using var resizeLayout = Text("Resize", 11.5f, FontWeight.Medium);
-        using var startLayout = Text("Start recording", 14, FontWeight.SemiBold);
+        using var resizeLayout = Text(Loc.T("Resize"), 11.5f, FontWeight.Medium);
+        using var startLayout = Text(Loc.T("Start recording"), 14, FontWeight.SemiBold);
         var padding = 22 * S;
         var resizeWidth = resizeLayout.Metrics.Width + 20 * S;
         var row = sizeLayout.Metrics.Width + 8 * S + resizeWidth;
@@ -367,9 +367,9 @@ internal sealed class TargetOverlay : IDisposable
         var inset = new RectangleF(bounds.X + 8 * S, bounds.Y + 8 * S, bounds.Width - 16 * S, bounds.Height - 16 * S);
         Fill(inset, 14 * S, new Color4(0.36f, 0.22f, 0.98f, 0.10f));
         Stroke(inset, 14 * S, new Color4(0.44f, 0.30f, 1, 1), 4 * S);
-        using var title = Text(display.IsPrimary ? "Primary display" : $"Display {display.Id}", 20, FontWeight.Bold);
-        using var detail = Text($"{display.Bounds.Width} × {display.Bounds.Height} • Press Esc to cancel", 13, FontWeight.Regular);
-        using var startLayout = Text("Record This Display", 14, FontWeight.SemiBold);
+        using var title = Text(display.IsPrimary ? Loc.T("Primary display") : Loc.F("Display %lld", display.Id), 20, FontWeight.Bold);
+        using var detail = Text(Loc.F("%lld × %lld • Press ESC to cancel", display.Bounds.Width, display.Bounds.Height), 13, FontWeight.Regular);
+        using var startLayout = Text(Loc.T("Record This Display"), 14, FontWeight.SemiBold);
         var padding = 24 * S;
         var startWidth = startLayout.Metrics.Width + 58 * S;
         var contentWidth = Math.Max(Math.Max(title.Metrics.Width, detail.Metrics.Width), startWidth);
@@ -399,7 +399,7 @@ internal sealed class TargetOverlay : IDisposable
         }
 
         using var sizeLayout = Text($"{area.Width} × {area.Height}", 13.5f, FontWeight.Medium);
-        using var startLayout = Text("Start Area Recording", 13, FontWeight.SemiBold);
+        using var startLayout = Text(Loc.T("Start Area Recording"), 13, FontWeight.SemiBold);
         var padding = 16 * S;
         var presets = WindowSizes.Take(4).ToArray();
         var layouts = presets.Select(preset => Text($"{preset.Width}x{preset.Height}", 11.5f, FontWeight.Medium)).ToList();

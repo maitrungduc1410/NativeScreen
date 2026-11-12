@@ -42,6 +42,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **How to verify:** `verify.ps1`: `ConformanceTests` and `FrameFixtureTests` pick up `camera-layout-exit` by folder, so they fail until the port is in and pass after. In the app: add a `Fullscreen camera` segment in the middle of a camera project and scrub out of its right edge: the camera is back in its corner when the playhead reaches the edge, and stays there after it.
 - **Open VERIFY items:** none beyond the above.
 
+### Verifier
+- **Result:** PASS. `ConformanceTests` picks up `camera-layout-exit` and matches its `stage.json`; the other 26 cases are unchanged.
+- **verify.ps1:** Debug x64 solution build, 0 warnings. Core 333, Rendering 34 (`FrameFixtureTests` included), Media 29 passed.
+- **Changes made:** `StageLayoutEngine.Resolved` has the three steps (`SegmentTransitionMs`, `AnimatesExit`). The recording length comes from the new `SpringTrajectorySolver.DurationMs` (the `durationMs` it was built with, from `metadata.json`), so preview, export and the canvas transform get it without new plumbing; `Resolve` takes it as a required `recordingDurationMs` after `hasRecordedCamera`. `LoadedProject.StageAt` passes `Metadata.DurationMs`.
+- **Next:** scrub out of a `Fullscreen camera` segment in the app.
+
 ## 2026-11-12, Quick dock: camera layouts behind one button
 
 ### Writer
@@ -52,6 +58,10 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **How to verify:** open a project recorded with a camera: the dock has one camera button between zooms and masks. Click it: a flyout lists the 5 layouts with icons. Pick each one: a segment of that type is added at the playhead on the `Layouts` track and the flyout closes. Open a project without a camera: no camera button. Switch the UI language (for example to Vietnamese): the tooltip and items are translated.
 - **Open VERIFY items:** none beyond the steps above.
 - **Risks / unsure:** none known.
+
+### Verifier
+- **Result:** PASS for build and tests; the flyout was not clicked through in the running app.
+- **Changes made:** `EditorWindow.xaml.cs`: `CameraLayoutDockButton()` (glyph `E960`, tooltip `Add camera layout`) opens a `MenuFlyout` with the 5 layouts in the macOS order, each with the old button's glyph, its name and the detail line as its tooltip. The Windows-only tooltip keys `Split screen layout`, `Fullscreen camera layout` and `Only screen layout` from the sweep were not added, since nothing shows them now; `Camera overlay layout` and `Camera cutout layout` stay in the catalog as they were.
 
 ## 2026-11-12, Untranslated text sweep (macOS done, Windows list below)
 
@@ -80,6 +90,18 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Built on macOS:** the app builds and every key the compiler extracts is in the catalog. Not checked by launching in another language.
 - **How to verify:** set the language to Vietnamese and walk through the list: each toast, tooltip and dialog above shows Vietnamese.
 
+### Verifier
+- **Result:** PASS for build, tests and a rescan of `windows/src/NativeScreen.App` (every UI literal and every `Loc.F` key has 14 translations); not walked through in the running app.
+- **Changes made:**
+  - Part 1: every sentence listed above uses `Loc.F`, plus ones the list missed: `Exported %@` (2 toasts), `Size %lld × %lld` in the crop readout, `Left %lld%% · Top %lld%%` in the zoom position pad, `Show every %@`, `Sound from %lld apps`, `Display %lld` and `%lld × %lld • Press ESC to cancel` in the display picker. The mask hint is two whole keys. Counts have singular keys (`Hid 1 face`, `Hid 1 sensitive area`, `Transcribed 1 word`). The replace dialog uses the macOS sentence `“%@” already exists. Do you want to replace it?`; the model download dialog's button is `Download (%@)`.
+  - Part 2: 50 Windows-only `manual` keys with translations (the three camera layout tooltips the list named went away with the single dock button below). Where macOS has the same meaning, Windows now uses its wording: `Scanning recording for sensitive data on device...`, `Detecting faces in recording on device...`, `No speech was found in this recording.`, `Re-Generate transcript`, `Open project...`, `Extract raw recording files...`, `Background Color`, `Hide & Mute original recording`, `Cancel countdown (ESC)` and the masks note.
+  - `TargetOverlay` drew all its text in English (its `Text` helper does not translate): the window, display and area labels now go through `Loc`. `ColorField` translates its accessible name. The `Recording stopped` box translates the capture failure detail.
+  - The transcript language list names each language with `CultureInfo.DisplayName` in the UI language, first letter capitalized ("Tiếng Việt", "Vietnamien").
+  - 66 keys in all; every translation keeps the key's format specifiers (checked by script).
+- **Left in English on purpose:** as the writer listed, plus the `★` favorites pill, keycap names and the agent commands in `Settings > AI Agents`.
+- **Spec updates:** `spec/06` ADR-44 (Windows bullet).
+- **Next:** build once on a Mac so Xcode normalizes the catalog (commit that alone if only the order changes).
+
 ## 2026-11-12, Translated export estimate and export errors (macOS done, small Windows follow-up)
 
 ### Writer
@@ -92,6 +114,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Port:** in `EditorWindow.Dialogs.cs`, `LocalizedDuration` translates only `N seconds`; "2 minutes" and "1 hour 5 minutes" still show in English. Build the text from the same keys as macOS (better from the seconds count than by parsing the English string), keeping `ExportEstimator` English for the fixtures. Windows export errors that reach the UI can reuse the error keys above where the wording matches.
 - **Built on macOS:** the app builds; the Vietnamese `Localizable.strings` in the built bundle has the new keys. Not checked by launching in another language.
 - **How to verify:** with the language set to Vietnamese, open Export on a project over 2 minutes long: the estimate reads `... 2 phút ...`, not `2 minutes`. Under a minute it reads `... 19 giây ...`.
+
+### Verifier
+- **Result:** PASS for build and tests; the dialog was not opened in another language.
+- **verify.ps1:** Debug x64 solution build, 0 warnings. Core 330 passed (new `ExportDurationTextTests`).
+- **Changes made:** `ExportEstimator` splits into `DurationSeconds` and `DescribeDuration(seconds, unit)`, which asks for one unit key at a time; `DurationString` passes an English filler, so the fixtures are unchanged. Hours are now described as on macOS ("1 hour 5 minutes"; Windows stopped at minutes). `EditorWindow.Dialogs.LocalizedDuration` fills the keys with `Loc.F`. The progress line (`Exporting video • %@`, `%@ • %@ left`) is translated too. Export errors: Windows has none of the macOS wordings; the reason shown is the system's own message, which Windows already gives in its language.
+- **Spec updates:** none beyond the sweep entry above.
 
 ## 2026-11-11, Long recordings: free disk space guard (macOS done, Windows port pending)
 

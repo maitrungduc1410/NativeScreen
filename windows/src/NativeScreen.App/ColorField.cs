@@ -11,6 +11,7 @@ internal static class ColorField
 {
     public static Grid Create(string name, string hex, Action<string> preview, Action<string> commit)
     {
+        name = Loc.T(name);
         var grid = new Grid { ColumnSpacing = 6 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition());

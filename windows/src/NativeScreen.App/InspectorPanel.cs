@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -277,7 +278,7 @@ internal sealed partial class InspectorPanel
                 swatches.Children.Add(swatch);
             }
 
-            Add(Labeled("Color", 10, ColorField.Create("Background color", background.SolidColor, hex => session.Mutate(d => d.Background.SolidColor = hex, "solid-color", structural: false), hex => Edit(d => d.Background.SolidColor = hex))));
+            Add(Labeled("Color", 10, ColorField.Create("Background Color", background.SolidColor, hex => session.Mutate(d => d.Background.SolidColor = hex, "solid-color", structural: false), hex => Edit(d => d.Background.SolidColor = hex))));
             Add(Action("Pick random color", () =>
             {
                 var picked = CuratedSolidColors[Random.Shared.Next(CuratedSolidColors.Length)];
@@ -566,7 +567,7 @@ internal sealed partial class InspectorPanel
         Add(Toggle("Hide during silence", null, () => Doc.Camera.HideDuringSilenceMs is not null, (d, v) => d.Camera.HideDuringSilenceMs = v ? 5000 : null));
         if (Doc.Camera.HideDuringSilenceMs is { } silence)
         {
-            Add(Slider($"Minimum silence duration ({silence / 1000:0.0}s)", () => Doc.Camera.HideDuringSilenceMs ?? 5000, (d, v) => d.Camera.HideDuringSilenceMs = v, 2000, 15000, 5000));
+            Add(Slider(Loc.F("Minimum silence duration (%@)", (silence / 1000).ToString("0.0", CultureInfo.CurrentCulture) + "s"), () => Doc.Camera.HideDuringSilenceMs ?? 5000, (d, v) => d.Camera.HideDuringSilenceMs = v, 2000, 15000, 5000));
         }
 
         if (camera.LayoutMode == CameraLayoutMode.Cutout)
@@ -1196,14 +1197,20 @@ internal sealed partial class InspectorPanel
         return bar;
     }
 
+    /// <summary>A transcript language ("vi_VN") named in the UI language, as macOS names it with `Locale` ("Tiếng Việt", "vietnamien").</summary>
+    private static string SpokenLanguageName(string code)
+    {
+        var name = CultureInfo.GetCultureInfo(code.Split('_')[0]).DisplayName;
+        return name.Length > 0 ? char.ToUpper(name[0], CultureInfo.CurrentUICulture) + name[1..] : code;
+    }
+
     private void TranscriptControls()
     {
         var captions = Doc.Captions;
-        var languages = new (string Code, string Name)[] { ("auto", "Detect"), ("en_US", "English"), ("vi_VN", "Vietnamese"), ("es_ES", "Spanish"), ("fr_FR", "French"), ("de_DE", "German"), ("ja_JP", "Japanese"), ("ko_KR", "Korean"), ("zh_CN", "Chinese") };
         var language = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        foreach (var (code, name) in languages)
+        foreach (var code in new[] { "auto", "en_US", "vi_VN", "es_ES", "fr_FR", "de_DE", "ja_JP", "ko_KR", "zh_CN" })
         {
-            language.Items.Add(new ComboBoxItem { Content = name, Tag = code });
+            language.Items.Add(new ComboBoxItem { Content = code == "auto" ? Loc.T("Detect") : SpokenLanguageName(code), Tag = code });
             if (code == captions.TranscriptLocale)
             {
                 language.SelectedIndex = language.Items.Count - 1;
@@ -1233,7 +1240,7 @@ internal sealed partial class InspectorPanel
         }
         else
         {
-            Add(Action(Doc.Captions.Segments.Count == 0 ? "Generate transcript" : "Generate transcript again", tools.GenerateTranscript));
+            Add(Action(Doc.Captions.Segments.Count == 0 ? "Generate transcript" : "Re-Generate transcript", tools.GenerateTranscript));
         }
     }
 
@@ -1341,13 +1348,13 @@ internal sealed partial class InspectorPanel
         {
             var id = voiceover.Id;
             VoiceoverSegment Find(ProjectDocument d) => d.Timeline.Voiceovers.First(item => item.Id == id);
-            Add(Collapsible($"Voiceover at {Ui.Timecode(voiceover.SourceStartMs)}", () => Stack(14,
+            Add(Collapsible(Loc.F("Voiceover at %@", Ui.Timecode(voiceover.SourceStartMs)), () => Stack(14,
                 Slider("Volume", () => Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.Volume ?? 1, (d, v) => Find(d).Volume = v, 0, 1, 1),
                 Action(Doc.Timeline.Voiceovers.Count > 1 ? "Apply to other voiceovers" : "", Doc.Timeline.Voiceovers.Count > 1 ? () => session.ApplyVoiceoverVolumeToOthers(id) : null),
                 Labeled("Attach to recording", 10, Options(
                     ("Independent", Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.AttachMode == VoiceoverAttachMode.Independent, () => Edit(d => Find(d).AttachMode = VoiceoverAttachMode.Independent)),
                     ("Synchronized", Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.AttachMode == VoiceoverAttachMode.Synchronized, () => Edit(d => Find(d).AttachMode = VoiceoverAttachMode.Synchronized)))),
-                Toggle("Hide & mute original recording", null, () => Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.HideRecording ?? false, (d, v) => Find(d).HideRecording = v),
+                Toggle("Hide & Mute original recording", null, () => Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.HideRecording ?? false, (d, v) => Find(d).HideRecording = v),
                 Toggle("Disable voiceover", null, () => Doc.Timeline.Voiceovers.Find(item => item.Id == id)?.Disabled ?? false, (d, v) => Find(d).Disabled = v),
                 Action("Remove voiceover", () => Edit(d => d.Timeline.Voiceovers.RemoveAll(item => item.Id == id))))));
         }
@@ -1475,7 +1482,7 @@ internal sealed partial class InspectorPanel
 
     private void Masks()
     {
-        Add(Note("Masks stay locked to the source clip coordinates (even while zooming). Select a mask on the timeline to edit it."));
+        Add(Note("Masks stay locked to the source clip coordinates (even while zooming). Drag or resize directly on the preview."));
         Add(Stack(8,
             Action("Add sensitive data mask", () => session.AddMaskAtPlayhead(MaskType.Blur)),
             Action("Add highlight mask", () => session.AddMaskAtPlayhead(MaskType.Spotlight))));

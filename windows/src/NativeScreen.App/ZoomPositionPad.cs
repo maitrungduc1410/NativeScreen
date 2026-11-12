@@ -133,7 +133,7 @@ internal sealed class ZoomPositionPad
         Place(viewport, x, y, w, h);
         Canvas.SetLeft(dot, zoom.ManualCenter01.X * width - DotSize / 2);
         Canvas.SetTop(dot, zoom.ManualCenter01.Y * height - DotSize / 2);
-        readout.Text = $"Left {Math.Round(zoom.ManualCenter01.X * 100)}% · Top {Math.Round(zoom.ManualCenter01.Y * 100)}%";
+        readout.Text = Loc.F("Left %lld%% · Top %lld%%", (long)Math.Round(zoom.ManualCenter01.X * 100), (long)Math.Round(zoom.ManualCenter01.Y * 100));
         Canvas.SetLeft(readout, 8);
         Canvas.SetTop(readout, 6);
     }

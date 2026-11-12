@@ -252,7 +252,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException or System.Runtime.InteropServices.COMException)
         {
-            toast($"Could not use this image: {exception.Message}");
+            toast(Loc.F("Could not use this image: %@", exception.Message));
         }
     }
 
@@ -885,7 +885,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
 
         IsScanningSensitive = true;
-        Report("Scanning for sensitive data...");
+        Report("Scanning recording for sensitive data on device...");
         try
         {
             var phrases = session.Document.Background.SensitiveDataCustomPhrases;
@@ -897,12 +897,12 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
             else if (session.Document.Background.HideSensitiveData)
             {
                 session.Mutate(document => AutoMaskBuilder.Replace(document, item => item.IsAutoSensitiveMask, found));
-                toast(found.Count == 0 ? "No sensitive data found" : $"Hid {found.Count} sensitive areas");
+                toast(found.Count switch { 0 => "No sensitive data found", 1 => "Hid 1 sensitive area", _ => Loc.F("Hid %lld sensitive areas", found.Count) });
             }
         }
         catch (Exception exception) when (exception is IOException or SharpGen.Runtime.SharpGenException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
         {
-            toast($"Scan failed: {exception.Message}");
+            toast(Loc.F("Scan failed: %@", exception.Message));
         }
 
         IsScanningSensitive = false;
@@ -933,19 +933,19 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
 
         IsScanningFaces = true;
-        Report("Scanning for faces...");
+        Report("Detecting faces in recording on device...");
         try
         {
             var found = await OnDeviceMaskScanner.DetectFacesAsync(path, session.SourceDurationMs, null, CancellationToken.None);
             if (session.Document.Background.HideFaces)
             {
                 session.Mutate(document => AutoMaskBuilder.Replace(document, item => item.IsAutoFaceMask, found));
-                toast(found.Count == 0 ? "No faces found" : $"Hid {found.Count} faces");
+                toast(found.Count switch { 0 => "No faces found", 1 => "Hid 1 face", _ => Loc.F("Hid %lld faces", found.Count) });
             }
         }
         catch (Exception exception) when (exception is IOException or SharpGen.Runtime.SharpGenException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
         {
-            toast($"Scan failed: {exception.Message}");
+            toast(Loc.F("Scan failed: %@", exception.Message));
         }
 
         IsScanningFaces = false;
@@ -984,8 +984,8 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                     XamlRoot = XamlRoot,
                     RequestedTheme = AppTheme.Current,
                     Title = Loc.T("Download the speech model?"),
-                    Content = $"Transcripts run on this device with the Whisper {model.Tier} model. It downloads {model.SizeText} from huggingface.co once. Your audio is never uploaded.",
-                    PrimaryButtonText = Loc.T("Download"),
+                    Content = Loc.F("Transcripts run on this device with the Whisper %@ model. It downloads %@ from huggingface.co once. Your audio is never uploaded.", model.Tier, model.SizeText),
+                    PrimaryButtonText = Loc.F("Download (%@)", model.SizeText),
                     CloseButtonText = Loc.T("Not now")
                 }.ShowAsync();
                 if (answer != ContentDialogResult.Primary)
@@ -1028,7 +1028,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                 next.Captions.RebuildTranscriptCaptionBlocks();
                 next.Captions.Enabled = true;
             });
-            toast(segments.Count == 0 ? "No speech found" : $"Transcribed {segments.Count} words");
+            toast(segments.Count switch { 0 => "No speech was found in this recording.", 1 => "Transcribed 1 word", _ => Loc.F("Transcribed %lld words", segments.Count) });
         }
         catch (OperationCanceledException)
         {
@@ -1036,7 +1036,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
         catch (Exception exception) when (exception is IOException or HttpRequestException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException or InvalidOperationException or Whisper.net.Wave.CorruptedWaveException)
         {
-            toast($"Transcript failed: {exception.Message}");
+            toast(Loc.F("Transcript failed: %@", exception.Message));
         }
         finally
         {
@@ -1056,7 +1056,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         else if (await PickSave(session.Document.Name, "SubRip subtitles", ".srt") is { } path)
         {
             await File.WriteAllTextAsync(path, text);
-            toast($"Exported {Path.GetFileName(path)}");
+            toast(Loc.F("Exported %@", Path.GetFileName(path)));
         }
     }
 
