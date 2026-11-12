@@ -129,13 +129,10 @@ public final class WhisperModelDownloadManager: NSObject, URLSessionDownloadDele
         alert.alertStyle = .informational
         alert.icon = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download Whisper Model")
         alert.messageText = String(localized: "Download OpenAI Whisper (\(tier.label)) Model?")
-        alert.informativeText = """
-        Native Screen will download the open-source OpenAI Whisper "\(tier.label)" (\(tier.fileName), ~\(tier.sizeDescription)) speech recognition model to your Mac:
-
-        ~/Library/Application Support/NativeScreen/WhisperModels/\(tier.fileName)
-
-        Once downloaded, all transcription runs 100% locally on your Mac with zero cloud uploads. You can cancel the download at any time.
-        """
+        let intro = String(localized: "Native Screen will download the open-source OpenAI Whisper \"\(tier.label)\" (\(tier.fileName), ~\(tier.sizeDescription)) speech recognition model to your Mac:")
+        let path = "~/Library/Application Support/NativeScreen/WhisperModels/\(tier.fileName)"
+        let outro = String(localized: "Once downloaded, all transcription runs locally on your Mac and nothing is uploaded. You can cancel the download at any time.")
+        alert.informativeText = "\(intro)\n\n\(path)\n\n\(outro)"
         alert.addButton(withTitle: String(localized: "Download (\(tier.sizeDescription))"))
         alert.addButton(withTitle: String(localized: "Cancel"))
 

@@ -254,7 +254,7 @@ public struct MultiTrackTimelineView: View {
                                                 }
                                                 .buttonStyle(.plain)
 
-                                                Text(track.name.localizedUI)
+                                                Text(track.name.localizedTrackName)
                                                     .font(.system(size: 11, weight: .medium))
                                                     .foregroundStyle(Color.ink.opacity(maskHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
@@ -285,7 +285,7 @@ public struct MultiTrackTimelineView: View {
                                                 }
                                                 .buttonStyle(.plain)
 
-                                                Text(track.name.localizedUI)
+                                                Text(track.name.localizedTrackName)
                                                     .font(.system(size: 11, weight: .medium))
                                                     .foregroundStyle(Color.ink.opacity(annotationHidden ? 0.30 : 0.65))
                                                     .lineLimit(1)
@@ -365,7 +365,7 @@ public struct MultiTrackTimelineView: View {
                                                         session.selectedShortcutId = nil
                                                         session.selectedInspectorTab = .shortcuts
                                                     } label: {
-                                                        Text((session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts").localizedUI)
+                                                        Text((session.document.captions.shortcutTracks.count > 1 ? sTrack.name : "Shortcuts").localizedTrackName)
                                                             .font(.system(size: 11, weight: .medium))
                                                             .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.30 : 0.65))
                                                             .lineLimit(1)
@@ -408,7 +408,7 @@ public struct MultiTrackTimelineView: View {
                                                     session.selectCaption(nil)
                                                     session.selectedInspectorTab = .captions
                                                 } label: {
-                                                    Text(track.name.localizedUI)
+                                                    Text(track.name.localizedTrackName)
                                                         .font(.system(size: 11, weight: .medium))
                                                         .foregroundStyle(Color.ink.opacity(isTrackHidden ? 0.30 : 0.65))
                                                         .lineLimit(1)
@@ -3466,7 +3466,7 @@ private struct TimelineInteractiveSegmentView: View {
                 HStack(spacing: 3.5) {
                     Image(systemName: "computermouse.fill")
                         .font(.system(size: 10.5, weight: .regular))
-                    Text(modeText)
+                    Text(modeText.localizedUI)
                         .font(.system(size: 12.0, weight: .regular))
                 }
             }

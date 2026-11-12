@@ -966,8 +966,8 @@ public struct ExportStillFrameModalView: View {
             alert.messageText = String(localized: "“\(outURL.lastPathComponent)” already exists. Do you want to replace it?")
             let folderName = exportDirectoryURL.lastPathComponent
             alert.informativeText = folderName == "Desktop"
-                ? "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents."
-                : "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents."
+                ? String(localized: "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents.")
+                : String(localized: "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents.")
             let replaceBtn = alert.addButton(withTitle: String(localized: "Replace"))
             replaceBtn.hasDestructiveAction = true
             alert.addButton(withTitle: String(localized: "Cancel"))

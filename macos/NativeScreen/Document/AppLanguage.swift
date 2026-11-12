@@ -89,4 +89,15 @@ extension String {
     public var localizedUI: String {
         Bundle.main.localizedString(forKey: self, value: self, table: nil)
     }
+
+    /// A track name, translated when it is a default one ("Captions", "Captions 2"). Names are stored in English;
+    /// a name the user typed has no catalog entry and shows as it is. Same rule as `Loc.TrackName` on Windows.
+    public var localizedTrackName: String {
+        let whole = localizedUI
+        if whole != self { return whole }
+        guard let space = lastIndex(of: " "), let number = Int(self[index(after: space)...]) else { return self }
+        let stem = String(self[..<space])
+        let translatedStem = stem.localizedUI
+        return translatedStem == stem ? self : "\(translatedStem) \(number)"
+    }
 }

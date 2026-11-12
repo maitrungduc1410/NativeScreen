@@ -382,12 +382,35 @@ public final class HardwareVideoExporter {
         return "\(low.amount)\(low.unit)–\(high.amount)\(high.unit)"
     }
 
-    /// Upfront export duration estimation.
+    /// Upfront export duration estimation, in English. The conformance fixtures compare this exact text.
     public static func estimateExportDurationString(
         config: ExportConfiguration,
         canvasAspect: Double,
         durationMs: Double
     ) -> String {
+        formatEstimatedDuration(
+            seconds: estimateExportSeconds(config: config, canvasAspect: canvasAspect, durationMs: durationMs),
+            localized: false
+        )
+    }
+
+    /// The same estimate in the UI language, for the export panel.
+    public static func localizedEstimateExportDurationString(
+        config: ExportConfiguration,
+        canvasAspect: Double,
+        durationMs: Double
+    ) -> String {
+        formatEstimatedDuration(
+            seconds: estimateExportSeconds(config: config, canvasAspect: canvasAspect, durationMs: durationMs),
+            localized: true
+        )
+    }
+
+    private static func estimateExportSeconds(
+        config: ExportConfiguration,
+        canvasAspect: Double,
+        durationMs: Double
+    ) -> Int {
         let (widthPx, heightPx) = config.outputPixelSize(canvasAspect: canvasAspect)
         let durationSec = max(0.5, durationMs / 1000.0)
         let totalFrames = durationSec * Double(config.fps)
@@ -400,19 +423,26 @@ public final class HardwareVideoExporter {
         if config.format == .mp4 && config.mp4Codec == .both && config.target == .file {
             seconds = Int(round(Double(seconds) * 1.75))
         }
+        return seconds
+    }
 
+    /// "19 seconds", "2 minutes", "1 hour 5 minutes". The keys are shared with Windows, which reads the same catalog.
+    private static func formatEstimatedDuration(seconds: Int, localized: Bool) -> String {
+        func unit(_ count: Int, one: String, many: String) -> String {
+            let key = count == 1 ? one : many
+            let pattern = localized ? key.localizedUI : key
+            return pattern.replacingOccurrences(of: "%@", with: "\(count)")
+        }
         if seconds < 60 {
-            return seconds == 1 ? "1 second" : "\(seconds) seconds"
+            return unit(seconds, one: "1 second", many: "%@ seconds")
         }
         let minutes = Int(round(Double(seconds) / 60.0))
         if minutes < 60 {
-            return minutes == 1 ? "1 minute" : "\(minutes) minutes"
+            return unit(minutes, one: "1 minute", many: "%@ minutes")
         }
-        let hours = minutes / 60
+        let hours = unit(minutes / 60, one: "1 hour", many: "%@ hours")
         let remMin = minutes % 60
-        let hStr = hours == 1 ? "1 hour" : "\(hours) hours"
-        let mStr = remMin == 1 ? "1 minute" : "\(remMin) minutes"
-        return remMin > 0 ? "\(hStr) \(mStr)" : hStr
+        return remMin > 0 ? "\(hours) \(unit(remMin, one: "1 minute", many: "%@ minutes"))" : hours
     }
 
     // MARK: - 3. Hardware-Accelerated Sequential Decode + Hybrid Parallel Export Pipeline
@@ -794,7 +824,7 @@ public final class HardwareVideoExporter {
         }
 
         private static func rewriteError(_ status: OSStatus) -> NSError {
-            NSError(domain: "NativeScreenExport", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Could not prepare an H.264 frame for the MP4 file."])
+            NSError(domain: "NativeScreenExport", code: Int(status), userInfo: [NSLocalizedDescriptionKey: String(localized: "Could not prepare an H.264 frame for the MP4 file.")])
         }
     }
 
@@ -1119,7 +1149,7 @@ public final class HardwareVideoExporter {
         onProgress: @escaping @MainActor (Double) -> Void
     ) async throws {
         guard let compositor = MetalFrameCompositor() else {
-            throw NSError(domain: "NativeScreenExport", code: -1, userInfo: [NSLocalizedDescriptionKey: "GPU compositor unavailable."])
+            throw NSError(domain: "NativeScreenExport", code: -1, userInfo: [NSLocalizedDescriptionKey: String(localized: "GPU compositor unavailable.")])
         }
 
         let targetW = Int(outputSize.width)
@@ -1159,7 +1189,7 @@ public final class HardwareVideoExporter {
         ) : nil
 
         guard hwWorker != nil || swWorker != nil else {
-            throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: "Hardware video encoder unavailable."])
+            throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: String(localized: "Hardware video encoder unavailable.")])
         }
 
         let totalDurationMs = session.timeMapper.totalTimelineDurationMs
@@ -1221,7 +1251,7 @@ public final class HardwareVideoExporter {
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: formatHint)
             input.expectsMediaDataInRealTime = false
             guard writer.canAdd(input) else {
-                throw NSError(domain: "NativeScreenExport", code: -6, userInfo: [NSLocalizedDescriptionKey: "Cannot configure MP4 passthrough muxer."])
+                throw NSError(domain: "NativeScreenExport", code: -6, userInfo: [NSLocalizedDescriptionKey: String(localized: "Cannot configure MP4 passthrough muxer.")])
             }
             writer.add(input)
             if audioPipeline != nil {
@@ -1255,14 +1285,14 @@ public final class HardwareVideoExporter {
             if muxWriter == nil {
                 guard let first = nextVideoSample else { return }
                 guard let formatDesc = CMSampleBufferGetFormatDescription(first) else {
-                    throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: "No video frames were encoded."])
+                    throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: String(localized: "No video frames were encoded.")])
                 }
                 try startMuxer(formatHint: formatDesc)
                 muxDescription = formatDesc
             }
             guard let writer = muxWriter, let input = muxInput else { return }
             if writer.status == .failed {
-                throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+                throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: String(localized: "MP4 muxer failed.")])
             }
 
             while !isVideoInputFinished, input.isReadyForMoreMediaData, let encoded = nextVideoSample {
@@ -1270,7 +1300,7 @@ public final class HardwareVideoExporter {
                     ? try H264InBandParameterSets.rewrite(encoded, sharedDescription: muxDescription!)
                     : encoded
                 guard input.append(sample) else {
-                    throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+                    throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: String(localized: "MP4 muxer failed.")])
                 }
                 lastMuxedVideoSeconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
                 nextVideoSample = ordered.popNext()
@@ -1419,7 +1449,7 @@ public final class HardwareVideoExporter {
                 try Task.checkCancellation()
                 try drainMuxer(encodersFinished: true)
                 if muxWriter == nil {
-                    throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: "No video frames were encoded."])
+                    throw NSError(domain: "NativeScreenExport", code: -5, userInfo: [NSLocalizedDescriptionKey: String(localized: "No video frames were encoded.")])
                 }
                 if !isVideoInputFinished || !isAudioDone {
                     try await Task.sleep(for: .milliseconds(1))
@@ -1430,7 +1460,7 @@ public final class HardwareVideoExporter {
             audioPipeline?.reader.cancelReading()
             await muxWriter?.finishWriting()
             if let writer = muxWriter, writer.status == .failed {
-                throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "MP4 muxer failed."])
+                throw writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: String(localized: "MP4 muxer failed.")])
             }
             reportProgress(1.0, force: true)
         } catch {
@@ -1481,7 +1511,7 @@ public final class HardwareVideoExporter {
         onProgress: @escaping @MainActor (Double) -> Void
     ) async throws {
         guard let compositor = MetalFrameCompositor() else {
-            throw NSError(domain: "NativeScreenExport", code: -1, userInfo: [NSLocalizedDescriptionKey: "GPU compositor unavailable."])
+            throw NSError(domain: "NativeScreenExport", code: -1, userInfo: [NSLocalizedDescriptionKey: String(localized: "GPU compositor unavailable.")])
         }
 
         let targetW = Int(outputSize.width)
@@ -1511,7 +1541,7 @@ public final class HardwareVideoExporter {
         )
 
         guard writer.canAdd(writerInput) else {
-            throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot configure ProRes video writer input."])
+            throw NSError(domain: "NativeScreenExport", code: -2, userInfo: [NSLocalizedDescriptionKey: String(localized: "Cannot configure ProRes video writer input.")])
         }
         writer.add(writerInput)
 
@@ -1536,7 +1566,7 @@ public final class HardwareVideoExporter {
         }
 
         func writerFailure() -> Error {
-            writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: "The video file could not be written."])
+            writer.error ?? NSError(domain: "NativeScreenExport", code: -7, userInfo: [NSLocalizedDescriptionKey: String(localized: "The video file could not be written.")])
         }
 
         guard writer.startWriting() else { throw writerFailure() }
@@ -1900,7 +1930,7 @@ public final class HardwareVideoExporter {
         onProgress: @escaping @MainActor (Double) -> Void
     ) async throws {
         guard let compositor = MetalFrameCompositor() else {
-            throw NSError(domain: "NativeScreenExport", code: -1, userInfo: [NSLocalizedDescriptionKey: "GPU compositor unavailable."])
+            throw NSError(domain: "NativeScreenExport", code: -1, userInfo: [NSLocalizedDescriptionKey: String(localized: "GPU compositor unavailable.")])
         }
 
         try? FileManager.default.removeItem(at: outputURL)
@@ -1996,7 +2026,7 @@ public final class HardwareVideoExporter {
 
         init(url: URL, width: Int, height: Int, loops: Bool) throws {
             guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
-                throw Self.error("Cannot create GIF file.")
+                throw Self.error(String(localized: "Cannot create GIF file."))
             }
             handle = try FileHandle(forWritingTo: url)
             self.width = width
@@ -2032,7 +2062,7 @@ public final class HardwareVideoExporter {
             guard let patch = image.cropping(to: region),
                   let frame = autoreleasepool(invoking: { Self.encodedFrame(patch) }),
                   let parsed = Self.parse(frame) else {
-                throw Self.error("Cannot encode GIF frame.")
+                throw Self.error(String(localized: "Cannot encode GIF frame."))
             }
             try writePendingFrame()
 

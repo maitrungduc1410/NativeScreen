@@ -1353,7 +1353,8 @@ public struct ProjectEditorWindowView: View {
             let cleanName = session.document.name.replacingOccurrences(of: "/", with: "-")
             outURL = ProjectWorkspaceStore.clipboardExportsDirectory
                 .appendingPathComponent("\(cleanName)-\(Int(Date().timeIntervalSince1970)).\(ext)")
-            activeExportDestinationLabel = "Clipboard (\(cleanName).\(ext))"
+            let clipboardFileName = "\(cleanName).\(ext)"
+            activeExportDestinationLabel = String(localized: "Clipboard (\(clipboardFileName))")
         } else {
             // Ensure NSSavePanel opens in expanded mode by default (showing the sidebar, file browser table, and "New Folder" button)
             UserDefaults.standard.set(true, forKey: "NSNavPanelExpandedStateForSaveMode")
@@ -1389,8 +1390,8 @@ public struct ProjectEditorWindowView: View {
                     alert.messageText = String(localized: "“\(hevcURL.lastPathComponent)” already exists. Do you want to replace it?")
                     let folderName = hevcURL.deletingLastPathComponent().lastPathComponent
                     alert.informativeText = folderName == "Desktop"
-                        ? "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents."
-                        : "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents."
+                        ? String(localized: "A file or folder with the same name already exists on the Desktop. Replacing it will overwrite its current contents.")
+                        : String(localized: "A file or folder with the same name already exists in the folder \(folderName). Replacing it will overwrite its current contents.")
                     let replaceBtn = alert.addButton(withTitle: String(localized: "Replace"))
                     replaceBtn.hasDestructiveAction = true
                     alert.addButton(withTitle: String(localized: "Cancel"))
@@ -2681,7 +2682,7 @@ private struct ExportSettingsModalView: View {
     }
 
     private var estimatedTimeText: String {
-        HardwareVideoExporter.estimateExportDurationString(
+        HardwareVideoExporter.localizedEstimateExportDurationString(
             config: config,
             canvasAspect: canvasAspect,
             durationMs: durationMs

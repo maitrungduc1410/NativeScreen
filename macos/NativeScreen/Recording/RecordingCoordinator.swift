@@ -1154,7 +1154,7 @@ public final class RecordingCoordinator {
                 onScreenWindowsOnly: true
             )
             guard !shareable.displays.isEmpty else {
-                lastErrorMessage = "No capturable display found."
+                lastErrorMessage = String(localized: "No capturable display found.")
                 restorePostRecordingSystemState()
                 updateHUDPanelFrameForCurrentState(animated: true)
                 return

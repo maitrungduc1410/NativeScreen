@@ -36,11 +36,11 @@ enum VideoProjectImporter {
     static func buildPackage(from videoURL: URL) async throws -> URL {
         let asset = AVURLAsset(url: videoURL)
         guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
-            throw importError("The file has no video track.")
+            throw importError(String(localized: "The file has no video track."))
         }
         let durationMs = CMTimeGetSeconds(try await asset.load(.duration)) * 1000.0
         guard durationMs.isFinite, durationMs > 100.0 else {
-            throw importError("The video is empty or too short.")
+            throw importError(String(localized: "The video is empty or too short."))
         }
         let (naturalSize, transform, fps) = try await videoTrack.load(.naturalSize, .preferredTransform, .nominalFrameRate)
         let displaySize = naturalSize.applying(transform)

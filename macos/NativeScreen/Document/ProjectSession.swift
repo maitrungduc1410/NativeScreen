@@ -3323,7 +3323,7 @@ public final class ProjectSession: Identifiable {
         case .caption(let id):
             deleteCaptionTrack(id: id)
         }
-        showToast(String(format: "Deleted %@. Press ⌘Z to undo.".localizedUI, displayName.localizedUI))
+        showToast(String(format: "Deleted %@. Press ⌘Z to undo.".localizedUI, displayName.localizedTrackName))
     }
 
     public func removeShortcutTrack(id: String) {

@@ -27,6 +27,46 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-12, Untranslated text sweep (macOS done, Windows list below)
+
+### Writer
+- **Scope:** a sweep of both apps for text that reaches the UI in English. macOS: every compiler-extracted key was already translated; the gaps were strings passed as plain `String`. Fixed in `ProjectSession.swift`, `RecordingCoordinator.swift`, `ProjectDocument.swift`, `VideoProjectImporter.swift`, `ProjectEditorWindowView.swift`, `ReelModeAndCropOverlayView.swift`, `MultiTrackTimelineView.swift`, `AppLanguage.swift` (new `String.localizedTrackName`, same rule as `Loc.TrackName`). 34 new keys in `Localizable.xcstrings`, translated into all 15 languages. Specs: `spec/06` ADR-44, `spec/05`.
+- **Already fixed for Windows by the new keys** (same English text, shown through `Loc.T`, so only check them): `The part you want to cut is too short`, `Can't cut item shorter than 0.2s`, `Can't split a caption with one word`, `Zoom range copied`, `Zoom range settings pasted`, `Mask settings pasted`, `Background audio file added`, `Could not start microphone voiceover recording`, `Recording voiceover... Click again to finish`, `Undo trim`, `Join clips`, and the disabled tab reasons `There is no mouse cursor recorded`, `Camera is hidden (see Camera Layout)`, `No microphone recorded`, `No keyboard shortcuts during recording`.
+- **Port, part 1: sentences built with `$"..."`.** These can never match a key. Use `Loc.F` with a new key (or the existing one where named):
+  - `EditorWindow.Dialogs.cs` 397 and 622 `Export failed: %@`; 582 `Could not render the preview: %@`; 596 the title `"%@" already exists`; 417 `Exporting video • 0%` (use the existing `Exporting video • %@`).
+  - `EditorWindow.xaml.cs` 644 and 658 `Could not save the project: %@`; 795 `Could not open %1$@: %2$@`.
+  - `EditorWindow.Tools.cs` 740 `Could not create a project from %@`.
+  - `PreviewOverlay.cs` 154 `Drag to select the area for the new ... mask`: make it two whole sentences (one for sensitive data, one for highlight), not a word put into a sentence.
+  - `TimelineView.cs` 1031 `Speed up typing %@x`; 1099 and `InspectorPanel.cs` 1344 `Voiceover at %@`.
+  - `InspectorPanel.cs` 569 `Minimum silence duration (%@)` (key exists).
+  - `EditorTools.cs` 255 `Could not use this image: %@`; 900 `Hid %lld sensitive areas`; 943 `Hid %lld faces`; 905 and 948 `Scan failed: %@`; 1031 `Transcribed %lld words`; 1039 `Transcript failed: %@`; 987 the model download dialog body.
+- **Port, part 2: Windows-only text with no key.** Shown through `Loc.T` already, so each needs a `manual` key with translations:
+  - Toasts in `EditorTools.cs`: `Open a saved project first`, `Could not finish the voiceover recording`, `The clipboard has no image`, `Scanning for sensitive data...`, `Windows has no text recognition language installed`, `No sensitive data found`, `Scanning for faces...`, `No faces found`, `Open a recording first`, `No speech found`, `Transcript stopped`, `Generate a transcript first`. Save dialog type `SubRip subtitles`.
+  - `EditorWindow.Tools.cs`: `Native Screen project folder`, `Save current style as preset`, `This file is not a preset`, `This project has no recording to crop`, `Could not read a frame to crop`, `This project has no camera recording to crop`.
+  - `EditorWindow.xaml.cs`: `Show safe zones for short videos`, `Split screen layout`, `Fullscreen camera layout`, `Only screen layout`.
+  - `TimelineView.cs` 1054 track label `Typing`.
+  - `SettingsWindow.xaml.cs`: `Delete selection`, `Inspector tabs`, `Change`, `When off, edits are saved with Ctrl+S.`, `Quick export uses the current settings of the Export window: format, frame rate, resolution and compression.`
+  - `InspectorPanel.cs`: `Gradient start`, `Gradient end`, `Gradient colors`, `Key gradient start`, `Key gradient end`, `Sizing`, `Volume`, `Transcribing`, `Generate transcript again`, `Hide cursor in this clip`, `This recording has no camera video.`, `Scan the recording on device and blur emails, keys and phone numbers.`, `Detect faces in the recording on device and blur them.`, `Edit your video by editing its text: delete words to cut them out, remove filler words and tighten pauses.`, and `Masks stay locked...` (its text differs from the macOS key; reuse the macOS wording). The transcript language list (1202: `Detect`, `English`, `Vietnamese`...) should show each language's name in the UI language, for example from `CultureInfo.DisplayName`, as macOS does with `Locale`.
+  - `Recording/TargetOverlay.cs` `Move the pointer over a window`; `Recording/RecordingHudWindow.cs` `Open .nativescreen Project`, `Show Projects Folder in File Explorer`, `Some app sound is missing`.
+  - Capture failure details from `ScreenRecorder.cs` (`The capture item closed.`, `The recorded window closed.`) if they reach the `Recording stopped` box.
+- **Left in English on purpose (both apps):** device and color names (`MacBook Pro 16"`, `Space Black`), cursor theme names, wallpaper collection names, built-in music titles, built-in preset names, the Explorer context menu verb, MCP tool text, and the demo project.
+- **How the list was made:** every string literal in `windows/src` with English words that is not a catalog key, minus logs, ids, file names, MCP and keycap names.
+- **Built on macOS:** the app builds and every key the compiler extracts is in the catalog. Not checked by launching in another language.
+- **How to verify:** set the language to Vietnamese and walk through the list: each toast, tooltip and dialog above shows Vietnamese.
+
+## 2026-11-12, Translated export estimate and export errors (macOS done, small Windows follow-up)
+
+### Writer
+- **Scope:** macOS `HardwareVideoExporter.swift`, `ProjectEditorWindowView.swift`, `MultiTrackTimelineView.swift`, `LocalOnDeviceMediaIntelligence.swift`. 17 new keys in the shared `Localizable.xcstrings`, translated into all 15 languages. Specs: `spec/06` ADR-44 (new "Filled-in values translate too" bullet), `spec/05` Localization line.
+- **What changed on macOS:**
+  1. Export estimate: the time is built from the keys `1 second`, `%@ seconds`, `1 minute`, `%@ minutes`, `1 hour`, `%@ hours` (all `manual`), joined with a space for "1 hour 5 minutes". `estimateExportDurationString` still returns English, so `estimates.json` and `ConformanceTests` are unchanged.
+  2. Zoom chip on the timeline: `Auto` / `Manual` now translated (Windows already does this in `TimelineView.cs`).
+  3. Speech model download prompt: the body is two keys around the model path.
+  4. Export errors: `Cannot configure MP4 passthrough muxer.`, `Cannot configure ProRes video writer input.`, `Could not prepare an H.264 frame for the MP4 file.`, `GPU compositor unavailable.`, `Hardware video encoder unavailable.`, `MP4 muxer failed.`, `No video frames were encoded.`, `The video file could not be written.`, `Cannot create GIF file.`, `Cannot encode GIF frame.`
+- **Port:** in `EditorWindow.Dialogs.cs`, `LocalizedDuration` translates only `N seconds`; "2 minutes" and "1 hour 5 minutes" still show in English. Build the text from the same keys as macOS (better from the seconds count than by parsing the English string), keeping `ExportEstimator` English for the fixtures. Windows export errors that reach the UI can reuse the error keys above where the wording matches.
+- **Built on macOS:** the app builds; the Vietnamese `Localizable.strings` in the built bundle has the new keys. Not checked by launching in another language.
+- **How to verify:** with the language set to Vietnamese, open Export on a project over 2 minutes long: the estimate reads `... 2 phút ...`, not `2 minutes`. Under a minute it reads `... 19 giây ...`.
+
 ## 2026-11-11, Long recordings: free disk space guard (macOS done, Windows port pending)
 
 ### Writer

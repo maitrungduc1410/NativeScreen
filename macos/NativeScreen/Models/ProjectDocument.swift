@@ -376,9 +376,9 @@ public enum DeviceFrameMatchMode: String, Codable, CaseIterable, Identifiable, S
     public var descriptionText: String {
         switch self {
         case .perfect:
-            return "Show only device frames that precisely match your recording size."
+            return String(localized: "Show only device frames that precisely match your recording size.")
         case .flexible:
-            return "Show all device frames, even those that don't precisely match your recording size."
+            return String(localized: "Show all device frames, even those that don't precisely match your recording size.")
         }
     }
 }
