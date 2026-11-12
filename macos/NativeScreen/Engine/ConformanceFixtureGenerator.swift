@@ -253,12 +253,16 @@ enum ConformanceFixtureGenerator {
         })
 
         // Leaving a segment with a gap after it animates before the segment's end; a short segment splits its length
-        // between the way in and the way out.
+        // between the way in and the way out. Same for a voiceover that hides the recording.
         cases.append(cameraCase(id: "camera-layout-exit") { doc in
             doc.camera.layoutMode = .overlay
             doc.timeline.cameraLayouts = [
                 CameraLayoutSegment(id: "layout-1", sourceStartMs: 1000, sourceEndMs: 3000, layoutType: .fullscreenCamera),
                 CameraLayoutSegment(id: "layout-2", sourceStartMs: 4000, sourceEndMs: 4400, layoutType: .splitScreen)
+            ]
+            // A voiceover that hides the recording: the camera is back on the voiceover's end.
+            doc.timeline.voiceovers = [
+                VoiceoverSegment(id: "voiceover-1", sourceStartMs: 5000, durationMs: 600, relativePath: "assets/voiceover.m4a", hideRecording: true)
             ]
         })
 

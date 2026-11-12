@@ -27,6 +27,32 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-13, A timeline item leaves no effect after its end (zoom, loupe, voiceover hide, captions)
+
+### Writer
+- **Rule (`spec/06` ADR-84):** the preview shows exactly the items under the playhead. An item animates out inside its last moments, so nothing of it is left once the playhead leaves it. Before, zooms, loupes, voiceover hides and captions began their way out on the item's end and kept moving after it (a zoom for about 1.2 s).
+- **Checked and already fine:** masks and annotations (drawn only inside their items), shortcut keycaps (fade inside their display window), camera layout segments (done in the last entry).
+- **macOS changes, to port one to one:**
+  1. `SpringTrajectorySolver.swift` (camera loop), port to `NativeScreen.Core/Motion/SpringTrajectorySolver.cs`:
+     - `zoomOutSettleMs`: step the camera spring with `stepClampedSpring` from 2.0 to target 1.0 at the solver `dt` until within 0.02 (at most 1500 ms).
+     - Per zoom `releaseMs`: 0 when the next zoom starts within 1 ms of its end or the zoom is instant, otherwise `min(zoomOutSettleMs, duration / 2)`.
+     - In a zoom with `tMs > end - releaseMs`: treat it as inactive for the targets (scale 1, focus 0.5, loupe presence 0, keep its loupe config). Weight `w = smoothstep((tMs - releaseStart) / releaseMs)`.
+     - After stepping the springs, output `rectX * (1 - w)`, `rectY * (1 - w)`, `1 + (rectW - 1) * (1 - w)` and `loupePresence * (1 - w)`. Recover the center from these, and use them for `isLoupeMode`. On these frames the scale velocity is the finite difference of the output scale.
+     - With no zoom active and at least one zoom behind (`zoomCursorIdx > 0`): set the rect to (0, 0, 1) with zero velocities, loupe scale 1 and presence 0 with zero velocities. Still spring the loupe center toward its target (the pre-warm).
+  2. `MetalFrameCompositor.swift` `timelineStageLayout`, port to `StageLayoutEngine.cs`: the exit rule now covers voiceovers that hide the recording as well as layout segments.
+     - `exitingStageItem(t)`: the earliest ending of these, if any: the layout segment at `t`, when no layout segment is active at `end + 0.5`; each voiceover at `t` with `hideRecording`, when the recording is not hidden by a voiceover at `end + 0.5`. Both only when `end < recordingDurationMs - 1`.
+     - `enteredStageItem(t)`: a layout segment or a hiding voiceover starting within 2 ms of `t`.
+     - Step 1 skips the blend when `exitingStageItem(lo).end <= hi + 0.01`, and uses `itemTransitionMs(enteredStageItem(hi))` (`min(380, max(1, length / 2))`) for the way in.
+     - Step 2 blends toward `StageKey(end + 0.5)` over the exiting item's last `itemTransitionMs`.
+  3. `CaptionLineLayout.swift`, port to `NativeScreen.Core/Captions/CaptionLineLayout.cs`:
+     - `Line.fadeOutStartMs`: defaults to `endMs`. In `linesByTrack`, after sorting a track's lines, a line whose next line does not start within 1 ms of its end gets `endMs - min(150, (endMs - startMs) / 2)`.
+     - The box opacity target and `targetWordOpacity` use `fadeOutStartMs` instead of `endMs`. Word offsets keep `endMs`.
+     - `frame` returns nothing when no line has `startMs <= t <= endMs`.
+- **Built on macOS:** BUILD SUCCEEDED. Conformance regenerated, and only these changed: `zoom-manual`, `zoom-follow` (trajectory, stage, frames), `loupe` (trajectory, one frame), `captions-dark`, `captions-light` (captions.json), and `camera-layout-exit` (project now has a hiding voiceover at 5000 to 5600 ms, plus its `stage.json`). Every other case gives the same json as before. `zoom-manual` scale: 2.2 at 3200, 1.268 at 3600, 1.007 at 4000, 1 on the block's end at 4200 (was 2.2 there and 1.007 at 5400).
+- **How to verify:** `verify.ps1`: `ConformanceTests` and `FrameFixtureTests` fail on the cases above until the port is in. In the app: add a zoom in the middle of a recording and scrub out of its right edge: the frame is at 1x on the edge and stays still after it. Same for a loupe, a voiceover with "Hide recording" (the camera is back on its end), and a caption block followed by a gap (the caption is gone on its end).
+- **Open VERIFY items:** none beyond the above.
+- **Risks / unsure:** the zoom release length comes from the spring, so it changes with the motion preset (it is measured, not a constant). Windows must measure it with its own `StepClampedSpring` at the same `dt` to match.
+
 ## 2026-11-12, Camera layout segments animate out before their end
 
 ### Writer

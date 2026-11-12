@@ -442,32 +442,32 @@
     "words" : [
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.1858649425635365,
         "text" : "Native"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.1858649425635365,
         "text" : "Screen"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.1858649425635365,
         "text" : "renders"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.1858649425635365,
         "text" : "the"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.1858649425635365,
         "text" : "same"
       },
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.1858649425635365,
         "text" : "frame"
       }
     ]
@@ -652,22 +652,22 @@
     "words" : [
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.971255759554278,
         "text" : "on"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.971255759554278,
         "text" : "every"
       },
       {
         "isSpokenNow" : false,
-        "opacity" : 1,
+        "opacity" : 0.971255759554278,
         "text" : "platform"
       },
       {
         "isSpokenNow" : true,
-        "opacity" : 1,
+        "opacity" : 0.971255759554278,
         "text" : "today"
       }
     ]
@@ -675,26 +675,7 @@
   {
     "sourceMs" : 4800,
     "words" : [
-      {
-        "isSpokenNow" : false,
-        "opacity" : 0.5390565868621443,
-        "text" : "on"
-      },
-      {
-        "isSpokenNow" : false,
-        "opacity" : 0.5390565868621443,
-        "text" : "every"
-      },
-      {
-        "isSpokenNow" : false,
-        "opacity" : 0.5390565868621443,
-        "text" : "platform"
-      },
-      {
-        "isSpokenNow" : true,
-        "opacity" : 0.5390565868621443,
-        "text" : "today"
-      }
+
     ]
   },
   {

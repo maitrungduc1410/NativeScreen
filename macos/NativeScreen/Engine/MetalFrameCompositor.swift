@@ -1810,10 +1810,11 @@ public final class MetalFrameCompositor {
     }
 
     /// Placement from the timeline's layout segments, with transitions.
-    /// A change animates over `stageTransitionMs` after it happens (entering a layout segment, silence or voiceover
-    /// hides), except leaving a layout segment: that animates over the segment's last `stageTransitionMs`, so the
-    /// layout is back to normal exactly when the playhead leaves the segment, mirroring how it enters at the start.
-    /// A segment shorter than two transitions splits its length between the way in and the way out.
+    /// A change animates over `stageTransitionMs` after it happens, except leaving a timeline item that changes the
+    /// stage (a camera layout segment, or a voiceover that hides the recording): that animates over the item's last
+    /// `stageTransitionMs`, so nothing of it is left once the playhead leaves it, mirroring how it enters at the start.
+    /// An item shorter than two transitions splits its length between the way in and the way out. Hiding the camera
+    /// during silence has no timeline item and keeps animating after the change.
     private static func timelineStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
@@ -1843,44 +1844,64 @@ public final class MetalFrameCompositor {
                         lo = mid
                     }
                 }
-                // Leaving a segment already animated before its end (step 2).
-                let leftSegment = session.activeCameraLayoutSegment(atSourceMs: lo)
-                let isAnimatedExit = (leftSegment.map { Self.animatesExit(session: session, segment: $0) } ?? false)
-                    && session.activeCameraLayoutSegment(atSourceMs: hi) == nil
+                // Leaving an item already animated before its end (step 2).
+                let isAnimatedExit = Self.exitingStageItem(session: session, at: lo).map { $0.end <= hi + 0.01 } ?? false
                 if !isAnimatedExit {
-                    var duration = Self.stageTransitionMs
-                    if let entered = session.activeCameraLayoutSegment(atSourceMs: hi), abs(entered.sourceStartMs - hi) <= 2.0 {
-                        duration = Self.segmentTransitionMs(entered)
-                    }
+                    let duration = Self.enteredStageItem(session: session, at: hi).map(Self.itemTransitionMs) ?? Self.stageTransitionMs
                     let previous = raw(Self.stageKey(session: session, at: lo))
                     stage = StageLayout.blend(previous, stage, StageLayout.ease(CGFloat((sourceTimeMs - hi) / duration)))
                 }
             }
         }
 
-        // 2. Blend out toward the layout after a segment that ends just ahead of the playhead.
-        if let segment = session.activeCameraLayoutSegment(atSourceMs: sourceTimeMs),
-           Self.animatesExit(session: session, segment: segment) {
-            let duration = Self.segmentTransitionMs(segment)
-            let exitStart = segment.sourceEndMs - duration
+        // 2. Blend out toward the layout after an item that ends just ahead of the playhead.
+        if let item = Self.exitingStageItem(session: session, at: sourceTimeMs) {
+            let duration = Self.itemTransitionMs(item)
+            let exitStart = item.end - duration
             if sourceTimeMs > exitStart {
-                let next = raw(Self.stageKey(session: session, at: segment.sourceEndMs + 0.5))
+                let next = raw(Self.stageKey(session: session, at: item.end + 0.5))
                 stage = StageLayout.blend(stage, next, StageLayout.ease(CGFloat((sourceTimeMs - exitStart) / duration)))
             }
         }
         return stage
     }
 
-    /// Transition length at either end of a layout segment.
-    private static func segmentTransitionMs(_ segment: CameraLayoutSegment) -> Double {
-        min(Self.stageTransitionMs, max(1.0, (segment.sourceEndMs - segment.sourceStartMs) * 0.5))
+    /// Transition length at either end of a timeline item.
+    private static func itemTransitionMs(_ item: (start: Double, end: Double)) -> Double {
+        min(Self.stageTransitionMs, max(1.0, (item.end - item.start) * 0.5))
     }
 
-    /// Whether leaving `segment` animates inside it: not when the next segment starts right at its end (that one
-    /// animates in), and not at the end of the recording (there is nothing after it).
-    private static func animatesExit(session: ProjectSession, segment: CameraLayoutSegment) -> Bool {
-        segment.sourceEndMs < session.metadata.durationMs - 1.0
-            && session.activeCameraLayoutSegment(atSourceMs: segment.sourceEndMs + 0.5) == nil
+    /// The item active at `t` whose way out animates inside it (the one ending first if several do). Not when an item
+    /// of the same kind takes over right at its end (that one animates in), and not at the end of the recording.
+    private static func exitingStageItem(session: ProjectSession, at t: Double) -> (start: Double, end: Double)? {
+        let recordingEndMs = session.metadata.durationMs - 1.0
+        var found: (start: Double, end: Double)?
+        func consider(_ start: Double, _ end: Double) {
+            if end < recordingEndMs, found.map({ end < $0.end }) ?? true {
+                found = (start, end)
+            }
+        }
+        if let segment = session.activeCameraLayoutSegment(atSourceMs: t),
+           session.activeCameraLayoutSegment(atSourceMs: segment.sourceEndMs + 0.5) == nil {
+            consider(segment.sourceStartMs, segment.sourceEndMs)
+        }
+        for voiceover in session.activeVoiceovers(atSourceMs: t) where voiceover.hideRecording {
+            if !session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: voiceover.sourceEndMs + 0.5) {
+                consider(voiceover.sourceStartMs, voiceover.sourceEndMs)
+            }
+        }
+        return found
+    }
+
+    /// The item that starts at `t` (within 2 ms), to shorten the way in of a short one.
+    private static func enteredStageItem(session: ProjectSession, at t: Double) -> (start: Double, end: Double)? {
+        if let segment = session.activeCameraLayoutSegment(atSourceMs: t), abs(segment.sourceStartMs - t) <= 2.0 {
+            return (segment.sourceStartMs, segment.sourceEndMs)
+        }
+        if let voiceover = session.activeVoiceovers(atSourceMs: t).first(where: { $0.hideRecording && abs($0.sourceStartMs - t) <= 2.0 }) {
+            return (voiceover.sourceStartMs, voiceover.sourceEndMs)
+        }
+        return nil
     }
 
     // Live preview spring state (edits glide; playback and scrubbing follow the timeline exactly).

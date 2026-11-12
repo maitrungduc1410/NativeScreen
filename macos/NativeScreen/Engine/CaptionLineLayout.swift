@@ -18,7 +18,22 @@ enum CaptionLineLayout {
         let endMs: Double
         let words: [Word]
         let style: CaptionStyle
+        /// When the line starts fading out: `exitLeadMs` before its end, so nothing is left once the playhead leaves
+        /// the block. A line followed right away by the next one keeps its end (the box moves on instead).
+        var fadeOutStartMs: Double
+
+        init(blockId: String, startMs: Double, endMs: Double, words: [Word], style: CaptionStyle) {
+            self.blockId = blockId
+            self.startMs = startMs
+            self.endMs = endMs
+            self.words = words
+            self.style = style
+            self.fadeOutStartMs = endMs
+        }
     }
+
+    /// Longer than the springs take to fade from 1 to 0 (about 108 ms), so a line is gone on its block's end.
+    private static let exitLeadMs = 150.0
 
     struct DrawnWord: Equatable {
         let text: String
@@ -130,10 +145,17 @@ enum CaptionLineLayout {
         }
         let wordsById = Dictionary(config.segments.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let result: [(track: CaptionTrack, lines: [Line])] = config.captionTracks.filter { !$0.isHidden }.map { track in
-            let lines = config.captionBlocks
+            var lines = config.captionBlocks
                 .filter { $0.trackId == track.id }
                 .sorted { $0.sourceStartMs < $1.sourceStartMs }
                 .compactMap { makeLine(block: $0, style: $0.styleOverride ?? track.style, wordsById: wordsById) }
+            for i in lines.indices {
+                let handsOver = i + 1 < lines.count && lines[i + 1].startMs - lines[i].endMs <= 1.0
+                if !handsOver {
+                    let lead = min(exitLeadMs, (lines[i].endMs - lines[i].startMs) * 0.5)
+                    lines[i].fadeOutStartMs = lines[i].endMs - lead
+                }
+            }
             return (track, lines)
         }
         cachedLines.append((key, result))
@@ -307,7 +329,7 @@ enum CaptionLineLayout {
     }
 
     private static func targetWordOpacity(_ geo: LineGeometry, index: Int, at timeMs: Double) -> Double {
-        guard progress(timeMs, geo.line.startMs, geo.line.endMs) == 0 else { return 0.0 }
+        guard progress(timeMs, geo.line.startMs, geo.line.fadeOutStartMs) == 0 else { return 0.0 }
         if geo.line.style.wordsReveal == .wordByWord {
             return index == presentWordCount(geo.line, at: timeMs) - 1 ? 1.0 : 0.0
         }
@@ -377,6 +399,8 @@ enum CaptionLineLayout {
     private static func frame(lines: [Line], at timeMs: Double, stageSize: CGSize) -> TrackFrame? {
         guard !lines.isEmpty else { return nil }
 
+        // Outside every block nothing is drawn: a caption shows only while the playhead is on its block.
+        guard lines.contains(where: { $0.startMs <= timeMs && timeMs <= $0.endMs }) else { return nil }
         let nearby = lines.indices.filter {
             lines[$0].startMs - drawnLineWindowMs <= timeMs && lines[$0].endMs + drawnLineWindowMs >= timeMs
         }
@@ -400,7 +424,7 @@ enum CaptionLineLayout {
             let index = nearestLineIndex(lines, at: t)
             let geo = geometry(index)
             let content = targetContentRect(geo, at: t)
-            let opacity: Double = progress(t, geo.line.startMs, geo.line.endMs) == 0 ? 1.0 : 0.0
+            let opacity: Double = progress(t, geo.line.startMs, geo.line.fadeOutStartMs) == 0 ? 1.0 : 0.0
             return [content.minX, content.minY, content.width, content.height, opacity]
         }
 

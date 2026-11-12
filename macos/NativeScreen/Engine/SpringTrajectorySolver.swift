@@ -505,6 +505,7 @@ public struct SpringTrajectorySolver: Sendable {
         var loupeVelPresence = 0.0
         var lastActiveLoupeCfg = LoupeConfig()
         var prevCenter01 = Point01.center
+        var prevSolvedScale = 1.0
 
         let precomputedLoupeSpring = PrecomputedSpring(
             SpringConfig(
@@ -516,6 +517,17 @@ public struct SpringTrajectorySolver: Sendable {
 
         let zoomCount = activeZooms.count
         var zoomCursorIdx = 0
+
+        // A zoom is over when the playhead leaves its block: zooming out runs inside the block's last `releaseMs`
+        // and lands exactly on the block's end, as zooming in starts on its first frame. A zoom whose next block
+        // starts right at its end hands over to that block instead (it animates in). Instant zooms snap at both ends.
+        let zoomOutSettleMs = Self.zoomOutSettleMs(spring: precomputedCamSpring, dt: dt)
+        let zoomReleaseMs: [Double] = activeZooms.indices.map { i in
+            let zoom = activeZooms[i]
+            let handsOver = i + 1 < zoomCount && activeZooms[i + 1].sourceStartMs - zoom.sourceEndMs <= 1.0
+            if handsOver || zoom.instantAnimation { return 0.0 }
+            return min(zoomOutSettleMs, max(0.0, (zoom.sourceEndMs - zoom.sourceStartMs) * 0.5))
+        }
         let avoidEmptyBounds = document.motion.avoidEmptyBoundsWhenZooming
 
         for step in 0..<totalSteps {
@@ -541,7 +553,24 @@ public struct SpringTrajectorySolver: Sendable {
             var loupeCfg = lastActiveLoupeCfg
             var isInstantZoomNow = false
 
-            if let zIdx = activeZoomIdx {
+            // How far the zoom is through its way out (0 outside the release window, 1 on the block's end).
+            var releaseWeight = 0.0
+            var isReleasing = false
+            if let zIdx = activeZoomIdx, zoomReleaseMs[zIdx] > 0.0 {
+                let releaseStart = activeZooms[zIdx].sourceEndMs - zoomReleaseMs[zIdx]
+                if tMs > releaseStart {
+                    isReleasing = true
+                    let u = min(1.0, (tMs - releaseStart) / zoomReleaseMs[zIdx])
+                    releaseWeight = u * u * (3.0 - 2.0 * u)
+                    if activeZooms[zIdx].presentation == .loupe {
+                        loupeCfg = activeZooms[zIdx].loupe
+                    }
+                }
+            }
+            // Between blocks nothing of a zoom is left: the camera rests at full frame and the loupe is gone.
+            let isAfterReleasedZoom = activeZoomIdx == nil && zoomCursorIdx > 0
+
+            if let zIdx = activeZoomIdx, !isReleasing {
                 let zoom = activeZooms[zIdx]
                 isInstantZoomNow = zoom.instantAnimation
                 isLoupeActiveNow = (zoom.presentation == .loupe)
@@ -613,7 +642,14 @@ public struct SpringTrajectorySolver: Sendable {
             }
 
             // Step the 3 screen-rect components `(rectX, rectY, rectW)` with the overshoot-clamped spring
-            if isInstantZoomNow && !isLoupeActiveNow {
+            if isAfterReleasedZoom {
+                rectX = 0.0
+                rectY = 0.0
+                rectW = 1.0
+                rectVelX = 0.0
+                rectVelY = 0.0
+                rectVelW = 0.0
+            } else if isInstantZoomNow && !isLoupeActiveNow {
                 rectX = targetRectX
                 rectY = targetRectY
                 rectW = targetRectW
@@ -646,7 +682,27 @@ public struct SpringTrajectorySolver: Sendable {
 
             // Only integrate the 4 Loupe springs if at least one Loupe zoom exists in the project!
             if hasAnyLoupeZoom {
-                if isInstantZoomNow && isLoupeActiveNow {
+                if isAfterReleasedZoom {
+                    loupeScaleVal = 1.0
+                    loupePresenceVal = 0.0
+                    loupeVelScale = 0.0
+                    loupeVelPresence = 0.0
+                    // Only the loupe center moves here, so a coming loupe appears on the cursor.
+                    (loupeCenterX, loupeVelX) = Self.stepClampedSpring(
+                        current: loupeCenterX,
+                        velocity: loupeVelX,
+                        target: targetLoupeFocusX,
+                        spring: precomputedLoupeSpring,
+                        dt: dt
+                    )
+                    (loupeCenterY, loupeVelY) = Self.stepClampedSpring(
+                        current: loupeCenterY,
+                        velocity: loupeVelY,
+                        target: targetLoupeFocusY,
+                        spring: precomputedLoupeSpring,
+                        dt: dt
+                    )
+                } else if isInstantZoomNow && isLoupeActiveNow {
                     loupeCenterX = targetLoupeFocusX
                     loupeCenterY = targetLoupeFocusY
                     loupeScaleVal = targetLoupeScale
@@ -687,8 +743,15 @@ public struct SpringTrajectorySolver: Sendable {
                 }
             }
 
-            let isLoupeVisible = (loupePresenceVal > 0.005)
-            let solvedScale = max(1.0, rectW)
+            // On the way out, pull the springs' result onto full frame so it is exact on the block's end.
+            let keep = 1.0 - releaseWeight
+            let outRectX = rectX * keep
+            let outRectY = rectY * keep
+            let outRectW = 1.0 + (rectW - 1.0) * keep
+            let outLoupePresence = loupePresenceVal * keep
+
+            let isLoupeVisible = (outLoupePresence > 0.005)
+            let solvedScale = max(1.0, outRectW)
             let solvedCenter01: Point01
             if isLoupeVisible {
                 solvedCenter01 = Point01(
@@ -699,8 +762,8 @@ public struct SpringTrajectorySolver: Sendable {
                 // Recover exact camera focus point `center01` from the interpolated screen rect `(rectX, rectY, rectW)`
                 // even when `solvedScale == 1.0` so `rectX`/`rectY` settling after `rectW` reaches `1.0` is preserved smoothly
                 // without an artificial snap in `center01`!
-                var cx = (0.5 - rectX) / solvedScale
-                var cy = (0.5 - rectY) / solvedScale
+                var cx = (0.5 - outRectX) / solvedScale
+                var cy = (0.5 - outRectY) / solvedScale
                 if document.motion.avoidEmptyBoundsWhenZooming && solvedScale > 1.0001 {
                     let halfSpan = 0.5 / solvedScale
                     cx = max(halfSpan, min(1.0 - halfSpan, cx))
@@ -712,15 +775,17 @@ public struct SpringTrajectorySolver: Sendable {
             let centerVelX = (solvedCenter01.x - prevCenter01.x) / dt
             let centerVelY = (solvedCenter01.y - prevCenter01.y) / dt
             prevCenter01 = solvedCenter01
+            let scaleVelocity = releaseWeight > 0.0 || isAfterReleasedZoom ? (solvedScale - prevSolvedScale) / dt : rectVelW
+            prevSolvedScale = solvedScale
 
             builtCamera.append(
                 CameraFrameState(
                     center01: solvedCenter01,
                     scale: solvedScale,
                     velocity01PerSec: Point01(x: centerVelX, y: centerVelY),
-                    scaleVelocityPerSec: rectVelW,
+                    scaleVelocityPerSec: scaleVelocity,
                     isLoupeMode: isLoupeVisible,
-                    loupePresence01: min(1.0, max(0.0, loupePresenceVal)),
+                    loupePresence01: min(1.0, max(0.0, outLoupePresence)),
                     loupeScale: max(1.0, loupeScaleVal),
                     loupeConfig: loupeCfg
                 )
@@ -731,6 +796,19 @@ public struct SpringTrajectorySolver: Sendable {
     }
 
     // MARK: - Spring Sanitization & the Exact Overshoot-Clamped Spring Integrator
+
+    /// How long the camera spring takes to zoom out from 2x to within 2% of full frame (at most 1.5 s).
+    /// Zooming out starts this long before a zoom block ends.
+    private static func zoomOutSettleMs(spring: PrecomputedSpring, dt: Double) -> Double {
+        var value = 2.0
+        var velocity = 0.0
+        var elapsedMs = 0.0
+        while abs(value - 1.0) > 0.02 && elapsedMs < 1500.0 {
+            (value, velocity) = stepClampedSpring(current: value, velocity: velocity, target: 1.0, spring: spring, dt: dt)
+            elapsedMs += dt * 1000.0
+        }
+        return elapsedMs
+    }
 
     /// Builds `[mouseDown ... mouseUp]` intervals so that during active drags (such as text selection / slider dragging),
     /// the cursor spring is boosted to stay 100% locked with the screen highlight.
