@@ -102,6 +102,11 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **How to verify:** `verify.ps1` builds with 0 warnings and every conformance case passes. In the app, scrub out of a zoom or a `Fullscreen camera` segment: the zoom out or the layout change starts when the playhead leaves the segment.
 - **Open VERIFY items:** the Windows changes above were made without a Windows build.
 
+### Verifier
+- **Result:** PASS for build and tests; not scrubbed in the running app.
+- **verify.ps1:** Debug x64 solution build, 0 warnings. Core 330, Rendering 34, Media 29 passed (the 3 `camera-layout-exit` cases are gone with the case).
+- **Changes made:** none. The local ADR-84 port (solver, stage, captions), made but never pushed, was discarded. `StageLayoutEngine.cs`, `SpringTrajectorySolver.cs`, `CaptionLineLayout.cs`, the session files and `FrameCompositor.Compose.cs` are byte for byte their state before `d70210c`; `PreviewOverlay.cs` differs from it only by the translated mask hint.
+
 ## 2026-11-12, Quick dock: camera layouts behind one button
 
 ### Writer
