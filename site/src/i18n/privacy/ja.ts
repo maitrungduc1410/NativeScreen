@@ -70,5 +70,5 @@ export default {
   changesP: "このポリシーを変更した場合は、新しい日付とともにこのページで新しい版を公開します。すべての変更の履歴は<a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">リポジトリ</a>で公開されています。",
 
   contactH: "お問い合わせ",
-  contactP: "プライバシーに関するご質問は、<a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> へメールするか、<a href=\"{repo}/issues\">GitHub</a> で issue を作成してください。",
+  contactP: "プライバシーに関するご質問は、<a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> へメールするか、<a href=\"{repo}/issues\">GitHub</a> で issue を作成してください。",
 };

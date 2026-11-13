@@ -120,24 +120,45 @@ public final class MetalFrameCompositor {
     public func composeFrame(
         sourceVideoFrame: CIImage?,
         sourceTimeMs: Double,
+        timelineTimeMs: Double? = nil,
         session: ProjectSession,
         outputSize: CGSize,
         includeShortcutOverlay: Bool = false,
         webcamVideoFrame: CIImage? = nil,
         isRealtimePreview: Bool = false
     ) -> CIImage {
+        let timelineMs = timelineTimeMs ?? session.timeMapper.timelineTime(forSourceMs: sourceTimeMs) ?? 0
+        return composeScene(sourceVideoFrame: sourceVideoFrame, sourceTimeMs: sourceTimeMs,
+                            timelineMs: timelineMs, session: session, outputSize: outputSize,
+                            includeShortcutOverlay: includeShortcutOverlay, webcamVideoFrame: webcamVideoFrame,
+                            isRealtimePreview: isRealtimePreview)
+    }
+
+    private func composeScene(
+        sourceVideoFrame: CIImage?, sourceTimeMs: Double, timelineMs: Double,
+        session: ProjectSession, outputSize: CGSize, includeShortcutOverlay: Bool,
+        webcamVideoFrame: CIImage?, isRealtimePreview: Bool,
+        magnifiedSceneTransform: CGAffineTransform? = nil, lensSamplingRect: CGRect? = nil,
+        fixedStage: StageLayout? = nil, fixedMaskedScreen: CIImage? = nil, fixedBackground: CIImage? = nil
+    ) -> CIImage {
         let doc = session.document
         let canvasRect = CGRect(origin: .zero, size: outputSize)
-        let eval = session.trajectorySolver.evaluate(atSourceMs: sourceTimeMs)
-        let cursorState = eval.cursor
-        let cameraState = session.evaluatedCamera(atSourceMs: sourceTimeMs)
+        let eval = session.trajectorySolver.evaluate(atTimelineMs: timelineMs)
+        var cursorState = eval.cursor
+        let cameraState = session.evaluatedCamera(atSourceMs: sourceTimeMs, timelineMs: timelineMs)
 
         // --- PASS 1: Cached Background Layer (Mesh / Wallpaper / Gradient / Solid + Crossfade + Blur) ---
-        var composite = renderBackgroundLayer(doc: doc, session: session, canvasRect: canvasRect)
+        let backgroundLayer = fixedBackground ?? renderBackgroundLayer(doc: doc, session: session, canvasRect: canvasRect)
+        var composite = backgroundLayer
+        if let magnifiedSceneTransform { composite = composite.transformed(by: magnifiedSceneTransform) }
 
         // --- PASS 2: Cached Source Screen Frame + Atomic Multi-Track Blur & Spotlight Masks ---
         let activeMasks = session.activeMasks(atSourceMs: sourceTimeMs)
         let crop01 = doc.canvas.cropRect01
+        cursorState.position01 = MotionGeometry.cropped(cursorState.position01, by: crop01)
+        cursorState.clickWaves = cursorState.clickWaves.map {
+            SpringTrajectorySolver.ClickWave(ageMs: $0.ageMs, position01: MotionGeometry.cropped($0.position01, by: crop01))
+        }
         let hasAnimatedMaskKeyframes = activeMasks.contains { $0.keyframes.count > 1 }
         let maskCacheKey = MaskedScreenCacheKey(
             framePtr: sourceVideoFrame.map { ObjectIdentifier($0) },
@@ -149,7 +170,9 @@ public final class MetalFrameCompositor {
         // A camera-only picture changes every frame and its styling (background, grade) is not in the cache key.
         let isCameraOnly = session.isCameraOnlyRecording
         let maskedScreen: CIImage
-        if !isCameraOnly, maskCacheKey == lastMaskedScreenKey, let cached = cachedMaskedScreenImage {
+        if let fixedMaskedScreen {
+            maskedScreen = fixedMaskedScreen
+        } else if !isCameraOnly, maskCacheKey == lastMaskedScreenKey, let cached = cachedMaskedScreenImage {
             maskedScreen = cached
         } else {
             var rawScreen = (sourceVideoFrame ?? fallbackSyntheticScreenImage(size: CGSize(
@@ -187,24 +210,24 @@ public final class MetalFrameCompositor {
         // --- PASS 3: Screen Rounded Corners, Device Mockup Bezel, Drop Shadow & Camera Zoom/Pan Transform ---
         // Screen and camera placement, including timeline transitions (identical in preview and export) and, in the
         // live preview only, a spring toward the new placement when a setting is edited.
-        let targetStage = Self.resolvedStageLayout(
+        let targetStage = fixedStage ?? Self.resolvedStageLayout(
             session: session,
             sourceTimeMs: sourceTimeMs,
             canvasRect: canvasRect,
             screenSourceSize: maskedScreen.extent.size,
             zoomScale: cameraState.scale
         )
-        let stage = isRealtimePreview
+        let stage = fixedStage ?? (isRealtimePreview
             ? animatedPreviewStage(target: targetStage, sourceTimeMs: sourceTimeMs, canvasSize: outputSize)
-            : targetStage
+            : targetStage)
         let screenFrameRect = stage.screenRect
 
         // The zoom is applied while the screen is drawn, not to the finished layer: enlarging a layer already rendered
         // at canvas size would throw away the detail the recording has (ADR-67).
         let zoomScale = CGFloat(max(1.0, cameraState.scale))
         let hasCenterOffset = hypot(cameraState.center01.x - 0.5, cameraState.center01.y - 0.5) > 0.0005
-        let cameraTransform: CGAffineTransform? = {
-            guard !cameraState.isLoupeMode && (zoomScale > 1.0005 || hasCenterOffset) else { return nil }
+        let baseCameraTransform: CGAffineTransform? = {
+            guard zoomScale > 1.0005 || hasCenterOffset else { return nil }
             let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
             let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
             let zoomInterp01 = min(1.0, max(0.0, (zoomScale - 1.0) / 0.5))
@@ -216,10 +239,12 @@ public final class MetalFrameCompositor {
                 .scaledBy(x: zoomScale, y: zoomScale)
                 .translatedBy(x: -focusX, y: -focusY)
         }()
+        let cameraTransform = magnifiedSceneTransform.map { (baseCameraTransform ?? .identity).concatenating($0) }
+            ?? baseCameraTransform
         let drawnScreenRect = cameraTransform.map { screenFrameRect.applying($0) } ?? screenFrameRect
         let drawScale = drawnScreenRect.width / max(1.0, screenFrameRect.width)
         // Small margin for motion blur, so downstream filters never evaluate the oversized zoomed layer outside the canvas.
-        let zoomedMargin = canvasRect.insetBy(dx: -24, dy: -24)
+        let zoomedMargin = lensSamplingRect ?? canvasRect.insetBy(dx: -24, dy: -24)
         func zoomed(_ layer: CIImage) -> CIImage {
             cameraTransform.map { layer.transformed(by: $0) } ?? layer
         }
@@ -349,9 +374,7 @@ public final class MetalFrameCompositor {
         }
 
         // --- PASS 4: Cursor Sprite & Click Ripple in Screen Space ---
-        let activeSlice = session.document.timeline.slices.first {
-            sourceTimeMs >= $0.sourceStartMs && sourceTimeMs <= $0.sourceEndMs
-        } ?? session.currentActiveSlice
+        let activeSlice = session.timeMapper.sourceTime(forTimelineMs: timelineMs).slice
         let hideCursorInSlice = activeSlice?.hideCursor ?? false
         // No cursor recorded (camera-only recordings, projects made from a video): nothing to draw.
         if session.hasRecordedCursor && !hideCursorInSlice && cursorState.opacity > 0.01 {
@@ -381,19 +404,20 @@ public final class MetalFrameCompositor {
             && !session.isPlaying
             && session.hoverSkimTimelineMs == nil
             && session.playheadTimelineMs >= session.timeMapper.totalTimelineDurationMs - 16.7
-        if !isPausedAtTimelineEnd
+        let previousTimelineMs = max(0, timelineMs - 16.67)
+        if magnifiedSceneTransform == nil && !isPausedAtTimelineEnd
             && !isInInstantSnapWindow
-            && !cameraState.isLoupeMode
             && doc.motion.motionBlurIntensity > 0.02
-            && sourceTimeMs > 8.0 {
-            let prevSourceMs = max(0.0, sourceTimeMs - 16.67)
-            let prevCam = session.evaluatedCamera(atSourceMs: prevSourceMs)
+            && timelineMs > 8.0
+            && session.trajectorySolver.isSameRun(timelineMs, previousTimelineMs) {
+            let prevSourceMs = session.timeMapper.sourceTime(forTimelineMs: previousTimelineMs).sourceMs
+            let prevCam = session.evaluatedCamera(atSourceMs: prevSourceMs, timelineMs: previousTimelineMs)
             let blurStrength = CGFloat(min(1.0, max(0.0, doc.motion.motionBlurIntensity)))
 
             func zoomedScreenRectInCanvas(for cam: SpringTrajectorySolver.CameraFrameState) -> CGRect {
                 let s = CGFloat(max(1.0, cam.scale))
                 let hasOffset = hypot(cam.center01.x - 0.5, cam.center01.y - 0.5) > 0.0005
-                guard !cam.isLoupeMode && (s > 1.0005 || hasOffset) else {
+                guard s > 1.0005 || hasOffset else {
                     return screenFrameRect
                 }
                 let fx = screenFrameRect.minX + CGFloat(cam.center01.x) * screenFrameRect.width
@@ -425,23 +449,43 @@ public final class MetalFrameCompositor {
             )
         }
 
+        let sceneRect = lensSamplingRect ?? canvasRect
         composite = positionedScreen
-            .cropped(to: canvasRect)
+            .cropped(to: sceneRect)
             .composited(over: composite)
-            .cropped(to: canvasRect)
+            .cropped(to: sceneRect)
+
+        // The second scene is a bounded, source-resolution lens patch, not an enlarged canvas texture.
+        if magnifiedSceneTransform != nil { return composite }
 
         // --- PASS 5B: Magnifier lens (loupe zoom) ---
         // Drawn over the whole scene (screen + background) so the lens and its shadow work over the wallpaper too.
         if cameraState.loupePresence01 > 0.005 && cameraState.loupeScale > 1.002 {
-            let focusX = screenFrameRect.minX + CGFloat(cameraState.center01.x) * screenFrameRect.width
-            let focusY = screenFrameRect.minY + CGFloat(1.0 - cameraState.center01.y) * screenFrameRect.height
+            let focusX = drawnScreenRect.minX + CGFloat(cameraState.loupeCenter01.x) * drawnScreenRect.width
+            let focusY = drawnScreenRect.minY + CGFloat(1.0 - cameraState.loupeCenter01.y) * drawnScreenRect.height
             let maxScreenDim = max(screenFrameRect.width, screenFrameRect.height)
             let loupeRadius = max(48.0, maxScreenDim * CGFloat(cameraState.loupeConfig.radius01))
+            let center = CGPoint(x: focusX, y: focusY)
+            let magnification = CGFloat(cameraState.loupeScale)
+            let lensTransform = CGAffineTransform(translationX: focusX, y: focusY)
+                .scaledBy(x: magnification, y: magnification)
+                .translatedBy(x: -focusX, y: -focusY)
+            // Rim bend and RGB splitting can reach 1.66 radii. Integral bounds keep texel centers aligned.
+            let samplingRect = CGRect(x: focusX - loupeRadius * 1.7 - 2, y: focusY - loupeRadius * 1.7 - 2,
+                                      width: loupeRadius * 3.4 + 4, height: loupeRadius * 3.4 + 4).integral
+            let sharpContent = composeScene(
+                sourceVideoFrame: sourceVideoFrame, sourceTimeMs: sourceTimeMs, timelineMs: timelineMs,
+                session: session, outputSize: outputSize, includeShortcutOverlay: false,
+                webcamVideoFrame: nil, isRealtimePreview: isRealtimePreview,
+                magnifiedSceneTransform: lensTransform, lensSamplingRect: samplingRect, fixedStage: stage,
+                fixedMaskedScreen: maskedScreen, fixedBackground: backgroundLayer
+            )
 
             composite = EffectKernels.applyMagnifierLens(
                 to: composite,
+                magnifiedContent: sharpContent,
                 canvasRect: canvasRect,
-                centerPx: CGPoint(x: focusX, y: focusY),
+                centerPx: center,
                 radiusPx: loupeRadius,
                 zoomScale: CGFloat(cameraState.loupeScale),
                 rimRatio: CGFloat(max(0.18, cameraState.loupeConfig.bevelRatio)),
@@ -1065,10 +1109,13 @@ public final class MetalFrameCompositor {
             break
         case .circle:
             if let progress = cursorState.activeClickProgress {
+                let anchor = cursorState.clickWaves.last?.position01 ?? cursorState.position01
+                let clickX = screenFrameRect.minX + CGFloat(anchor.x) * screenFrameRect.width
+                let clickY = screenFrameRect.minY + CGFloat(1 - anchor.y) * screenFrameRect.height
                 let radius = max(4.0, 46.0 * canvasScale * CGFloat(cursorConfig.scale) * CGFloat(progress))
                 let alpha = CGFloat(max(0.0, (1.0 - progress) * 0.72 * cursorState.opacity))
                 if let circle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                    "inputExtent": CIVector(cgRect: CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2)),
+                    "inputExtent": CIVector(cgRect: CGRect(x: clickX - radius, y: clickY - radius, width: radius * 2, height: radius * 2)),
                     "inputRadius": radius,
                     "inputColor": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha * 0.65)
                 ])?.outputImage {

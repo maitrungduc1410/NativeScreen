@@ -1395,6 +1395,7 @@ public final class HardwareVideoExporter {
                         let composited = compositor.composeFrame(
                             sourceVideoFrame: frames.screen,
                             sourceTimeMs: frameSourceMs,
+                            timelineTimeMs: Double(frameIdx) * frameStepMs,
                             session: session,
                             outputSize: outputSize,
                             includeShortcutOverlay: true,
@@ -1639,6 +1640,7 @@ public final class HardwareVideoExporter {
                     compositor.composeFrame(
                         sourceVideoFrame: frames.screen,
                         sourceTimeMs: sourceMs,
+                        timelineTimeMs: timelineMs,
                         session: session,
                         outputSize: outputSize,
                         includeShortcutOverlay: true,
@@ -1981,6 +1983,7 @@ public final class HardwareVideoExporter {
                     compositor.composeFrame(
                         sourceVideoFrame: frames.screen,
                         sourceTimeMs: sourceMs,
+                        timelineTimeMs: timelineMs,
                         session: session,
                         outputSize: outputSize,
                         includeShortcutOverlay: true,

@@ -70,5 +70,5 @@ export default {
   changesP: "이 방침이 변경되면 새 버전을 새 날짜와 함께 이 페이지에 게시합니다. 모든 변경 기록은 <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">저장소</a>에 공개되어 있습니다.",
 
   contactH: "문의",
-  contactP: "개인정보 관련 문의: <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a>로 이메일을 보내거나 <a href=\"{repo}/issues\">GitHub</a>에 이슈를 등록하세요.",
+  contactP: "개인정보 관련 문의: <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a>로 이메일을 보내거나 <a href=\"{repo}/issues\">GitHub</a>에 이슈를 등록하세요.",
 };

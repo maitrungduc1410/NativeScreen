@@ -49,6 +49,7 @@ public struct SpringTrajectorySolver: Sendable {
         public var loupePresence01: Double
         public var loupeScale: Double
         public var loupeConfig: LoupeConfig
+        public var loupeCenter01: Point01 = .center
     }
 
     /// A `MovesGroup`:
@@ -153,18 +154,33 @@ public struct SpringTrajectorySolver: Sendable {
     private let durationMs: Double
     public let cursorStates: [CursorFrameState]
     public let cameraStates: [CameraFrameState]
+    /// The planned smoothed cursor (ADR-87), sampled per ms in points. `nil` when smoothing is off.
+    public let plannedCursor: PlannedCursorPath?
+    private let pointSize: MotionPointSize
 
     public init(
         durationMs: Double,
         cursorEvents: [CursorSampleEvent],
         clickEvents: [ClickEvent],
         document: ProjectDocument,
-        reusingCursorStates: [CursorFrameState]? = nil
+        pointSize: MotionPointSize = .reference,
+        reusingCursorStates: [CursorFrameState]? = nil,
+        reusingPlannedCursor: PlannedCursorPath? = nil,
+        startsAtCut: Bool = false,
+        loopTarget01: Point01? = nil,
+        telemetryUsesPlaybackTime: Bool = false
     ) {
         let totalDuration = max(100.0, durationMs)
         self.durationMs = totalDuration
         let totalSteps = max(2, Int(ceil(totalDuration / stepMs)) + 1)
         let dt = stepMs / 1000.0
+        self.pointSize = pointSize
+        let smooth = document.cursor.smoothMovementEnabled
+        let cursorEvents = smooth
+            ? CursorTelemetry.insertingClicks(clickEvents, into: cursorEvents, holdPauses: !telemetryUsesPlaybackTime,
+                                            pointSize: pointSize)
+            : cursorEvents
+        let crop = document.canvas.cropRect01
 
         // Upgrade any underdamped spring (`zeta < 0.72` or legacy `damping < 35`) automatically to the overdamped presets!
         let cursorSpring = Self.sanitizedCursorSpring(document.cursor.spring)
@@ -173,42 +189,18 @@ public struct SpringTrajectorySolver: Sendable {
 
         // 1. Pre-solve Cursor Trajectory at 120 Hz (or reuse cached `cursorStates` in O(1) when only Zooms/Camera changed!)
         let builtCursor: [CursorFrameState]
-        if let existing = reusingCursorStates, existing.count == totalSteps {
+        var planned: PlannedCursorPath? = nil
+        if let existing = reusingCursorStates, existing.count == totalSteps, !smooth || reusingPlannedCursor != nil {
             builtCursor = existing
+            planned = smooth ? reusingPlannedCursor : nil
         } else {
             var solvedCursor: [CursorFrameState] = []
             solvedCursor.reserveCapacity(totalSteps)
 
-            let firstEventTimeMs = cursorEvents.first?.t ?? 0.0
-            // Auto-correct legacy recordings where `TelemetryRecorder` started ~150-400ms before `SCStream`'s first video frame:
-            let legacyStartupOffsetMs = (firstEventTimeMs > 60.0 && firstEventTimeMs < 900.0) ? firstEventTimeMs : 0.0
-
             let firstPos = cursorEvents.first.map { Point01(x: $0.x, y: $0.y) } ?? .center
-
-            // Build mouse-down -> mouse-up drag intervals and click sync timestamps (adjusted by `legacyStartupOffsetMs`)
-            let dragIntervals: [(startMs: Double, endMs: Double)] = Self.buildMouseDragIntervals(
-                from: clickEvents,
-                timeOffsetMs: legacyStartupOffsetMs,
-                totalDurationMs: totalDuration
-            )
-            let clickTimestampsMs: [Double] = clickEvents.map { max(0.0, $0.t - legacyStartupOffsetMs) }.sorted()
-            let downClickTimesMs: [Double] = clickEvents.compactMap {
-                $0.type == "down" ? max(0.0, $0.t - legacyStartupOffsetMs) : nil
-            }.sorted()
-            let sortedDragIntervals = dragIntervals.sorted { $0.startMs < $1.startMs }
-            // Sliding-window cursors into the sorted drags/clicks: each step only visits the few events near `tMs`
-            // instead of every drag and click in the recording (O(steps + events) instead of O(steps x events)).
-            var dragWindowStart = 0
-            var clickWindowStart = 0
+            let downClickTimesMs: [Double] = clickEvents.compactMap { $0.type == "down" ? max(0.0, $0.t) : nil }.sorted()
+            let downClickPositions = clickEvents.filter { $0.type == "down" }.sorted { $0.t < $1.t }
             var rippleWindowStart = 0
-
-            // Steady-state spring phase lag
-            let baseSpringLagMs: Double = document.cursor.smoothMovementEnabled
-                ? min(240.0, max(0.0, (cursorSpring.damping / max(10.0, cursorSpring.stiffness)) * 1000.0))
-                : 0.0
-            let leadFactor: Double = document.cursor.keepInSyncWithHovers ? 1.0 : 0.72
-            let effectiveLeadMs: Double = baseSpringLagMs * leadFactor
-            let baseCursorPrecomputed = PrecomputedSpring(cursorSpring)
 
             var curX = firstPos.x
             var curY = firstPos.y
@@ -222,57 +214,33 @@ public struct SpringTrajectorySolver: Sendable {
             var lastStableCursorKind = "arrow"
             var lastCursorKindChangeMs = -1000.0
 
-            let shakeThreshold01 = max(0.0, document.cursor.removeShakeThresholdPx) / 1600.0
+            let shakeThresholdPt = max(0.0, document.cursor.removeShakeThresholdPx)
             let stopMoveCutoffMs = (document.cursor.loopBackToStartMs == nil && document.cursor.stopMovementInLastPartMs > 0)
                 ? max(0.0, totalDuration - document.cursor.stopMovementInLastPartMs)
                 : nil
+            let loopMs = document.cursor.loopBackToStartMs.flatMap { $0 > 0 ? $0 : nil }
+            let loopStartMs = loopMs.map { max(0, totalDuration - $0) }
+            let loopTarget = loopTarget01 ?? firstPos
 
-            let eventCount = cursorEvents.count
-
-            // Helper to sample recorded cursor position & kind at any `queryMs`
             func sampleRecordedCursor(at queryMs: Double) -> (x: Double, y: Double, kind: String) {
-                guard eventCount > 0 else {
-                    return (firstPos.x, firstPos.y, "arrow")
-                }
-                let shiftedMs = queryMs + legacyStartupOffsetMs
-                if shiftedMs <= cursorEvents[0].t {
-                    return (cursorEvents[0].x, cursorEvents[0].y, cursorEvents[0].c)
-                }
-                if shiftedMs >= cursorEvents[eventCount - 1].t {
-                    let last = cursorEvents[eventCount - 1]
-                    return (last.x, last.y, last.c)
-                }
-                var lo = 0
-                var hi = eventCount - 1
-                while hi - lo > 1 {
-                    let mid = (lo + hi) >> 1
-                    if cursorEvents[mid].t <= shiftedMs {
-                        lo = mid
-                    } else {
-                        hi = mid
-                    }
-                }
-                let e0 = cursorEvents[lo]
-                let e1 = cursorEvents[lo + 1]
-                let span = max(0.001, e1.t - e0.t)
-                if span > 48.0 {
-                    let moveWindowStart = e1.t - 16.0
-                    if shiftedMs <= moveWindowStart {
-                        return (e0.x, e0.y, e0.c)
-                    }
-                    let moveFrac = max(0.0, min(1.0, (shiftedMs - moveWindowStart) / max(1.0, e1.t - moveWindowStart)))
-                    return (
-                        e0.x + (e1.x - e0.x) * moveFrac,
-                        e0.y + (e1.y - e0.y) * moveFrac,
-                        e0.c
-                    )
-                }
-                let frac = max(0.0, min(1.0, (shiftedMs - e0.t) / span))
-                return (
-                    e0.x + (e1.x - e0.x) * frac,
-                    e0.y + (e1.y - e0.y) * frac,
-                    e0.c
-                )
+                guard !cursorEvents.isEmpty else { return (firstPos.x, firstPos.y, "arrow") }
+                let e = CursorTelemetry.sample(cursorEvents, at: queryMs, holdPauses: !telemetryUsesPlaybackTime)
+                return (e.x, e.y, e.c)
+            }
+
+            /// Where the recorded cursor is, including the ending options (stop moving, loop back to the start).
+            func endingAdjusted(_ p: (x: Double, y: Double), at tMs: Double) -> (x: Double, y: Double) {
+                guard let loopStartMs, let loopMs, tMs > loopStartMs else { return p }
+                let f = max(0.0, min(1.0, (tMs - loopStartMs) / loopMs))
+                return (p.x + (loopTarget.x - p.x) * f, p.y + (loopTarget.y - p.y) * f)
+            }
+
+            if smooth {
+                planned = Self.planCursor(
+                    events: cursorEvents, clicks: clickEvents, document: document, spring: cursorSpring,
+                    durationMs: totalDuration, pointSize: pointSize, expandPauses: !telemetryUsesPlaybackTime,
+                    shakeThresholdPt: shakeThresholdPt, stopMoveCutoffMs: stopMoveCutoffMs, loopStartMs: loopStartMs,
+                    stepMs: stepMs, endingAdjusted: endingAdjusted)
             }
 
             let baseRad = -document.cursor.baseRotationDegrees * .pi / 180.0
@@ -283,49 +251,8 @@ public struct SpringTrajectorySolver: Sendable {
             for step in 0..<totalSteps {
                 let tMs = Double(step) * stepMs
                 let baseLookupMs = stopMoveCutoffMs.map { min(tMs, $0) } ?? tMs
-
-                var syncSpeedMultiplier = 1.0
-                while dragWindowStart < sortedDragIntervals.count && sortedDragIntervals[dragWindowStart].endMs + 260.0 < tMs {
-                    dragWindowStart += 1
-                }
-                for drag in sortedDragIntervals[dragWindowStart...] {
-                    if drag.startMs - 220.0 > tMs {
-                        break
-                    }
-                    if tMs >= drag.startMs - 220.0 && tMs <= drag.endMs + 260.0 {
-                        if tMs < drag.startMs {
-                            let ramp = (tMs - (drag.startMs - 220.0)) / 220.0
-                            syncSpeedMultiplier = max(syncSpeedMultiplier, 1.0 + 3.2 * max(0.0, min(1.0, ramp)))
-                        } else if tMs <= drag.endMs {
-                            syncSpeedMultiplier = max(syncSpeedMultiplier, 4.2)
-                        } else {
-                            let rampOut = 1.0 - (tMs - drag.endMs) / 260.0
-                            syncSpeedMultiplier = max(syncSpeedMultiplier, 1.0 + 3.2 * max(0.0, min(1.0, rampOut)))
-                        }
-                    }
-                }
-                while clickWindowStart < clickTimestampsMs.count && clickTimestampsMs[clickWindowStart] < tMs - 180.0 {
-                    clickWindowStart += 1
-                }
-                for clickT in clickTimestampsMs[clickWindowStart...] {
-                    if clickT > tMs + 180.0 {
-                        break
-                    }
-                    let delta = abs(tMs - clickT)
-                    if delta <= 180.0 {
-                        let boost = 1.0 + 2.4 * (1.0 - delta / 180.0)
-                        syncSpeedMultiplier = max(syncSpeedMultiplier, boost)
-                    }
-                }
-
-                let currentLeadMs = effectiveLeadMs / syncSpeedMultiplier
-                let lookaheadLookupMs = min(totalDuration, stopMoveCutoffMs.map { min(tMs + currentLeadMs, $0) } ?? (tMs + currentLeadMs))
-
-                let sampledTarget = sampleRecordedCursor(at: lookaheadLookupMs)
                 let sampledNow = sampleRecordedCursor(at: baseLookupMs)
-
-                var rawTargetX = sampledTarget.x
-                var rawTargetY = sampledTarget.y
+                let target = endingAdjusted((sampledNow.x, sampledNow.y), at: tMs)
                 var cursorKind = sampledNow.kind
 
                 if document.cursor.alwaysUsePointer {
@@ -341,50 +268,22 @@ public struct SpringTrajectorySolver: Sendable {
                     }
                 }
 
-                if let loopMs = document.cursor.loopBackToStartMs, loopMs > 0, tMs > totalDuration - loopMs {
-                    let factor = max(0.0, min(1.0, (tMs - (totalDuration - loopMs)) / loopMs))
-                    rawTargetX = rawTargetX + (firstPos.x - rawTargetX) * factor
-                    rawTargetY = rawTargetY + (firstPos.y - rawTargetY) * factor
-                }
-
-                let dist = hypot(rawTargetX - filteredTargetX, rawTargetY - filteredTargetY)
-                let effectiveShakeThreshold = (syncSpeedMultiplier > 1.5) ? 0.0 : shakeThreshold01
-                if dist > effectiveShakeThreshold {
-                    filteredTargetX = rawTargetX
-                    filteredTargetY = rawTargetY
+                if pointSize.distance(Point01(x: target.x, y: target.y), Point01(x: filteredTargetX, y: filteredTargetY)) > shakeThresholdPt {
+                    filteredTargetX = target.x
+                    filteredTargetY = target.y
                     lastMoveTimeMs = tMs
                 }
 
-                if document.cursor.smoothMovementEnabled {
-                    let effectivePrecomputed: PrecomputedSpring
-                    if abs(syncSpeedMultiplier - 1.0) < 0.001 {
-                        effectivePrecomputed = baseCursorPrecomputed
-                    } else {
-                        effectivePrecomputed = PrecomputedSpring(
-                            SpringConfig(
-                                stiffness: cursorSpring.stiffness * syncSpeedMultiplier * syncSpeedMultiplier,
-                                damping: cursorSpring.damping * syncSpeedMultiplier,
-                                mass: cursorSpring.mass
-                            )
-                        )
-                    }
-                    (curX, velX) = Self.stepClampedSpring(
-                        current: curX,
-                        velocity: velX,
-                        target: filteredTargetX,
-                        spring: effectivePrecomputed,
-                        dt: dt
-                    )
-                    (curY, velY) = Self.stepClampedSpring(
-                        current: curY,
-                        velocity: velY,
-                        target: filteredTargetY,
-                        spring: effectivePrecomputed,
-                        dt: dt
-                    )
+                if let planned {
+                    let p = planned.position(at: tMs)
+                    let before = planned.position(at: tMs - 1), after = planned.position(at: tMs + 1)
+                    curX = p.x / pointSize.width
+                    curY = p.y / pointSize.height
+                    velX = (after.x - before.x) / pointSize.width / 0.002
+                    velY = (after.y - before.y) / pointSize.height / 0.002
                 } else {
-                    velX = (filteredTargetX - curX) / dt
-                    velY = (filteredTargetY - curY) / dt
+                    velX = step == 0 ? 0 : (filteredTargetX - curX) / dt
+                    velY = step == 0 ? 0 : (filteredTargetY - curY) / dt
                     curX = filteredTargetX
                     curY = filteredTargetY
                 }
@@ -402,12 +301,14 @@ public struct SpringTrajectorySolver: Sendable {
                     switch document.cursor.rotationMode {
                     case .tilt:
                         let maxTilt = 0.35
-                        let rawTilt = -velX * 0.14 * document.cursor.velocityRotationIntensity
+                        let rawTilt = -velX * pointSize.width / 1600.0 * 0.14 * document.cursor.velocityRotationIntensity
                         dynamicRad = max(-maxTilt, min(maxTilt, rawTilt))
                     case .follow:
-                        let speed = hypot(velX, velY)
+                        let physicalX = velX * pointSize.width / 1600.0
+                        let physicalY = velY * pointSize.height / 1600.0
+                        let speed = hypot(physicalX, physicalY)
                         if speed > 0.04 {
-                            let targetAngle = atan2(-velY, velX) - (.pi * 0.75)
+                            let targetAngle = atan2(-physicalY, physicalX) - (.pi * 0.75)
                             var delta = targetAngle - lastDirectionalBearingRad
                             while delta > .pi { delta -= 2.0 * .pi }
                             while delta < -.pi { delta += 2.0 * .pi }
@@ -439,7 +340,7 @@ public struct SpringTrajectorySolver: Sendable {
                 while nextWaveClick < downClickTimesMs.count && downClickTimesMs[nextWaveClick] <= tMs {
                     clickWaves.append(ClickWave(
                         ageMs: tMs - downClickTimesMs[nextWaveClick],
-                        position01: Point01(x: curX, y: curY)
+                        position01: Point01(x: downClickPositions[nextWaveClick].x, y: downClickPositions[nextWaveClick].y)
                     ))
                     nextWaveClick += 1
                 }
@@ -462,6 +363,7 @@ public struct SpringTrajectorySolver: Sendable {
             builtCursor = solvedCursor
         }
         self.cursorStates = builtCursor
+        self.plannedCursor = planned
 
         // 2. Pre-build `MovesGroup` Dead-Zone Focus Clusters for every Auto-Zoom Block
         //    Each group's `timeWeightedCenter01` is resolved ONCE up-front into `[ResolvedFocusGroup]` so the 120Hz camera loop
@@ -479,8 +381,8 @@ public struct SpringTrajectorySolver: Sendable {
                 zoom: zoom,
                 cursorEvents: cursorEvents,
                 clickEvents: clickEvents,
-                maxDistanceX: maxDist01,
-                maxDistanceY: maxDist01
+                maxDistanceX: maxDist01 * crop.width,
+                maxDistanceY: maxDist01 * crop.height
             )
         }
 
@@ -523,7 +425,7 @@ public struct SpringTrajectorySolver: Sendable {
             let cursorAtStep = builtCursor[step].position01
 
             // Advance monotonic zoom index pointer (`activeZooms` are sorted and non-overlapping)
-            while zoomCursorIdx < zoomCount && activeZooms[zoomCursorIdx].sourceEndMs < tMs {
+            while zoomCursorIdx < zoomCount && activeZooms[zoomCursorIdx].sourceEndMs <= tMs {
                 zoomCursorIdx += 1
             }
             let activeZoomIdx: Int? = (zoomCursorIdx < zoomCount && tMs >= activeZooms[zoomCursorIdx].sourceStartMs)
@@ -543,6 +445,13 @@ public struct SpringTrajectorySolver: Sendable {
 
             if let zIdx = activeZoomIdx {
                 let zoom = activeZooms[zIdx]
+                let groups = resolvedZoomFocusGroups[zIdx]
+                var focus = zoom.mode == .manual ? zoom.manualCenter01 : cursorAtStep
+                for group in groups {
+                    if group.startTimeMs > tMs { break }
+                    focus = group.center01
+                }
+                focus = MotionGeometry.cropped(focus, by: crop)
                 isInstantZoomNow = zoom.instantAnimation
                 isLoupeActiveNow = (zoom.presentation == .loupe)
                 if isLoupeActiveNow {
@@ -554,49 +463,33 @@ public struct SpringTrajectorySolver: Sendable {
                     let wobbleY = cos((tMs / 18000.0) * 2.0 * .pi) * 0.008
                     switch zoom.mode {
                     case .followCursor:
-                        targetLoupeFocusX = min(1.0, max(0.0, cursorAtStep.x + wobbleX))
-                        targetLoupeFocusY = min(1.0, max(0.0, cursorAtStep.y + wobbleY))
+                        targetLoupeFocusX = min(1.0, max(0.0, focus.x + wobbleX))
+                        targetLoupeFocusY = min(1.0, max(0.0, focus.y + wobbleY))
                     case .manual:
-                        targetLoupeFocusX = zoom.manualCenter01.x
-                        targetLoupeFocusY = zoom.manualCenter01.y
+                        targetLoupeFocusX = focus.x
+                        targetLoupeFocusY = focus.y
                     }
                     targetScale = 1.0
                     targetFocusX = 0.5
                     targetFocusY = 0.5
                 } else {
                     targetScale = max(1.0, zoom.scale)
-                    switch zoom.mode {
-                    case .followCursor:
-                        let groups = resolvedZoomFocusGroups[zIdx]
-                        if !groups.isEmpty {
-                            var activeGroupCenter = groups[0].center01
-                            for g in groups {
-                                if g.startTimeMs <= tMs {
-                                    activeGroupCenter = g.center01
-                                } else {
-                                    break
-                                }
-                            }
-                            targetFocusX = activeGroupCenter.x
-                            targetFocusY = activeGroupCenter.y
-                        } else {
-                            targetFocusX = cursorAtStep.x
-                            targetFocusY = cursorAtStep.y
-                        }
-                    case .manual:
-                        targetFocusX = zoom.manualCenter01.x
-                        targetFocusY = zoom.manualCenter01.y
-                    }
+                    targetFocusX = focus.x
+                    targetFocusY = focus.y
                 }
-            } else if hasAnyLoupeZoom {
-                // Pre-warm `loupeCenterX/Y` towards an upcoming Loupe block so it spawns right on the cursor (`inactiveLoupeStandIn`)
-                if zoomCursorIdx < zoomCount {
-                    let upcoming = activeZooms[zoomCursorIdx]
+            }
+            // Warm only invisible glass, including while the preceding screen zoom is active.
+            if hasAnyLoupeZoom && !isLoupeActiveNow && loupePresenceVal <= 0.005 {
+                let upcomingIndex = activeZoomIdx.map { $0 + 1 } ?? zoomCursorIdx
+                if upcomingIndex < zoomCount {
+                    let upcoming = activeZooms[upcomingIndex]
                     if upcoming.presentation == .loupe && upcoming.sourceStartMs > tMs && upcoming.sourceStartMs - tMs <= 450.0 {
                         loupeCfg = upcoming.loupe
                         lastActiveLoupeCfg = upcoming.loupe
-                        targetLoupeFocusX = (upcoming.mode == .manual) ? upcoming.manualCenter01.x : cursorAtStep.x
-                        targetLoupeFocusY = (upcoming.mode == .manual) ? upcoming.manualCenter01.y : cursorAtStep.y
+                        let focus = MotionGeometry.cropped(upcoming.mode == .manual ? upcoming.manualCenter01
+                            : resolvedZoomFocusGroups[upcomingIndex].first?.center01 ?? cursorAtStep, by: crop)
+                        targetLoupeFocusX = focus.x
+                        targetLoupeFocusY = focus.y
                     }
                 }
             }
@@ -613,7 +506,7 @@ public struct SpringTrajectorySolver: Sendable {
             }
 
             // Step the 3 screen-rect components `(rectX, rectY, rectW)` with the overshoot-clamped spring
-            if isInstantZoomNow && !isLoupeActiveNow {
+            if (isInstantZoomNow && !isLoupeActiveNow) || (step == 0 && startsAtCut) {
                 rectX = targetRectX
                 rectY = targetRectY
                 rectW = targetRectW
@@ -646,7 +539,7 @@ public struct SpringTrajectorySolver: Sendable {
 
             // Only integrate the 4 Loupe springs if at least one Loupe zoom exists in the project!
             if hasAnyLoupeZoom {
-                if isInstantZoomNow && isLoupeActiveNow {
+                if (isInstantZoomNow && isLoupeActiveNow) || (step == 0 && startsAtCut) {
                     loupeCenterX = targetLoupeFocusX
                     loupeCenterY = targetLoupeFocusY
                     loupeScaleVal = targetLoupeScale
@@ -690,12 +583,7 @@ public struct SpringTrajectorySolver: Sendable {
             let isLoupeVisible = (loupePresenceVal > 0.005)
             let solvedScale = max(1.0, rectW)
             let solvedCenter01: Point01
-            if isLoupeVisible {
-                solvedCenter01 = Point01(
-                    x: min(1.0, max(0.0, loupeCenterX)),
-                    y: min(1.0, max(0.0, loupeCenterY))
-                )
-            } else {
+            do {
                 // Recover exact camera focus point `center01` from the interpolated screen rect `(rectX, rectY, rectW)`
                 // even when `solvedScale == 1.0` so `rectX`/`rectY` settling after `rectW` reaches `1.0` is preserved smoothly
                 // without an artificial snap in `center01`!
@@ -722,7 +610,8 @@ public struct SpringTrajectorySolver: Sendable {
                     isLoupeMode: isLoupeVisible,
                     loupePresence01: min(1.0, max(0.0, loupePresenceVal)),
                     loupeScale: max(1.0, loupeScaleVal),
-                    loupeConfig: loupeCfg
+                    loupeConfig: loupeCfg,
+                    loupeCenter01: Point01(x: min(1, max(0, loupeCenterX)), y: min(1, max(0, loupeCenterY)))
                 )
             )
         }
@@ -731,37 +620,6 @@ public struct SpringTrajectorySolver: Sendable {
     }
 
     // MARK: - Spring Sanitization & the Exact Overshoot-Clamped Spring Integrator
-
-    /// Builds `[mouseDown ... mouseUp]` intervals so that during active drags (such as text selection / slider dragging),
-    /// the cursor spring is boosted to stay 100% locked with the screen highlight.
-    private static func buildMouseDragIntervals(
-        from clickEvents: [ClickEvent],
-        timeOffsetMs: Double,
-        totalDurationMs: Double
-    ) -> [(startMs: Double, endMs: Double)] {
-        var intervals: [(startMs: Double, endMs: Double)] = []
-        var activeDownMs: Double? = nil
-
-        for ev in clickEvents.sorted(by: { $0.t < $1.t }) {
-            let t = max(0.0, ev.t - timeOffsetMs)
-            if ev.type == "down" {
-                if activeDownMs == nil {
-                    activeDownMs = t
-                }
-            } else if ev.type == "up" {
-                if let start = activeDownMs {
-                    if t > start + 25.0 {
-                        intervals.append((startMs: start, endMs: t))
-                    }
-                    activeDownMs = nil
-                }
-            }
-        }
-        if let unclosedStart = activeDownMs, totalDurationMs > unclosedStart + 25.0 {
-            intervals.append((startMs: unclosedStart, endMs: totalDurationMs))
-        }
-        return intervals
-    }
 
     /// Upgrades any legacy underdamped camera spring (`zeta < 0.80` or `damping < 30`) to the overdamped `Smooth` preset (`stiffness: 170, damping: 50, mass: 3.0`, $\zeta \approx 1.11$).
     private static func sanitizedCameraSpring(_ raw: SpringConfig) -> SpringConfig {
@@ -798,10 +656,10 @@ public struct SpringTrajectorySolver: Sendable {
         velocity: Double,
         target: Double,
         spring: PrecomputedSpring,
-        dt: Double
+        dt: Double,
+        precision: Double = 0.002
     ) -> (value: Double, velocity: Double) {
         // spring precision
-        let precision = 0.002
         if abs(target - current) < precision && abs(velocity) < precision {
             return (target, 0.0)
         }
@@ -979,7 +837,7 @@ public struct SpringTrajectorySolver: Sendable {
         // Fractional frame linear interpolation
         let c0 = cursorStates[i0]
         let c1 = cursorStates[i1]
-        let interpCursor = CursorFrameState(
+        var interpCursor = CursorFrameState(
             position01: Point01(
                 x: c0.position01.x + (c1.position01.x - c0.position01.x) * frac,
                 y: c0.position01.y + (c1.position01.y - c0.position01.y) * frac
@@ -991,6 +849,11 @@ public struct SpringTrajectorySolver: Sendable {
             activeClickProgress: c0.activeClickProgress,
             clickWaves: c0.clickWaves
         )
+        // The planned path is per ms, finer than the 120 Hz states, so clicks between steps stay exact.
+        if let plannedCursor {
+            let p = plannedCursor.position(at: sourceMs)
+            interpCursor.position01 = Point01(x: p.x / pointSize.width, y: p.y / pointSize.height)
+        }
 
         let cam0 = cameraStates[i0]
         let cam1 = cameraStates[i1]
@@ -1005,7 +868,9 @@ public struct SpringTrajectorySolver: Sendable {
             isLoupeMode: cam0.isLoupeMode || cam1.isLoupeMode,
             loupePresence01: cam0.loupePresence01 + (cam1.loupePresence01 - cam0.loupePresence01) * frac,
             loupeScale: cam0.loupeScale + (cam1.loupeScale - cam0.loupeScale) * frac,
-            loupeConfig: cam0.loupeConfig
+            loupeConfig: cam0.loupeConfig,
+            loupeCenter01: Point01(x: cam0.loupeCenter01.x + (cam1.loupeCenter01.x - cam0.loupeCenter01.x) * frac,
+                                  y: cam0.loupeCenter01.y + (cam1.loupeCenter01.y - cam0.loupeCenter01.y) * frac)
         )
 
         return (interpCursor, interpCamera)
@@ -1118,7 +983,7 @@ public enum AutoZoomClusterGenerator {
 
     /// Two zooms less than this far apart become one. Zooming out takes about 750 ms to settle, so a shorter gap only
     /// zooms out and straight back in, which reads as a jolt.
-    public static let mergeGapMs = 1500.0
+    public static let mergeGapMs = 2500.0
 
     /// Joins neighbouring zooms whose gap is under `mergeGapMs`. The joined zoom spans both, and its center is the
     /// duration-weighted mean of their centers.

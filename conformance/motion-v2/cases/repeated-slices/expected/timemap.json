@@ -1,0 +1,157 @@
+[
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 500,
+    "timelineMs" : 0
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 625,
+    "timelineMs" : 125
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 750,
+    "timelineMs" : 250
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 875,
+    "timelineMs" : 375
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1000,
+    "timelineMs" : 500
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1125,
+    "timelineMs" : 625
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1250,
+    "timelineMs" : 750
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1375,
+    "timelineMs" : 875
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1500,
+    "timelineMs" : 1000
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1625,
+    "timelineMs" : 1125
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1750,
+    "timelineMs" : 1250
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 1875,
+    "timelineMs" : 1375
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2000,
+    "timelineMs" : 1500
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2125,
+    "timelineMs" : 1625
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2250,
+    "timelineMs" : 1750
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2375,
+    "timelineMs" : 1875
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2500,
+    "timelineMs" : 2000
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2625,
+    "timelineMs" : 2125
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2750,
+    "timelineMs" : 2250
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 2875,
+    "timelineMs" : 2375
+  },
+  {
+    "sliceIndex" : 0,
+    "sourceMs" : 500,
+    "timelineMs" : 2500
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 750,
+    "timelineMs" : 2625
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 1000,
+    "timelineMs" : 2750
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 1250,
+    "timelineMs" : 2875
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 1500,
+    "timelineMs" : 3000
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 1750,
+    "timelineMs" : 3125
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 2000,
+    "timelineMs" : 3250
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 2250,
+    "timelineMs" : 3375
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 2500,
+    "timelineMs" : 3500
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 2750,
+    "timelineMs" : 3625
+  },
+  {
+    "sliceIndex" : 1,
+    "sourceMs" : 3000,
+    "timelineMs" : 3750
+  }
+]

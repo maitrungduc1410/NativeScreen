@@ -1543,3 +1543,46 @@ The Mac App Store requires the App Sandbox; the DMG build keeps it off. A second
 - **Privacy manifest.** `PrivacyInfo.xcprivacy` (in both builds) declares no tracking and no collected data, and the reasons for UserDefaults (`CA92.1`), system uptime (`35F9.1`, recording clocks), free disk space (`E174.1`, ADR-83) and file timestamps (`C617.1`, `3B52.1`, recent projects and LUT caching).
 - **Checked on a Mac:** both targets build in Debug and Release; the App Store app has no `Frameworks/Sparkle.framework`, carries the sandbox entitlements, and launches with no sandbox denials. Recording, keycaps under Input Monitoring, bookmarks across relaunch and the language relaunch (`/bin/sh` from the sandbox) are not checked yet.
 
+## 86. ADR-86: Crop-Safe Playback Motion and a Sharp Loupe Scene
+
+Motion used recording time even after speed edits and cuts. Cursor/click overlays and zoom focus also used original normalized positions on an already-cropped screen. A fading Loupe replaced the screen camera's center and suppressed its transform, and the lens enlarged a canvas-resolution input. These are derived-state/rendering bugs, not package-format changes.
+
+- **Time:** `PlaybackTrajectorySolver` projects retained cursor/click/zoom data into edited time. Adjacent source-contiguous slices share history, including speed changes; real cuts start separate 120 Hz trajectories. Incoming cursor and active camera/lens targets are initialized at the cut. Expand sparse recording-time pause holds before time projection, so slowing 60 Hz footage does not falsely turn its samples into stationary gaps. Use explicit timeline time in preview, all exports and slice visibility. The incoming slice owns a boundary; neither interpolation nor motion blur crosses a cut. Slice edits invalidate cursor and camera caches.
+- **Space:** keep telemetry, manual focus and click waves normalized to the original recording. Group bounds use the crop-scaled viewport; targets enter crop space before camera solving, cursor/clicks only before drawing. Do not clamp outside points to crop edges. Crop edits invalidate camera groups but can reuse the cursor trajectory.
+- **Interaction:** superseded by ADR-87. Insert derived down/up samples. A button held through a trim anchors the drag but makes no click wave. Clock offsets of older recordings: ADR-88.
+- **Loupe:** follow the same resolved focus groups as the camera, retaining the existing slow decorative drift and glass shading. `center01` and `loupeCenter01` are independent crop-space centers. Invisible glass prewarms toward the next focus for 450 ms, including during the preceding screen zoom; a visible exiting lens is not moved by prewarming. The screen camera keeps settling while glass appears/disappears. Exits still start on the item end (ADR-84).
+- **Sharp content:** render a second, pre-magnified scene directly from source pixels at lens scale, with privacy masks, screen annotations, cursor, frame and background. Give the compute kernel only an integral patch with half-side `1.7 * radius + 2`, independent of zoom. Preserve rim bend, fringe, gloss and shadow; sample the patch without dividing offsets by zoom again. Carry each texture ROI's canvas origin into Metal. Webcam, keycaps, captions and canvas annotations stay above the lens.
+- **Auto zoom:** merge generated intervals with gaps strictly below 2500 ms, preserving typing hold and tail margin. A useful reading pause should not cause a zoom-out/in detour.
+
+Verification is reproducible with `--verify-motion <output-folder>` (synthetic math checks and real GPU pixels). Motion fixtures are generated separately with `--generate-conformance conformance/motion-v2 --motion-only`; edited-time rows/frames cover crop, speed, cuts, repeated footage and screen/Loupe transitions. Windows needs the ADR-86 port before these replace its legacy motion expectations. No media or telemetry migration is needed.
+
+## 87. ADR-87: Planned Cursor Sync Instead of an Error Disc
+
+ADR-86 kept the fixed lookahead and drag/click speed boosts, then pulled the solved tip into a disc around the raw cursor. With hover sync on (the default) the disc was 24 capture pixels everywhere, so a Retina recording lost its glide: the cursor followed the raw path and its frame-to-frame speed changed more than the raw cursor's. With hover sync off, entering the 180 ms click window clamped a lag of a few hundred pixels at once, a visible jump.
+
+- **Planner:** `CursorPathPlanner` plans the cursor as a plain spring on `path(t + lead(t))` with speed `s(t)` (stiffness x s^2, damping x s), lead and speed raised only where an anchor needs them, smallest speed level first, then smallest lead, error measured at the anchors. Constants and rules are in spec/03 section 2.2. The spring never gets a position correction, so velocity is continuous.
+- **Anchors:** down/up and held-button samples at 2 pt, cursor-shape changes at 4 pt (hover sync) or 6 pt. NativeScreen records no hover changes; shape changes are the closest signal.
+- **Units:** tolerances, shake filtering and rotation use capture points (`logicalBounds`), not pixels, so Retina and standard captures behave the same.
+- **Merging:** a failing group is also merged with the previous one while that group's lead is still decaying (span at most 4000 ms). Without it, about 1% of clicks in fast synthetic sessions missed by up to 30 pt, since a large lead chosen at 1x decays at only 0.35 ms/ms.
+- **Cost:** the planner simulates at 1 ms. A 10 minute synthetic session (26k samples, 760 clicks) solves in about 0.4 s in a Release-optimized probe; the result is reused while only zooms or crop change.
+- **Measured** (synthetic, 1728x1117 pt): every click within 1.5 pt (max 1.64 pt over about 3000 clicks), drags within 1.5 pt, peak speed of a 150 ms flick 3.9 pt/ms against 8.6 raw, largest frame-to-frame speed change 0.66 pt/ms. For comparison on a 3456x2234 capture, the ADR-86 disc changed speed by up to 1.88 px/ms per frame (raw cursor 1.64, previous lookahead solver 0.64), and the click window jumped from 6.1 to 14.1 px/ms in one frame.
+
+`--verify-motion` covers click/drag tolerance, no speed jump and kept glide for a flick ending on a click. Windows has not been ported.
+
+## 88. ADR-88: Older Recordings on the Video Clock, Checked on Real Projects
+
+Before 2026-10-26 the telemetry clock started before capture, so cursor, clicks and keys run late by the startup delay. The solver used to subtract the first cursor sample's time when it was between 60 and 900 ms. That guess overshot by 30 to 70 ms and skipped recordings whose first sample came later; four of the ten older recordings here were 0.9 to 1.4 s off. ADR-86 removed the guess, leaving all of them off.
+
+- **Detection:** current recordings always write a cursor sample at exactly `t = 0`. A later first sample marks an older recording.
+- **Delay:** telemetry and capture stopped together, so `D = min(firstCursor.t, max(0, lastEvent.t - durationMs))` (ignored below 20 ms). On the ten older recordings the first move then falls 28 to 71 ms after the first frame. On the Xcode recording every corrected click is followed by a UI change 7 to 39 ms later (149 ms for the first); raw click times line up with nothing and some fall after the end of the video.
+- **Where:** `ProjectSession.load` moves cursor, clicks and keys by `-D` in memory (`LegacyTelemetryEpoch`). Files are untouched. Zooms already saved in such projects keep their times.
+- **Click samples:** a click more than 16 pt from the recorded cursor and from both bracketing samples is not inserted into the path. Real recordings agree within 1 pt; the sample project placed its clicks away from its cursor and is fixed to click on it.
+
+`--verify-projects <output> <package>...` copies real projects and checks them headlessly: click accuracy and frame-to-frame speed on the edited timeline, frames at clicks, a full 1080p60 MP4 export (duration and frame count), and composition time. Results on an Apple M4 Pro (Debug build), six recordings including three older ones, a 43 s edited timeline with a cut and a cursor warp:
+
+- **Cursor:** 52 of 53 clicks within 1.5 pt (mean 0.4 to 1.0 pt); the other is 3.4 pt, a click 12 ms before the recorded cursor jumps 363 pt. Largest frame-to-frame speed change 0.4 to 2.1 pt/ms, except that warp (19 pt/ms, raw 22).
+- **Export:** all six finished; durations within 15 ms of the timeline, 60 frames per second.
+- **Sharp Loupe cost** (median / p95 ms per frame, GPU complete, distinct frames): 1080p 3.7/4.4 to 10.4/15.0, 4K 6.8/10.5 to 14.9/18.2. Compared with no zoom: +0.8 to +1.9 ms median at 1080p, +2.3 to +3.7 ms at 4K. A 4K preview frame with the Loupe can exceed 16.7 ms on heavy recordings, where 4K without any zoom already reaches 17.8 ms p95. With the default radius (0.35) the lens patch is close to the canvas size, so the bound mainly matters for small radii.
+- **Aside:** no zoom costs more than a 2x screen zoom (6.2 against 2.9 ms at 1080p) because the Retina source is Lanczos-downscaled to the canvas. That is a separate optimization.
+
+Not checked: driving the editor UI (live playback pacing, scrubbing). The preview uses the same compositor and solver calls with explicit timeline time.

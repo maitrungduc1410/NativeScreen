@@ -70,5 +70,5 @@ export default {
   changesP: "Pokud se tyto zásady změní, nová verze bude zveřejněna na této stránce s novým datem. Historie všech změn je veřejná v <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">repozitáři</a>.",
 
   contactH: "Kontakt",
-  contactP: "Dotazy k ochraně soukromí: napište na <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> nebo založte issue na <a href=\"{repo}/issues\">GitHubu</a>.",
+  contactP: "Dotazy k ochraně soukromí: napište na <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> nebo založte issue na <a href=\"{repo}/issues\">GitHubu</a>.",
 };

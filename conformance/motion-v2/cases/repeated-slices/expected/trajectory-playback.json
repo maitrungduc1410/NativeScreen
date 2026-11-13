@@ -1,0 +1,494 @@
+[
+  {
+    "cameraScale" : 1,
+    "cameraX" : 0.5,
+    "cameraY" : 0.5,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.6937555789947509,
+    "cursorY" : 0.7550621032714844,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -1.3351440429687501e-06,
+    "sliceId" : "slice-1",
+    "sourceMs" : 500,
+    "timelineMs" : 0
+  },
+  {
+    "cameraScale" : 1,
+    "cameraX" : 0.5,
+    "cameraY" : 0.5,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.6937555837631225,
+    "cursorY" : 0.7550620947943794,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -0.00021959915161132816,
+    "sliceId" : "slice-1",
+    "sourceMs" : 500.1,
+    "timelineMs" : 0.1
+  },
+  {
+    "cameraScale" : 1,
+    "cameraX" : 0.5,
+    "cameraY" : 0.5,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.753877592086792,
+    "cursorY" : 0.7311669243706598,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -0.014404869079589846,
+    "sliceId" : "slice-1",
+    "sourceMs" : 700,
+    "timelineMs" : 200
+  },
+  {
+    "cameraScale" : 1.1907119184875694,
+    "cameraX" : 0.5800831483780767,
+    "cameraY" : 0.5334126228128298,
+    "clickWaves" : [
+      {
+        "ageMs" : 180.00000000000006,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.7936413764953614,
+    "cursorY" : 0.7026785956488715,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -0.009200477600097658,
+    "sliceId" : "slice-1",
+    "sourceMs" : 900,
+    "timelineMs" : 400
+  },
+  {
+    "cameraScale" : 1.634204769726194,
+    "cameraX" : 0.6940407901980524,
+    "cameraY" : 0.5809585020631614,
+    "clickWaves" : [
+      {
+        "ageMs" : 379.9999999999999,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.8162951469421387,
+    "cursorY" : 0.6670995076497396,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -0.0034072875976562497,
+    "sliceId" : "slice-1",
+    "sourceMs" : 1100,
+    "timelineMs" : 600
+  },
+  {
+    "cameraScale" : 1.853400232053805,
+    "cameraX" : 0.7302255652326449,
+    "cameraY" : 0.5960556637542838,
+    "clickWaves" : [
+      {
+        "ageMs" : 579.9999999999999,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.8176608085632324,
+    "cursorY" : 0.6272762722439236,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.0023765563964843754,
+    "sliceId" : "slice-1",
+    "sourceMs" : 1300,
+    "timelineMs" : 800
+  },
+  {
+    "cameraScale" : 1.9426834683936545,
+    "cameraX" : 0.742624051661162,
+    "cameraY" : 0.6012286116075608,
+    "clickWaves" : [
+      {
+        "ageMs" : 771.6666666666674,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.8014605522155762,
+    "cursorY" : 0.5894486321343316,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.006381988525390623,
+    "sliceId" : "slice-1",
+    "sourceMs" : 1500,
+    "timelineMs" : 1000
+  },
+  {
+    "cameraScale" : 1.9777149498518034,
+    "cameraX" : 0.747182980015665,
+    "cameraY" : 0.6031307065754126,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.7665388584136963,
+    "cursorY" : 0.5466347164577908,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.013451576232910158,
+    "sliceId" : "slice-1",
+    "sourceMs" : 1700,
+    "timelineMs" : 1200
+  },
+  {
+    "cameraScale" : 1.9913464256293358,
+    "cameraX" : 0.7489136025932885,
+    "cameraY" : 0.6038527640942368,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.7071255683898926,
+    "cursorY" : 0.4951784345838759,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.01975212097167969,
+    "sliceId" : "slice-1",
+    "sourceMs" : 1900,
+    "timelineMs" : 1400
+  },
+  {
+    "cameraScale" : 1.9966406850247251,
+    "cameraX" : 0.7223577175070666,
+    "cameraY" : 0.5666833119187723,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.6287998199462891,
+    "cursorY" : 0.44208077324761286,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.02365074157714844,
+    "sliceId" : "slice-1",
+    "sourceMs" : 2100,
+    "timelineMs" : 1600
+  },
+  {
+    "cameraScale" : 1.807984083910362,
+    "cameraX" : 0.6630347676828817,
+    "cameraY" : 0.5101201328005742,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.5545708179473877,
+    "cursorY" : 0.3988994598388672,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.01742897033691407,
+    "sliceId" : "slice-1",
+    "sourceMs" : 2300,
+    "timelineMs" : 1800
+  },
+  {
+    "cameraScale" : 1.3652890605526102,
+    "cameraX" : 0.5945640248399413,
+    "cameraY" : 0.501871843322123,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.4972872734069824,
+    "cursorY" : 0.3687173631456163,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.015311431884765626,
+    "sliceId" : "slice-1",
+    "sourceMs" : 2500,
+    "timelineMs" : 2000
+  },
+  {
+    "cameraScale" : 1.1464032899175522,
+    "cameraX" : 0.544858667468565,
+    "cameraY" : 0.5005113356424047,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.4384173393249512,
+    "cursorY" : 0.3398060056898329,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.01921939849853516,
+    "sliceId" : "slice-1",
+    "sourceMs" : 2700,
+    "timelineMs" : 2200
+  },
+  {
+    "cameraScale" : 1.0572402655188058,
+    "cameraX" : 0.518991791190508,
+    "cameraY" : 0.5001809642629418,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.3658552408218384,
+    "cursorY" : 0.30603807237413194,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.02015933990478516,
+    "sliceId" : "slice-1",
+    "sourceMs" : 2900,
+    "timelineMs" : 2400
+  },
+  {
+    "cameraScale" : 1.0357194257061249,
+    "cameraX" : 0.5120950689196154,
+    "cameraY" : 0.5001117591046611,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.3306257176399231,
+    "cursorY" : 0.2901394950018989,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.009727742004394533,
+    "sliceId" : "slice-1",
+    "sourceMs" : 2999.9,
+    "timelineMs" : 2499.9
+  },
+  {
+    "cameraScale" : 1,
+    "cameraX" : 0.5,
+    "cameraY" : 0.5,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.694522762298584,
+    "cursorY" : 0.754832034640842,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -2.6702880859375003e-06,
+    "sliceId" : "slice-2",
+    "sourceMs" : 500,
+    "timelineMs" : 2500
+  },
+  {
+    "cameraScale" : 1,
+    "cameraX" : 0.5,
+    "cameraY" : 0.5,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.6945227718353271,
+    "cursorY" : 0.754832026163737,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -0.00043571090698200807,
+    "sliceId" : "slice-2",
+    "sourceMs" : 500.1999999999998,
+    "timelineMs" : 2500.1
+  },
+  {
+    "cameraScale" : 1,
+    "cameraX" : 0.5,
+    "cameraY" : 0.5,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.7500994205474854,
+    "cursorY" : 0.7331776936848958,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -0.027499961853027343,
+    "sliceId" : "slice-2",
+    "sourceMs" : 700,
+    "timelineMs" : 2600
+  },
+  {
+    "cameraScale" : 1.3192613221195977,
+    "cameraX" : 0.6210000311411596,
+    "cameraY" : 0.5504841340874032,
+    "clickWaves" : [
+      {
+        "ageMs" : 190.00000000000006,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.8165358543395996,
+    "cursorY" : 0.6671621534559462,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : -0.006809234619140626,
+    "sliceId" : "slice-2",
+    "sourceMs" : 1100,
+    "timelineMs" : 2800
+  },
+  {
+    "cameraScale" : 1.7075255797874993,
+    "cameraX" : 0.7071786180431776,
+    "cameraY" : 0.5864399210040936,
+    "clickWaves" : [
+      {
+        "ageMs" : 381.6666666666665,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.7850410461425781,
+    "cursorY" : 0.5655904981825087,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.022586631774902343,
+    "sliceId" : "slice-2",
+    "sourceMs" : 1500,
+    "timelineMs" : 3000
+  },
+  {
+    "cameraScale" : 1.8839513708951392,
+    "cameraX" : 0.7346003682874095,
+    "cameraY" : 0.5978809372020656,
+    "clickWaves" : [
+      {
+        "ageMs" : 589.9999999999999,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "arrow",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.6943024635314942,
+    "cursorY" : 0.4852202945285373,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.029692268371582033,
+    "sliceId" : "slice-2",
+    "sourceMs" : 1900,
+    "timelineMs" : 3200
+  },
+  {
+    "cameraScale" : 1.8827898499010518,
+    "cameraX" : 0.7012385917281394,
+    "cameraY" : 0.5521893106553953,
+    "clickWaves" : [
+      {
+        "ageMs" : 781.6666666666674,
+        "x" : 0.7576615981247576,
+        "y" : 0.7291801804302115
+      }
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.5424311637878418,
+    "cursorY" : 0.39442240397135414,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.04436817169189454,
+    "sliceId" : "slice-2",
+    "sourceMs" : 2300,
+    "timelineMs" : 3400
+  },
+  {
+    "cameraScale" : 1.4371583897638949,
+    "cameraX" : 0.6240252494431254,
+    "cameraY" : 0.5248856947869434,
+    "clickWaves" : [
+
+    ],
+    "cursorKind" : "iBeam",
+    "cursorOpacity" : 1,
+    "cursorX" : 0.4115729808807373,
+    "cursorY" : 0.32769540150960286,
+    "loupePresence" : 0,
+    "loupeScale" : 1,
+    "loupeX" : 0.5,
+    "loupeY" : 0.5,
+    "rotation" : 0.030589485168457033,
+    "sliceId" : "slice-2",
+    "sourceMs" : 2700,
+    "timelineMs" : 3600
+  }
+]

@@ -70,5 +70,5 @@ export default {
   changesP: "Bu politika değişirse yeni sürüm yeni bir tarihle bu sayfada yayımlanır. Her değişikliğin geçmişi <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">depoda</a> herkese açıktır.",
 
   contactH: "İletişim",
-  contactP: "Gizlilikle ilgili sorular için <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> adresine e-posta gönderin veya <a href=\"{repo}/issues\">GitHub</a> üzerinde bir issue açın.",
+  contactP: "Gizlilikle ilgili sorular için <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> adresine e-posta gönderin veya <a href=\"{repo}/issues\">GitHub</a> üzerinde bir issue açın.",
 };

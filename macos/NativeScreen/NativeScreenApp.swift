@@ -80,11 +80,37 @@ struct NativeScreenApp: App {
         // Pinned now, before anything can change it, so Settings knows when a restart is due.
         _ = AppLanguage.atLaunch
         let args = CommandLine.arguments
+        if let idx = args.firstIndex(of: "--verify-motion"), idx + 1 < args.count {
+            do {
+                try MotionRegressionChecks.run(to: URL(fileURLWithPath: args[idx + 1], isDirectory: true))
+                exit(0)
+            } catch {
+                fputs("Motion checks failed: \(error)\n", stderr)
+                exit(1)
+            }
+        }
+        if let idx = args.firstIndex(of: "--verify-projects"), idx + 2 < args.count {
+            // Real recordings: async export, so the main run loop is spun until the checks finish.
+            var finished: Int32? = nil
+            Task { @MainActor in
+                do {
+                    try await ProjectVerification.run(
+                        packages: args[(idx + 2)...].map { URL(fileURLWithPath: $0, isDirectory: true) },
+                        to: URL(fileURLWithPath: args[idx + 1], isDirectory: true))
+                    finished = 0
+                } catch {
+                    fputs("Project checks failed: \(error)\n", stderr)
+                    finished = 1
+                }
+            }
+            while finished == nil { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+            exit(finished ?? 1)
+        }
         if let idx = args.firstIndex(of: "--generate-conformance"), idx + 1 < args.count {
             let outputPath = args[idx + 1]
             let outputURL = URL(fileURLWithPath: outputPath, isDirectory: true)
             do {
-                try ConformanceFixtureGenerator.generateAll(to: outputURL)
+                try ConformanceFixtureGenerator.generateAll(to: outputURL, motionOnly: args.contains("--motion-only"))
                 exit(0)
             } catch {
                 fputs("Failed to generate conformance fixtures: \(error)\n", stderr)

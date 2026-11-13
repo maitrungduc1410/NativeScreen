@@ -25,9 +25,11 @@ extension ProjectSession {
     /// The zoom camera at `sourceMs`. In a camera-only recording with face tracking on, a zoom centers on the face:
     /// the center moves from the solver's toward the face as the zoom grows in, and stays where the zoomed picture
     /// still covers its frame.
-    func evaluatedCamera(atSourceMs sourceMs: Double) -> SpringTrajectorySolver.CameraFrameState {
-        var camera = trajectorySolver.evaluate(atSourceMs: sourceMs).camera
-        guard !camera.isLoupeMode, camera.scale > 1.0005,
+    func evaluatedCamera(atSourceMs sourceMs: Double, timelineMs: Double? = nil) -> SpringTrajectorySolver.CameraFrameState {
+        let time = timelineMs ?? timeMapper.timelineTime(forSourceMs: sourceMs, withinSliceAtTimelineMs: effectivePreviewTimelineMs)
+            ?? timeMapper.timelineTime(forSourceMs: sourceMs) ?? 0
+        var camera = trajectorySolver.evaluate(atTimelineMs: time).camera
+        guard camera.scale > 1.0005,
               let face = cameraOnlyFaceCenter01(atSourceMs: sourceMs) else { return camera }
         let progress = min(1.0, (camera.scale - 1.0) / 0.25)
         let half = 0.5 / camera.scale

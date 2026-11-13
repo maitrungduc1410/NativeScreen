@@ -46,6 +46,9 @@ This guide documents the macOS-specific implementation details, API pitfalls, an
 ### 2.2. Runtime-Compiled Metal Shaders (`MTLLibrary` from Source)
 - **Context:** To avoid fragile Xcode build-rule dependencies or missing `.metallib` resources when embedding shaders in `CIImageProcessorKernel`, `EffectKernels` compiles its Metal compute shaders (`magnifierLens`, `cameraMotionBlur`) once at runtime via `device.makeLibrary(source:options:)` and caches the `MTLComputePipelineState`s in a static singleton.
 
+### 2.3. Sharp Loupe Input (ADR-86)
+`composeScene` draws the second scene from the same full-resolution masked source and background recipe, using the already-resolved stage placement. This avoids duplicate camera-only processing or a second wallpaper crossfade clock. It returns before the lens/overlay passes, so no recursive lens or duplicate live-stage animation occurs. CoreImage materializes only the integral lens sampling ROI, not a whole magnified canvas. `EffectKernelProcessor` binds this patch at texture 2 and its top-down canvas origin at buffer 2; output/input base origins are buffer 1. Privacy masks and screen-pinned overlays must be in both scene recipes. Keep the existing decorative glass math unchanged.
+
 ---
 
 ## 3. AppKit & SwiftUI Integration (`InstantTooltipView.swift`, `TimelineSegmentContextPopovers.swift`, `WallpaperCatalog.swift`)

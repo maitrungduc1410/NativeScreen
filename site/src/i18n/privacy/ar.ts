@@ -70,5 +70,5 @@ export default {
   changesP: "إذا تغيّرت هذه السياسة، ستُنشر النسخة الجديدة على هذه الصفحة بتاريخ جديد. سجل كل تغيير متاح للعموم في <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">المستودع</a>.",
 
   contactH: "التواصل",
-  contactP: "للأسئلة المتعلقة بالخصوصية: راسل <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> أو افتح بلاغًا على <a href=\"{repo}/issues\">GitHub</a>.",
+  contactP: "للأسئلة المتعلقة بالخصوصية: راسل <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> أو افتح بلاغًا على <a href=\"{repo}/issues\">GitHub</a>.",
 };

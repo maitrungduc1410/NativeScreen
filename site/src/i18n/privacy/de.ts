@@ -70,5 +70,5 @@ export default {
   changesP: "Ändert sich diese Erklärung, wird die neue Fassung mit neuem Datum auf dieser Seite veröffentlicht. Der Verlauf aller Änderungen ist im <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">Repository</a> öffentlich.",
 
   contactH: "Kontakt",
-  contactP: "Fragen zum Datenschutz: schreib eine E-Mail an <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> oder eröffne ein Issue auf <a href=\"{repo}/issues\">GitHub</a>.",
+  contactP: "Fragen zum Datenschutz: schreib eine E-Mail an <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> oder eröffne ein Issue auf <a href=\"{repo}/issues\">GitHub</a>.",
 };

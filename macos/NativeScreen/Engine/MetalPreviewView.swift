@@ -711,6 +711,7 @@ public struct MetalPreviewView: NSViewRepresentable, Animatable {
             let finalCIImage = compositor.composeFrame(
                 sourceVideoFrame: lastDecodedFrame,
                 sourceTimeMs: sourceMs,
+                timelineTimeMs: session.effectivePreviewTimelineMs,
                 session: session,
                 outputSize: drawableSize,
                 includeShortcutOverlay: true,

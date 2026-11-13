@@ -1,0 +1,534 @@
+[
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.5,
+      "y" : 0.7799999660915798
+    },
+    "sourceMs" : 0
+  },
+  {
+    "camera" : {
+      "cx" : 0.5278466608218332,
+      "cy" : 0.5323516848687235,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.0719391110684071
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.017777442932128906,
+      "x" : 0.5310456275939941,
+      "y" : 0.778853268093533
+    },
+    "sourceMs" : 200
+  },
+  {
+    "camera" : {
+      "cx" : 0.646411270944159,
+      "cy" : 0.6700976404000634,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.5452488624092875
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.03161888122558594,
+      "x" : 0.6502434730529785,
+      "y" : 0.7656239827473958
+    },
+    "sourceMs" : 400
+  },
+  {
+    "camera" : {
+      "cx" : 0.6863256437077583,
+      "cy" : 0.7164693478605242,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.8150459014126648
+    },
+    "cursor" : {
+      "clickProgress" : 0.3333333333333333,
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.013833427429199218,
+      "x" : 0.7237627983093262,
+      "y" : 0.7448397318522135
+    },
+    "sourceMs" : 600
+  },
+  {
+    "camera" : {
+      "cx" : 0.6996579443543688,
+      "cy" : 0.7319585439208304,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9274542629164098
+    },
+    "cursor" : {
+      "clickProgress" : 0.17777777777777778,
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.011669158935546877,
+      "x" : 0.7769482612609864,
+      "y" : 0.7169754028320312
+    },
+    "sourceMs" : 800
+  },
+  {
+    "camera" : {
+      "cx" : 0.7044966007934835,
+      "cy" : 0.7375799966798455,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9717730242673104
+    },
+    "cursor" : {
+      "clickProgress" : 0.6037037037037039,
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.006088256835937504,
+      "x" : 0.8088288307189941,
+      "y" : 0.6839099884033203
+    },
+    "sourceMs" : 1000
+  },
+  {
+    "camera" : {
+      "cx" : 0.721754525349576,
+      "cy" : 0.6736802564049303,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.989037253493081
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.00040321350097656257,
+      "x" : 0.819890308380127,
+      "y" : 0.6475652482774522
+    },
+    "sourceMs" : 1200
+  },
+  {
+    "camera" : {
+      "cx" : 0.7380888757238155,
+      "cy" : 0.6076091492870376,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9957441004614656
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.0027824401855468753,
+      "x" : 0.8154762268066407,
+      "y" : 0.6183391571044922
+    },
+    "sourceMs" : 1400
+  },
+  {
+    "camera" : {
+      "cx" : 0.7452948186761356,
+      "cy" : 0.5782529964915193,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9983479571904406
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.006459426879882813,
+      "x" : 0.800783348083496,
+      "y" : 0.588408448961046
+    },
+    "sourceMs" : 1600
+  },
+  {
+    "camera" : {
+      "cx" : 0.7481667077257848,
+      "cy" : 0.5665369572907973,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.999358729067479
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.014693260192871082,
+      "x" : 0.7651464939117432,
+      "y" : 0.54538451300727
+    },
+    "sourceMs" : 1800
+  },
+  {
+    "camera" : {
+      "cx" : 0.7491945635357653,
+      "cy" : 0.5618919585371511,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.03022232055664061,
+      "x" : 0.6872458934783936,
+      "y" : 0.48132748074001735
+    },
+    "sourceMs" : 2000
+  },
+  {
+    "camera" : {
+      "cx" : 0.7386418634989544,
+      "cy" : 0.5520980724198726,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.021736145019531253,
+      "x" : 0.5752474784851074,
+      "y" : 0.41036508348253037
+    },
+    "sourceMs" : 2200
+  },
+  {
+    "camera" : {
+      "cx" : 0.6098250634322775,
+      "cy" : 0.45730110933913526,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.012898826599121095,
+      "x" : 0.5199504375457764,
+      "y" : 0.38019485473632814
+    },
+    "sourceMs" : 2400
+  },
+  {
+    "camera" : {
+      "cx" : 0.5310210362304207,
+      "cy" : 0.3994906471343574,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.015885543823242188,
+      "x" : 0.4711120128631592,
+      "y" : 0.3555978139241536
+    },
+    "sourceMs" : 2600
+  },
+  {
+    "camera" : {
+      "cx" : 0.49739093024729764,
+      "cy" : 0.37494246614442395,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.020924377441406253,
+      "x" : 0.40274977684020996,
+      "y" : 0.32302034166124133
+    },
+    "sourceMs" : 2800
+  },
+  {
+    "camera" : {
+      "cx" : 0.38742549309144303,
+      "cy" : 0.31743951012559557,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.01923608779907227,
+      "x" : 0.33061990737915037,
+      "y" : 0.29013820224338105
+    },
+    "sourceMs" : 3000
+  },
+  {
+    "camera" : {
+      "cx" : 0.30986376612498,
+      "cy" : 0.27786825943860827,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.02022876739501953,
+      "x" : 0.26020848751068115,
+      "y" : 0.258916982014974
+    },
+    "sourceMs" : 3200
+  },
+  {
+    "camera" : {
+      "cx" : 0.276644097704108,
+      "cy" : 0.26096839291154594,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.011590385437011779,
+      "x" : 0.1955559253692627,
+      "y" : 0.229442384507921
+    },
+    "sourceMs" : 3400
+  },
+  {
+    "camera" : {
+      "cx" : 0.2634715256036151,
+      "cy" : 0.25427102288794706,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "pointingHand",
+      "opacity" : 1,
+      "rotation" : 0.00040822029113769944,
+      "x" : 0.18104090690612792,
+      "y" : 0.22170501285129124
+    },
+    "sourceMs" : 3600
+  },
+  {
+    "camera" : {
+      "cx" : 0.2583335853954444,
+      "cy" : 0.2516590673568327,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "pointingHand",
+      "opacity" : 1,
+      "rotation" : -0.004917001724243147,
+      "x" : 0.18909541368484498,
+      "y" : 0.22185084025065105
+    },
+    "sourceMs" : 3800
+  },
+  {
+    "camera" : {
+      "cx" : 0.25633699906090784,
+      "cy" : 0.2506441006355693,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "pointingHand",
+      "opacity" : 1,
+      "rotation" : -0.0105910301208496,
+      "x" : 0.21736724376678468,
+      "y" : 0.22956547207302516
+    },
+    "sourceMs" : 4000
+  },
+  {
+    "camera" : {
+      "cx" : 0.2555617948146609,
+      "cy" : 0.2502500274716295,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "clickProgress" : 0.4259259259259266,
+      "kind" : "pointingHand",
+      "opacity" : 1,
+      "rotation" : -0.014530372619628893,
+      "x" : 0.26268820762634276,
+      "y" : 0.24456534915500217
+    },
+    "sourceMs" : 4200
+  },
+  {
+    "camera" : {
+      "cx" : 0.25506995037487057,
+      "cy" : 0.25,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "clickProgress" : 0.8888888888888888,
+      "kind" : "crosshair",
+      "opacity" : 1,
+      "rotation" : -0.02009391784667969,
+      "x" : 0.32410497665405275,
+      "y" : 0.26698968675401474
+    },
+    "sourceMs" : 4400
+  },
+  {
+    "camera" : {
+      "cx" : 0.25506995037487057,
+      "cy" : 0.25,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "crosshair",
+      "opacity" : 1,
+      "rotation" : -0.02274284362792969,
+      "x" : 0.40126705169677734,
+      "y" : 0.2977167977227105
+    },
+    "sourceMs" : 4600
+  },
+  {
+    "camera" : {
+      "cx" : 0.3332355303689608,
+      "cy" : 0.2806317464437526,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.020474433898925785,
+      "x" : 0.48235745429992677,
+      "y" : 0.3331848356458876
+    },
+    "sourceMs" : 4800
+  },
+  {
+    "camera" : {
+      "cx" : 0.44848001149548444,
+      "cy" : 0.325794076527869,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 2
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.01565055847167969,
+      "x" : 0.5449965953826904,
+      "y" : 0.36316676669650605
+    },
+    "sourceMs" : 5000
+  },
+  {
+    "camera" : {
+      "cx" : 0.5020201957798825,
+      "cy" : 0.34693940146592117,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.997874593680515
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.016615867614746094,
+      "x" : 0.5996695518493652,
+      "y" : 0.3921116722954644
+    },
+    "sourceMs" : 5200
+  },
+  {
+    "camera" : {
+      "cx" : 0.5092244839463596,
+      "cy" : 0.3930074630622189,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.5602510644290044
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.018686676025390623,
+      "x" : 0.6648208141326905,
+      "y" : 0.4315333048502604
+    },
+    "sourceMs" : 5400
+  },
+  {
+    "camera" : {
+      "cx" : 0.5054598132150018,
+      "cy" : 0.44395040435097577,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.2329030270987875
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.016011047363281253,
+      "x" : 0.7276918411254882,
+      "y" : 0.47733082241482205
+    },
+    "sourceMs" : 5600
+  },
+  {
+    "camera" : {
+      "cx" : 0.5024868311748146,
+      "cy" : 0.4750793277029832,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.0917824163194116
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.011217880249023439,
+      "x" : 0.7768070697784424,
+      "y" : 0.524629889594184
+    },
+    "sourceMs" : 5800
+  },
+  {
+    "camera" : {
+      "cx" : 0.5010263288967508,
+      "cy" : 0.48977021823380196,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.0357497403062204
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.0028892517089843753,
+      "x" : 0.8071677207946777,
+      "y" : 0.5705658382839627
+    },
+    "sourceMs" : 6000
+  }
+]

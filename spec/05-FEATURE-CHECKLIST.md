@@ -50,7 +50,7 @@
   - [x] SDF anti-aliased rounded corners (`borderRadius`), inner border (`inset`), and directional/classic soft drop shadow (`shadow`).
   - [x] Aspect ratio presets (`Auto`, `Wide 16:9`, `Vertical 9:16`, `Square 1:1`, `Classic 4:3`, `Tall 3:4`, `Portrait 4:5`, `Display 16:10`).
 - [x] **Cursor & Auto-Zoom Pass:**
-  - [x] 120Hz Spring Physics Solver for smooth cursor glide (`stiffness`, `damping`, `mass`) + lookahead phase-lag compensation (`lagMs = damping / stiffness * 1000`) + drag/click speed boost (`k * speed^2`, `c * speed`) + cursor size slider.
+  - [x] 120Hz Spring Physics Solver for smooth cursor glide (`stiffness`, `damping`, `mass`) + planned lead and spring speed per interaction (ADR-87: clicks, drags and cursor-shape changes within 0.75 x tolerance, `k * speed^2`, `c * speed`) + cursor size slider.
   - [x] Automatic click-clustering zoom generator (`follow-click-groups` + stationary `MovesGroup` dead-zone clusters) + manual zoom target point override + dedicated `Close Zoom editor` Inspector view.
   - [x] Smooth spring-driven virtual camera pan & zoom in Screen-Rect space (`rects.screen`) with boundary clamping (`avoidEmptyBoundsWhenZooming`) and optional `Instant animation`.
 - [x] **Multi-Track Blur & Spotlight Masks (Killer MVP Feature):**
@@ -170,6 +170,8 @@
   - [x] Auto-hide webcam during silence (`Hide during silence`).
 - [x] **Optical Glass Loupe Zoom:**
   - [x] Alternative zoom presentation mode (`presentation: "loupe"`) with circular magnifying lens, bevel rim highlight, and adjustable loupe radius.
+  - [x] **macOS motion correctness (ADR-86):** crop-aligned cursor/clicks/focus, pixel-error-constrained interactions, playback-time springs with cut resets, grouped Loupe targets, independent screen/lens centers, source-sharp bounded lens content, and 2500 ms auto-zoom interval merge. Verified with synthetic math and real GPU frames (`--verify-motion`).
+  - [ ] **Windows ADR-86 port:** Core motion/time/crop changes and two-input sharp lens, checked against `conformance/motion-v2` and the Windows handoff.
 - [x] **Keyboard Shortcuts 3D Keycaps & Multi-Track Editor:**
   - [x] Render 3D bevel keycaps (`⌘`, `⇧`, `⌥`, `⌃`, `Space`, `⌫`, etc.) both on the live Preview Canvas and baked directly into exported videos/GIFs (`Pass 6` in `MetalFrameCompositor`).
   - [x] Prose-typing suppression filter (ignores normal typing words/code even when `Show single key shortcuts` is enabled).

@@ -27,6 +27,67 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-13, ADR-88: Older recordings on the video clock (macOS first)
+
+### Writer
+- **Status:** implemented on macOS. Windows: port with ADR-86/87. No format change; files are never rewritten.
+- **Swift:** `LegacyTelemetryEpoch` and the click-insertion guard in `Engine/MotionGeometry.swift`, applied in `ProjectSession.load`; sample project clicks in `RecordingCoordinator.createInteractiveSampleProject`; `Engine/ProjectVerification.swift` (`--verify-projects`). Spec: spec/03 section 2.1, ADR-88.
+- **Rule:** a first cursor sample after 0.5 ms marks an older recording. `D = min(firstCursor.t, max(0, lastEvent.t - durationMs))` over cursor/click/key, ignored below 20 ms. Shift cursor, clicks and keys by `-D` on load and drop negatives. Skip inserting a click into the path when it is over 16 pt from the interpolated cursor and both bracketing samples.
+- **Verified on macOS:** `--verify-motion` 56 checks; `--verify-projects` on six real recordings (numbers in ADR-88). Both schemes build.
+
+### Verifier
+- **Result:** pending port.
+
+## 2026-11-13, ADR-87: Planned cursor sync replaces the ADR-86 error disc (macOS first)
+
+### Writer
+- **Status:** implemented on macOS. Windows runtime code is unchanged; port together with ADR-86. Package schema and recordings are unchanged.
+- **Swift sources:** new `Engine/CursorPathPlanner.swift` (planner, `SpringTrajectorySolver.planCursor`, `PlannedCursorPath`); `Engine/MotionGeometry.swift` (`MotionPointSize`, `CursorTelemetry`; `CursorInteractionConstraints` removed); cursor section of `Engine/SpringTrajectorySolver.swift` (fixed lookahead, drag/click boosts and the disc removed); `PlaybackTrajectorySolver` and `ProjectSession` pass `MotionPointSize(captureTarget)` and reuse the planned path. Spec: spec/03 section 2.2 to 2.4, ADR-87.
+- **Verified on macOS:** Debug builds for `NativeScreen` and `NativeScreen AppStore`. `--verify-motion` passed 50 checks (worst drag error 1.43 pt). `conformance/motion-v2` regenerated. Not checked: live playback in the editor, real recordings, export timing.
+
+### Port
+1. Port `CursorPathPlanner` line by line: `Path` (linear, moving ranges), `LeadCurve` (piecewise linear, 0 before the first knot, clamp at 0), `SpeedCurve` (max of log-space bumps), `Simulation.run` (1 ms steps, speed every 4 ms, per-axis snap at 0.01), `GroupChooser` (speed binary search, lead candidates, refine/golden section, lead raise in rests or by compression, rate 0.65 to 1.4), merge rules including the decaying-lead merge (span 4000 ms).
+2. Use capture points: `logicalBounds` size, falling back to pixels / scale factor.
+3. Planned positions are per ms; fractional evaluation reads them directly. Velocity for rotation is the +-1 ms central difference.
+
+### Verifier
+- **Result:** pending port.
+
+## 2026-11-13, ADR-86: Playback motion, crop alignment and sharp Loupe (macOS first)
+
+### Writer
+- **Status:** implemented on macOS. Windows runtime code is unchanged; this entry is the port specification, not a Windows PASS. Package schema and raw recording files are unchanged.
+- **Swift sources:** `Engine/PlaybackTrajectorySolver.swift`, `Engine/MotionGeometry.swift`, `Engine/SpringTrajectorySolver.swift`, `Engine/MetalFrameCompositor.swift`, `Engine/EffectKernels.swift`; callers in `ProjectSession`, camera-only evaluation, preview, exports and canvas hit-testing. Specs: ADR-86, spec/03 and spec/07.
+- **Verified on macOS:** Debug builds for `NativeScreen` and `NativeScreen AppStore`. `--verify-motion` passed 41 checks, including real Metal frames: worst drag error 0.7500000000000223 capture pixels, one-pixel stripe contrast through the lens 253/255, paused preview/export pixels identical. Results: `conformance/motion-v2/verification.json`. Existing concurrency warnings elsewhere remain. Nine synthetic motion fixture cases were rendered. This does not measure live playback pacing, A/V sync or full encoded movie export.
+
+### Port Order
+1. Add `PlaybackTrajectorySolver` and `MotionGeometry` / `CursorInteractionConstraints` under Core/Motion. Read the Swift implementations, including source-time pause expansion, clipped telemetry, derived click anchors and held-button state at a trim. Source-contiguous slices share history even across speed changes; discontinuous or repeated ranges use separate trajectories. Initialize the incoming cursor and active camera/lens targets at a cut, and never interpolate between runs. A slice owns `[timelineStart, timelineEnd)`, except the final movie endpoint.
+2. Extend `CameraFrameState` with `LoupeCenter01`. `Center01` always belongs to the screen camera. Crop-space focus groups serve both camera and Loupe, retaining the existing decorative drift and glass style. Prewarm invisible glass for 450 ms, including during a preceding screen zoom; never move an exiting visible lens for prewarming. Keep item exits starting at the end (ADR-84), not before it. Change generated auto-zoom `MergeGapMs` to 2500 (strict `<`), keeping typing hold and tail margin.
+3. Update `LoadedProject`, `EditorSession`, `NLETimeMapper`, frame composition and preview/export callers to use explicit timeline time. Do not infer the active slice from the first source match. Slice edits rebuild both trajectories; crop edits rebuild camera groups but may reuse cursor states. Keep source-only lookup for editing helpers, choosing the first retained occurrence. The within-slice mapper must retain the last occurrence at the final movie endpoint; still frames snapshot effective preview time before async decoding.
+4. In `FrameCompositor.Compose`, remap cursor and wave positions from original recording space to crop space before placement. Remap manual/group focus before solving, not a second time in rendering. Keep the screen transform while the lens is visible. Motion blur samples 16.67 playback ms earlier only inside the same continuous run. `PreviewOverlay` / annotation hit-testing must use the same independent screen camera.
+5. Add a second scene texture to the lens pipeline: source pixels drawn directly at lens scale, with the same masks, screen annotations, cursor, frame, shadow and background. Render only the integral sampling patch, not a whole supersized canvas. Apply the screen camera followed by magnification about the transformed lens center. Keep webcam/captions/keycaps/canvas annotations above the glass. Preserve the optical shader coefficients; the patch is already magnified, so sample with `offset * bend`, not `offset / zoom`. Pass base/output/patch canvas origins when using ROI textures.
+
+### Constants And Coordinates
+| Item | Rule |
+| :--- | :--- |
+| Persisted cursor, click, manual center | Original recording-normalized, top-left. Never rewrite telemetry. |
+| Rendered crop position | `((x - crop.x) / crop.width, (y - crop.y) / crop.height)`, no edge clamp. |
+| Focus group span | `(crop.width, crop.height) * 0.5 / zoomScale` in original coordinates. |
+| Cursor sync | Superseded by ADR-87 (entry above): planned lead/speed, no error disc. |
+| Click accuracy | Down/up samples are inserted path samples. Waves/circles stay at the down anchor. |
+| Sparse pause holds | Expand `gap > 48 source ms` into a hold until `next.t - 16 source ms` before projecting time. Do not reclassify stretched playback samples as pauses. |
+| Lens patch | Integral square, half-side `1.7 * radiusPx + 2`; texture size independent of zoom. Base scene and pre-magnified patch are separate inputs. |
+
+### Fixtures And Acceptance
+- **New expectations:** `conformance/motion-v2/cases`: `zoom-follow`, `zoom-manual`, `loupe`, `drag-sync`, `slices-speed-cut`, `crop-cursor`, `crop-loupe`, `zoom-loupe-transition`, `repeated-slices`. Each has `trajectory-playback.json` (timeline/source/slice, original cursor/waves, crop-space camera/loupe) and `playback-frames/<timelineMs>.png`. Existing `conformance/cases` is untouched. Use the playback files as authoritative for cut/speed/repeated footage; replace legacy motion expectations only after porting. Do not lower tolerances to hide differences.
+- **Regenerate on macOS:** `"Native Screen.app/Contents/MacOS/Native Screen" --generate-conformance conformance/motion-v2 --motion-only`. Math/GPU checks: the same executable with `--verify-motion <temporary-folder>`.
+- **Windows verification:** run `pwsh windows/scripts/verify.ps1`, add numeric tests against the new playback rows, and GPU comparisons against playback frames using spec/08 tolerances. Port the 41 invariant checks from `MotionRegressionChecks.swift`, especially fractional clicks, 0.25x 60 Hz movement, a drag held through a trim, an exact cut boundary, hidden cursor/final frame in a reused range, invisible lens prewarming, crop invalidation and privacy masks inside a sharp lens.
+- **Manual verification:** play and scrub screen -> Loupe -> screen, crop a corner, switch 0.25x/1x/2x/10x, reuse a source slice with its cursor hidden, and export MP4/GIF/still. No camera snap, discarded-history motion or cursor offset. Pause and check idle rendering stays stopped. Measure lens GPU time/memory at 1080p and 4K, large radius, and masks/annotations; verify A/V sync and encoding on real hardware.
+- **Open VERIFY:** Windows port, shader compilation/ROI orientation, numeric/frame comparisons and live performance remain pending. No Windows code was built or run for this entry.
+
+### Verifier
+- **Result:** pending port and Windows hardware verification.
+
 ## 2026-11-13, Back to animating out after an item ends (layout exits and ADR-84 reverted)
 
 ### Writer

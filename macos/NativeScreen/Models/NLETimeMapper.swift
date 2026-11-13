@@ -42,7 +42,7 @@ public struct NLETimeMapper: Sendable {
 
         let clamped = max(0.0, min(totalTimelineDurationMs, timelineMs))
         for item in mappedSlices {
-            if clamped >= item.timelineStartMs && clamped <= item.timelineEndMs {
+            if clamped >= item.timelineStartMs && (clamped < item.timelineEndMs || clamped == totalTimelineDurationMs) {
                 let offsetInTimeline = clamped - item.timelineStartMs
                 let sourceMs = item.slice.sourceStartMs + offsetInTimeline * item.slice.speed
                 return (min(item.slice.sourceEndMs, sourceMs), item.slice)
@@ -58,7 +58,10 @@ public struct NLETimeMapper: Sendable {
     /// Maps `sourceMs` to timeline time, but only inside the slice that contains `referenceTimelineMs`
     /// (used to follow the decoder clock during playback without jumping to another slice that reuses the same source range).
     public func timelineTime(forSourceMs sourceMs: Double, withinSliceAtTimelineMs referenceTimelineMs: Double) -> Double? {
-        guard let item = mappedSlices.first(where: { referenceTimelineMs >= $0.timelineStartMs && referenceTimelineMs < $0.timelineEndMs }),
+        guard let item = mappedSlices.first(where: {
+            referenceTimelineMs >= $0.timelineStartMs && (referenceTimelineMs < $0.timelineEndMs
+                || (referenceTimelineMs == totalTimelineDurationMs && $0.timelineEndMs == totalTimelineDurationMs))
+        }),
               sourceMs >= item.slice.sourceStartMs && sourceMs <= item.slice.sourceEndMs else {
             return nil
         }

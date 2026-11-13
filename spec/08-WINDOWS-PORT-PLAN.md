@@ -18,7 +18,9 @@ Where the Swift code and a spec disagree, the Swift code wins.
 | `Models/RecordingMetadata.swift` | `Core/Models/RecordingMetadata.cs` | `platform = "windows"` when written by Windows. |
 | `Models/NLETimeMapper.swift` | `Core/Timeline/NLETimeMapper.cs` | Exact. |
 | `Models/WallpaperCatalog.swift` (`MeshPreset`, gradient swatches) | `Core/Styles/*` | Mesh colors and ids exact. System wallpapers: `C:\Windows\Web\Wallpaper\` instead of `/System/Library/Desktop Pictures/`. |
-| `Engine/SpringTrajectorySolver.swift` (incl. `AutoZoomClusterGenerator`) | `Core/Motion/*` | Exact, including step size (120 Hz), substeps, clamps, lookahead, drag/click speed boost, dead-zone groups, loupe springs. Same `double` arithmetic order. |
+| `Engine/SpringTrajectorySolver.swift` (incl. `AutoZoomClusterGenerator`) | `Core/Motion/*` | Exact, including step size (120 Hz), substeps, clamps, dead-zone groups, loupe springs. Same `double` arithmetic order. |
+| `Engine/PlaybackTrajectorySolver.swift`, `Engine/MotionGeometry.swift` | `Core/Motion/*` | ADR-86: edited-time projection, continuous runs, cut initialization, source/crop coordinate separation. `MotionPointSize`, `CursorTelemetry`. |
+| `Engine/CursorPathPlanner.swift` | `Core/Motion/*` | ADR-87: planned cursor lead/speed, 1 ms integration, anchor tolerances in points. Exact. |
 | `Engine/StageLayout.swift`, `MetalFrameCompositor` stage helpers (`resolvedStageLayout`, `rawStageLayout`, `cameraPlacement`, `computeSplitScreenGeometry`, `calculateFittedScreenRect`, `stageKey`, `effectiveCameraConfig`) | `Core/Layout/*` | Pure functions of (project, time, canvas size). |
 | `Engine/CaptionLineLayout.swift` | `Core/Captions/CaptionLineLayout.cs` | Exact. |
 | `Engine/CanvasCoordinateTransform.swift` | `Core/Layout/CanvasCoordinateTransform.cs` | Preview hit-testing math. |
@@ -82,6 +84,8 @@ spotlight, keyframed) · `zoom-follow` (auto zoom, cursor follow, motion blur) �
 `device-mockup` (each device and finish) · `custom-look-warmth` · `aspect-ratios` (16:9, 9:16, 1:1, 4:3).
 
 ### 2.4. Tolerances
+ADR-86 motion fixtures live separately in `conformance/motion-v2` until the Windows port is accepted. Generate with `--generate-conformance <folder> --motion-only`. `trajectory-playback.json` and `playback-frames/<timelineMs>.png` are authoritative for speed, cuts and reused source ranges. Keep the existing fixtures during the port; do not relax their thresholds to hide algorithm differences. Replace legacy motion expectations after porting, while retaining non-motion coverage.
+
 | Output | Tolerance |
 | :--- | :--- |
 | Time mapping, trajectory, auto zoom, stage, captions, shortcuts, estimates | `|a - b| ≤ 1e-6` relative or `≤ 1e-4` absolute (pixels / normalized units). Discrete values exact. |

@@ -144,6 +144,15 @@ h3 { font-size: 24px; line-height: 1.2; }
 .hero-foot { display: grid; grid-template-columns: 1.4fr 1fr; gap: 48px; align-items: end; margin-top: 40px; }
 .cta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; }
 .cta .fine { flex-basis: 100%; text-align: end; }
+.ph-badge { display: inline-flex; line-height: 0; }
+.ph-badge img { width: 250px; height: 54px; }
+.ph-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ph-light { display: none; }
+  :root:not([data-theme="light"]) .ph-dark { display: block; }
+}
+:root[data-theme="dark"] .ph-light { display: none; }
+:root[data-theme="dark"] .ph-dark { display: block; }
 
 /* Demo placeholders: plain, labelled, easy to spot and replace */
 .demo { margin: 56px 0 0; }

@@ -171,9 +171,9 @@ pixel of the recording. They join the positioned screen before the cursor, so mo
 
 ### Pass 4: Click effect and cursor (`renderCursorAndRipple`)
 Skipped when `cursor.jsonl` is empty (camera-only recordings, projects made from a video).
-Cursor position = screen rect + `position01` (top-left normalized).
+Cursor and click waves are stored in recording space. Before drawing, remap with `((x - crop.x) / crop.width, (y - crop.y) / crop.height)`, then place in the drawn screen rect (top-left normalized). Do not clamp: a point outside the crop must not jump onto its edge. Slice cursor visibility is looked up by explicit timeline time, not by the first matching source range.
 - **Circle click effect** while `activeClickProgress = p` is set: filled white disc, radius `max(4, 46 * S * cursor.scale * p)`,
-  alpha `(1 - p) * 0.72 * cursorOpacity * 0.65`.
+  alpha `(1 - p) * 0.72 * cursorOpacity * 0.65`, centered on the latest down anchor rather than the moving cursor.
 - **Ripple click effect:** draws nothing on top. It bends the positioned screen, shadow included, before the cursor is drawn,
   over the whole canvas (`clickRipple` in `EffectKernels.swift`). Up to 3 waves at once, each from the cursor position when the
   button went down, for 900 ms. With `t` the age in seconds, `L` the longer side of the screen rect and `d` the distance to the
@@ -190,16 +190,18 @@ Cursor position = screen rect + `position01` (top-left normalized).
   about the hotspot, alpha `opacity`. For a non-pointer kind, choose the sprite as in `spec/06` ADR-29.
 
 ### Camera zoom (classic)
-Skipped while editing masks on the paused preview. With `Z = max(1, scale)` and focus `f` = screen rect + `center01`:
+With `Z = max(1, scale)` and focus `f` = screen rect + crop-space `center01`:
 the zoom target moves from the screen center toward the canvas center by `k = clamp((Z - 1) / 0.5, 0, 1)`; the
-transform is `translate(target) · scale(Z) · translate(-f)`. Crop to the canvas grown by 24 px.
+transform is `translate(target) · scale(Z) · translate(-f)`. Crop to the canvas grown by 24 px. Keep this transform during a visible Loupe's entry/exit; the screen and glass have separate centers.
 
 ### Pass 5: Motion blur and lens
 Port the Metal kernels in `EffectKernels.swift` to HLSL compute shaders **line for line** (same math, same constants,
 same sample counts: 8 in playback, 24 in export, `pixelsPerSample` 10 / 3). Conditions for running motion blur are in
-`composeFrame` (instant-zoom window, paused last frame, loupe mode, `motionBlurIntensity > 0.02`). The lens runs over the
+`composeFrame` (instant-zoom window, paused last frame, same continuous playback run, `motionBlurIntensity > 0.02`). Previous state is 16.67 playback milliseconds earlier, never across a cut. The lens runs over the
 whole composite when `loupePresence01 > 0.005` and `loupeScale > 1.002`, radius `max(48, max(w, h) * radius01)` of the
 screen rect.
+
+The lens has two texture inputs (ADR-86). Keep the existing refraction, RGB fringe, gloss, rim and shadow math. Draw a second scene directly from source pixels with the existing screen camera followed by magnification about the lens center. Its integral ROI has half-side `1.7 * radius + 2`; it includes masks, screen-pinned annotations, cursor, frame, shadow and background, but no camera/keycaps/captions/canvas annotations. Sample this already-magnified patch at `center + offset * bend`, not `offset / zoom`. Both output tiles and input ROI textures carry their top-down canvas origin into the compute shader. Never allocate a whole canvas at `zoom * outputSize`, and never use an unmasked source as the lens input.
 
 ### Pass 5C: Annotations pinned to the frame
 Items with `anchor: "canvas"`, drawn as in Pass 3B with points at `p * canvasSize`, after the lens and before the camera.

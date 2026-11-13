@@ -13,19 +13,21 @@ enum ConformanceFixtureGenerator {
     private static let sourceHeight = 720
     private static let durationMs = 6000.0
 
-    static func generateAll(to root: URL) throws {
+    static func generateAll(to root: URL, motionOnly: Bool = false) throws {
         let fm = FileManager.default
         if fm.fileExists(atPath: root.path) {
             try fm.removeItem(at: root)
         }
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
 
-        try writeLooks(to: root.appendingPathComponent("looks", isDirectory: true))
+        if !motionOnly { try writeLooks(to: root.appendingPathComponent("looks", isDirectory: true)) }
 
         let screen = syntheticScreenImage()
         let webcam = syntheticWebcamImage()
         var caseIds: [String] = []
-        for spec in allCases() {
+        let motionCases: Set<String> = ["zoom-follow", "zoom-manual", "loupe", "drag-sync", "slices-speed-cut",
+                                       "crop-cursor", "crop-loupe", "zoom-loupe-transition", "repeated-slices"]
+        for spec in allCases() where !motionOnly || motionCases.contains(spec.id) {
             // One compositor per case: its background crossfade runs on wall-clock time and would leak between cases.
             guard let compositor = MetalFrameCompositor() else {
                 throw failure("Metal is unavailable; frame fixtures and stage layout need a GPU.")
@@ -56,6 +58,8 @@ enum ConformanceFixtureGenerator {
         - `estimates.json` stores the formatted size and duration strings plus the MP4 video bitrate in bits/second.
         - Default canvas is 1280×720. Aspect-ratio cases use a canvas with a 720 px short side (9:16 is 720×1280).
         - `shortcuts.json` includes `typingSuggestions` from the same keystrokes.
+        - `trajectory-playback.json` is authoritative for motion: includes timeline time, slice id, source time, crop-space camera/loupe centers and recording-space click waves.
+        - `playback-frames/<timelineMs>.png` renders with explicit edited time, including repeated source ranges. Legacy `frames` remain source-time examples.
 
         Cases: \(caseIds.joined(separator: ", "))
         """
@@ -207,6 +211,34 @@ enum ConformanceFixtureGenerator {
                 ClipSlice(id: "slice-2", sourceStartMs: 2800, sourceEndMs: 4000, speed: 2),
                 ClipSlice(id: "slice-3", sourceStartMs: 4000, sourceEndMs: 6000, speed: 0.5)
             ]
+            doc.timeline.zooms = [ZoomBlock(id: "zoom-1", sourceStartMs: 1200, sourceEndMs: 5200, scale: 2.4,
+                                           mode: .manual, manualCenter01: Point01(x: 0.65, y: 0.4))]
+        })
+
+        cases.append(makeCase(id: "crop-cursor") { doc in
+            doc.canvas.cropRect01 = Rect01(x: 0.25, y: 0.2, width: 0.5, height: 0.6)
+            doc.camera.enabled = false
+            doc.cursor.clickEffect.visualStyle = .circle
+        })
+        cases.append(makeCase(id: "crop-loupe") { doc in
+            doc.canvas.cropRect01 = Rect01(x: 0.2, y: 0.1, width: 0.6, height: 0.8)
+            doc.camera.enabled = false
+            doc.timeline.zooms = [ZoomBlock(id: "zoom-1", sourceStartMs: 500, sourceEndMs: 4600, scale: 2.5,
+                                           mode: .followCursor, presentation: .loupe,
+                                           loupe: LoupeConfig(radius01: 0.25, bevelRatio: 0.22, chromaticAberration: 0.6))]
+        })
+        cases.append(makeCase(id: "zoom-loupe-transition") { doc in
+            doc.camera.enabled = false
+            doc.timeline.zooms = [ZoomBlock(id: "zoom-1", sourceStartMs: 400, sourceEndMs: 2000, scale: 2.3,
+                                           mode: .manual, manualCenter01: Point01(x: 0.7, y: 0.4)),
+                                 ZoomBlock(id: "zoom-2", sourceStartMs: 2000, sourceEndMs: 3600, scale: 2.5, mode: .followCursor, presentation: .loupe),
+                                 ZoomBlock(id: "zoom-3", sourceStartMs: 3600, sourceEndMs: 5000, scale: 2, mode: .manual)]
+        })
+        cases.append(makeCase(id: "repeated-slices") { doc in
+            doc.camera.enabled = false
+            doc.timeline.slices = [ClipSlice(id: "slice-1", sourceStartMs: 500, sourceEndMs: 3000),
+                                   ClipSlice(id: "slice-2", sourceStartMs: 500, sourceEndMs: 3000, speed: 2, hideCursor: true)]
+            doc.timeline.zooms = [ZoomBlock(id: "zoom-1", sourceStartMs: 800, sourceEndMs: 2200, scale: 2, mode: .followCursor)]
         })
 
         cases.append(cameraCase(id: "camera-overlay") { doc in
@@ -531,6 +563,14 @@ enum ConformanceFixtureGenerator {
         let times = sampleTimes(durationMs: durationMs, stepMs: 200)
         try writeJSON(timeMapRows(session: session, times: times), to: expected.appendingPathComponent("timemap.json"))
         try writeJSON(trajectoryRows(session: session, times: times), to: expected.appendingPathComponent("trajectory.json"))
+        var playbackTimes = sampleTimes(durationMs: session.timeMapper.totalTimelineDurationMs, stepMs: 200)
+        for slice in session.timeMapper.mappedSlices {
+            for t in [slice.timelineStartMs - 0.1, slice.timelineStartMs, slice.timelineStartMs + 0.1] where t >= 0 {
+                playbackTimes.append(t)
+            }
+        }
+        playbackTimes = Array(Set(playbackTimes)).sorted()
+        try writeJSON(playbackTrajectoryRows(session: session, times: playbackTimes), to: expected.appendingPathComponent("trajectory-playback.json"))
         try writeJSON(autoZoomRows(clicks: spec.clicks, keys: spec.keys), to: expected.appendingPathComponent("autozoom.json"))
         try writeJSON(
             stageRows(spec: spec, session: session, compositor: compositor, times: times),
@@ -559,6 +599,18 @@ enum ConformanceFixtureGenerator {
                 throw failure("Could not rasterize frame \(t) of \(spec.id)")
             }
             try writePNG(cg, to: framesDir.appendingPathComponent("\(Int(t)).png"))
+        }
+        let playbackFrames = expected.appendingPathComponent("playback-frames", isDirectory: true)
+        try fm.createDirectory(at: playbackFrames, withIntermediateDirectories: true)
+        let frameTimes = Set(spec.frameTimes + session.timeMapper.mappedSlices.map { $0.timelineStartMs } + [1999, 2000, 2001, 3599, 3600, 3601])
+        for t in frameTimes.sorted() where t <= session.timeMapper.totalTimelineDurationMs {
+            let source = session.timeMapper.sourceTime(forTimelineMs: t).sourceMs
+            let frame = compositor.composeFrame(sourceVideoFrame: screenCI, sourceTimeMs: source, timelineTimeMs: t,
+                                                session: session, outputSize: spec.canvas, includeShortcutOverlay: true, webcamVideoFrame: webcamCI)
+            guard let cg = compositor.ciContext.createCGImage(frame, from: CGRect(origin: .zero, size: spec.canvas)) else {
+                throw failure("Could not rasterize playback frame \(t) of \(spec.id)")
+            }
+            try writePNG(cg, to: playbackFrames.appendingPathComponent("\(Int(t)).png"))
         }
     }
 
@@ -589,6 +641,26 @@ enum ConformanceFixtureGenerator {
         var sourceMs: Double
         var cursor: Cursor
         var camera: Camera
+    }
+
+    private struct PlaybackTrajectoryRow: Codable {
+        struct Wave: Codable { var ageMs: Double; var x: Double; var y: Double }
+        var timelineMs: Double
+        var sourceMs: Double
+        var sliceId: String?
+        var cursorX: Double
+        var cursorY: Double
+        var cursorOpacity: Double
+        var rotation: Double
+        var cursorKind: String
+        var clickWaves: [Wave]
+        var cameraScale: Double
+        var cameraX: Double
+        var cameraY: Double
+        var loupeX: Double
+        var loupeY: Double
+        var loupeScale: Double
+        var loupePresence: Double
     }
 
     private struct StageRow: Codable {
@@ -724,6 +796,20 @@ enum ConformanceFixtureGenerator {
                     loupePresence: eval.camera.loupePresence01
                 )
             )
+        }
+    }
+
+    private static func playbackTrajectoryRows(session: ProjectSession, times: [Double]) -> [PlaybackTrajectoryRow] {
+        times.map { t in
+            let mapped = session.timeMapper.sourceTime(forTimelineMs: t)
+            let state = session.trajectorySolver.evaluate(atTimelineMs: t)
+            return PlaybackTrajectoryRow(timelineMs: t, sourceMs: mapped.sourceMs, sliceId: mapped.slice?.id,
+                cursorX: state.cursor.position01.x, cursorY: state.cursor.position01.y, cursorOpacity: state.cursor.opacity,
+                rotation: state.cursor.rotationRadians, cursorKind: state.cursor.cursorType,
+                clickWaves: state.cursor.clickWaves.map { .init(ageMs: $0.ageMs, x: $0.position01.x, y: $0.position01.y) },
+                cameraScale: state.camera.scale, cameraX: state.camera.center01.x, cameraY: state.camera.center01.y,
+                loupeX: state.camera.loupeCenter01.x, loupeY: state.camera.loupeCenter01.y,
+                loupeScale: state.camera.loupeScale, loupePresence: state.camera.loupePresence01)
         }
     }
 

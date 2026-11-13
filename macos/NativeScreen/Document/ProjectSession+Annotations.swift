@@ -66,8 +66,8 @@ extension ProjectSession {
             canvasSize: canvasSize,
             screenRectBottomLeft: stage.screenRect,
             cropRect01: crop,
-            cameraCenter01: camera.isLoupeMode ? .center : camera.center01,
-            cameraScale: camera.isLoupeMode ? 1.0 : camera.scale
+            cameraCenter01: camera.center01,
+            cameraScale: camera.scale
         )
     }
 

@@ -146,13 +146,14 @@ public final class ProjectSession: Identifiable {
 
     // Cached NLE Mapper & 120Hz Spring Trajectory Solver
     public private(set) var timeMapper: NLETimeMapper
-    @ObservationIgnored public private(set) var trajectorySolver: SpringTrajectorySolver
+    @ObservationIgnored public private(set) var trajectorySolver: PlaybackTrajectorySolver
 
     @ObservationIgnored private var lastMappedSlices: [ClipSlice]
     @ObservationIgnored private var lastSolverCursorConfig: CursorConfig
     @ObservationIgnored private var lastSolverMotionConfig: MotionConfig
     @ObservationIgnored private var lastSolverZooms: [ZoomBlock]
     @ObservationIgnored private var lastSolverZoomTrackHidden: Bool
+    @ObservationIgnored private var lastSolverCrop: Rect01
 
     @ObservationIgnored private var cachedTypingSuggestions: [TypingSuggestionRange]?
     @ObservationIgnored private var lastTypingSuggestionsSlices: [ClipSlice]?
@@ -267,11 +268,13 @@ public final class ProjectSession: Identifiable {
         self.lastSolverMotionConfig = cleanedDoc.motion
         self.lastSolverZooms = cleanedDoc.timeline.zooms
         self.lastSolverZoomTrackHidden = cleanedDoc.timeline.isZoomTrackHidden
-        self.trajectorySolver = SpringTrajectorySolver(
+        self.lastSolverCrop = cleanedDoc.canvas.cropRect01
+        self.trajectorySolver = PlaybackTrajectorySolver(
             durationMs: metadata.durationMs,
             cursorEvents: cursorEvents,
             clickEvents: clickEvents,
-            document: cleanedDoc
+            document: cleanedDoc,
+            pointSize: MotionPointSize(metadata.captureTarget)
         )
         self.selectedSliceId = nil
         let realDisplayVideoExists = FileManager.default.fileExists(
@@ -346,9 +349,14 @@ public final class ProjectSession: Identifiable {
         let clicksURL = recordingDir.appendingPathComponent(metadata.tracks.clicksTelemetry)
         let keysURL = recordingDir.appendingPathComponent(metadata.tracks.keysTelemetry)
 
-        let cursorEvents = JSONLinesCodec.load(CursorSampleEvent.self, from: cursorURL)
-        let clickEvents = JSONLinesCodec.load(ClickEvent.self, from: clicksURL)
-        let keyEvents = JSONLinesCodec.load(KeyStrokeEvent.self, from: keysURL)
+        // Files stay as recorded; older recordings are moved onto the video clock in memory only.
+        let rawCursor = JSONLinesCodec.load(CursorSampleEvent.self, from: cursorURL)
+        let rawClicks = JSONLinesCodec.load(ClickEvent.self, from: clicksURL)
+        let rawKeys = JSONLinesCodec.load(KeyStrokeEvent.self, from: keysURL)
+        let legacyOffsetMs = LegacyTelemetryEpoch.offsetMs(cursor: rawCursor, clicks: rawClicks, keys: rawKeys,
+                                                           durationMs: metadata.durationMs)
+        let (cursorEvents, clickEvents, keyEvents) = LegacyTelemetryEpoch.corrected(
+            cursor: rawCursor, clicks: rawClicks, keys: rawKeys, offsetMs: legacyOffsetMs)
 
         return ProjectSession(
             packageURL: packageURL,
@@ -557,7 +565,8 @@ public final class ProjectSession: Identifiable {
     }
 
     private func rebuildDerivedState(forceSpringRebuild: Bool = false) {
-        if forceSpringRebuild || document.timeline.slices != lastMappedSlices {
+        let slicesChanged = document.timeline.slices != lastMappedSlices
+        if forceSpringRebuild || slicesChanged {
             lastMappedSlices = document.timeline.slices
             timeMapper = NLETimeMapper(slices: document.timeline.slices)
         }
@@ -569,24 +578,27 @@ public final class ProjectSession: Identifiable {
         trajectoryCursorConfig.themeId = lastSolverCursorConfig.themeId
         trajectoryCursorConfig.variantId = lastSolverCursorConfig.variantId
         trajectoryCursorConfig.clickEffect = lastSolverCursorConfig.clickEffect
-        let cursorChanged = forceSpringRebuild || trajectoryCursorConfig != lastSolverCursorConfig
+        let cursorChanged = forceSpringRebuild || slicesChanged || trajectoryCursorConfig != lastSolverCursorConfig
         let needsSpringRebuild = cursorChanged
             || document.motion != lastSolverMotionConfig
             || document.timeline.zooms != lastSolverZooms
             || document.timeline.isZoomTrackHidden != lastSolverZoomTrackHidden
+            || document.canvas.cropRect01 != lastSolverCrop
 
         if needsSpringRebuild {
-            let reusableCursorStates = cursorChanged ? nil : trajectorySolver.cursorStates
+            let reusableCursor = cursorChanged ? nil : trajectorySolver
             lastSolverCursorConfig = document.cursor
             lastSolverMotionConfig = document.motion
             lastSolverZooms = document.timeline.zooms
             lastSolverZoomTrackHidden = document.timeline.isZoomTrackHidden
-            trajectorySolver = SpringTrajectorySolver(
+            lastSolverCrop = document.canvas.cropRect01
+            trajectorySolver = PlaybackTrajectorySolver(
                 durationMs: metadata.durationMs,
                 cursorEvents: cursorEvents,
                 clickEvents: clickEvents,
                 document: document,
-                reusingCursorStates: reusableCursorStates
+                pointSize: MotionPointSize(metadata.captureTarget),
+                reusingCursorFrom: reusableCursor
             )
         }
 
@@ -1520,7 +1532,7 @@ public final class ProjectSession: Identifiable {
     public func addZoomAtPlayhead(presentation: ZoomPresentation = .screen) {
         let srcMs = committedSourceTimeMs
         let maxDur = metadata.durationMs
-        let cursorState = trajectorySolver.evaluate(atSourceMs: srcMs).cursor
+        let cursorState = trajectorySolver.evaluate(atTimelineMs: playheadTimelineMs).cursor
 
         let sorted = document.timeline.zooms.sorted { $0.sourceStartMs < $1.sourceStartMs }
         if let containing = sorted.first(where: { srcMs >= $0.sourceStartMs && srcMs <= $0.sourceEndMs }) {
@@ -2006,7 +2018,8 @@ public final class ProjectSession: Identifiable {
 
     public func renderCurrentCompositedCGImage(targetHeight: Double = 1440.0) async -> CGImage? {
         guard let compositor = MetalFrameCompositor() else { return nil }
-        let sourceMs = currentSourceTimeMs
+        let timelineMs = effectivePreviewTimelineMs
+        let sourceMs = timeMapper.sourceTime(forTimelineMs: timelineMs).sourceMs
         var sourceCI: CIImage?
 
         let url = videoFileURL
@@ -2045,6 +2058,7 @@ public final class ProjectSession: Identifiable {
         let composited = compositor.composeFrame(
             sourceVideoFrame: sourceCI,
             sourceTimeMs: sourceMs,
+            timelineTimeMs: timelineMs,
             session: self,
             outputSize: outputSize,
             includeShortcutOverlay: true,

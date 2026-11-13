@@ -12,6 +12,8 @@ Free and open source. Native on macOS and Windows.
 [Download for Windows](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe) ·
 [All releases](https://github.com/maitrungduc1410/NativeScreen/releases)
 
+<a href="https://www.producthunt.com/products/native-screen?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-native-screen" target="_blank" rel="noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=dark"><img alt="Native Screen on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=light"></picture></a>
+
 </div>
 
 ![The Native Screen editor](site/public/assets/shots/editor-light.jpg)

@@ -70,5 +70,5 @@ export default {
   changesP: "如果本政策有所變更，新版本將在本頁面發布並註明新的日期。每次變更的歷史紀錄都公開在<a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">程式碼儲存庫</a>中。",
 
   contactH: "聯絡方式",
-  contactP: "隱私相關問題：寄送電子郵件至 <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a>，或在 <a href=\"{repo}/issues\">GitHub</a> 上提出 issue。",
+  contactP: "隱私相關問題：寄送電子郵件至 <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a>，或在 <a href=\"{repo}/issues\">GitHub</a> 上提出 issue。",
 };

@@ -2010,12 +2010,11 @@ public final class RecordingCoordinator {
         }
         cursorAppender.close()
 
-        let sampleClickTimes: [(Double, Double, Double)] = [
-            (2200.0, 0.72, 0.34),
-            (8400.0, 0.28, 0.66),
-            (13800.0, 0.64, 0.42)
-        ]
-        for (t, cx, cy) in sampleClickTimes {
+        // Clicks land where the sample cursor is at that moment, as in a real recording.
+        for t in [2200.0, 8400.0, 13800.0] {
+            let phase = (t / durationMs) * (.pi * 4.0)
+            let cx = 0.5 + 0.30 * sin(phase)
+            let cy = 0.5 + 0.24 * sin(phase * 2.0)
             clicksAppender.append(ClickEvent(t: t, type: "down", button: "left", x: cx, y: cy, count: 1))
             clicksAppender.append(ClickEvent(t: t + 90.0, type: "up", button: "left", x: cx, y: cy, count: 1))
         }

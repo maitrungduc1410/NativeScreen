@@ -56,6 +56,7 @@ public final class EffectKernels {
     /// `centerPx` and `canvasRect` are in CoreImage coordinates (bottom-left origin).
     public static func applyMagnifierLens(
         to inputImage: CIImage,
+        magnifiedContent: CIImage,
         canvasRect: CGRect,
         centerPx: CGPoint,
         radiusPx: CGFloat,
@@ -75,7 +76,8 @@ public final class EffectKernels {
             fringe: Float(min(1.5, max(0.0, colorFringe))),
             presence: Float(min(1.0, presence))
         )
-        return run(.lens, on: inputImage, canvasRect: canvasRect, uniforms: uniforms)
+        return run(.lens, on: inputImage, canvasRect: canvasRect, uniforms: uniforms,
+                   secondInput: magnifiedContent)
     }
 
     // MARK: - Click ripple
@@ -205,18 +207,20 @@ public final class EffectKernels {
         var maxSamples: Int32
     }
 
-    private static func run<U>(_ kind: Kind, on image: CIImage, canvasRect: CGRect, uniforms: U) -> CIImage {
+    private static func run<U>(_ kind: Kind, on image: CIImage, canvasRect: CGRect, uniforms: U,
+                               secondInput: CIImage? = nil) -> CIImage {
         // Pad to the stride: Metal sizes the struct with its trailing padding.
         var bytes = withUnsafeBytes(of: uniforms) { Data($0) }
         bytes.append(Data(count: MemoryLayout<U>.stride - bytes.count))
-        let args: [String: Any] = [
+        var args: [String: Any] = [
             EffectKernelProcessor.kindKey: kind.rawValue,
             EffectKernelProcessor.uniformsKey: bytes,
             EffectKernelProcessor.canvasKey: CIVector(cgRect: canvasRect)
         ]
+        if let secondInput { args[EffectKernelProcessor.secondRectKey] = CIVector(cgRect: secondInput.extent) }
         guard let out = try? EffectKernelProcessor.apply(
             withExtent: canvasRect,
-            inputs: [image.cropped(to: canvasRect)],
+            inputs: [image.cropped(to: canvasRect)] + (secondInput.map { [$0] } ?? []),
             arguments: args
         ) else {
             return image
@@ -306,15 +310,20 @@ public final class EffectKernels {
     kernel void magnifierLens(
         texture2d<float, access::sample> src [[texture(0)]],
         texture2d<float, access::write> dst [[texture(1)]],
+        texture2d<float, access::sample> content [[texture(2)]],
         sampler smp [[sampler(0)]],
         constant LensUniforms &u [[buffer(0)]],
+        constant float4 &regions [[buffer(1)]],
+        constant float2 &contentOrigin [[buffer(2)]],
         uint2 gid [[thread_position_in_grid]]
     ) {
         float2 size = float2(dst.get_width(), dst.get_height());
         if (gid.x >= uint(size.x) || gid.y >= uint(size.y)) { return; }
 
-        float2 px = float2(gid) + 0.5;
-        float4 under = sampleAt(src, smp, px, size);
+        float2 px = float2(gid) + 0.5 + regions.xy;
+        float2 srcSize = float2(src.get_width(), src.get_height());
+        float2 contentSize = float2(content.get_width(), content.get_height());
+        float4 under = sampleAt(src, smp, px - regions.zw, srcSize);
         float2 offset = px - u.center;
         float dist = length(offset);
         float R = u.radius;
@@ -336,15 +345,15 @@ public final class EffectKernels {
         float r = dist / R;
         float rimStart = 1.0 - u.rimRatio;
         float rim = smoothstep(rimStart, 1.0, r);
-        float2 lensOffset = offset / u.zoom;
+        float2 lensOffset = offset;
         float bend = 1.0 + 0.55 * rim * rim;
 
         // Color fringing grows toward the rim: red bends a bit less than blue.
         float spread = 0.045 * u.fringe * rim;
         float2 baseRel = lensOffset * bend;
-        float4 g = sampleAt(src, smp, u.center + baseRel, size);
-        float rr = sampleAt(src, smp, u.center + baseRel * (1.0 - spread), size).r;
-        float bb = sampleAt(src, smp, u.center + baseRel * (1.0 + spread), size).b;
+        float4 g = sampleAt(content, smp, u.center + baseRel - contentOrigin, contentSize);
+        float rr = sampleAt(content, smp, u.center + baseRel * (1.0 - spread) - contentOrigin, contentSize).r;
+        float bb = sampleAt(content, smp, u.center + baseRel * (1.0 + spread) - contentOrigin, contentSize).b;
         float3 glass = float3(rr, g.g, bb);
 
         // Light comes from the top left.
@@ -432,6 +441,7 @@ private final class EffectKernelProcessor: CIImageProcessorKernel {
     static let kindKey = "kind"
     static let uniformsKey = "uniforms"
     static let canvasKey = "canvas"
+    static let secondRectKey = "secondRect"
 
     override class func process(
         with inputs: [CIImageProcessorInput]?,
@@ -460,6 +470,12 @@ private final class EffectKernelProcessor: CIImageProcessorKernel {
         encoder.setComputePipelineState(pipeline)
         encoder.setTexture(inTexture, index: 0)
         encoder.setTexture(outTexture, index: 1)
+        if kind == .lens, let content = inputs?.dropFirst().first, let texture = content.metalTexture {
+            encoder.setTexture(texture, index: 2)
+            let canvas = (arguments?[canvasKey] as? CIVector)?.cgRectValue ?? output.region
+            var origin = SIMD2<Float>(Float(content.region.minX - canvas.minX), Float(canvas.maxY - content.region.maxY))
+            encoder.setBytes(&origin, length: MemoryLayout<SIMD2<Float>>.size, index: 2)
+        }
         encoder.setSamplerState(sampler, index: 0)
         uniforms.withUnsafeBytes { encoder.setBytes($0.baseAddress!, length: uniforms.count, index: 0) }
 
@@ -484,7 +500,8 @@ private final class EffectKernelProcessor: CIImageProcessorKernel {
 
     /// The kernels sample anywhere on the canvas (magnified, trailing or bent content), so they need the whole input.
     override class func roi(forInput input: Int32, arguments: [String: Any]?, outputRect: CGRect) -> CGRect {
-        (arguments?[canvasKey] as? CIVector)?.cgRectValue ?? outputRect
+        if input == 1, let rect = arguments?[secondRectKey] as? CIVector { return rect.cgRectValue }
+        return (arguments?[canvasKey] as? CIVector)?.cgRectValue ?? outputRect
     }
 
     override class var outputFormat: CIFormat { .BGRA8 }

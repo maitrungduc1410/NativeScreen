@@ -1,0 +1,531 @@
+[
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 0
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 200
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 400
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.01363048553466797,
+      "x" : 0.7259488582611084,
+      "y" : 0.7440015157063802
+    },
+    "sourceMs" : 600
+  },
+  {
+    "camera" : {
+      "cx" : 0.5010604492741536,
+      "cy" : 0.5004424450377769,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.002125406319485
+    },
+    "cursor" : {
+      "clickProgress" : 0.17777777777777778,
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.011267280578613282,
+      "x" : 0.7750736713409424,
+      "y" : 0.718163808186849
+    },
+    "sourceMs" : 800
+  },
+  {
+    "camera" : {
+      "cx" : 0.6527172289231782,
+      "cy" : 0.5637173146957302,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.4397489355709954
+    },
+    "cursor" : {
+      "clickProgress" : 0.6037037037037037,
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.006363296508789065,
+      "x" : 0.8075617790222168,
+      "y" : 0.6855599721272786
+    },
+    "sourceMs" : 1000
+  },
+  {
+    "camera" : {
+      "cx" : 0.7170500500721801,
+      "cy" : 0.5905585207555722,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.7670969729012125
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -0.00034446716308593754,
+      "x" : 0.8196296691894531,
+      "y" : 0.6482603708902995
+    },
+    "sourceMs" : 1200
+  },
+  {
+    "camera" : {
+      "cx" : 0.7379753733137732,
+      "cy" : 0.5992890707759966,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9082175836805884
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.004576873779296872,
+      "x" : 0.8113494873046875,
+      "y" : 0.6080633799235026
+    },
+    "sourceMs" : 1400
+  },
+  {
+    "camera" : {
+      "cx" : 0.7454499509253223,
+      "cy" : 0.602407645001386,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9642502596937796
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.00972118377685547,
+      "x" : 0.7872807502746582,
+      "y" : 0.5697350396050347
+    },
+    "sourceMs" : 1600
+  },
+  {
+    "camera" : {
+      "cx" : 0.7482518859918323,
+      "cy" : 0.6035766799534252,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.986112197781073
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.016691970825195315,
+      "x" : 0.7395721435546875,
+      "y" : 0.5213993496365017
+    },
+    "sourceMs" : 1800
+  },
+  {
+    "camera" : {
+      "cx" : 0.7474396133985016,
+      "cy" : 0.6014315519369037,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9946082495654762
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : 0.022036552429199222,
+      "x" : 0.6696610450744629,
+      "y" : 0.4684318542480469
+    },
+    "sourceMs" : 2000
+  },
+  {
+    "camera" : {
+      "cx" : 0.6941573294508124,
+      "cy" : 0.5279930153425619,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.9957816126645764
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.020780181884765637,
+      "x" : 0.588404655456543,
+      "y" : 0.4179846445719401
+    },
+    "sourceMs" : 2200
+  },
+  {
+    "camera" : {
+      "cx" : 0.6279839896400741,
+      "cy" : 0.5041470720507557,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.5594386327876688
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.01587619781494141,
+      "x" : 0.5250497341156006,
+      "y" : 0.3830423567030165
+    },
+    "sourceMs" : 2400
+  },
+  {
+    "camera" : {
+      "cx" : 0.5664131116222704,
+      "cy" : 0.5009346040606257,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.232587668150888
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.01595230102539062,
+      "x" : 0.4699233531951904,
+      "y" : 0.355049811469184
+    },
+    "sourceMs" : 2600
+  },
+  {
+    "camera" : {
+      "cx" : 0.5294660852106188,
+      "cy" : 0.5002985596993372,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1.0916600046703935
+    },
+    "cursor" : {
+      "kind" : "iBeam",
+      "opacity" : 1,
+      "rotation" : 0.020740127563476565,
+      "x" : 0.40242629051208495,
+      "y" : 0.3228635576036241
+    },
+    "sourceMs" : 2800
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -2.6702880859375003e-06,
+      "x" : 0.694522762298584,
+      "y" : 0.754832034640842
+    },
+    "sourceMs" : 3000
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 3200
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 3400
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 3600
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 3800
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 4000
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 4200
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 4400
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 4600
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 4800
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 5000
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 5200
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 5400
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 5600
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 5800
+  },
+  {
+    "camera" : {
+      "cx" : 0.5,
+      "cy" : 0.5,
+      "loupePresence" : 0,
+      "loupeScale" : 1,
+      "scale" : 1
+    },
+    "cursor" : {
+      "kind" : "arrow",
+      "opacity" : 1,
+      "rotation" : -1.3351440429687501e-06,
+      "x" : 0.6937555789947509,
+      "y" : 0.7550621032714844
+    },
+    "sourceMs" : 6000
+  }
+]

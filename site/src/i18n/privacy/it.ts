@@ -70,5 +70,5 @@ export default {
   changesP: "Se questa informativa cambia, la nuova versione sarà pubblicata su questa pagina con una nuova data. La cronologia di ogni modifica è pubblica nel <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">repository</a>.",
 
   contactH: "Contatti",
-  contactP: "Domande sulla privacy: scrivi a <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> o apri una issue su <a href=\"{repo}/issues\">GitHub</a>.",
+  contactP: "Domande sulla privacy: scrivi a <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> o apri una issue su <a href=\"{repo}/issues\">GitHub</a>.",
 };

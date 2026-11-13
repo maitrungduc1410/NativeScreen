@@ -38,7 +38,7 @@ Where:
 
 ### 1.2. 1ms Substep Integrator with Dynamic Critical Damping Clamp (`stepClampedSpring`)
 
-Becausetimeline scrubbing must support instant random access to any timestamp $t$ without simulating from $t = 0$ on every frame, the solver pre-computes the entire trajectory at **120Hz** ($\Delta t = 1000 / 120 \approx 8.333\text{ ms}$) into a contiguous lookup array whenever telemetry or zoom blocks change:
+Because timeline scrubbing must support random access without replaying the simulation, `PlaybackTrajectorySolver` projects retained telemetry and zoom intervals into edited time, then pre-solves at **120Hz** ($\Delta t = 1000 / 120 \approx 8.333\text{ ms}$). Source-contiguous slices share a trajectory even when speed changes; a source discontinuity starts a new one, with the incoming cursor and active camera targets initialized at the cut. Lookup never interpolates across cuts. Preview, video/GIF export and still frames pass explicit timeline time (required when a source range is reused). Crop and slice edits invalidate derived camera/motion state. Source media and persisted coordinates do not change.
 - For a 10-minute video at 120Hz, the pre-solved trajectory array has only `72,000` samples (`~1.1 MB` in RAM) and takes **`< 2 ms`** to compute on a single CPU core.
 - Within each `8.333 ms` step, the integrator advances in **8 substeps** ($\delta t = \Delta t / 8 \approx 1.04\text{ ms}$).
 - **Dynamic Overshoot Clamp:** At every `1 ms` substep, if the velocity $v$ is approaching the target ($v \cdot (x_{\text{target}} - x) > 0$) faster than the natural settling rate $|x_{\text{target}} - x| \cdot \omega_0$, the effective damping for that substep is boosted to at least critical damping:
@@ -50,39 +50,32 @@ Becausetimeline scrubbing must support instant random access to any timestamp $t
 ## 2. Cursor Trajectory, Phase-Lag Compensation & Drag Synchronization
 
 ### 2.1. First-Frame Telemetry Epoch Synchronization
-During recording, the mouse/keyboard telemetry clock (`t = 0.0 ms`) MUST be anchored to the exact presentation timestamp (`firstSampleTime`) of the first captured video frame from the OS screen capture stream. This prevents any startup offset between the recorded video frames and the cursor trajectory.
+During recording, the mouse/keyboard telemetry clock (`t = 0.0 ms`) MUST be anchored to the exact presentation timestamp (`firstSampleTime`) of the first captured video frame from the OS screen capture stream, and a cursor sample is written at exactly `t = 0`. This prevents any startup offset between the recorded video frames and the cursor trajectory.
 
-### 2.2. Lookahead Phase-Lag Compensation (`leadMs`)
-A physical spring with parameters $(k, c)$ chasing a moving target at velocity $v$ exhibits a steady-state temporal phase lag:
-$$\text{lagMs} = \frac{c}{k} \times 1000\text{ ms}$$
-If the spring at time $t$ is fed the raw cursor position at $t$, the rendered cursor will arrive at buttons, hover highlights, and text selections ~`150 ms` *after* the visual reaction has already appeared in the video frame.
+Recordings made before this (until 2026-10-26) started the clock when telemetry started, before capture, so every event is late by the startup delay `D`. They are recognized by a first cursor sample after `t = 0.5 ms`. Telemetry and capture stopped together, so `D = min(firstCursor.t, max(0, lastEvent.t - durationMs))` over cursor, click and key events, ignored below `20 ms` (ADR-88). On load, cursor, clicks and keys are moved by `-D` in memory; events before `0` are dropped. Files are never rewritten.
 
-To eliminate this lag:
-1. **Lookahead Target Lookup:** At simulation time $t$, the spring is fed the recorded target position at:
-   $$t_{\text{lookup}} = t + \frac{\text{effectiveLeadMs}}{\text{syncSpeedMultiplier}}$$
-   where $\text{effectiveLeadMs} = \text{lagMs} \times (1.0 \text{ if } \text{keepInSyncWithHovers else } 0.72)$.
-2. **Stationary Pause Hold (`> 48 ms` gap):** When two consecutive recorded cursor samples $e_0, e_1$ are separated by more than `48 ms` (indicating the physical mouse was stationary), the target lookup holds $(e_0.x, e_0.y)$ until $e_1.t - 16\text{ ms}$ rather than linearly interpolating across the pause. This prevents the cursor from drifting prematurely before the user actually moved their hand.
+### 2.2. Planned Lead and Spring Speed (ADR-87, `CursorPathPlanner`)
+A spring $(k, c, m)$ chasing a target at constant velocity lags it by $\text{lagMs} = c / k \times 1000$ (about `149 ms` for the default cursor `470/70/3`). The cursor is not given a fixed lookahead. It is a plain spring fed the recorded path at $t + \text{lead}(t)$, with $k_{\text{eff}} = k\,s(t)^2$ and $c_{\text{eff}} = c\,s(t)$. Lead is `0` and speed `1` except where an interaction needs them. All distances are in capture points (`logicalBounds`), all times in playback ms of one continuous run.
 
-### 2.3. Active Drag & Click Speed Multiplier (`syncSpeedMultiplier`)
-When the user performs a mouse-down drag (e.g., selecting/highlighting a line of text or dragging a UI slider) or clicks a button, the rendered cursor tip must stay locked 1:1 to the selection edge and stop at the exact millisecond `mouseUp` occurs:
-1. Construct all `[mouseDown ... mouseUp]` drag intervals from `clicks.jsonl`.
-2. Compute a dynamic speed multiplier $\text{speed} \ge 1.0$:
-   - **220 ms ramp-in before `drag.startMs`:** $\text{speed}$ ramps linearly from $1.0 \rightarrow 4.2$.
-   - **During `[drag.startMs, drag.endMs]`:** $\text{speed} = 4.2$, and the micro-shake filter threshold is set to `0.0` so every character selection step is tracked faithfully.
-   - **260 ms ramp-out after `drag.endMs`:** $\text{speed}$ ramps linearly from $4.2 \rightarrow 1.0$.
-   - **Within $\pm 180\text{ ms}$ of any click:** $\text{speed}$ is boosted up to $3.4\times$.
-3. Scale the effective spring parameters quadratically/linearly by $\text{speed}$:
-   $$k_{\text{eff}} = k \cdot \text{speed}^2, \quad c_{\text{eff}} = c \cdot \text{speed}$$
-   Because $\text{lagMs}_{\text{eff}} = c_{\text{eff}} / k_{\text{eff}} = \text{lagMs} / \text{speed}$, dividing the lookahead time by $\text{speed}$ keeps phase alignment seamless.
+1. **Integration:** semi-implicit Euler in `1 ms` steps (fractional at the ends), the path sampled at every step, $s$ re-read every `4 ms`. Overshoot clamp as in §1. An axis snaps to its target below `0.01 pt` and `0.01 pt/s`. The result is stored per ms; evaluation interpolates it, so clicks between 120 Hz steps stay exact.
+2. **Anchors:** mouse down/up (tolerance `2 pt`), every cursor sample while a button is held (`2 pt`), cursor-shape changes (`4 pt` with *Keep in sync with hovers*, otherwise `6 pt`; no hover telemetry is recorded, shape changes stand in for hovered UI). Anchors within `100 ms` form a group. Nothing after the ending options start (stop moving, loop back) is anchored.
+3. **Per group**, simulate from the committed trajectory and measure $\max(\text{error} / \text{tolerance})$ at its anchors. Choose the smallest speed level in `[1, 1.25, 1.6, 2, 2.5, 3.2, 4, 5, 6.4, 8, 10, 13, 16, 20, 25, 32]` (binary search) and, for it, the smallest lead in `[0, 600] ms` (doubling candidates from `lagMs / s / 8`, then bisection or golden-section) whose ratio is at most `0.75`. If no level passes, keep the smallest error.
+4. **Speed bump:** $s$ ramps in log space from `1` over `250 ms` before the group, holds through it and ramps out over `300 ms`. Overlapping bumps take the maximum.
+5. **Lead shape:** after a group, lead drops to `0` at once if the recorded cursor rests for the whole lead, otherwise linearly at `0.35 ms/ms`. A raise toward the next group is placed in a rest where the target does not move (a jump), else compressed over the last `400 ms`. Target time must advance at `0.65x` to `1.4x` real time, or the raise is rejected. The approach window is `1500 ms` before the group.
+6. **Merging:** a group whose ratio exceeds `1` is merged with the previous one and solved again when the gap is at most `400 ms`, or when the previous lead is still decaying at the group's start and the merged span stays within `4000 ms`.
+
+Pauses: two samples more than `48 ms` apart in recording time hold the first position until `16 ms` before the second. The playback wrapper expands these holds before projecting samples into playback time; the planner then interpolates linearly. Down/up positions are inserted as path samples, since the click log owns the tip at the interaction, unless the click is more than `16 pt` from the interpolated cursor and from both bracketing samples (inconsistent or synthetic data; the bracketing samples cover a click just before a cursor warp). Click waves and circles stay at the down coordinate. A button held through a trim is a `held` event: it anchors the drag but makes no ripple. Clock offsets of older recordings are corrected on load (section 2.1).
+
+### 2.3. Smoothing Off
+With smoothing off the cursor is the shake-filtered recorded position at $t$, with no lead and no spring.
 
 ### 2.4. Micro-Shake Filter, Cursor Rotation & Idle Auto-Hide
 1. **Micro-Shake Filtering (`removeShakeThresholdPx`):**
-   - Convert pixel threshold to normalized coordinates: $r_{\text{shake}} = \text{removeShakeThresholdPx} / 1600.0$.
-   - Ignore target displacements smaller than $r_{\text{shake}}$ when not actively dragging.
+   - Measure displacement in capture points, `hypot(dx01 * pointWidth, dy01 * pointHeight)`, and drop moves within `removeShakeThresholdPx` of the last kept sample, except while a button is held and at clicks. A kept move after dropped ones holds until the last dropped sample's time. The planner runs on the filtered path.
 2. **Cursor Rotation (`Tilt` vs `Follow`):**
-   - **Tilt mode (`velocity`):** Banks horizontally with horizontal velocity $v_x$:
+   - **Tilt mode (`velocity`):** Banks horizontally with horizontal velocity in points, expressed as `vx01 * pointWidth / 1600`:
      $$\theta_{\text{dynamic}} = \text{clamp}\left(-v_x \cdot 0.14 \cdot \text{intensity},\; -0.35\text{ rad},\; +0.35\text{ rad}\right)$$
-   - **Follow mode (`directional`):** Smoothly aligns cursor heading along the 2D velocity vector $\text{atan2}(-v_y, v_x) - \frac{3\pi}{4}$ when speed exceeds `0.04`.
+   - **Follow mode (`directional`):** Uses `atan2(-vy01 * pointHeight, vx01 * pointWidth) - 3pi/4`; the speed gate is measured in points divided by 1600. A non-square capture must not distort the heading. Velocity is the planned path's central difference over `+-1 ms`.
 3. **Auto-Hide on Idle & Loop-Back:**
    - If cursor movement ceases for `> hideWhenIdleAfterMs`, smoothly fade opacity toward `0.0`.
    - If `loopBackToStartMs` is set, linearly blend the target position back to `firstPos` over the final `loopBackToStartMs` milliseconds of the recording.
@@ -97,7 +90,7 @@ When a recording finishes, mouse clicks (`clicks.jsonl`) and keystrokes (`keys.j
 - **Click Merge Window:** Consecutive clicks within `2500 ms` of each other are merged into the same zoom block, holding for `2500 ms` after the last click.
 - **Typing Hold:** If active keystrokes occur during the zoom window, extend `sourceEndMs` until `1500 ms` after the last keystroke.
 - **Minimum Duration:** Enforce a minimum duration of `2200 ms` per zoom block.
-- **Merge Close Zooms:** After the blocks are built, neighbours less than `1500 ms` apart (`mergeGapMs`) become one block spanning both, centered on the duration-weighted mean of their centers. Zooming out takes about `750 ms` to settle, so a shorter gap only zooms out and straight back in. Same rule in the Windows `AutoZoomClusterGenerator.MergeCloseZooms`.
+- **Merge Close Zooms:** After the blocks are built, neighbours less than `2500 ms` apart (`mergeGapMs`, strict inequality) become one block spanning both, centered on the duration-weighted mean of their centers. Keep the typing hold and tail margin. This avoids a brief full-frame detour between related interactions.
 
 ### 3.2. Stationary Dead-Zone Focus Groups (`CursorMovesGroup`)
 If a zoomed-in camera chased every minor mouse movement continuously, the viewport would swim constantly and cause motion sickness. Instead, inside each `followCursor` zoom block:
@@ -108,6 +101,8 @@ If a zoomed-in camera chased every minor mouse movement continuously, the viewpo
    $$\mathbf{c}_{\text{group}} = \frac{\sum_i \mathbf{p}_i \cdot \Delta t_i}{\sum_i \Delta t_i}$$
    where $\Delta t_i = t_{i+1} - t_i$ is the duration the cursor dwelt at sample $i$.
 4. As long as the cursor stays within the current `CursorMovesGroup`'s bounding box, the camera target remains **100% stationary** at $\mathbf{c}_{\text{group}}$, only panning when the user moves the cursor into the next group!
+
+Group spans in recording coordinates are `(crop.width, crop.height) * 0.5 / zoomScale`. Camera and Loupe targets then enter crop space as `((x - crop.x) / crop.width, (y - crop.y) / crop.height)`. Cursor states and click waves remain recording-space until drawn. Loupe uses these same grouped targets, plus its existing slow decorative drift (manual focus has no drift). `CameraFrameState.center01` always belongs to the screen camera; `loupeCenter01` is independent. A fading lens never suppresses the screen transform. Effect exits start at the item end, not before it (ADR-84).
 
 ### 3.3. Screen-Rect Space Interpolation (Zero Curvilinear Swimming)
 If camera center $(c_x, c_y)$ and zoom scale $Z$ were animated by independent springs, differences in relative displacement would cause the viewport to travel along a curved arc ("curvilinear swimming") when zooming in on a corner.
@@ -150,14 +145,14 @@ Every video frame at source timestamp $t$ is composited on the GPU in a determin
 
 ### Pass 5: Virtual Camera Transform, Camera Motion Blur & Magnifier Lens
 - **5A. Camera Zoom & Motion Blur (`EffectKernels.applyCameraMotionBlur`):**
-  - When not in Loupe mode, apply the affine camera transform (`scale: Z`, centered on `cameraState.center01`).
+  - Apply the affine screen camera transform (`scale: Z`, centered on `cameraState.center01`), including its settling during Loupe transitions.
   - Evaluate where the zoomed screen rect sits now ($R_1$) and one frame earlier ($R_0$, at $t - 16.67\text{ ms}$). The shutter is open for the last `motionBlurIntensity` fraction of that interval.
   - For a pixel $p$, the screen point under it at time $s$ is $u(s) = (p - R(s)_{xy}) / R(s)_{wh}$ with $R(s) = \text{lerp}(R_0, R_1, s)$, drawn in the current frame at $q(s) = R_{1,xy} + u(s) \cdot R_{1,wh}$. The output averages the current frame at $q(s)$ for $s \in [1 - \text{shutter}, 1]$. For pans the path is a straight line; for zooms it curves toward the focus point.
   - Samples are taken in linear light (gamma 2.2 decode, premultiplied), with a per-pixel jitter (interleaved gradient noise) so a small sample count reads as fine grain. Sample count = `travel / pixelsPerSample`, capped at 8 in playback and 24 in export.
-  - If no edge moves at least `0.5 px`, the pass is skipped, so the image is sharp the moment the camera settles. Also skipped during instant zoom snaps and on the paused last frame.
+  - Compare camera states 16.67 playback milliseconds apart. If no edge moves at least `0.5 px`, skip so the image is sharp once the camera settles. Also skip across a real cut, during instant zoom snaps and on the paused last frame.
 - **5B. Magnifier Lens (`EffectKernels.applyMagnifierLens`):**
-  - When `cameraState.loupePresence01 > 0.005`, run the lens kernel over the composited scene (screen + background):
-    1. **Magnification:** inside radius $R$, sample at `center + offset / zoom`.
+  - When `cameraState.loupePresence01 > 0.005`, run the lens kernel with two inputs: the base scene and a sharp, pre-magnified scene patch (screen, masks, screen annotations, cursor, frame and background). Rebuild the screen directly from source pixels at lens scale. The patch bounds are integral, centered on the transformed `loupeCenter01`, with half-side `1.7 * R + 2`; allocation does not grow with magnification. Canvas annotations, webcam, captions and keycaps remain outside the glass.
+    1. **Magnification:** the patch already applies `translate(center) * scale(zoom) * translate(-center)`, so the kernel samples it at `center + offset`.
     2. **Rim refraction:** in the rim band (`rimRatio` of the radius), scale the sample offset by $1 + 0.55\,e^2$ with $e = \text{smoothstep}(1 - \text{rimRatio}, 1, r/R)$, so the edge shows content from further out like a thick convex lens.
     3. **Color fringing:** red and blue are sampled at offsets scaled by $1 \mp 0.045 \cdot \text{colorFringe} \cdot e$ (3 taps).
     4. **Lighting:** soft gloss over the upper half, slight rim darkening away from the light, and an exponential rim highlight that is strongest on the top-left (light side) with a faint counter highlight opposite.

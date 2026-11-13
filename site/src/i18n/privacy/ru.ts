@@ -70,5 +70,5 @@ export default {
   changesP: "Если эта политика изменится, новая версия будет опубликована на этой странице с новой датой. История всех изменений открыта в <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">репозитории</a>.",
 
   contactH: "Контакты",
-  contactP: "Вопросы о конфиденциальности: напишите на <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> или создайте issue на <a href=\"{repo}/issues\">GitHub</a>.",
+  contactP: "Вопросы о конфиденциальности: напишите на <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> или создайте issue на <a href=\"{repo}/issues\">GitHub</a>.",
 };

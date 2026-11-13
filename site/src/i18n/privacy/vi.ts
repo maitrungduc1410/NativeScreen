@@ -70,5 +70,5 @@ export default {
   changesP: "Nếu chính sách này thay đổi, phiên bản mới sẽ được đăng trên trang này với ngày mới. Lịch sử mọi thay đổi được công khai trong <a href=\"{repo}/commits/master/site/src/i18n/privacy/en.ts\">kho mã</a>.",
 
   contactH: "Liên hệ",
-  contactP: "Câu hỏi về quyền riêng tư: gửi email tới <a href=\"mailto:maitrungduc1410@gmail.com\">maitrungduc1410@gmail.com</a> hoặc mở issue trên <a href=\"{repo}/issues\">GitHub</a>.",
+  contactP: "Câu hỏi về quyền riêng tư: gửi email tới <a href=\"mailto:hello@nativescreen.app\">hello@nativescreen.app</a> hoặc mở issue trên <a href=\"{repo}/issues\">GitHub</a>.",
 };
