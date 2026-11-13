@@ -48,7 +48,11 @@ Same structure in `windows/src/NativeScreen.Core/Captions/CaptionLineLayout.cs`:
 - Retake the Arabic Store screenshots with the caption typed in its normal order, and update the note in docs/releasing.md.
 
 ### Verifier
-- **Result:** pending port.
+- **Result:** PASS.
+- **Changes made:** `CaptionLineLayout.cs` as in the port steps (`IsRightToLeft` is public for the tests). Nothing else changed: timing, sizes, spring and drawing are the same.
+- **Tests:** `CaptionDirectionTests` (6): direction from the first strong letter (also Arabic-Indic digits before a word), the four styles for Arabic and English, growth from the right edge. Without the port 5 of them fail. Core 355, Rendering 38, Media 29 pass.
+- **Rendering:** "مرحبا بكم في التطبيق" bottom center at 1280 x 720 reads from the right, each word joined. Not compared pixel by pixel with `caption-rtl.png` (that file is written by `--verify-motion` on the Mac and is not in the repository).
+- **Store screenshots:** the four Arabic shots in `windows/store-listing/screenshots/ar` were retaken with the captions in their normal order and read correctly; `docs/releasing.md` updated.
 
 ## 2026-11-13, ADR-88: Older recordings on the video clock (macOS first)
 
@@ -59,7 +63,10 @@ Same structure in `windows/src/NativeScreen.Core/Captions/CaptionLineLayout.cs`:
 - **Verified on macOS:** `--verify-motion` 56 checks; `--verify-projects` on six real recordings (numbers in ADR-88). Both schemes build.
 
 ### Verifier
-- **Result:** pending port.
+- **Result:** PASS (ported with ADR-86/87).
+- **Changes made:** `Core/Motion/LegacyTelemetryEpoch.cs` (offset and correction, new lists, inputs untouched) and `CursorTelemetry.InsertingClicks` with the 16 pt guard. `LoadedProject` applies the correction on load, so the editor, every export and the MCP tools see the same events; files are never rewritten.
+- **Tests:** `MotionRegressionTests.OlderRecordingsMoveOntoTheVideoClock` (the macOS cases: no offset for current recordings, 1276 ms offset, dropped pre-capture click, cursor kept at 43 ms, far click and warp click).
+- **Not checked:** an older real recording opened in the app. None on this machine is from before 2026-10-26.
 
 ## 2026-11-13, ADR-87: Planned cursor sync replaces the ADR-86 error disc (macOS first)
 
@@ -74,7 +81,9 @@ Same structure in `windows/src/NativeScreen.Core/Captions/CaptionLineLayout.cs`:
 3. Planned positions are per ms; fractional evaluation reads them directly. Velocity for rotation is the +-1 ms central difference.
 
 ### Verifier
-- **Result:** pending port.
+- **Result:** PASS. The planned cursor matches `motion-v2` numerically (`trajectory.json` and `trajectory-playback.json` of all nine cases within the spec/08 tolerances).
+- **Changes made:** `Core/Motion/CursorPathPlanner.cs` (Path, LeadCurve, SpeedCurve, Simulation, GroupChooser, merge rules) and `PlannedCursorPath.cs`, line by line. Swift's curves are value types: here `LeadCurve`/`SpeedCurve` are classes and each copy that is then extended is a `Clone()`. `SpringTrajectorySolver` takes `MotionPointSize` (from `logicalBounds`, else pixels / scale), plans when smoothing is on, reuses the planned path with the cursor states, and reads the per-ms path in `Evaluate`. The old lookahead, drag/click boosts and `BuildDragIntervals` are gone. Shake and rotation use points.
+- **Tests:** `MotionRegressionTests` ports the macOS checks that need no GPU: tip at fractional down/up within 1.5 pt, drag error, wave on the down anchor, disabled smoothing, 0.25x 60 Hz, shake in points, heading with the physical aspect, held drag through a trim, and the flick ending on a click (three variants: on time, no speed jump, keeps the glide).
 
 ## 2026-11-13, ADR-86: Playback motion, crop alignment and sharp Loupe (macOS first)
 
@@ -109,7 +118,17 @@ Same structure in `windows/src/NativeScreen.Core/Captions/CaptionLineLayout.cs`:
 - **Open VERIFY:** Windows port, shader compilation/ROI orientation, numeric/frame comparisons and live performance remain pending. No Windows code was built or run for this entry.
 
 ### Verifier
-- **Result:** pending port and Windows hardware verification.
+- **Result:** PASS on build, tests and the running app.
+- **verify (Debug x64):** solution builds with 0 warnings. Core 349, Rendering 38, Media 29 passed. All nine `motion-v2` cases pass `ConformanceTests` (trajectory, trajectory-playback, stage, timemap, autozoom, captions, shortcuts, estimates) and `FrameFixtureTests.PlaybackFramesMatchMacOs` (every playback frame, sharp lens included: 99.4 to 100% of pixels within 6/255, SSIM 0.995 to 1.0).
+- **Original suite:** only motion files differ from the new code: `trajectory.json` of every case (planned cursor), `stage.json` of `zoom-follow`/`zoom-manual` and `timemap.json` of `slices-speed-cut` (half-open slices), and the frames of `loupe`. The tests now skip `trajectory.json` there and use `motion-v2` for the cases it shares; everything else in the original suite still passes unchanged. **Writer:** regenerate `conformance/cases` on macOS to lift these skips (spec/08 section 2).
+- **Changes made:**
+  - Core: `PlaybackTrajectorySolver` (runs, held buttons at a trim, ending options on the last run, cursor reuse by run span), `MotionGeometry`, `CursorTelemetry`, `CameraFrameState.LoupeCenter01`, crop-space focus groups and targets, Loupe prewarm only while invisible, snap at a cut, `NLETimeMapper` half-open slices, auto zoom merge gap 2500 ms. The solver API is `EvaluateAtTimeline` / `EvaluateAtSource`, so every old `Evaluate` call had to be reviewed.
+  - Editor: the solve key includes slices and crop; `LiveTimelineClock`; `DisplayTimelineMs`; the canvas transform and preview overlay read the camera at edited time and keep the screen camera while a lens is visible; still exports pass the playhead's edited time.
+  - Compositor: `ComposeRequest.TimelineMs`; cursor and waves moved into crop space before drawing; active slice from edited time (hidden cursor in a reused range); click circle on the last wave; motion blur 16.67 ms earlier only within one run; the screen scene drawn by one function for the canvas and the lens patch (`SceneView`); `MagnifierLens.hlsl` takes the patch as `t1` with `contentOrigin` and no `/ zoom`.
+- **Measurements** (this machine, demo project, 60 Hz display, `NS_PREVIEW_STATS`, 6 s of playback): with a 2.4x Loupe 366 frames, median interval 16.66 ms, compose and present 4.94 ms median / 6.32 ms p95; the same span with a screen zoom 5.31 / 6.50 ms. Stripe test: 1 px columns of a 3840 px source keep more than 180/255 contrast inside a 3x lens (`SharpLensTests`).
+- **Tolerance added:** the first step of a zoom (scale between 1.0005 and 1.01) samples the screen at a fractional pixel, where bilinear and CoreImage differ on 1 px lines: `zoom-loupe-transition` at 400 ms is 99.08% within 6/255 (SSIM 0.997). Only such frames get 99%.
+- **Found on the way:** `DrawCaptionBox` asked for a texture of negative size when the caption box spring overshoots past zero width (a block starting 186 ms after the previous one, while it fades in), which stopped the preview for good. The box is now skipped when it is not positive and finite; `CaptionBoxRenderingTests` reproduces it. **Writer:** the spring itself overshoots to -127 px on macOS too (same `CaptionLineLayout` math); worth clamping there.
+- **Not checked:** 4K canvas timing with the lens, exports of a long project with cuts, scrubbing feel.
 
 ## 2026-11-13, Back to animating out after an item ends (layout exits and ADR-84 reverted)
 

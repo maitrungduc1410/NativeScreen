@@ -234,11 +234,10 @@ internal sealed partial class PreviewOverlay
         var crop = document.Canvas.CropRect01;
         var at = session.SourceAtPlayhead;
         var face = session.IsCameraOnly ? CameraOnlyLayout.FaceCenter01(document, session.FaceTrack, at) : null;
-        var camera = CameraOnlyLayout.FaceCentered(trajectory.Evaluate(at).Camera, face);
+        var camera = CameraOnlyLayout.FaceCentered(trajectory.EvaluateAtTimeline(session.PlayheadTimelineMs).Camera, face);
         var stage = new StageLayoutEngine().Resolve(document, at, width, height, Math.Max(16, sourceWidth * crop.Width), Math.Max(16, sourceHeight * crop.Height), camera.Scale, hasCamera, cameraOnly: session.IsCameraOnly, faceTrack: session.FaceTrack);
-        return camera.IsLoupeMode
-            ? new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, Point01.Center, 1)
-            : new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, camera.Center01, camera.Scale);
+        // The screen camera keeps its transform while a lens is visible (ADR-86).
+        return new CanvasCoordinateTransform(width, height, stage.ScreenRect, crop, camera.Center01, camera.Scale);
     }
 
     private void DrawSafeZones(double width, double height)

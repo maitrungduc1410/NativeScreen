@@ -17,6 +17,9 @@ public sealed partial class EditorSession
 
     public double DisplaySourceMs => HoverSkimTimelineMs is { } skim ? Mapper.SourceTime(skim).SourceMs : SourceAtPlayhead;
 
+    /// <summary>The edited time shown in the preview: the skimmed time, else the playhead.</summary>
+    public double DisplayTimelineMs => HoverSkimTimelineMs ?? PlayheadTimelineMs;
+
     /// <summary>Returns whether the time changed.</summary>
     public bool SetHoverSkim(double? timelineMs)
     {

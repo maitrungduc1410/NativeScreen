@@ -31,7 +31,7 @@ public sealed class IntelligenceAndAssetsTests : IDisposable
             new ComposeRequest
             {
                 Document = document,
-                Trajectory = new SpringTrajectorySolver(60000, [], [], document),
+                Trajectory = new PlaybackTrajectorySolver(60000, [], [], document),
                 SourceMs = 500,
                 ScreenWidth = Width,
                 ScreenHeight = Height,

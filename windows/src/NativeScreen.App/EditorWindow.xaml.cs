@@ -99,7 +99,7 @@ public sealed partial class EditorWindow : Window
         AppTheme.Register(this);
         Ui.SizeWindow(this, 1600, 1000, 1180, 720);
 
-        session = new EditorSession(source.Document, source.DurationMs) { HasRecordedCamera = source.HasCamera, IsCameraOnly = source.Project?.IsCameraOnly == true, SourceWidth = source.SourceWidth, SourceHeight = source.SourceHeight, HasMicrophoneTrack = source.Project?.Metadata.Tracks.MicrophoneAudio is not null, CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
+        session = new EditorSession(source.Document, source.DurationMs) { HasRecordedCamera = source.HasCamera, IsCameraOnly = source.Project?.IsCameraOnly == true, SourceWidth = source.SourceWidth, SourceHeight = source.SourceHeight, HasMicrophoneTrack = source.Project?.Metadata.Tracks.MicrophoneAudio is not null, CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], PointSize = source.Project?.PointSize ?? MotionPointSize.Reference, KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
         tools = new EditorTools(this, session, source, ShowToast);
         tools.StartPlayback = () => session.IsPlaying ? Task.CompletedTask : TogglePlaybackAsync();
         tools.PausePlayback = () =>
@@ -866,6 +866,7 @@ public sealed partial class EditorWindow : Window
             Document = document,
             Trajectory = trajectory,
             SourceMs = session.DisplaySourceMs,
+            TimelineMs = session.DisplayTimelineMs,
             ScreenSource = screenPlayback,
             WebcamSource = webcamPlayback,
             Shortcuts = session.Shortcuts(),
@@ -878,7 +879,7 @@ public sealed partial class EditorWindow : Window
             CameraOnly = source.Project?.IsCameraOnly == true,
             HiddenAnnotationId = session.EditingAnnotationTextId
         };
-        renderer.Submit(request, width, height, Preview.CompositionScaleX, session.LiveSourceClock());
+        renderer.Submit(request, width, height, Preview.CompositionScaleX, session.LiveTimelineClock());
     }
 
     private void ClockTick(object? sender, object args) => Sample();

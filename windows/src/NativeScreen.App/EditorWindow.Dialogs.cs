@@ -607,7 +607,7 @@ public sealed partial class EditorWindow
         button.IsEnabled = false;
         try
         {
-            await new ProjectExporter(CurrentExportSource()).ExportStillAsync(path, session.SourceAtPlayhead, stillHeight, jpeg);
+            await new ProjectExporter(CurrentExportSource()).ExportStillAsync(path, session.SourceAtPlayhead, stillHeight, jpeg, session.PlayheadTimelineMs);
             AppSettings.Shared.StillExportFolder = folder;
             AppSettings.Shared.Save();
             ExportOverlay.Visibility = Visibility.Collapsed;

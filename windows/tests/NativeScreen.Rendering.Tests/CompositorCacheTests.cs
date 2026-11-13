@@ -21,7 +21,7 @@ public sealed class CompositorCacheTests
         return new VideoFrame(pixels, width, height, 0);
     }
 
-    private static byte[] Compose(FrameCompositor compositor, ProjectDocument document, SpringTrajectorySolver trajectory, IVideoFrameSource screen, int width, int height, IVideoFrameSource? webcam = null)
+    private static byte[] Compose(FrameCompositor compositor, ProjectDocument document, PlaybackTrajectorySolver trajectory, IVideoFrameSource screen, int width, int height, IVideoFrameSource? webcam = null)
     {
         var layer = compositor.Compose(
             new ComposeRequest { Document = document, Trajectory = trajectory, SourceMs = 100, ScreenSource = screen, WebcamSource = webcam, HasCamera = webcam is not null, ScreenWidth = 1920, ScreenHeight = 1080 },
@@ -35,7 +35,7 @@ public sealed class CompositorCacheTests
     {
         using var compositor = new FrameCompositor();
         var document = new ProjectDocument();
-        var trajectory = new SpringTrajectorySolver(1000, [], [], document);
+        var trajectory = new PlaybackTrajectorySolver(1000, [], [], document);
         var source = new OneFrame { Current = Flat(235) };
         var white = Compose(compositor, document, trajectory, source, 1280, 720);
         Assert.Equal(white, Compose(compositor, document, trajectory, source, 1280, 720));
@@ -50,7 +50,7 @@ public sealed class CompositorCacheTests
         using var compositor = new FrameCompositor();
         var document = new ProjectDocument();
         document.Camera.Enabled = true;
-        var trajectory = new SpringTrajectorySolver(1000, [], [], document);
+        var trajectory = new PlaybackTrajectorySolver(1000, [], [], document);
         var screen = new OneFrame { Current = Flat(128) };
         var camera = new OneFrame { Current = Flat(235, 640, 360) };
         var first = Compose(compositor, document, trajectory, screen, 1280, 720, camera);
@@ -66,7 +66,7 @@ public sealed class CompositorCacheTests
         var document = new ProjectDocument();
         document.FrameStyle.Shadow.Enabled = true;
         document.FrameStyle.Shadow.Intensity = 0.5;
-        var trajectory = new SpringTrajectorySolver(1000, [], [], document);
+        var trajectory = new PlaybackTrajectorySolver(1000, [], [], document);
         var source = new OneFrame { Current = Flat(128) };
         for (var step = 0; step < 60; step++)
         {

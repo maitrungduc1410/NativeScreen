@@ -73,7 +73,8 @@ public sealed class NLETimeMapper
         var clamped = Math.Max(0, Math.Min(TotalTimelineDurationMs, timelineMs));
         foreach (var item in MappedSlices)
         {
-            if (clamped >= item.TimelineStartMs && clamped <= item.TimelineEndMs)
+            // A slice owns [start, end): a cut boundary belongs to the incoming slice, except the movie end (ADR-86).
+            if (clamped >= item.TimelineStartMs && (clamped < item.TimelineEndMs || clamped == TotalTimelineDurationMs))
             {
                 var offset = clamped - item.TimelineStartMs;
                 var source = item.Slice.SourceStartMs + offset * item.Slice.Speed;
@@ -119,7 +120,8 @@ public sealed class NLETimeMapper
         MappedSlice? item = null;
         foreach (var candidate in MappedSlices)
         {
-            if (referenceTimelineMs >= candidate.TimelineStartMs && referenceTimelineMs < candidate.TimelineEndMs)
+            if (referenceTimelineMs >= candidate.TimelineStartMs && (referenceTimelineMs < candidate.TimelineEndMs
+                || (referenceTimelineMs == TotalTimelineDurationMs && candidate.TimelineEndMs == TotalTimelineDurationMs)))
             {
                 item = candidate;
                 break;

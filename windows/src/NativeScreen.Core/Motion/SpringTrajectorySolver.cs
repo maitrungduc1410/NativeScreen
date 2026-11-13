@@ -23,6 +23,9 @@ public sealed class SpringTrajectorySolver
         public double LoupePresence01 { get; set; }
         public double LoupeScale { get; set; } = 1;
         public LoupeConfig LoupeConfig { get; set; } = new();
+
+        /// <summary>Where the lens is, in crop space. <see cref="Center01"/> always belongs to the screen camera (ADR-86).</summary>
+        public Point01 LoupeCenter01 { get; set; } = Point01.Center;
     }
 
     private sealed class MovesGroup
@@ -144,23 +147,54 @@ public sealed class SpringTrajectorySolver
     /// <summary>False for camera-only recordings and projects made from a video: no cursor is drawn (spec/07 Pass 4).</summary>
     public bool HasRecordedCursor { get; }
 
+    /// <summary>The planned smoothed cursor (ADR-87), sampled per ms in points. Null when smoothing is off.</summary>
+    public PlannedCursorPath? PlannedCursor { get; }
+
+    private readonly MotionPointSize pointSize;
+
+    /// <param name="pointSize">The capture's size in points (<see cref="MotionPointSize.Of"/>); tolerances and shake use points.</param>
+    /// <param name="reusing">A solver of the same run whose cursor can be kept when only zooms, camera or crop changed.</param>
+    /// <param name="startsAtCut">The run begins at a cut: the camera starts at its target, with no discarded history.</param>
+    /// <param name="loopTarget01">Where "loop back to the start" returns: the first retained cursor position of the movie.</param>
+    /// <param name="telemetryUsesPlaybackTime">The events are already projected onto playback time with pauses expanded.</param>
     public SpringTrajectorySolver(
         double durationMs,
         IReadOnlyList<CursorSampleEvent> cursorEvents,
         IReadOnlyList<ClickEvent> clickEvents,
-        ProjectDocument document)
+        ProjectDocument document,
+        MotionPointSize? pointSize = null,
+        SpringTrajectorySolver? reusing = null,
+        bool startsAtCut = false,
+        Point01? loopTarget01 = null,
+        bool telemetryUsesPlaybackTime = false)
     {
         HasRecordedCursor = cursorEvents.Count > 0;
+        this.pointSize = pointSize ?? MotionPointSize.Reference;
         var totalDuration = Math.Max(100, durationMs);
         var totalSteps = Math.Max(2, (int)Math.Ceiling(totalDuration / stepMs) + 1);
         var dt = stepMs / 1000.0;
+        var smooth = document.Cursor.SmoothMovementEnabled;
+        var events = smooth
+            ? CursorTelemetry.InsertingClicks(clickEvents, cursorEvents, !telemetryUsesPlaybackTime, this.pointSize)
+            : cursorEvents;
         var cursorSpring = SanitizeCursor(document.Cursor.Spring);
         var camSpring = SanitizeCamera(document.Motion.CameraSpring);
         var camPrecomputed = new PrecomputedSpring(camSpring);
 
-        var cursor = SolveCursor(document, cursorEvents, clickEvents, cursorSpring, totalDuration, totalSteps, dt);
-        CursorStates = cursor;
-        CameraStates = SolveCamera(document, cursorEvents, clickEvents, cursor, camSpring, camPrecomputed, totalDuration, totalSteps, dt);
+        // Reuse the cursor (states and planned path) when only zooms, camera or crop changed.
+        if (reusing is { } old && old.CursorStates.Count == totalSteps && (!smooth || old.PlannedCursor is not null))
+        {
+            CursorStates = old.CursorStates;
+            PlannedCursor = smooth ? old.PlannedCursor : null;
+        }
+        else
+        {
+            var (states, planned) = SolveCursor(document, events, clickEvents, cursorSpring, totalDuration, totalSteps, dt, loopTarget01, telemetryUsesPlaybackTime);
+            CursorStates = states;
+            PlannedCursor = planned;
+        }
+
+        CameraStates = SolveCamera(document, events, clickEvents, CursorStates, camSpring, camPrecomputed, totalSteps, dt, startsAtCut);
     }
 
     public (CursorFrameState Cursor, CameraFrameState Camera) Evaluate(double sourceMs)
@@ -193,6 +227,13 @@ public sealed class SpringTrajectorySolver
             ActiveClickProgress = c0.ActiveClickProgress,
             ClickWaves = c0.ClickWaves
         };
+        // The planned path is per ms, finer than the 120 Hz states, so clicks between steps stay exact.
+        if (PlannedCursor is { } planned)
+        {
+            var (px, py) = planned.Position(sourceMs);
+            cursor.Position01 = new Point01(px / pointSize.Width, py / pointSize.Height);
+        }
+
         var a0 = CameraStates[i0];
         var a1 = CameraStates[i1];
         var camera = new CameraFrameState
@@ -206,35 +247,30 @@ public sealed class SpringTrajectorySolver
             IsLoupeMode = a0.IsLoupeMode || a1.IsLoupeMode,
             LoupePresence01 = a0.LoupePresence01 + (a1.LoupePresence01 - a0.LoupePresence01) * frac,
             LoupeScale = a0.LoupeScale + (a1.LoupeScale - a0.LoupeScale) * frac,
-            LoupeConfig = a0.LoupeConfig
+            LoupeConfig = a0.LoupeConfig,
+            LoupeCenter01 = new Point01(
+                a0.LoupeCenter01.X + (a1.LoupeCenter01.X - a0.LoupeCenter01.X) * frac,
+                a0.LoupeCenter01.Y + (a1.LoupeCenter01.Y - a0.LoupeCenter01.Y) * frac)
         };
         return (cursor, camera);
     }
 
-    private List<CursorFrameState> SolveCursor(
+    private (List<CursorFrameState> States, PlannedCursorPath? Planned) SolveCursor(
         ProjectDocument document,
         IReadOnlyList<CursorSampleEvent> cursorEvents,
         IReadOnlyList<ClickEvent> clickEvents,
         SpringConfig cursorSpring,
         double totalDuration,
         int totalSteps,
-        double dt)
+        double dt,
+        Point01? loopTarget01,
+        bool telemetryUsesPlaybackTime)
     {
         var solved = new List<CursorFrameState>(totalSteps);
-        var firstEventTime = cursorEvents.Count == 0 ? 0 : cursorEvents[0].T;
-        var legacyOffset = firstEventTime > 60 && firstEventTime < 900 ? firstEventTime : 0;
         var first = cursorEvents.Count == 0 ? Point01.Center : new Point01(cursorEvents[0].X, cursorEvents[0].Y);
-        var drags = BuildDragIntervals(clickEvents, legacyOffset, totalDuration).OrderBy(drag => drag.Start).ToList();
-        var clicks = clickEvents.Select(click => Math.Max(0, click.T - legacyOffset)).OrderBy(t => t).ToList();
-        var downs = clickEvents.Where(click => click.Type == "down").Select(click => Math.Max(0, click.T - legacyOffset)).OrderBy(t => t).ToList();
-        var dragWindow = 0;
-        var clickWindow = 0;
+        var downClicks = clickEvents.Where(click => click.Type == "down").OrderBy(click => click.T).ToList();
+        var downs = downClicks.Select(click => Math.Max(0, click.T)).ToList();
         var rippleWindow = 0;
-        var baseLag = document.Cursor.SmoothMovementEnabled
-            ? Math.Min(240, Math.Max(0, cursorSpring.Damping / Math.Max(10, cursorSpring.Stiffness) * 1000))
-            : 0;
-        var lead = baseLag * (document.Cursor.KeepInSyncWithHovers ? 1 : 0.72);
-        var baseSpring = new PrecomputedSpring(cursorSpring);
         var curX = first.X;
         var curY = first.Y;
         var velX = 0.0;
@@ -246,10 +282,13 @@ public sealed class SpringTrajectorySolver
         var bearing = 0.0;
         var stableKind = "arrow";
         var lastKindChange = -1000.0;
-        var shake = Math.Max(0, document.Cursor.RemoveShakeThresholdPx) / 1600.0;
+        var shakePt = Math.Max(0, document.Cursor.RemoveShakeThresholdPx);
         double? stopCutoff = document.Cursor.LoopBackToStartMs is null && document.Cursor.StopMovementInLastPartMs > 0
             ? Math.Max(0, totalDuration - document.Cursor.StopMovementInLastPartMs)
             : null;
+        double? loopMs = document.Cursor.LoopBackToStartMs is double loop && loop > 0 ? loop : null;
+        double? loopStart = loopMs is double length ? Math.Max(0, totalDuration - length) : null;
+        var loopTarget = loopTarget01 ?? first;
         var baseRad = -document.Cursor.BaseRotationDegrees * Math.PI / 180.0;
         const double rippleDuration = 450;
         var clickWaves = new List<ClickWave>();
@@ -262,115 +301,32 @@ public sealed class SpringTrajectorySolver
                 return (first.X, first.Y, "arrow");
             }
 
-            var shifted = queryMs + legacyOffset;
-            if (shifted <= cursorEvents[0].T)
-            {
-                return (cursorEvents[0].X, cursorEvents[0].Y, cursorEvents[0].C);
-            }
-
-            if (shifted >= cursorEvents[^1].T)
-            {
-                var last = cursorEvents[^1];
-                return (last.X, last.Y, last.C);
-            }
-
-            var lo = 0;
-            var hi = cursorEvents.Count - 1;
-            while (hi - lo > 1)
-            {
-                var mid = (lo + hi) >> 1;
-                if (cursorEvents[mid].T <= shifted)
-                {
-                    lo = mid;
-                }
-                else
-                {
-                    hi = mid;
-                }
-            }
-
-            var e0 = cursorEvents[lo];
-            var e1 = cursorEvents[lo + 1];
-            var span = Math.Max(0.001, e1.T - e0.T);
-            if (span > 48)
-            {
-                var moveStart = e1.T - 16;
-                if (shifted <= moveStart)
-                {
-                    return (e0.X, e0.Y, e0.C);
-                }
-
-                var moveFrac = Math.Clamp((shifted - moveStart) / Math.Max(1, e1.T - moveStart), 0, 1);
-                return (e0.X + (e1.X - e0.X) * moveFrac, e0.Y + (e1.Y - e0.Y) * moveFrac, e0.C);
-            }
-
-            var frac = Math.Clamp((shifted - e0.T) / span, 0, 1);
-            return (e0.X + (e1.X - e0.X) * frac, e0.Y + (e1.Y - e0.Y) * frac, e0.C);
+            var e = CursorTelemetry.Sample(cursorEvents, queryMs, !telemetryUsesPlaybackTime);
+            return (e.X, e.Y, e.C);
         }
+
+        // Where the recorded cursor is, including the ending options (stop moving, loop back to the start).
+        (double X, double Y) EndingAdjusted((double X, double Y) p, double tMs)
+        {
+            if (loopStart is not double start || loopMs is not double duration || tMs <= start)
+            {
+                return p;
+            }
+
+            var f = Math.Clamp((tMs - start) / duration, 0, 1);
+            return (p.X + (loopTarget.X - p.X) * f, p.Y + (loopTarget.Y - p.Y) * f);
+        }
+
+        var planned = document.Cursor.SmoothMovementEnabled
+            ? PlanCursor(cursorEvents, clickEvents, document, cursorSpring, totalDuration, pointSize, !telemetryUsesPlaybackTime, shakePt, stopCutoff, loopStart, stepMs, EndingAdjusted)
+            : null;
 
         for (var step = 0; step < totalSteps; step++)
         {
             var tMs = step * stepMs;
             var baseLookup = stopCutoff is double cutoff ? Math.Min(tMs, cutoff) : tMs;
-            var sync = 1.0;
-            while (dragWindow < drags.Count && drags[dragWindow].End + 260 < tMs)
-            {
-                dragWindow++;
-            }
-
-            for (var i = dragWindow; i < drags.Count; i++)
-            {
-                var drag = drags[i];
-                if (drag.Start - 220 > tMs)
-                {
-                    break;
-                }
-
-                if (tMs >= drag.Start - 220 && tMs <= drag.End + 260)
-                {
-                    if (tMs < drag.Start)
-                    {
-                        var ramp = (tMs - (drag.Start - 220)) / 220;
-                        sync = Math.Max(sync, 1 + 3.2 * Math.Clamp(ramp, 0, 1));
-                    }
-                    else if (tMs <= drag.End)
-                    {
-                        sync = Math.Max(sync, 4.2);
-                    }
-                    else
-                    {
-                        var rampOut = 1 - (tMs - drag.End) / 260;
-                        sync = Math.Max(sync, 1 + 3.2 * Math.Clamp(rampOut, 0, 1));
-                    }
-                }
-            }
-
-            while (clickWindow < clicks.Count && clicks[clickWindow] < tMs - 180)
-            {
-                clickWindow++;
-            }
-
-            for (var i = clickWindow; i < clicks.Count; i++)
-            {
-                var clickT = clicks[i];
-                if (clickT > tMs + 180)
-                {
-                    break;
-                }
-
-                var delta = Math.Abs(tMs - clickT);
-                if (delta <= 180)
-                {
-                    sync = Math.Max(sync, 1 + 2.4 * (1 - delta / 180));
-                }
-            }
-
-            var currentLead = lead / sync;
-            var lookahead = Math.Min(totalDuration, stopCutoff is double stop ? Math.Min(tMs + currentLead, stop) : tMs + currentLead);
-            var sampledTarget = Sample(lookahead);
             var sampledNow = Sample(baseLookup);
-            var rawX = sampledTarget.X;
-            var rawY = sampledTarget.Y;
+            var target = EndingAdjusted((sampledNow.X, sampledNow.Y), tMs);
             var kind = sampledNow.Kind;
             if (document.Cursor.AlwaysUsePointer)
             {
@@ -392,37 +348,27 @@ public sealed class SpringTrajectorySolver
                 }
             }
 
-            if (document.Cursor.LoopBackToStartMs is double loopMs && loopMs > 0 && tMs > totalDuration - loopMs)
+            if (pointSize.Distance(target.X, target.Y, filteredX, filteredY) > shakePt)
             {
-                var factor = Math.Clamp((tMs - (totalDuration - loopMs)) / loopMs, 0, 1);
-                rawX += (first.X - rawX) * factor;
-                rawY += (first.Y - rawY) * factor;
-            }
-
-            var dist = Math.Sqrt((rawX - filteredX) * (rawX - filteredX) + (rawY - filteredY) * (rawY - filteredY));
-            var shakeNow = sync > 1.5 ? 0 : shake;
-            if (dist > shakeNow)
-            {
-                filteredX = rawX;
-                filteredY = rawY;
+                filteredX = target.X;
+                filteredY = target.Y;
                 lastMove = tMs;
             }
 
-            if (document.Cursor.SmoothMovementEnabled)
+            if (planned is not null)
             {
-                var spring = Math.Abs(sync - 1) < 0.001
-                    ? baseSpring
-                    : new PrecomputedSpring(new SpringConfig(
-                        cursorSpring.Stiffness * sync * sync,
-                        cursorSpring.Damping * sync,
-                        cursorSpring.Mass));
-                (curX, velX) = Step(curX, velX, filteredX, spring, dt);
-                (curY, velY) = Step(curY, velY, filteredY, spring, dt);
+                var p = planned.Position(tMs);
+                var before = planned.Position(tMs - 1);
+                var after = planned.Position(tMs + 1);
+                curX = p.X / pointSize.Width;
+                curY = p.Y / pointSize.Height;
+                velX = (after.X - before.X) / pointSize.Width / 0.002;
+                velY = (after.Y - before.Y) / pointSize.Height / 0.002;
             }
             else
             {
-                velX = (filteredX - curX) / dt;
-                velY = (filteredY - curY) / dt;
+                velX = step == 0 ? 0 : (filteredX - curX) / dt;
+                velY = step == 0 ? 0 : (filteredY - curY) / dt;
                 curX = filteredX;
                 curY = filteredY;
             }
@@ -442,14 +388,17 @@ public sealed class SpringTrajectorySolver
             {
                 if (document.Cursor.RotationMode == CursorRotationMode.Tilt)
                 {
-                    dynamic = Math.Clamp(-velX * 0.14 * document.Cursor.VelocityRotationIntensity, -0.35, 0.35);
+                    dynamic = Math.Clamp(-velX * pointSize.Width / 1600.0 * 0.14 * document.Cursor.VelocityRotationIntensity, -0.35, 0.35);
                 }
                 else
                 {
-                    var speed = Math.Sqrt(velX * velX + velY * velY);
+                    // Heading uses the physical aspect ratio, so a wide capture turns like the cursor really moves.
+                    var physicalX = velX * pointSize.Width / 1600.0;
+                    var physicalY = velY * pointSize.Height / 1600.0;
+                    var speed = Math.Sqrt(physicalX * physicalX + physicalY * physicalY);
                     if (speed > 0.04)
                     {
-                        var targetAngle = Math.Atan2(-velY, velX) - Math.PI * 0.75;
+                        var targetAngle = Math.Atan2(-physicalY, physicalX) - Math.PI * 0.75;
                         var delta = targetAngle - bearing;
                         while (delta > Math.PI)
                         {
@@ -497,7 +446,8 @@ public sealed class SpringTrajectorySolver
             clickWaves.RemoveAll(wave => wave.AgeMs > ClickWaveDurationMs);
             while (nextWaveClick < downs.Count && downs[nextWaveClick] <= tMs)
             {
-                clickWaves.Add(new ClickWave(tMs - downs[nextWaveClick], new Point01(curX, curY)));
+                // A wave stays where the button went down, in recording coordinates (ADR-86).
+                clickWaves.Add(new ClickWave(tMs - downs[nextWaveClick], new Point01(downClicks[nextWaveClick].X, downClicks[nextWaveClick].Y)));
                 nextWaveClick++;
             }
 
@@ -518,21 +468,179 @@ public sealed class SpringTrajectorySolver
             });
         }
 
-        return solved;
+        return (solved, planned);
+    }
+
+    /// <summary>Builds the planner's path (points, shake-filtered, with the ending options) and its anchors, then plans it.</summary>
+    private static PlannedCursorPath PlanCursor(
+        IReadOnlyList<CursorSampleEvent> events,
+        IReadOnlyList<ClickEvent> clicks,
+        ProjectDocument document,
+        SpringConfig spring,
+        double durationMs,
+        MotionPointSize pointSize,
+        bool expandPauses,
+        double shakeThresholdPt,
+        double? stopMoveCutoffMs,
+        double? loopStartMs,
+        double stepMs,
+        Func<(double X, double Y), double, (double X, double Y)> endingAdjusted)
+    {
+        var held = CursorTelemetry.HeldIntervals(clicks, durationMs);
+        var anchors = clicks.Where(click => click.Type is "down" or "up").ToList();
+        var anchorTimes = anchors.Select(anchor => anchor.T).ToHashSet();
+
+        // Recorded samples, with recording-time pauses held until shortly before the next sample.
+        var source = new List<(double T, double X, double Y)>(events.Count + 16);
+        for (var i = 0; i < events.Count; i++)
+        {
+            var e = events[i];
+            if (expandPauses && i > 0 && e.T - events[i - 1].T > 48)
+            {
+                source.Add((e.T - 16, events[i - 1].X, events[i - 1].Y));
+            }
+
+            source.Add((e.T, e.X, e.Y));
+        }
+
+        // Shake filter: small moves are dropped, except while a button is held and at the clicks themselves.
+        var filtered = new List<(double T, double X, double Y)>(source.Count);
+        double? skippedMs = null;
+        var heldIndex = 0;
+        foreach (var e in source)
+        {
+            while (heldIndex < held.Count && held[heldIndex].End < e.T)
+            {
+                heldIndex++;
+            }
+
+            var isHeld = heldIndex < held.Count && e.T >= held[heldIndex].Start;
+            if (filtered.Count > 0 && shakeThresholdPt > 0 && !isHeld && !anchorTimes.Contains(e.T)
+                && pointSize.Distance(e.X, e.Y, filtered[^1].X, filtered[^1].Y) <= shakeThresholdPt)
+            {
+                skippedMs = e.T;
+                continue;
+            }
+
+            if (skippedMs is double skipped && filtered.Count > 0 && skipped > filtered[^1].T)
+            {
+                filtered.Add((skipped, filtered[^1].X, filtered[^1].Y));
+            }
+
+            skippedMs = null;
+            filtered.Add(e);
+        }
+
+        if (filtered.Count == 0)
+        {
+            filtered.Add((0, 0.5, 0.5));
+        }
+
+        (double X, double Y) FilteredPosition(double t)
+        {
+            var lo = 0;
+            var hi = filtered.Count;
+            while (lo < hi)
+            {
+                var mid = (lo + hi) >> 1;
+                if (filtered[mid].T <= t)
+                {
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid;
+                }
+            }
+
+            if (lo == 0)
+            {
+                return (filtered[0].X, filtered[0].Y);
+            }
+
+            var a = filtered[lo - 1];
+            if (lo >= filtered.Count)
+            {
+                return (a.X, a.Y);
+            }
+
+            var b = filtered[lo];
+            var f = (t - a.T) / Math.Max(0.000001, b.T - a.T);
+            return (a.X + (b.X - a.X) * f, a.Y + (b.Y - a.Y) * f);
+        }
+
+        var points = new List<CursorPathPlanner.PathPoint>(filtered.Count + 64);
+        var tailStart = loopStartMs ?? stopMoveCutoffMs;
+        foreach (var p in filtered)
+        {
+            if (tailStart is not double tail || p.T < tail)
+            {
+                points.Add(new CursorPathPlanner.PathPoint(p.T, p.X * pointSize.Width, p.Y * pointSize.Height));
+            }
+        }
+
+        if (tailStart is double tailFrom)
+        {
+            // The ending is resampled at 120 Hz: a hold after "stop moving", or a blend toward the start for a loop.
+            var t = tailFrom;
+            while (t <= durationMs + stepMs)
+            {
+                var p = endingAdjusted(FilteredPosition(stopMoveCutoffMs is double stop ? Math.Min(t, stop) : t), t);
+                points.Add(new CursorPathPlanner.PathPoint(t, p.X * pointSize.Width, p.Y * pointSize.Height));
+                t += stepMs;
+            }
+        }
+
+        // Anchors the cursor must reach on time. Nothing after the ending starts is synchronized.
+        var syncEndMs = tailStart ?? durationMs;
+        var sync = anchors.Where(anchor => anchor.T <= syncEndMs).Select(anchor => new CursorPathPlanner.SyncPoint(anchor.T, CursorPathPlanner.Tolerance.Click)).ToList();
+        heldIndex = 0;
+        foreach (var e in events)
+        {
+            if (e.T > syncEndMs || anchorTimes.Contains(e.T))
+            {
+                continue;
+            }
+
+            while (heldIndex < held.Count && held[heldIndex].End <= e.T)
+            {
+                heldIndex++;
+            }
+
+            if (heldIndex < held.Count && e.T > held[heldIndex].Start)
+            {
+                sync.Add(new CursorPathPlanner.SyncPoint(e.T, CursorPathPlanner.Tolerance.Drag));
+            }
+        }
+
+        if (!document.Cursor.AlwaysUsePointer)
+        {
+            // No hover telemetry is recorded; cursor-shape changes mark where hovered UI reacts.
+            var tolerance = document.Cursor.KeepInSyncWithHovers ? CursorPathPlanner.Tolerance.Hover : CursorPathPlanner.Tolerance.CursorImage;
+            for (var i = 1; i < events.Count; i++)
+            {
+                if (events[i].C != events[i - 1].C && events[i].T <= syncEndMs)
+                {
+                    sync.Add(new CursorPathPlanner.SyncPoint(events[i].T, tolerance));
+                }
+            }
+        }
+
+        return CursorPathPlanner.Plan(points, sync, spring, durationMs);
     }
 
     private List<CameraFrameState> SolveCamera(
         ProjectDocument document,
         IReadOnlyList<CursorSampleEvent> cursorEvents,
         IReadOnlyList<ClickEvent> clickEvents,
-        List<CursorFrameState> cursor,
+        IReadOnlyList<CursorFrameState> cursor,
         SpringConfig camSpring,
         PrecomputedSpring camPrecomputed,
-        double totalDuration,
         int totalSteps,
-        double dt)
+        double dt,
+        bool startsAtCut)
     {
-        _ = totalDuration;
+        var crop = document.Canvas.CropRect01;
         var active = document.Timeline.IsZoomTrackHidden
             ? []
             : document.Timeline.Zooms.Where(zoom => !zoom.Disabled).OrderBy(zoom => zoom.SourceStartMs).ToList();
@@ -546,7 +654,8 @@ public sealed class SpringTrajectorySolver
 
             var scale = Math.Max(1, zoom.Scale);
             var maxDist = 0.5 / scale;
-            return BuildGroups(zoom, cursorEvents, clickEvents, maxDist, maxDist);
+            // Groups live in recording coordinates; the half-viewport span is measured inside the crop (ADR-86).
+            return BuildGroups(zoom, cursorEvents, clickEvents, maxDist * crop.Width, maxDist * crop.Height);
         }).ToList();
 
         var built = new List<CameraFrameState>(totalSteps);
@@ -576,7 +685,7 @@ public sealed class SpringTrajectorySolver
         {
             var tMs = step * stepMs;
             var cursorAt = cursor[step].Position01;
-            while (zoomIndex < active.Count && active[zoomIndex].SourceEndMs < tMs)
+            while (zoomIndex < active.Count && active[zoomIndex].SourceEndMs <= tMs)
             {
                 zoomIndex++;
             }
@@ -596,6 +705,20 @@ public sealed class SpringTrajectorySolver
             if (activeIndex is int zIdx)
             {
                 var zoom = active[zIdx];
+                // One focus for the screen camera and the Loupe: the active focus group (or the cursor before the first one),
+                // or the manual center, moved into crop space before solving (ADR-86).
+                var focus = zoom.Mode == ZoomMode.Manual ? zoom.ManualCenter01 : cursorAt;
+                foreach (var group in groups[zIdx])
+                {
+                    if (group.StartTimeMs > tMs)
+                    {
+                        break;
+                    }
+
+                    focus = group.Center01;
+                }
+
+                focus = MotionGeometry.Cropped(focus, crop);
                 instant = zoom.InstantAnimation;
                 loupeNow = zoom.Presentation == ZoomPresentation.Loupe;
                 if (loupeNow)
@@ -608,61 +731,41 @@ public sealed class SpringTrajectorySolver
                     var wobbleY = Math.Cos(tMs / 18000.0 * 2 * Math.PI) * 0.008;
                     if (zoom.Mode == ZoomMode.FollowCursor)
                     {
-                        targetLoupeX = Math.Clamp(cursorAt.X + wobbleX, 0, 1);
-                        targetLoupeY = Math.Clamp(cursorAt.Y + wobbleY, 0, 1);
+                        targetLoupeX = Math.Clamp(focus.X + wobbleX, 0, 1);
+                        targetLoupeY = Math.Clamp(focus.Y + wobbleY, 0, 1);
                     }
                     else
                     {
-                        targetLoupeX = zoom.ManualCenter01.X;
-                        targetLoupeY = zoom.ManualCenter01.Y;
+                        targetLoupeX = focus.X;
+                        targetLoupeY = focus.Y;
                     }
                 }
                 else
                 {
                     targetScale = Math.Max(1, zoom.Scale);
-                    if (zoom.Mode == ZoomMode.FollowCursor)
-                    {
-                        var focusGroups = groups[zIdx];
-                        if (focusGroups.Count > 0)
-                        {
-                            var focusCenter = focusGroups[0].Center01;
-                            foreach (var group in focusGroups)
-                            {
-                                if (group.StartTimeMs <= tMs)
-                                {
-                                    focusCenter = group.Center01;
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
-
-                            focusX = focusCenter.X;
-                            focusY = focusCenter.Y;
-                        }
-                        else
-                        {
-                            focusX = cursorAt.X;
-                            focusY = cursorAt.Y;
-                        }
-                    }
-                    else
-                    {
-                        focusX = zoom.ManualCenter01.X;
-                        focusY = zoom.ManualCenter01.Y;
-                    }
+                    focusX = focus.X;
+                    focusY = focus.Y;
                 }
             }
-            else if (hasLoupe && zoomIndex < active.Count)
+
+            // Warm only invisible glass, including while the preceding screen zoom is active.
+            if (hasLoupe && !loupeNow && loupePresence <= 0.005)
             {
-                var upcoming = active[zoomIndex];
-                if (upcoming.Presentation == ZoomPresentation.Loupe && upcoming.SourceStartMs > tMs && upcoming.SourceStartMs - tMs <= 450)
+                var upcomingIndex = activeIndex is int current ? current + 1 : zoomIndex;
+                if (upcomingIndex < active.Count)
                 {
-                    loupeCfg = upcoming.Loupe;
-                    lastLoupe = upcoming.Loupe;
-                    targetLoupeX = upcoming.Mode == ZoomMode.Manual ? upcoming.ManualCenter01.X : cursorAt.X;
-                    targetLoupeY = upcoming.Mode == ZoomMode.Manual ? upcoming.ManualCenter01.Y : cursorAt.Y;
+                    var upcoming = active[upcomingIndex];
+                    if (upcoming.Presentation == ZoomPresentation.Loupe && upcoming.SourceStartMs > tMs && upcoming.SourceStartMs - tMs <= 450)
+                    {
+                        loupeCfg = upcoming.Loupe;
+                        lastLoupe = upcoming.Loupe;
+                        var upcomingGroups = groups[upcomingIndex];
+                        var warm = MotionGeometry.Cropped(
+                            upcoming.Mode == ZoomMode.Manual ? upcoming.ManualCenter01 : upcomingGroups.Count > 0 ? upcomingGroups[0].Center01 : cursorAt,
+                            crop);
+                        targetLoupeX = warm.X;
+                        targetLoupeY = warm.Y;
+                    }
                 }
             }
 
@@ -676,7 +779,8 @@ public sealed class SpringTrajectorySolver
                 targetY = Math.Min(0, Math.Max(minOrigin, targetY));
             }
 
-            if (instant && !loupeNow)
+            // A run that begins at a cut starts on its targets: no history from discarded footage (ADR-86).
+            if ((instant && !loupeNow) || (step == 0 && startsAtCut))
             {
                 rectX = targetX;
                 rectY = targetY;
@@ -692,7 +796,7 @@ public sealed class SpringTrajectorySolver
 
             if (hasLoupe)
             {
-                if (instant && loupeNow)
+                if ((instant && loupeNow) || (step == 0 && startsAtCut))
                 {
                     loupeX = targetLoupeX;
                     loupeY = targetLoupeY;
@@ -712,12 +816,8 @@ public sealed class SpringTrajectorySolver
             var visible = loupePresence > 0.005;
             var solvedScale = Math.Max(1, rectW);
             Point01 center;
-            if (visible)
             {
-                center = new Point01(Math.Clamp(loupeX, 0, 1), Math.Clamp(loupeY, 0, 1));
-            }
-            else
-            {
+                // The screen camera keeps its own center while the lens is visible; the lens has LoupeCenter01.
                 var cx = (0.5 - rectX) / solvedScale;
                 var cy = (0.5 - rectY) / solvedScale;
                 if (document.Motion.AvoidEmptyBoundsWhenZooming && solvedScale > 1.0001)
@@ -742,44 +842,12 @@ public sealed class SpringTrajectorySolver
                 IsLoupeMode = visible,
                 LoupePresence01 = Math.Clamp(loupePresence, 0, 1),
                 LoupeScale = Math.Max(1, loupeScale),
-                LoupeConfig = loupeCfg
+                LoupeConfig = loupeCfg,
+                LoupeCenter01 = new Point01(Math.Clamp(loupeX, 0, 1), Math.Clamp(loupeY, 0, 1))
             });
         }
 
         return built;
-    }
-
-    private static List<(double Start, double End)> BuildDragIntervals(
-        IReadOnlyList<ClickEvent> clicks,
-        double offset,
-        double duration)
-    {
-        var intervals = new List<(double Start, double End)>();
-        double? down = null;
-        foreach (var ev in clicks.OrderBy(click => click.T))
-        {
-            var t = Math.Max(0, ev.T - offset);
-            if (ev.Type == "down")
-            {
-                down ??= t;
-            }
-            else if (ev.Type == "up" && down is double start)
-            {
-                if (t > start + 25)
-                {
-                    intervals.Add((start, t));
-                }
-
-                down = null;
-            }
-        }
-
-        if (down is double unclosed && duration > unclosed + 25)
-        {
-            intervals.Add((unclosed, duration));
-        }
-
-        return intervals;
     }
 
     private static SpringConfig SanitizeCamera(SpringConfig raw)

@@ -158,7 +158,7 @@ public sealed class PreviewRenderer : IDisposable
             latency.WaitOne(100);
             if (clock is not null)
             {
-                current = current.At(clock());
+                current = current.AtTimeline(clock());
             }
 
             var composeStart = System.Diagnostics.Stopwatch.GetTimestamp();

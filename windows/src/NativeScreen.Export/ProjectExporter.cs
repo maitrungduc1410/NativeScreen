@@ -20,7 +20,8 @@ public sealed record ExportSource(
     IReadOnlyList<ShortcutCluster> Shortcuts,
     Task<FaceTrack?>? FaceTrack = null,
     Func<IPersonMaskSource?>? PersonMasks = null,
-    bool CameraOnly = false);
+    bool CameraOnly = false,
+    MotionPointSize? PointSize = null);
 
 /// <summary>
 /// Sequential decode, compose, encode on its own thread and its own compositor, so a running export never touches the
@@ -31,8 +32,11 @@ public sealed class ProjectExporter(ExportSource source)
     public Task RunAsync(string path, ExportSettings settings, IProgress<ExportProgress>? progress, CancellationToken cancel) =>
         Task.Factory.StartNew(() => Run(path, settings, progress, cancel), cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
-    /// <summary>One composed frame as PNG or JPEG, on its own compositor like a video export.</summary>
-    public Task ExportStillAsync(string path, double sourceMs, int resolutionHeight, bool jpeg) => Task.Run(() =>
+    /// <summary>
+    /// One composed frame as PNG or JPEG, on its own compositor like a video export. <paramref name="timelineMs"/> picks the
+    /// occurrence of a reused source range (ADR-86); without it the first one is used.
+    /// </summary>
+    public Task ExportStillAsync(string path, double sourceMs, int resolutionHeight, bool jpeg, double? timelineMs = null) => Task.Run(() =>
     {
         var document = source.Document;
         var aspect = document.Canvas.EffectiveAspectRatio(source.SourceWidth, source.SourceHeight);
@@ -47,8 +51,9 @@ public sealed class ProjectExporter(ExportSource source)
             new ComposeRequest
             {
                 Document = document,
-                Trajectory = new SpringTrajectorySolver(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, document),
+                Trajectory = Solve(document),
                 SourceMs = sourceMs,
+                TimelineMs = timelineMs,
                 ScreenSource = screen,
                 WebcamSource = webcam,
                 ScreenWidth = (int)source.SourceWidth,
@@ -66,6 +71,10 @@ public sealed class ProjectExporter(ExportSource source)
         ImageTexture.Save(ImageTexture.ReadBack(compositor.Device, compositor.Context, layer.Texture, width, height), width, height, path, jpeg);
     });
 
+    // Motion runs on edited time: every exported frame passes its timeline time (ADR-86).
+    private PlaybackTrajectorySolver Solve(ProjectDocument document) =>
+        new(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, document, source.PointSize);
+
     private void Run(string path, ExportSettings settings, IProgress<ExportProgress>? progress, CancellationToken cancel)
     {
         var document = source.Document;
@@ -74,7 +83,7 @@ public sealed class ProjectExporter(ExportSource source)
         var (width, height) = settings.OutputSize(aspect);
         var total = ExportPlan.FrameCount(mapper.TotalTimelineDurationMs, settings.Fps);
         var frameMs = 1000.0 / settings.Fps;
-        var trajectory = new SpringTrajectorySolver(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, document);
+        var trajectory = Solve(document);
 
         using var compositor = new FrameCompositor();
         using var screen = OpenSequential(source.Tracks.DisplayVideo);
@@ -102,6 +111,7 @@ public sealed class ProjectExporter(ExportSource source)
                         Document = document,
                         Trajectory = trajectory,
                         SourceMs = mapper.SourceTime(timelineMs).SourceMs,
+                        TimelineMs = timelineMs,
                         ScreenSource = screen,
                         WebcamSource = webcam,
                         ScreenWidth = (int)source.SourceWidth,

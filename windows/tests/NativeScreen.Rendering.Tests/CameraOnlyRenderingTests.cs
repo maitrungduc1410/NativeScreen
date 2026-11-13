@@ -50,7 +50,7 @@ public sealed class CameraOnlyRenderingTests
             new ComposeRequest
             {
                 Document = document,
-                Trajectory = new SpringTrajectorySolver(1000, [], [], document),
+                Trajectory = new PlaybackTrajectorySolver(1000, [], [], document),
                 SourceMs = 100,
                 ScreenSource = new OneFrame(Backdrop()),
                 ScreenWidth = 640,

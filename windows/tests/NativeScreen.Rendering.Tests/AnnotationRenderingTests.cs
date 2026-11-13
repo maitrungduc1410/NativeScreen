@@ -56,7 +56,7 @@ public sealed class AnnotationRenderingTests
 
     private static byte[] Compose(FrameCompositor compositor, ProjectDocument document, double ms, int width, int height, string? dump = null)
     {
-        var trajectory = new SpringTrajectorySolver(4000, [], [], document);
+        var trajectory = new PlaybackTrajectorySolver(4000, [], [], document);
         var layer = compositor.Compose(
             new ComposeRequest { Document = document, Trajectory = trajectory, SourceMs = ms, ScreenSource = new OneFrame(Flat(60)), ScreenWidth = 1920, ScreenHeight = 1080 },
             width,

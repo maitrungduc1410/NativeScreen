@@ -819,7 +819,7 @@ internal sealed class McpToolbox
         var file = Path.Combine(Path.GetTempPath(), $"ns-mcp-{Guid.NewGuid():N}" + (jpeg ? ".jpg" : ".png"));
         try
         {
-            await new ProjectExporter(editor.McpExportSource()).ExportStillAsync(file, session.SourceAtPlayhead, height, jpeg);
+            await new ProjectExporter(editor.McpExportSource()).ExportStillAsync(file, session.SourceAtPlayhead, height, jpeg, session.PlayheadTimelineMs);
             var bytes = await File.ReadAllBytesAsync(file);
             var (width, imageHeight) = ImageSize(bytes);
             return (bytes, width, imageHeight, session.PlayheadTimelineMs);

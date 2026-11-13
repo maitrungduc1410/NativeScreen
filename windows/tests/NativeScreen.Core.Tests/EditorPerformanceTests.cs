@@ -26,18 +26,22 @@ public sealed class EditorPerformanceTests
     public void HidingTheZoomTrackReachesThePreview()
     {
         var session = Session();
-        Assert.True(session.RenderSnapshot().Trajectory.Evaluate(8000).Camera.Scale > 1.5);
+        Assert.True(session.RenderSnapshot().Trajectory.EvaluateAtSource(8000).Camera.Scale > 1.5);
         session.Mutate(document => document.Timeline.IsZoomTrackHidden = true);
-        Assert.Equal(1, session.RenderSnapshot().Trajectory.Evaluate(8000).Camera.Scale, 3);
+        Assert.Equal(1, session.RenderSnapshot().Trajectory.EvaluateAtSource(8000).Camera.Scale, 3);
     }
 
     [Fact]
-    public void ACutDoesNotSolveTheMotionAgain()
+    public void MotionIsSolvedAgainOnlyForWhatItReads()
     {
         var session = Session();
         var before = session.RenderSnapshot().Trajectory;
-        session.Mutate(document => document.Timeline.Slices[0].SourceEndMs = 15000);
+        session.Mutate(document => document.Name = "renamed");
         Assert.Same(before, session.RenderSnapshot().Trajectory);
+        // Motion runs on edited time, so a cut changes it (ADR-86).
+        session.Mutate(document => document.Timeline.Slices[0].SourceEndMs = 15000);
+        Assert.NotSame(before, session.RenderSnapshot().Trajectory);
+        before = session.RenderSnapshot().Trajectory;
         session.Mutate(document => document.Timeline.Zooms[0].Scale = 3);
         Assert.NotSame(before, session.RenderSnapshot().Trajectory);
     }
@@ -56,7 +60,7 @@ public sealed class EditorPerformanceTests
         await solved.Task.WaitAsync(TimeSpan.FromSeconds(20));
         var latest = session.RenderSnapshot().Trajectory;
         Assert.NotSame(first, latest);
-        Assert.Equal(2.5, latest.Evaluate(8000).Camera.Scale, 1);
+        Assert.Equal(2.5, latest.EvaluateAtSource(8000).Camera.Scale, 1);
     }
 
     [Theory]

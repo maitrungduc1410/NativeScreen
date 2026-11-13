@@ -54,13 +54,15 @@ public sealed partial class EditorSession
 
     /// <summary>
     /// The canvas mapping the compositor uses at `sourceMs` for a canvas of the given size (top-down), camera-only framing and
-    /// face-centered zoom included.
+    /// face-centered zoom included. The camera is read at edited time: the occurrence under the playhead when the source range
+    /// is reused, else the first one (ADR-86).
     /// </summary>
     public CanvasCoordinateTransform CanvasTransform(double sourceMs, double canvasWidth, double canvasHeight)
     {
         var (document, trajectory) = RenderSnapshot();
         var face = IsCameraOnly ? CameraOnlyLayout.FaceCenter01(document, FaceTrack, sourceMs) : null;
-        var camera = CameraOnlyLayout.FaceCentered(trajectory.Evaluate(sourceMs).Camera, face);
+        var timelineMs = trajectory.Mapper.TimelineTime(sourceMs, PlayheadTimelineMs) ?? trajectory.Mapper.TimelineTime(sourceMs) ?? 0;
+        var camera = CameraOnlyLayout.FaceCentered(trajectory.EvaluateAtTimeline(timelineMs).Camera, face);
         var crop = document.Canvas.CropRect01;
         // The same source size the compositor and the preview handles use, so a new or re-pinned item lands where it is drawn.
         var stage = new StageLayoutEngine().Resolve(
@@ -74,7 +76,7 @@ public sealed partial class EditorSession
             HasRecordedCamera,
             cameraOnly: IsCameraOnly,
             faceTrack: FaceTrack);
-        return new CanvasCoordinateTransform(canvasWidth, canvasHeight, stage.ScreenRect, crop, camera.IsLoupeMode ? Point01.Center : camera.Center01, camera.IsLoupeMode ? 1 : camera.Scale);
+        return new CanvasCoordinateTransform(canvasWidth, canvasHeight, stage.ScreenRect, crop, camera.Center01, camera.Scale);
     }
 
     public double OutputCanvasAspect => Document.Canvas.EffectiveAspectRatio(SourceWidth, SourceHeight);

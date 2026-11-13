@@ -8,7 +8,10 @@ public sealed class LoadedProject
     public IReadOnlyList<ClickEvent> ClickEvents { get; }
     public IReadOnlyList<KeyStrokeEvent> KeyEvents { get; }
     public NLETimeMapper TimeMapper { get; }
-    public SpringTrajectorySolver Trajectory { get; }
+    public PlaybackTrajectorySolver Trajectory { get; }
+
+    /// <summary>The capture size in points, for cursor tolerances and shake (ADR-87).</summary>
+    public MotionPointSize PointSize => MotionPointSize.Of(Metadata.CaptureTarget);
     public bool HasRecordedCamera { get; }
 
     /// <summary>Recorded in the Camera mode: the main picture is the camera, with no screen, cursor or system audio.</summary>
@@ -28,11 +31,14 @@ public sealed class LoadedProject
         Document.Timeline.MaskTracks.RemoveAll(track => track.Items.Count == 0);
         // Items on an annotation track must not overlap, or dragging one pushes it away. Older live drawings could.
         AnnotationTrack.RepackOverlapping(Document.Timeline.AnnotationTracks);
-        CursorEvents = JsonLines.Load<CursorSampleEvent>(Path.Combine(recording, Metadata.Tracks.CursorTelemetry));
-        ClickEvents = JsonLines.Load<ClickEvent>(Path.Combine(recording, Metadata.Tracks.ClicksTelemetry));
-        KeyEvents = JsonLines.Load<KeyStrokeEvent>(Path.Combine(recording, Metadata.Tracks.KeysTelemetry));
+        // Files stay as recorded; older recordings are moved onto the video clock in memory only (ADR-88).
+        var rawCursor = JsonLines.Load<CursorSampleEvent>(Path.Combine(recording, Metadata.Tracks.CursorTelemetry));
+        var rawClicks = JsonLines.Load<ClickEvent>(Path.Combine(recording, Metadata.Tracks.ClicksTelemetry));
+        var rawKeys = JsonLines.Load<KeyStrokeEvent>(Path.Combine(recording, Metadata.Tracks.KeysTelemetry));
+        var legacyOffsetMs = LegacyTelemetryEpoch.OffsetMs(rawCursor, rawClicks, rawKeys, Metadata.DurationMs);
+        (CursorEvents, ClickEvents, KeyEvents) = LegacyTelemetryEpoch.Corrected(rawCursor, rawClicks, rawKeys, legacyOffsetMs);
         TimeMapper = new NLETimeMapper(Document.Timeline.Slices);
-        Trajectory = new SpringTrajectorySolver(Metadata.DurationMs, CursorEvents, ClickEvents, Document);
+        Trajectory = new PlaybackTrajectorySolver(Metadata.DurationMs, CursorEvents, ClickEvents, Document, PointSize);
         var webcam = Metadata.Tracks.WebcamVideo;
         // A camera-only recording names its camera movie as the screen and has no camera layer (spec/06 ADR-77).
         HasRecordedCamera = !IsCameraOnly && (webcam is not null || File.Exists(Path.Combine(recording, "webcam.mp4")));
@@ -60,7 +66,7 @@ public sealed class LoadedProject
         var crop = Document.Canvas.CropRect01;
         var sourceW = Math.Max(16, Metadata.CaptureTarget.PixelSize.Width * crop.Width);
         var sourceH = Math.Max(16, Metadata.CaptureTarget.PixelSize.Height * crop.Height);
-        var zoom = Trajectory.Evaluate(sourceMs).Camera.Scale;
+        var zoom = Trajectory.EvaluateAtSource(sourceMs).Camera.Scale;
         return new StageLayoutEngine().Resolve(
             Document,
             sourceMs,

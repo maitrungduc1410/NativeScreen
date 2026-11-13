@@ -41,7 +41,7 @@ public sealed class ExportEndToEndTests : IDisposable
             new ComposeRequest
             {
                 Document = source.Document,
-                Trajectory = new SpringTrajectorySolver(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, source.Document),
+                Trajectory = new PlaybackTrajectorySolver(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, source.Document),
                 SourceMs = 2000,
                 ScreenSource = screen,
                 ExportQuality = true,

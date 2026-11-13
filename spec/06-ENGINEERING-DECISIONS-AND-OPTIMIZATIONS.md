@@ -1554,7 +1554,9 @@ Motion used recording time even after speed edits and cuts. Cursor/click overlay
 - **Sharp content:** render a second, pre-magnified scene directly from source pixels at lens scale, with privacy masks, screen annotations, cursor, frame and background. Give the compute kernel only an integral patch with half-side `1.7 * radius + 2`, independent of zoom. Preserve rim bend, fringe, gloss and shadow; sample the patch without dividing offsets by zoom again. Carry each texture ROI's canvas origin into Metal. Webcam, keycaps, captions and canvas annotations stay above the lens.
 - **Auto zoom:** merge generated intervals with gaps strictly below 2500 ms, preserving typing hold and tail margin. A useful reading pause should not cause a zoom-out/in detour.
 
-Verification is reproducible with `--verify-motion <output-folder>` (synthetic math checks and real GPU pixels). Motion fixtures are generated separately with `--generate-conformance conformance/motion-v2 --motion-only`; edited-time rows/frames cover crop, speed, cuts, repeated footage and screen/Loupe transitions. Windows needs the ADR-86 port before these replace its legacy motion expectations. No media or telemetry migration is needed.
+Verification is reproducible with `--verify-motion <output-folder>` (synthetic math checks and real GPU pixels). Motion fixtures are generated separately with `--generate-conformance conformance/motion-v2 --motion-only`; edited-time rows/frames cover crop, speed, cuts, repeated footage and screen/Loupe transitions. Windows needs the ADR-86 port before these replace its legacy motion expectations. 
+
+- **Windows.** `Core/Motion/PlaybackTrajectorySolver.cs`, `MotionGeometry.cs`, `CursorTelemetry.cs` and the camera loop of `SpringTrajectorySolver.cs`, ported line by line. The solver API names the clock: `EvaluateAtTimeline` for rendering, `EvaluateAtSource` for editing helpers (first occurrence), so no caller mixes the two by accident. `ComposeRequest` carries `TimelineMs`; the live preview clock returns edited time (`EditorSession.LiveTimelineClock`) and the request derives its source time per frame. The editor re-solves when slices or the crop change, keeping the cursor when only zooms, motion or crop changed. The sharp lens (`FrameCompositor.Lens`) draws the screen scene a second time through a `SceneView` (magnify about the lens center, move to the patch origin) into a square patch of half-side `ceil(1.7 * radius + 2)`: screen, inset and cursor are drawn from source pixels at lens scale; shadow and bezel reuse their canvas bakes through a remapped placement; screen annotations pass the view to `DrawSprite`; the ripple and the patch have their own layer names so neither recreates the canvas textures. `MagnifierLens.hlsl` takes the patch as `t1` and samples `center + offset * bend - contentOrigin`. Measured on the demo project at 60 Hz: compose and present 4.9 ms median with the lens against 5.3 ms without it.No media or telemetry migration is needed.
 
 ## 87. ADR-87: Planned Cursor Sync Instead of an Error Disc
 
@@ -1567,7 +1569,9 @@ ADR-86 kept the fixed lookahead and drag/click speed boosts, then pulled the sol
 - **Cost:** the planner simulates at 1 ms. A 10 minute synthetic session (26k samples, 760 clicks) solves in about 0.4 s in a Release-optimized probe; the result is reused while only zooms or crop change.
 - **Measured** (synthetic, 1728x1117 pt): every click within 1.5 pt (max 1.64 pt over about 3000 clicks), drags within 1.5 pt, peak speed of a 150 ms flick 3.9 pt/ms against 8.6 raw, largest frame-to-frame speed change 0.66 pt/ms. For comparison on a 3456x2234 capture, the ADR-86 disc changed speed by up to 1.88 px/ms per frame (raw cursor 1.64, previous lookahead solver 0.64), and the click window jumped from 6.1 to 14.1 px/ms in one frame.
 
-`--verify-motion` covers click/drag tolerance, no speed jump and kept glide for a flick ending on a click. Windows has not been ported.
+`--verify-motion` covers click/drag tolerance, no speed jump and kept glide for a flick ending on a click.
+
+- **Windows.** `Core/Motion/CursorPathPlanner.cs` and `PlannedCursorPath.cs`. The Swift curves are value types; in C# `LeadCurve` and `SpeedCurve` are classes and every copy that is then extended is a `Clone()` (context, trial knots, committed state, the state saved before a commit). The motion checks without a GPU are `MotionRegressionTests` (same inputs and thresholds), and the lens checks are `SharpLensTests`.
 
 ## 88. ADR-88: Older Recordings on the Video Clock, Checked on Real Projects
 
@@ -1577,6 +1581,7 @@ Before 2026-10-26 the telemetry clock started before capture, so cursor, clicks 
 - **Delay:** telemetry and capture stopped together, so `D = min(firstCursor.t, max(0, lastEvent.t - durationMs))` (ignored below 20 ms). On the ten older recordings the first move then falls 28 to 71 ms after the first frame. On the Xcode recording every corrected click is followed by a UI change 7 to 39 ms later (149 ms for the first); raw click times line up with nothing and some fall after the end of the video.
 - **Where:** `ProjectSession.load` moves cursor, clicks and keys by `-D` in memory (`LegacyTelemetryEpoch`). Files are untouched. Zooms already saved in such projects keep their times.
 - **Click samples:** a click more than 16 pt from the recorded cursor and from both bracketing samples is not inserted into the path. Real recordings agree within 1 pt; the sample project placed its clicks away from its cursor and is fixed to click on it.
+- **Windows.** `LegacyTelemetryEpoch` runs in `LoadedProject`, so the editor, exports and the MCP tools all see corrected events; the files are never rewritten.
 
 `--verify-projects <output> <package>...` copies real projects and checks them headlessly: click accuracy and frame-to-frame speed on the edited timeline, frames at clicks, a full 1080p60 MP4 export (duration and frame count), and composition time. Results on an Apple M4 Pro (Debug build), six recordings including three older ones, a 43 s edited timeline with a cut and a cursor warp:
 
@@ -1596,4 +1601,6 @@ Captions are laid out word by word, each word in its own box, so the words can b
 - **Unchanged:** timing, box size, fonts, spring and the text shown on the timeline and in the inspector, which is drawn as a normal string.
 
 `--verify-motion` checks direction detection, word order in four styles for Arabic and English, growth from the right edge, and writes `caption-rtl.png`.
+
+- **Windows.** `Core/Captions/CaptionLineLayout.cs`: `Line.IsRightToLeft` from `IsRightToLeft(text)`, which walks the `Rune`s and lets the first letter decide (the same ranges; `Rune.IsLetter` only differs from `isAlphabetic` on combining marks, which never come first). The expanding line is anchored at the right edge and `TargetWordOffset` mirrors `LeftToRightWordOffset`. DirectWrite still draws each word on its own and shapes it joined. `CaptionDirectionTests` has the macOS checks with a fixed-width measure.
 

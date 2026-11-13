@@ -6,33 +6,110 @@ namespace NativeScreen.Core.Tests;
 
 public sealed class ConformanceTests
 {
+    /// <summary>The fixture suites: the original cases, and the ADR-86 motion cases (`motion-v2`, authoritative for motion).</summary>
     public static IEnumerable<object[]> Cases()
     {
         var root = RepoRoot();
-        foreach (var dir in Directory.GetDirectories(Path.Combine(root, "conformance", "cases")).OrderBy(path => path, StringComparer.Ordinal))
+        foreach (var suite in new[] { "cases", Path.Combine("motion-v2", "cases") })
         {
-            yield return new object[] { Path.GetFileName(dir) };
+            foreach (var dir in Directory.GetDirectories(Path.Combine(root, "conformance", suite)).OrderBy(path => path, StringComparer.Ordinal))
+            {
+                yield return new object[] { suite.Replace(Path.DirectorySeparatorChar, '/'), Path.GetFileName(dir) };
+            }
         }
     }
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public void MatchesFixture(string caseId)
+    public void MatchesFixture(string suite, string caseId)
     {
         var root = RepoRoot();
-        var caseDir = Path.Combine(root, "conformance", "cases", caseId);
+        var caseDir = Path.Combine(root, "conformance", suite, caseId);
         var package = Directory.GetDirectories(caseDir, "*.nativescreen").Single();
         var loaded = new LoadedProject(package);
         var expected = Path.Combine(caseDir, "expected");
 
+        // Every file is checked, and all differences are reported together.
+        var failures = new List<string>();
+        void Check(string file, Action<string> assert)
+        {
+            try
+            {
+                assert(File.ReadAllText(Path.Combine(expected, file)));
+            }
+            catch (Exception exception) when (exception is Xunit.Sdk.XunitException)
+            {
+                failures.Add($"{file}: {exception.Message.Split(Environment.NewLine)[0]}");
+            }
+        }
+
+        // The original suite was made before motion ran on edited time with a planned cursor (ADR-86/87). Its motion files are
+        // superseded by motion-v2 until macOS regenerates them; everything else in it is still checked.
+        var legacy = suite == "cases";
+        var motionSuperseded = legacy && Directory.Exists(Path.Combine(root, "conformance", "motion-v2", "cases", caseId));
+
         AssertJsonEqual(File.ReadAllText(Path.Combine(package, "project.json")), ProjectJson.Serialize(ProjectJson.Deserialize<ProjectDocument>(File.ReadAllText(Path.Combine(package, "project.json")))), $"{caseId} project");
-        AssertTimemap(loaded, File.ReadAllText(Path.Combine(expected, "timemap.json")), caseId);
-        AssertTrajectory(loaded, File.ReadAllText(Path.Combine(expected, "trajectory.json")), caseId);
-        AssertAutoZoom(loaded, File.ReadAllText(Path.Combine(expected, "autozoom.json")), caseId);
-        AssertStage(loaded, File.ReadAllText(Path.Combine(expected, "stage.json")), caseId);
-        AssertCaptions(loaded, File.ReadAllText(Path.Combine(expected, "captions.json")), caseId);
-        AssertShortcuts(loaded, File.ReadAllText(Path.Combine(expected, "shortcuts.json")), caseId);
-        AssertEstimates(loaded, File.ReadAllText(Path.Combine(expected, "estimates.json")), caseId);
+        if (!motionSuperseded)
+        {
+            Check("timemap.json", json => AssertTimemap(loaded, json, caseId));
+        }
+
+        if (!legacy)
+        {
+            Check("trajectory.json", json => AssertTrajectory(loaded, json, caseId));
+        }
+
+        Check("autozoom.json", json => AssertAutoZoom(loaded, json, caseId));
+        if (!motionSuperseded)
+        {
+            Check("stage.json", json => AssertStage(loaded, json, caseId));
+        }
+
+        Check("captions.json", json => AssertCaptions(loaded, json, caseId));
+        Check("shortcuts.json", json => AssertShortcuts(loaded, json, caseId));
+        Check("estimates.json", json => AssertEstimates(loaded, json, caseId));
+        if (File.Exists(Path.Combine(expected, "trajectory-playback.json")))
+        {
+            Check("trajectory-playback.json", json => AssertPlaybackTrajectory(loaded, json, caseId));
+        }
+
+        Assert.True(failures.Count == 0, string.Join(" | ", failures));
+    }
+
+    /// <summary>Motion on edited time (ADR-86): slice, source time, crop-space camera and lens, recording-space click waves.</summary>
+    private static void AssertPlaybackTrajectory(LoadedProject loaded, string expectedJson, string caseId)
+    {
+        using var expected = JsonDocument.Parse(expectedJson);
+        foreach (var row in expected.RootElement.EnumerateArray())
+        {
+            var t = row.GetProperty("timelineMs").GetDouble();
+            var where = $"{caseId} playback {t}";
+            var mapped = loaded.Trajectory.Mapper.SourceTime(t);
+            Close(row.GetProperty("sourceMs").GetDouble(), mapped.SourceMs, $"{where} source");
+            Assert.Equal(row.TryGetProperty("sliceId", out var slice) && slice.ValueKind == JsonValueKind.String ? slice.GetString() : null, mapped.Slice?.Id);
+            var eval = loaded.Trajectory.EvaluateAtTimeline(t);
+            Close(row.GetProperty("cursorX").GetDouble(), eval.Cursor.Position01.X, $"{where} cursor x");
+            Close(row.GetProperty("cursorY").GetDouble(), eval.Cursor.Position01.Y, $"{where} cursor y");
+            Close(row.GetProperty("cursorOpacity").GetDouble(), eval.Cursor.Opacity, $"{where} cursor opacity");
+            Close(row.GetProperty("rotation").GetDouble(), eval.Cursor.RotationRadians, $"{where} rotation");
+            Assert.Equal(row.GetProperty("cursorKind").GetString(), eval.Cursor.CursorType);
+            var waves = row.GetProperty("clickWaves").EnumerateArray().ToList();
+            Assert.True(waves.Count == eval.Cursor.ClickWaves.Length, $"{where} waves {waves.Count} vs {eval.Cursor.ClickWaves.Length}");
+            for (var i = 0; i < waves.Count; i++)
+            {
+                Close(waves[i].GetProperty("ageMs").GetDouble(), eval.Cursor.ClickWaves[i].AgeMs, $"{where} wave age");
+                Close(waves[i].GetProperty("x").GetDouble(), eval.Cursor.ClickWaves[i].Position01.X, $"{where} wave x");
+                Close(waves[i].GetProperty("y").GetDouble(), eval.Cursor.ClickWaves[i].Position01.Y, $"{where} wave y");
+            }
+
+            Close(row.GetProperty("cameraScale").GetDouble(), eval.Camera.Scale, $"{where} camera scale");
+            Close(row.GetProperty("cameraX").GetDouble(), eval.Camera.Center01.X, $"{where} camera x");
+            Close(row.GetProperty("cameraY").GetDouble(), eval.Camera.Center01.Y, $"{where} camera y");
+            Close(row.GetProperty("loupeX").GetDouble(), eval.Camera.LoupeCenter01.X, $"{where} loupe x");
+            Close(row.GetProperty("loupeY").GetDouble(), eval.Camera.LoupeCenter01.Y, $"{where} loupe y");
+            Close(row.GetProperty("loupeScale").GetDouble(), eval.Camera.LoupeScale, $"{where} loupe scale");
+            Close(row.GetProperty("loupePresence").GetDouble(), eval.Camera.LoupePresence01, $"{where} loupe presence");
+        }
     }
 
     [Fact]
@@ -82,7 +159,7 @@ public sealed class ConformanceTests
         foreach (var row in expected.RootElement.EnumerateArray())
         {
             var t = row.GetProperty("sourceMs").GetDouble();
-            var eval = loaded.Trajectory.Evaluate(t);
+            var eval = loaded.Trajectory.EvaluateAtSource(t);
             var cursor = row.GetProperty("cursor");
             Close(cursor.GetProperty("x").GetDouble(), eval.Cursor.Position01.X, $"{caseId} cursor x {t}");
             Close(cursor.GetProperty("y").GetDouble(), eval.Cursor.Position01.Y, $"{caseId} cursor y {t}");

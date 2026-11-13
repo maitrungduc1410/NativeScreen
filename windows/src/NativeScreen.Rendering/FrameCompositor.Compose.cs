@@ -12,8 +12,14 @@ namespace NativeScreen.Rendering;
 public sealed class ComposeRequest
 {
     public required ProjectDocument Document { get; init; }
-    public required SpringTrajectorySolver Trajectory { get; init; }
+    public required PlaybackTrajectorySolver Trajectory { get; init; }
     public required double SourceMs { get; init; }
+
+    /// <summary>
+    /// Edited (timeline) time of this frame. Motion is solved on edited time, so a reused source range has its own trajectory;
+    /// without it the first occurrence of <see cref="SourceMs"/> is used (ADR-86).
+    /// </summary>
+    public double? TimelineMs { get; init; }
     public ID3D11ShaderResourceView? Screen { get; init; }
     public IVideoFrameSource? ScreenSource { get; init; }
     public IVideoFrameSource? WebcamSource { get; init; }
@@ -35,11 +41,13 @@ public sealed class ComposeRequest
     /// <summary>A camera-only recording: the screen source is the camera movie, styled as the camera (spec/06 ADR-77).</summary>
     public bool CameraOnly { get; init; }
 
-    public ComposeRequest At(double sourceMs) => new()
+    /// <summary>The same frame at another edited time, for the live preview clock.</summary>
+    public ComposeRequest AtTimeline(double timelineMs) => new()
     {
         Document = Document,
         Trajectory = Trajectory,
-        SourceMs = sourceMs,
+        SourceMs = Trajectory.Mapper.SourceTime(timelineMs).SourceMs,
+        TimelineMs = timelineMs,
         Screen = Screen,
         ScreenSource = ScreenSource,
         WebcamSource = WebcamSource,
@@ -101,8 +109,12 @@ public sealed partial class FrameCompositor
 
         request = WithDecodedFrames(request);
         var document = request.Document;
-        var state = request.Trajectory.Evaluate(request.SourceMs);
+        var timelineMs = request.TimelineMs ?? request.Trajectory.Mapper.TimelineTime(request.SourceMs) ?? 0;
+        var state = request.Trajectory.EvaluateAtTimeline(timelineMs);
         var camera = CameraAt(request, request.SourceMs, state.Camera);
+        // Telemetry stays in recording coordinates; the drawn cursor and its waves move into crop space here (ADR-86).
+        var cursor = InCropSpace(state.Cursor, document.Canvas.CropRect01);
+        var hideCursor = request.Trajectory.Mapper.SourceTime(timelineMs).Slice?.HideCursor == true;
         var background = Background(document, request.PackageDirectory, width, height, request.ExportQuality);
         if (request.CameraOnly && request.Screen is { } main)
         {
@@ -123,34 +135,12 @@ public sealed partial class FrameCompositor
         // shadow and the bezel are enlarged after rendering (spec/06 ADR-67).
         var zoom = ZoomedRect(camera, screen, width, height);
         var drawn = zoom ?? screen;
-        var drawScale = drawn.Width / Math.Max(1, screen.Width);
-        var soft = ZoomMap(screen, zoom, width, height);
+        var scene = new SceneParts(request, cursor, hideCursor, screenView, screenWidth, screenHeight, screen, zoom, radius, fillsCanvas, width, height);
         var layer = Layer("screen", width, height);
         context.ClearRenderTargetView(layer.Target, new Color4(0, 0, 0, 0));
-        Viewport(layer);
-        if (!fillsCanvas)
-        {
-            DrawShadow(document, screen, radius, layer, width, height, soft);
-            DrawInset(document, drawn, radius * drawScale, layer, height, drawScale, request.CameraOnly);
-        }
+        layer = DrawScreenScene(scene, SceneView.Canvas, layer, "ripple");
 
-        DrawScreen(request, screenView, screenWidth, screenHeight, drawn, radius * drawScale, layer);
-        if (!request.CameraOnly)
-        {
-            DrawBezel(document, screen, radius, layer, width, height, soft);
-        }
-
-        layer = Rippled(layer, document, state.Cursor, drawn, width, height);
-        DrawScreenAnnotations(layer, request, screen, zoom, width, height);
-        BindTarget(layer);
-        context.OMSetBlendState(_sourceOver);
-        if (request.Trajectory.HasRecordedCursor)
-        {
-            DrawClick(document, state.Cursor, drawn, height * drawScale);
-            DrawCursor(document, state.Cursor, request.SourceMs, drawn, layer, height * drawScale, request.PackageDirectory);
-        }
-
-        var blurred = MotionBlurred(layer, request, camera, screen, width, height);
+        var blurred = MotionBlurred(layer, request, timelineMs, camera, screen, width, height);
 
         var output = Layer("output", width, height);
         BindTarget(output);
@@ -171,7 +161,7 @@ public sealed partial class FrameCompositor
         context.OMSetBlendState(_sourceOver);
         DrawQuad(blurred.View, Identity(width, height), default, 0, 1);
         context.UnsetRenderTargets();
-        var lensed = Lens(output, camera, screen, width, height);
+        var lensed = Lens(output, scene, background, camera, drawn, width, height);
         DrawCanvasAnnotations(lensed, request, width, height);
         DrawOverlays(lensed, request, stage, width, height);
         context.UnsetRenderTargets();
@@ -194,6 +184,7 @@ public sealed partial class FrameCompositor
             Document = request.Document,
             Trajectory = request.Trajectory,
             SourceMs = request.SourceMs,
+            TimelineMs = request.TimelineMs,
             HasCamera = request.HasCamera,
             ExportQuality = request.ExportQuality,
             PackageDirectory = request.PackageDirectory,
@@ -559,10 +550,9 @@ public sealed partial class FrameCompositor
         DrawQuad(baked.View, soft, default, 0, 1);
     }
 
-    private void DrawCursor(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, double sourceMs, PixelRect screen, RenderLayer target, double height, string? packageDirectory)
+    private void DrawCursor(ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, bool hiddenInSlice, PixelRect screen, RenderLayer target, double height, string? packageDirectory)
     {
-        var slice = document.Timeline.Slices.Find(item => sourceMs >= item.SourceStartMs && sourceMs <= item.SourceEndMs);
-        if (cursor.Opacity <= 0.01 || slice?.HideCursor == true || document.Cursor.Hidden)
+        if (cursor.Opacity <= 0.01 || hiddenInSlice || document.Cursor.Hidden)
         {
             return;
         }
@@ -622,7 +612,7 @@ public sealed partial class FrameCompositor
             color);
     }
 
-    private void DrawScreen(ComposeRequest request, ID3D11ShaderResourceView? view, int width, int height, PixelRect screen, double radius, RenderLayer target)
+    private void DrawScreen(ComposeRequest request, ID3D11ShaderResourceView? view, int width, int height, PixelRect screen, double radius, RenderLayer target, bool allowDownscale = true)
     {
         var rect = new Vector4((float)screen.X, (float)screen.Y, (float)screen.Width, (float)screen.Height);
         var context = _graphics.Context;
@@ -638,7 +628,7 @@ public sealed partial class FrameCompositor
         var crop = request.Document.Canvas.CropRect01;
         var scaleX = screen.Width / Math.Max(1, width * crop.Width);
         var scaleY = screen.Height / Math.Max(1, height * crop.Height);
-        if (Math.Abs(scaleX - scaleY) < 0.002 && scaleX < 0.99 && crop is { X: 0, Y: 0, Width: 1, Height: 1 })
+        if (allowDownscale && Math.Abs(scaleX - scaleY) < 0.002 && scaleX < 0.99 && crop is { X: 0, Y: 0, Width: 1, Height: 1 })
         {
             // Only the plain recording can be reused: masks change with the time, not with the video frame.
             view = Downscaled(view, width, height, scaleX, ReferenceEquals(view, request.Screen) ? request.ScreenFrame : null);
@@ -697,14 +687,15 @@ public sealed partial class FrameCompositor
             return;
         }
 
-        var x = screen.X + cursor.Position01.X * screen.Width;
-        var y = screen.Y + cursor.Position01.Y * screen.Height;
+        var anchor = cursor.ClickWaves.Length > 0 ? cursor.ClickWaves[^1].Position01 : cursor.Position01;
+        var x = screen.X + anchor.X * screen.Width;
+        var y = screen.Y + anchor.Y * screen.Height;
         var rect = new Vector4((float)(x - placement.Radius), (float)(y - placement.Radius), (float)(placement.Radius * 2), (float)(placement.Radius * 2));
         DrawBox(rect, (float)placement.Radius, 0, new Vector4(1, 1, 1, (float)(placement.Alpha * 0.65)));
     }
 
     // The ripple draws nothing on top: it bends the positioned screen, shadow included, before the cursor and the camera (spec/07 Pass 4).
-    private RenderLayer Rippled(RenderLayer layer, ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, PixelRect screen, int width, int height)
+    private RenderLayer Rippled(RenderLayer layer, ProjectDocument document, SpringTrajectorySolver.CursorFrameState cursor, PixelRect screen, int width, int height, string name)
     {
         var style = document.Cursor.ClickEffect.VisualStyle;
         var waves = cursor.ClickWaves;
@@ -732,7 +723,7 @@ public sealed partial class FrameCompositor
                 bounce);
         }
 
-        var output = Layer("ripple", width, height);
+        var output = Layer(name, width, height);
         var context = _graphics.Context;
         context.OMSetRenderTargets((ID3D11RenderTargetView)null!);
         context.PSSetShaderResource(0, null!);
@@ -769,7 +760,7 @@ public sealed partial class FrameCompositor
     {
         var scale = Math.Max(1, camera.Scale);
         var offset = Math.Sqrt(Math.Pow(camera.Center01.X - 0.5, 2) + Math.Pow(camera.Center01.Y - 0.5, 2));
-        if (camera.IsLoupeMode || (scale <= 1.0005 && offset <= 0.0005))
+        if (scale <= 1.0005 && offset <= 0.0005)
         {
             return null;
         }
@@ -783,19 +774,20 @@ public sealed partial class FrameCompositor
     }
 
     // Pass 5.
-    private RenderLayer MotionBlurred(RenderLayer layer, ComposeRequest request, SpringTrajectorySolver.CameraFrameState camera, PixelRect screen, int width, int height)
+    private RenderLayer MotionBlurred(RenderLayer layer, ComposeRequest request, double timelineMs, SpringTrajectorySolver.CameraFrameState camera, PixelRect screen, int width, int height)
     {
         var document = request.Document;
         var ms = request.SourceMs;
         var instant = document.Timeline.Zooms.Exists(zoom => !zoom.Disabled && zoom.InstantAnimation && ms >= zoom.SourceStartMs && ms <= zoom.SourceEndMs + 50);
         var shutter = Math.Clamp(document.Motion.MotionBlurIntensity, 0, 1);
-        if (instant || camera.IsLoupeMode || shutter <= 0.02 || ms <= 8)
+        var previousTimelineMs = Math.Max(0, timelineMs - 16.67);
+        if (instant || shutter <= 0.02 || timelineMs <= 8 || !request.Trajectory.IsSameRun(timelineMs, previousTimelineMs))
         {
             return layer;
         }
 
-        var previousMs = Math.Max(0, ms - 16.67);
-        var previous = CameraAt(request, previousMs, request.Trajectory.Evaluate(previousMs).Camera);
+        var previousMs = request.Trajectory.Mapper.SourceTime(previousTimelineMs).SourceMs;
+        var previous = CameraAt(request, previousMs, request.Trajectory.EvaluateAtTimeline(previousTimelineMs).Camera);
         var now = ZoomedRect(camera, screen, width, height) ?? screen;
         var before = ZoomedRect(previous, screen, width, height) ?? screen;
         var opened = new PixelRect(
@@ -829,29 +821,172 @@ public sealed partial class FrameCompositor
         return output;
     }
 
-    private RenderLayer Lens(RenderLayer layer, SpringTrajectorySolver.CameraFrameState camera, PixelRect screen, int width, int height)
+    /// <summary>Everything the screen scene (pass 3 and 4) is drawn from, so the canvas and the lens patch draw the same scene.</summary>
+    private sealed record SceneParts(
+        ComposeRequest Request,
+        SpringTrajectorySolver.CursorFrameState Cursor,
+        bool HideCursor,
+        ID3D11ShaderResourceView? View,
+        int ScreenWidth,
+        int ScreenHeight,
+        PixelRect Screen,
+        PixelRect? Zoom,
+        double Radius,
+        bool FillsCanvas,
+        int Width,
+        int Height);
+
+    /// <summary>
+    /// Where canvas pixels land in the target: magnified by <see cref="Scale"/> about <see cref="Center"/>, then moved so that
+    /// <see cref="Origin"/> is the target's top-left. The canvas itself is the identity.
+    /// </summary>
+    private readonly record struct SceneView(double Scale, Vector2 Center, Vector2 Origin)
+    {
+        public static SceneView Canvas { get; } = new(1, Vector2.Zero, Vector2.Zero);
+
+        public bool IsCanvas => Scale == 1 && Origin == Vector2.Zero;
+
+        public PixelRect Map(PixelRect rect) => new(
+            (rect.X - Center.X) * Scale + Center.X - Origin.X,
+            (rect.Y - Center.Y) * Scale + Center.Y - Origin.Y,
+            rect.Width * Scale,
+            rect.Height * Scale);
+
+        public Matrix3x2 Matrix => IsCanvas
+            ? Matrix3x2.Identity
+            : Matrix3x2.CreateTranslation(-Center) * Matrix3x2.CreateScale((float)Scale) * Matrix3x2.CreateTranslation(Center - Origin);
+
+        /// <summary>A placement made for canvas pixels, read from target pixels instead.</summary>
+        public QuadMap Placement(QuadMap canvas)
+        {
+            if (IsCanvas)
+            {
+                return canvas;
+            }
+
+            // Target pixel q comes from canvas pixel q / scale + k.
+            var inverse = (float)(1 / Scale);
+            var k = (Origin - Center) * inverse + Center;
+            return new QuadMap(
+                new Vector4(canvas.U.X * inverse, canvas.U.Y * inverse, canvas.U.X * k.X + canvas.U.Y * k.Y + canvas.U.Z, canvas.U.W),
+                new Vector4(canvas.V.X * inverse, canvas.V.Y * inverse, canvas.V.X * k.X + canvas.V.Y * k.Y + canvas.V.Z, canvas.V.W));
+        }
+    }
+
+    /// <summary>
+    /// Passes 3 and 4 into <paramref name="target"/>: shadow, inset, screen from source pixels, bezel, click ripple, screen
+    /// annotations, click circle and cursor, all through <paramref name="view"/>. Returns the layer holding the result (the
+    /// ripple writes a new one).
+    /// </summary>
+    private RenderLayer DrawScreenScene(SceneParts parts, SceneView view, RenderLayer target, string rippleName)
+    {
+        var request = parts.Request;
+        var document = request.Document;
+        var drawn = parts.Zoom ?? parts.Screen;
+        var drawScale = drawn.Width / Math.Max(1, parts.Screen.Width) * view.Scale;
+        var placed = view.Map(drawn);
+        var soft = view.Placement(ZoomMap(parts.Screen, parts.Zoom, parts.Width, parts.Height));
+        Viewport(target);
+        if (!parts.FillsCanvas)
+        {
+            DrawShadow(document, parts.Screen, parts.Radius, target, parts.Width, parts.Height, soft);
+            DrawInset(document, placed, parts.Radius * drawScale, target, parts.Height, drawScale, request.CameraOnly);
+        }
+
+        DrawScreen(request, parts.View, parts.ScreenWidth, parts.ScreenHeight, placed, parts.Radius * drawScale, target, allowDownscale: view.IsCanvas);
+        if (!request.CameraOnly)
+        {
+            DrawBezel(document, parts.Screen, parts.Radius, target, parts.Width, parts.Height, soft);
+        }
+
+        target = Rippled(target, document, parts.Cursor, placed, target.Width, target.Height, rippleName);
+        sceneView = view.Matrix;
+        DrawScreenAnnotations(target, request, parts.Screen, parts.Zoom, parts.Width, parts.Height);
+        sceneView = Matrix3x2.Identity;
+        BindTarget(target);
+        _graphics.Context.OMSetBlendState(_sourceOver);
+        if (request.Trajectory.HasRecordedCursor && !parts.HideCursor)
+        {
+            DrawClick(document, parts.Cursor, placed, parts.Height * drawScale);
+            DrawCursor(document, parts.Cursor, parts.HideCursor, placed, target, parts.Height * drawScale, request.PackageDirectory);
+        }
+
+        return target;
+    }
+
+    /// <summary>The cursor and its click waves in crop space; the solver keeps recording coordinates (ADR-86).</summary>
+    private static SpringTrajectorySolver.CursorFrameState InCropSpace(SpringTrajectorySolver.CursorFrameState cursor, Rect01 crop)
+    {
+        if (crop is { X: 0, Y: 0, Width: 1, Height: 1 })
+        {
+            return cursor;
+        }
+
+        var waves = new SpringTrajectorySolver.ClickWave[cursor.ClickWaves.Length];
+        for (var i = 0; i < waves.Length; i++)
+        {
+            waves[i] = cursor.ClickWaves[i] with { Position01 = MotionGeometry.Cropped(cursor.ClickWaves[i].Position01, crop) };
+        }
+
+        return new SpringTrajectorySolver.CursorFrameState
+        {
+            Position01 = MotionGeometry.Cropped(cursor.Position01, crop),
+            Velocity01PerSec = cursor.Velocity01PerSec,
+            RotationRadians = cursor.RotationRadians,
+            Opacity = cursor.Opacity,
+            CursorType = cursor.CursorType,
+            ActiveClickProgress = cursor.ActiveClickProgress,
+            ClickWaves = waves
+        };
+    }
+
+    /// <summary>
+    /// Pass 5B, the magnifier. The glass samples a second scene: background and screen drawn again from source pixels at lens
+    /// scale (screen camera, then magnification about the lens center) into a square patch of half-side 1.7 x radius + 2, whose
+    /// size does not depend on the zoom. Magnified text stays sharp (spec/06 ADR-86, spec/07 Pass 5B).
+    /// </summary>
+    private RenderLayer Lens(RenderLayer layer, SceneParts parts, RenderLayer background, SpringTrajectorySolver.CameraFrameState camera, PixelRect drawn, int width, int height)
     {
         if (camera.LoupePresence01 <= 0.005 || camera.LoupeScale <= 1.002)
         {
             return layer;
         }
 
-        var output = Layer("lens", width, height);
         var context = _graphics.Context;
-        var center = new Vector2((float)(screen.X + camera.Center01.X * screen.Width), (float)(screen.Y + camera.Center01.Y * screen.Height));
-        var radius = (float)Math.Max(48, Math.Max(screen.Width, screen.Height) * camera.LoupeConfig.Radius01);
+        var center = new Vector2((float)(drawn.X + camera.LoupeCenter01.X * drawn.Width), (float)(drawn.Y + camera.LoupeCenter01.Y * drawn.Height));
+        var radius = (float)Math.Max(48, Math.Max(parts.Screen.Width, parts.Screen.Height) * camera.LoupeConfig.Radius01);
+        // Rim bend and color splitting reach about 1.66 radii. Whole-pixel bounds keep texel centers aligned.
+        var half = (int)Math.Ceiling(radius * 1.7 + 2);
+        var origin = new Vector2(MathF.Floor(center.X) - half, MathF.Floor(center.Y) - half);
+        var side = half * 2;
+        var view = new SceneView(camera.LoupeScale, center, origin);
+
+        var scene = Layer("lens-scene", side, side);
+        context.ClearRenderTargetView(scene.Target, new Color4(0, 0, 0, 0));
+        scene = DrawScreenScene(parts, view, scene, "lens-ripple");
+        var patch = Layer("lens-patch", side, side);
+        BindTarget(patch);
+        context.OMSetBlendState(null);
+        DrawQuad(background.View, view.Placement(Identity(width, height)), default, 0, 1);
+        context.OMSetBlendState(_sourceOver);
+        DrawQuad(scene.View, Identity(side, side), default, 0, 1);
+        context.UnsetRenderTargets();
+
+        var output = Layer("lens", width, height);
         context.PSSetShaderResource(0, null!);
         context.CSSetShader(_lens);
         context.CSSetShaderResource(0, layer.View);
+        context.CSSetShaderResource(1, patch.View);
         context.CSSetSampler(0, linearClamp);
         context.CSSetUnorderedAccessView(0, output.Unordered);
         context.UpdateSubresource(
-            new LensConstants(center, radius, (float)camera.LoupeScale, (float)Math.Max(0.18, camera.LoupeConfig.BevelRatio), (float)Math.Max(0.55, camera.LoupeConfig.ChromaticAberration), (float)camera.LoupePresence01, 0),
+            new LensConstants(center, radius, (float)camera.LoupeScale, (float)Math.Max(0.18, camera.LoupeConfig.BevelRatio), (float)Math.Max(0.55, camera.LoupeConfig.ChromaticAberration), (float)camera.LoupePresence01, 0, origin, Vector2.Zero),
             lensConstants!);
         context.CSSetConstantBuffer(0, lensConstants);
         context.Dispatch((uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
         context.CSSetUnorderedAccessView(0, null!);
         context.CSSetShaderResource(0, null!);
+        context.CSSetShaderResource(1, null!);
         return output;
     }
 
@@ -918,5 +1053,5 @@ public sealed partial class FrameCompositor
     private readonly record struct RippleConstants(Vector4 Wave0, Vector4 Wave1, Vector4 Wave2, int WaveCount, float BandWidth, float Pull, float Fringe, float CoreRadius, Vector3 Pad);
 
     [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct LensConstants(Vector2 Center, float Radius, float Zoom, float RimRatio, float Fringe, float Presence, float Pad);
+    private readonly record struct LensConstants(Vector2 Center, float Radius, float Zoom, float RimRatio, float Fringe, float Presence, float Pad, Vector2 ContentOrigin, Vector2 Pad2);
 }

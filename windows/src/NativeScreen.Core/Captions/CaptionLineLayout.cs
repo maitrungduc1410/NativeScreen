@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace NativeScreen.Core;
 
@@ -45,6 +46,9 @@ public static class CaptionLineLayout
         public required double EndMs { get; init; }
         public required IReadOnlyList<Word> Words { get; init; }
         public required CaptionStyle Style { get; init; }
+
+        /// <summary>Arabic, Hebrew and other right-to-left lines put their first word on the right (spec/06 ADR-89).</summary>
+        public bool IsRightToLeft { get; init; }
     }
 
     /// <summary>A rectangle in stage units with a top-left origin.</summary>
@@ -221,7 +225,30 @@ public static class CaptionLineLayout
 
         return words.Count == 0
             ? null
-            : new Line { BlockId = block.Id, StartMs = words[0].StartMs, EndMs = words[^1].EndMs, Words = words, Style = style };
+            : new Line { BlockId = block.Id, StartMs = words[0].StartMs, EndMs = words[^1].EndMs, Words = words, Style = style, IsRightToLeft = IsRightToLeft(string.Join(' ', words.Select(word => word.Text))) };
+    }
+
+    /// <summary>
+    /// The paragraph direction from the first strong character, as in the Unicode bidirectional algorithm (rules P2, P3).
+    /// Digits, punctuation, spaces and marks are neutral; text without a strong character is left to right.
+    /// </summary>
+    public static bool IsRightToLeft(string text)
+    {
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (!Rune.IsLetter(rune))
+            {
+                continue;
+            }
+
+            var value = rune.Value;
+            // Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan, Mandaic; Hebrew and Arabic presentation forms A and B; historic
+            // right-to-left scripts; Adlam and Arabic mathematical symbols.
+            return value is (>= 0x0590 and <= 0x08FF) or (>= 0xFB1D and <= 0xFDFF) or (>= 0xFE70 and <= 0xFEFF)
+                or (>= 0x10800 and <= 0x10FFF) or (>= 0x1E800 and <= 0x1EFFF);
+        }
+
+        return false;
     }
 
     private static (double Width, double Height) Measure(string text, CaptionFontStyle style, double size, CaptionTextMeasure measure)
@@ -345,13 +372,28 @@ public static class CaptionLineLayout
         return growth switch
         {
             CaptionLineGrowth.FullLine => full,
-            CaptionLineGrowth.Expanding => full with { Width = geometry.WidthOfFirstWords(count) },
+            // The line grows from the side its first word is on.
+            CaptionLineGrowth.Expanding => geometry.Line.IsRightToLeft
+                ? full with { X = full.X + full.Width - geometry.WidthOfFirstWords(count), Width = geometry.WidthOfFirstWords(count) }
+                : full with { Width = geometry.WidthOfFirstWords(count) },
             _ => geometry.Fitted(geometry.WidthOfFirstWords(count), geometry.Height)
         };
     }
 
     /// <summary>A word's place relative to its line's content origin.</summary>
+    /// <summary>
+    /// A word's place relative to its line's content origin. Right-to-left lines mirror the left-to-right place inside the
+    /// content width at that time, so words read from the right, slide in from the left and leave to the right.
+    /// </summary>
     private static double TargetWordOffset(Geometry geometry, int index, double timeMs)
+    {
+        var leftToRight = LeftToRightWordOffset(geometry, index, timeMs);
+        return geometry.Line.IsRightToLeft
+            ? TargetContentRect(geometry, timeMs).Width - leftToRight - geometry.Sizes[index].Width
+            : leftToRight;
+    }
+
+    private static double LeftToRightWordOffset(Geometry geometry, int index, double timeMs)
     {
         var style = geometry.Line.Style;
         if (style.WordsReveal == CaptionWordsReveal.WordByWord)

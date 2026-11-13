@@ -74,7 +74,7 @@ public static class AutoZoomClusterGenerator
     }
 
     /// Two zooms less than this far apart become one: a shorter gap only zooms out and straight back in.
-    public const double MergeGapMs = 1500;
+    public const double MergeGapMs = 2500;
 
     /// Joins neighbouring zooms whose gap is under <see cref="MergeGapMs"/>. The joined zoom spans both, and its center
     /// is the duration-weighted mean of their centers. Same as the macOS `mergeCloseZooms`.

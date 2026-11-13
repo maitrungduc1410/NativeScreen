@@ -171,7 +171,7 @@
 - [x] **Optical Glass Loupe Zoom:**
   - [x] Alternative zoom presentation mode (`presentation: "loupe"`) with circular magnifying lens, bevel rim highlight, and adjustable loupe radius.
   - [x] **macOS motion correctness (ADR-86):** crop-aligned cursor/clicks/focus, pixel-error-constrained interactions, playback-time springs with cut resets, grouped Loupe targets, independent screen/lens centers, source-sharp bounded lens content, and 2500 ms auto-zoom interval merge. Verified with synthetic math and real GPU frames (`--verify-motion`).
-  - [ ] **Windows ADR-86 port:** Core motion/time/crop changes and two-input sharp lens, checked against `conformance/motion-v2` and the Windows handoff.
+  - [x] **Windows ADR-86 port:** Core motion/time/crop changes, the ADR-87 planner, ADR-88 load-time correction and the two-input sharp lens. Every `conformance/motion-v2` case matches (trajectory, playback trajectory, stage, playback frames), plus the macOS motion checks as tests (2026-11-13).
 - [x] **Keyboard Shortcuts 3D Keycaps & Multi-Track Editor:**
   - [x] Render 3D bevel keycaps (`⌘`, `⇧`, `⌥`, `⌃`, `Space`, `⌫`, etc.) both on the live Preview Canvas and baked directly into exported videos/GIFs (`Pass 6` in `MetalFrameCompositor`).
   - [x] Prose-typing suppression filter (ignores normal typing words/code even when `Show single key shortcuts` is enabled).

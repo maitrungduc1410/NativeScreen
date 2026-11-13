@@ -25,6 +25,7 @@ public sealed partial class FrameCompositor
             Document = request.Document,
             Trajectory = request.Trajectory,
             SourceMs = request.SourceMs,
+            TimelineMs = request.TimelineMs,
             HasCamera = false,
             ExportQuality = request.ExportQuality,
             PackageDirectory = request.PackageDirectory,

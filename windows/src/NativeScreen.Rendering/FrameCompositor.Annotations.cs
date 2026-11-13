@@ -158,9 +158,12 @@ public sealed partial class FrameCompositor
         return Matrix3x2.CreateTranslation(-center) * Matrix3x2.CreateScale(scale) * Matrix3x2.CreateRotation(angle) * Matrix3x2.CreateTranslation(center.X + shift, center.Y + lift);
     }
 
+    // Canvas to target: identity, or the lens patch magnification while the sharp lens scene is drawn (ADR-86).
+    private Matrix3x2 sceneView = Matrix3x2.Identity;
+
     private void DrawSprite(RenderLayer target, RenderLayer sprite, Matrix3x2 spriteToCanvas, float opacity)
     {
-        Matrix3x2.Invert(spriteToCanvas, out var inverse);
+        Matrix3x2.Invert(spriteToCanvas * sceneView, out var inverse);
         var map = new QuadMap(
             new Vector4(inverse.M11 / sprite.Width, inverse.M21 / sprite.Width, inverse.M31 / sprite.Width, 0),
             new Vector4(inverse.M12 / sprite.Height, inverse.M22 / sprite.Height, inverse.M32 / sprite.Height, 0));

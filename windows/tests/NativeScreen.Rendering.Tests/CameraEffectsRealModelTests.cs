@@ -74,7 +74,7 @@ public sealed class CameraEffectsRealModelTests
                     new ComposeRequest
                     {
                         Document = document,
-                        Trajectory = new SpringTrajectorySolver(stored.WebcamDurationMs, [], [], document),
+                        Trajectory = new PlaybackTrajectorySolver(stored.WebcamDurationMs, [], [], document),
                         SourceMs = ms,
                         WebcamSource = webcam,
                         ScreenWidth = 1920,

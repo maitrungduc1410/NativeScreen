@@ -8,15 +8,25 @@ cbuffer Lens : register(b0)
     float fringe;
     float presence;
     float pad;
+    // Canvas position of the magnified patch's top-left texel (ADR-86).
+    float2 contentOrigin;
+    float2 pad2;
 };
 
 Texture2D<float4> srcTex : register(t0);
+// The scene drawn again from source pixels at lens scale, over a bounded patch around the lens: magnified text stays sharp.
+Texture2D<float4> contentTex : register(t1);
 SamplerState smp : register(s0);
 RWTexture2D<float4> dstTex : register(u0);
 
 float4 sampleAt(float2 px, float2 size)
 {
     return srcTex.SampleLevel(smp, px / size, 0);
+}
+
+float4 contentAt(float2 px, float2 size)
+{
+    return contentTex.SampleLevel(smp, (px - contentOrigin) / size, 0);
 }
 
 [numthreads(8, 8, 1)]
@@ -31,6 +41,10 @@ void main(uint3 gid : SV_DispatchThreadID)
     }
 
     float2 size = float2(width, height);
+    uint contentWidth;
+    uint contentHeight;
+    contentTex.GetDimensions(contentWidth, contentHeight);
+    float2 contentSize = float2(contentWidth, contentHeight);
     float2 px = float2(gid.xy) + 0.5;
     float4 under = sampleAt(px, size);
     float2 offset = px - center;
@@ -51,13 +65,14 @@ void main(uint3 gid : SV_DispatchThreadID)
     float r = dist / R;
     float rimStart = 1.0 - rimRatio;
     float rim = smoothstep(rimStart, 1.0, r);
-    float2 lensOffset = offset / zoom;
+    // The patch is already magnified, so the glass samples it at the offset itself, not offset / zoom.
+    float2 lensOffset = offset;
     float bend = 1.0 + 0.55 * rim * rim;
     float spread = 0.045 * fringe * rim;
     float2 baseRel = lensOffset * bend;
-    float4 g = sampleAt(center + baseRel, size);
-    float rr = sampleAt(center + baseRel * (1.0 - spread), size).r;
-    float bb = sampleAt(center + baseRel * (1.0 + spread), size).b;
+    float4 g = contentAt(center + baseRel, contentSize);
+    float rr = contentAt(center + baseRel * (1.0 - spread), contentSize).r;
+    float bb = contentAt(center + baseRel * (1.0 + spread), contentSize).b;
     float3 glass = float3(rr, g.g, bb);
 
     float2 dir = dist > 0.001 ? offset / dist : float2(0.0, -1.0);

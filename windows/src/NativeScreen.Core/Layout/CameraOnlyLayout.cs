@@ -55,7 +55,8 @@ public static class CameraOnlyLayout
     /// </summary>
     public static SpringTrajectorySolver.CameraFrameState FaceCentered(SpringTrajectorySolver.CameraFrameState camera, Point01? face)
     {
-        if (camera.IsLoupeMode || camera.Scale <= 1.0005 || face is not { } f)
+        // The screen camera keeps its own transform while a lens is visible (ADR-86), so the face applies to it too.
+        if (camera.Scale <= 1.0005 || face is not { } f)
         {
             return camera;
         }
@@ -73,7 +74,8 @@ public static class CameraOnlyLayout
             IsLoupeMode = camera.IsLoupeMode,
             LoupePresence01 = camera.LoupePresence01,
             LoupeScale = camera.LoupeScale,
-            LoupeConfig = camera.LoupeConfig
+            LoupeConfig = camera.LoupeConfig,
+            LoupeCenter01 = camera.LoupeCenter01
         };
     }
 }

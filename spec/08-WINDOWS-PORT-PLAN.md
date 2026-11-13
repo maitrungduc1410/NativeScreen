@@ -84,7 +84,7 @@ spotlight, keyframed) · `zoom-follow` (auto zoom, cursor follow, motion blur) �
 `device-mockup` (each device and finish) · `custom-look-warmth` · `aspect-ratios` (16:9, 9:16, 1:1, 4:3).
 
 ### 2.4. Tolerances
-ADR-86 motion fixtures live separately in `conformance/motion-v2` until the Windows port is accepted. Generate with `--generate-conformance <folder> --motion-only`. `trajectory-playback.json` and `playback-frames/<timelineMs>.png` are authoritative for speed, cuts and reused source ranges. Keep the existing fixtures during the port; do not relax their thresholds to hide algorithm differences. Replace legacy motion expectations after porting, while retaining non-motion coverage.
+ADR-86 motion fixtures live separately in `conformance/motion-v2` until the Windows port is accepted. Generate with `--generate-conformance <folder> --motion-only`. `trajectory-playback.json` and `playback-frames/<timelineMs>.png` are authoritative for speed, cuts and reused source ranges. Keep the existing fixtures during the port; do not relax their thresholds to hide algorithm differences. Replace legacy motion expectations after porting, while retaining non-motion coverage. Windows ported them on 2026-11-13: `ConformanceTests` and `FrameFixtureTests` run both suites; in `conformance/cases` they skip `trajectory.json`, and for the cases `motion-v2` also has they check `stage.json`, `timemap.json` and frames there instead. Everything else in the original suite is still checked. Regenerating `conformance/cases` on macOS lifts these skips.
 
 | Output | Tolerance |
 | :--- | :--- |

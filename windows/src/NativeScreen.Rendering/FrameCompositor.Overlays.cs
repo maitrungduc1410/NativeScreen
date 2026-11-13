@@ -497,8 +497,15 @@ public sealed partial class FrameCompositor
             return;
         }
 
-        var dark = track.Style.ColorTheme == CaptionColorTheme.Dark;
         var box = track.BoxRect;
+        // The box springs between lines and can overshoot past zero width when a block starts right after another. An inverted
+        // box has nothing to draw, and its blur patch would ask for a texture of negative size, which stops the preview.
+        if (!(box.Width > 0 && box.Height > 0 && double.IsFinite(box.Width) && double.IsFinite(box.Height)))
+        {
+            return;
+        }
+
+        var dark = track.Style.ColorTheme == CaptionColorTheme.Dark;
         var radius = (float)(track.FontSize * 0.3);
         var ring = (float)Math.Max(1, track.FontSize * 0.025);
         var shade = dark ? 0f : 1f;

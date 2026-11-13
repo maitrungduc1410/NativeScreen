@@ -77,7 +77,7 @@ public sealed class PerformanceMeasurements : IDisposable
 
         var document = Styled(5000);
         using var compositor = new FrameCompositor();
-        var trajectory = new SpringTrajectorySolver(5000, [], [], document);
+        var trajectory = new PlaybackTrajectorySolver(5000, [], [], document);
         var times = new List<double>();
         for (var index = 0; index < 120; index++)
         {
@@ -106,7 +106,7 @@ public sealed class PerformanceMeasurements : IDisposable
         var path = Clip(1920, 1080, 12);
         var document = Styled(12000);
         using var compositor = new FrameCompositor();
-        var trajectory = new SpringTrajectorySolver(12000, [], [], document);
+        var trajectory = new PlaybackTrajectorySolver(12000, [], [], document);
         using var source = new VideoPlaybackSource(path);
         var open = Stopwatch.StartNew();
         while (source.FrameAt(0) is null && open.ElapsedMilliseconds < 3000)

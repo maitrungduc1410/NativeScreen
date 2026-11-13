@@ -63,11 +63,12 @@ public sealed partial class EditorSession
     private bool interactiveEditActive;
     private bool interactiveEditCommitted;
     private ProjectDocument? renderDocument;
-    private SpringTrajectorySolver? trajectory;
+    private PlaybackTrajectorySolver? trajectory;
     private string? trajectoryKey;
+    private string? trajectoryCursorKey;
     private readonly object solveGate = new();
     private string? wantedTrajectoryKey;
-    private (string Key, ProjectDocument Document)? pendingSolve;
+    private (string Key, string CursorKey, ProjectDocument Document)? pendingSolve;
     private bool solving;
     private ProjectDocument? shortcutsDocument;
     private IReadOnlyList<ShortcutCluster> shortcuts = [];
@@ -159,6 +160,9 @@ public sealed partial class EditorSession
 
     public IReadOnlyList<KeyStrokeEvent> KeyEvents { get; init; } = [];
 
+    /// <summary>The capture size in points (cursor tolerances and shake are measured in points, spec/06 ADR-87).</summary>
+    public MotionPointSize PointSize { get; init; } = MotionPointSize.Reference;
+
     public KeycapStyle KeycapStyle { get; init; }
 
     public bool HasRecordedCamera { get; init; }
@@ -221,7 +225,7 @@ public sealed partial class EditorSession
     }
 
     /// <summary>A frozen copy for the render thread, rebuilt only after an edit. On a long recording the motion can lag an edit by one solve.</summary>
-    public (ProjectDocument Document, SpringTrajectorySolver Trajectory) RenderSnapshot()
+    public (ProjectDocument Document, PlaybackTrajectorySolver Trajectory) RenderSnapshot()
     {
         if (renderDocument is null)
         {
@@ -235,10 +239,12 @@ public sealed partial class EditorSession
         }
     }
 
-    // Everything the solver reads from the document, and nothing else: a clip drag must not solve again.
+    // Everything the solver reads from the document, and nothing else. Motion runs on edited time, so slices and the crop count
+    // too (ADR-86); a change that leaves cursor and slices alone keeps the solved cursor.
     private void RequestTrajectory(ProjectDocument document)
     {
-        var key = ProjectJson.Serialize(new object[] { document.Cursor, document.Motion, document.Timeline.Zooms, document.Timeline.IsZoomTrackHidden });
+        var cursorKey = ProjectJson.Serialize(new object[] { document.Cursor, document.Timeline.Slices });
+        var key = cursorKey + ProjectJson.Serialize(new object[] { document.Motion, document.Timeline.Zooms, document.Timeline.IsZoomTrackHidden, document.Canvas.CropRect01 });
         lock (solveGate)
         {
             wantedTrajectoryKey = key;
@@ -250,7 +256,7 @@ public sealed partial class EditorSession
 
             if (trajectory is not null && SourceDurationMs >= BackgroundSolveMinimumMs)
             {
-                pendingSolve = (key, document);
+                pendingSolve = (key, cursorKey, document);
                 if (!solving)
                 {
                     solving = true;
@@ -261,12 +267,24 @@ public sealed partial class EditorSession
             }
         }
 
-        var solved = new SpringTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, document);
+        var solved = Solve(document, cursorKey);
         lock (solveGate)
         {
             trajectory = solved;
             trajectoryKey = key;
+            trajectoryCursorKey = cursorKey;
         }
+    }
+
+    private PlaybackTrajectorySolver Solve(ProjectDocument document, string cursorKey)
+    {
+        PlaybackTrajectorySolver? reusable;
+        lock (solveGate)
+        {
+            reusable = trajectory is not null && trajectoryCursorKey == cursorKey ? trajectory : null;
+        }
+
+        return new PlaybackTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, document, PointSize, reusable);
     }
 
     // One worker that always takes the newest edit, so a drag never queues solves behind itself.
@@ -274,7 +292,7 @@ public sealed partial class EditorSession
     {
         while (true)
         {
-            (string Key, ProjectDocument Document) job;
+            (string Key, string CursorKey, ProjectDocument Document) job;
             lock (solveGate)
             {
                 if (pendingSolve is not { } next)
@@ -287,7 +305,7 @@ public sealed partial class EditorSession
                 pendingSolve = null;
             }
 
-            var solved = new SpringTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, job.Document);
+            var solved = Solve(job.Document, job.CursorKey);
             var current = false;
             lock (solveGate)
             {
@@ -295,6 +313,7 @@ public sealed partial class EditorSession
                 {
                     trajectory = solved;
                     trajectoryKey = job.Key;
+                    trajectoryCursorKey = job.CursorKey;
                     current = true;
                 }
             }
@@ -324,16 +343,16 @@ public sealed partial class EditorSession
     }
 
     /// <summary>Source time now, for the render thread. Holds its own mapper, since an edit replaces the session's.</summary>
-    public Func<double>? LiveSourceClock()
+    /// <summary>While playing, the edited time for the render thread to read each frame (motion is solved on edited time, ADR-86).</summary>
+    public Func<double>? LiveTimelineClock()
     {
         if (!clock.IsRunning)
         {
             return null;
         }
 
-        var mapper = Mapper;
         var duration = DurationMs;
-        return () => mapper.SourceTime(Math.Clamp(clock.PositionMs, 0, duration)).SourceMs;
+        return () => Math.Clamp(clock.PositionMs, 0, duration);
     }
 
     public void SyncToAudio(double audioTimelineMs) => clock.SyncToAudio(audioTimelineMs);
@@ -554,7 +573,7 @@ public sealed partial class EditorSession
         }
 
         var hasCursor = CursorEvents.Count > 0;
-        var center = hasCursor ? RenderSnapshot().Trajectory.Evaluate((startMs + endMs) * 0.5).Cursor.Position01 : Point01.Center;
+        var center = hasCursor ? RenderSnapshot().Trajectory.EvaluateAtSource((startMs + endMs) * 0.5).Cursor.Position01 : Point01.Center;
         var created = new ZoomBlock
         {
             Id = NewId(),
