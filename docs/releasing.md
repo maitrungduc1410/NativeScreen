@@ -111,9 +111,10 @@ The Store page text and images for all 15 UI languages are in `windows/store-lis
    (9 s). The second shot is a camera-only recording with an AI background and a sticker, on the Camera Style tab.
    Each shot is the editor window's own pixels (`PrintWindow`), not a copy of the screen, so a notification on screen
    cannot end up in it. A caption block under the shot time is moved so its whole text shows: words get time in
-   proportion to their length, so longer languages reveal their last word later. Arabic captions are typed in reverse
-   word order for these shots, because both apps lay a caption's words out left to right (a known bug), and in the
-   right order the Arabic would read backwards.
+   proportion to their length, so longer languages reveal their last word later. Arabic captions were typed in reverse
+   word order for these shots, because both apps laid a caption's words out left to right, and in the right order the
+   Arabic read backwards. macOS lays right-to-left lines out from the right since ADR-89; once Windows has the port,
+   retake the Arabic shots with the caption in its normal order.
 
 **Restricted capabilities** asks why the app needs runFullTrust, in at most 500 characters:
 

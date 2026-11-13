@@ -18,6 +18,8 @@ enum CaptionLineLayout {
         let endMs: Double
         let words: [Word]
         let style: CaptionStyle
+        /// Arabic, Hebrew and other right-to-left lines put their first word on the right.
+        var isRightToLeft = false
     }
 
     struct DrawnWord: Equatable {
@@ -104,7 +106,34 @@ enum CaptionLineLayout {
             }
         }
         guard let first = words.first, let last = words.last else { return nil }
-        return Line(blockId: block.id, startMs: first.startMs, endMs: last.endMs, words: words, style: style)
+        return Line(blockId: block.id, startMs: first.startMs, endMs: last.endMs, words: words, style: style,
+                    isRightToLeft: isRightToLeft(words.map(\.text).joined(separator: " ")))
+    }
+
+    // MARK: Direction
+
+    /// The paragraph direction from the first strong character, as in the Unicode bidirectional algorithm (rules P2, P3).
+    /// Digits, punctuation and spaces are neutral; text without a strong character is left to right.
+    static func isRightToLeft(_ text: String) -> Bool {
+        for scalar in text.unicodeScalars {
+            if isStrongRightToLeft(scalar) { return true }
+            if scalar.properties.isAlphabetic { return false }
+        }
+        return false
+    }
+
+    private static func isStrongRightToLeft(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0590...0x08FF,   // Hebrew, Arabic, Syriac, Arabic Supplement, Thaana, NKo, Samaritan, Mandaic, Arabic Extended
+             0xFB1D...0xFDFF,   // Hebrew and Arabic presentation forms A
+             0xFE70...0xFEFF,   // Arabic presentation forms B
+             0x10800...0x10FFF, // Historic right-to-left scripts
+             0x1E800...0x1EFFF: // Adlam, Arabic mathematical symbols and others
+            // Arabic-Indic digits and some marks inside these blocks are not strong letters.
+            return scalar.properties.isAlphabetic
+        default:
+            return false
+        }
     }
 
     // MARK: Line cache
@@ -279,14 +308,23 @@ enum CaptionLineLayout {
         case .fullLine:
             return full
         case .expanding:
-            return CGRect(x: full.minX, y: full.minY, width: geo.widthOfFirstWords(count), height: full.height)
+            // The line grows from the side its first word is on.
+            let width = geo.widthOfFirstWords(count)
+            return CGRect(x: geo.line.isRightToLeft ? full.maxX - width : full.minX, y: full.minY, width: width, height: full.height)
         case .centered:
             return geo.fitted(width: geo.widthOfFirstWords(count), height: geo.height)
         }
     }
 
-    /// A word's place relative to its line's content origin.
+    /// A word's place relative to its line's content origin. Right-to-left lines mirror the left-to-right place inside the
+    /// content width at that time, so words read from the right, slide in from the left and leave to the right.
     private static func targetWordOffset(_ geo: LineGeometry, index: Int, at timeMs: Double) -> CGFloat {
+        let leftToRight = leftToRightWordOffset(geo, index: index, at: timeMs)
+        guard geo.line.isRightToLeft else { return leftToRight }
+        return targetContentRect(geo, at: timeMs).width - leftToRight - geo.sizes[index].width
+    }
+
+    private static func leftToRightWordOffset(_ geo: LineGeometry, index: Int, at timeMs: Double) -> CGFloat {
         let word = geo.line.words[index]
         let style = geo.line.style
 

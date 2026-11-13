@@ -147,6 +147,32 @@ enum MotionRegressionChecks {
             into: [CursorSampleEvent(t: 45, x: 0.1, y: 0.1), CursorSampleEvent(t: 57, x: 0.6, y: 0.6)], holdPauses: false, pointSize: size)
         try check("a click just before a cursor warp keeps its position", warpClick.contains { $0.t == 50 && $0.x == 0.1 })
 
+        // Right-to-left captions put the first word on the right, in every reveal style.
+        func captionWords(_ text: String, _ style: CaptionStyle, at t: Double) -> [CaptionLineLayout.DrawnWord] {
+            var captions = ProjectDocument(name: "Captions").captions
+            let track = CaptionTrack(name: "Captions", style: style)
+            captions.captionTracks = [track]
+            captions.captionBlocks = [CaptionBlock(trackId: track.id, sourceStartMs: 0, sourceEndMs: 2000, customText: text)]
+            return CaptionLineLayout.frames(in: captions, at: t, stageSize: CGSize(width: 1280, height: 720)).first?.words ?? []
+        }
+        let arabic = "مرحبا بكم في التطبيق"
+        try check("caption direction comes from the first strong letter",
+                  CaptionLineLayout.isRightToLeft(arabic) && CaptionLineLayout.isRightToLeft("2026 שלום")
+                  && !CaptionLineLayout.isRightToLeft("Hello مرحبا") && !CaptionLineLayout.isRightToLeft("123"))
+        for (name, style) in [("line", CaptionStyle()), ("full line", CaptionStyle(lineGrowth: .fullLine)),
+                              ("slide in", CaptionStyle(wordAnimation: .slideIn)), ("fade in", CaptionStyle(wordAnimation: .fadeIn))] {
+            let rtl = captionWords(arabic, style, at: 1990)
+            let ltr = captionWords("Welcome to the app", style, at: 1990)
+            try check("right-to-left caption (\(name)) reads from the right",
+                      rtl.count == 4 && zip(rtl, rtl.dropFirst()).allSatisfy { $0.rect.minX > $1.rect.maxX })
+            try check("left-to-right caption (\(name)) still reads from the left",
+                      ltr.count == 4 && zip(ltr, ltr.dropFirst()).allSatisfy { $0.rect.maxX < $1.rect.minX })
+        }
+        let firstWordOnly = captionWords(arabic, CaptionStyle(), at: 100)
+        let fullLine = captionWords(arabic, CaptionStyle(), at: 1990)
+        try check("right-to-left caption grows from the right edge",
+                  firstWordOnly.count == 1 && abs(firstWordOnly[0].rect.maxX - fullLine[0].rect.maxX) < 0.5)
+
         // A fast flick that ends on a click: the tip must arrive on time without a snap, and keep the spring's glide.
         func ease(_ u: Double) -> Double { u * u * (3 - 2 * u) }
         let flick = (0...480).map { i -> CursorSampleEvent in
@@ -268,6 +294,21 @@ enum MotionRegressionChecks {
         try check("slice edit invalidates playback trajectories", session.timeMapper.totalTimelineDurationMs == 4000
                   && !session.trajectorySolver.isSameRun(500, 2500))
         try check("rendering leaves raw telemetry unchanged", session.cursorEvents == stationary)
+        // An Arabic caption, to look at: words read from the right.
+        let captionTimelineMs = session.timeMapper.totalTimelineDurationMs - 20
+        let captionSourceMs = session.timeMapper.sourceTime(forTimelineMs: captionTimelineMs).sourceMs
+        session.mutate { doc in
+            let track = CaptionTrack(name: "Captions")
+            doc.captions.enabled = true
+            doc.captions.captionTracks = [track]
+            doc.captions.captionBlocks = [CaptionBlock(trackId: track.id, sourceStartMs: max(0, captionSourceMs - 600),
+                                                       sourceEndMs: captionSourceMs + 10, customText: arabic)]
+        }
+        let captionImage = try raster(compositor.composeFrame(sourceVideoFrame: white, sourceTimeMs: captionSourceMs, timelineTimeMs: captionTimelineMs, session: session, outputSize: canvas, includeShortcutOverlay: true), compositor: compositor, size: canvas)
+        if let destination = CGImageDestinationCreateWithURL(root.appendingPathComponent("caption-rtl.png") as CFURL, UTType.png.identifier as CFString, 1, nil) {
+            CGImageDestinationAddImage(destination, captionImage, nil)
+            CGImageDestinationFinalize(destination)
+        }
         let report: [String: Any] = ["passed": passed.count, "checks": passed, "worstDragErrorPt": worstDragError,
                                    "lensStripeContrast255": contrast, "prewarmCenterError01": prewarmError]
         let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

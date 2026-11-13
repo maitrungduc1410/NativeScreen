@@ -27,6 +27,29 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-14, ADR-89: Right-to-left captions (macOS first)
+
+### Writer
+- **Bug:** found on Windows while making the Arabic Store screenshots (docs/releasing.md). Both apps place a caption's words left to right, so an Arabic or Hebrew line reads backwards. Each word is shaped correctly; only the word order is wrong.
+- **macOS:** fixed in `Engine/CaptionLineLayout.swift`. `Line.isRightToLeft` is set in `makeLine` from `isRightToLeft(text)`. `targetWordOffset` mirrors the old offset (now `leftToRightWordOffset`) inside the content width at that time, and `.expanding` anchors the content rect at `full.maxX - width`. Specs: spec/07 Captions, ADR-89.
+- **Verified on macOS:** both schemes build; `--verify-motion` 66 checks, including 10 new caption checks; `caption-rtl.png` shows "مرحبا بكم في التطبيق" reading from the right. Not checked: captions from a real Arabic transcript (word timings from speech).
+
+### Port
+Same structure in `windows/src/NativeScreen.Core/Captions/CaptionLineLayout.cs`:
+1. `Line`: add `IsRightToLeft`, set in `MakeLine` from the joined word text.
+2. `IsRightToLeft(string)`: walk the code points (`Rune`). The first one that is a letter decides: RTL if it is in U+0590 to U+08FF, U+FB1D to U+FDFF, U+FE70 to U+FEFF, U+10800 to U+10FFF or U+1E800 to U+1EFFF, otherwise LTR. Non-letters (digits, Arabic-Indic digits, punctuation, spaces, marks) are skipped. No letter: LTR. Swift tests `isAlphabetic`; `Rune.IsLetter` differs only on combining marks (Arabic harakat), which never precede a word's first letter, so it gives the same direction.
+3. `TargetContentRect`: for `CaptionLineGrowth.Expanding` on an RTL line, `X = full.X + full.Width - width` (line 348 today sets only `Width`).
+4. `TargetWordOffset`: rename the current body to `LeftToRightWordOffset`; for an RTL line return `TargetContentRect(geometry, timeMs).Width - leftToRight - geometry.Sizes[index].Width`. No change to `LayOut`, sizes, timing or the spring.
+5. DirectWrite draws each word on its own, as before. Check that a single Arabic word renders joined (it should, as DirectWrite shapes the run).
+
+### Acceptance
+- Port the caption checks from `MotionRegressionChecks.swift` ("caption direction comes from the first strong letter", the four styles for Arabic and English, "right-to-left caption grows from the right edge") as Core tests with a fixed-width measure.
+- Render "مرحبا بكم في التطبيق" bottom center at 1280x720: first word on the right, compare with the macOS `caption-rtl.png` within spec/08 text tolerances.
+- Retake the Arabic Store screenshots with the caption typed in its normal order, and update the note in docs/releasing.md.
+
+### Verifier
+- **Result:** pending port.
+
 ## 2026-11-13, ADR-88: Older recordings on the video clock (macOS first)
 
 ### Writer

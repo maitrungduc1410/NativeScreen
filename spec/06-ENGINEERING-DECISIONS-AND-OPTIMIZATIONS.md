@@ -1586,3 +1586,14 @@ Before 2026-10-26 the telemetry clock started before capture, so cursor, clicks 
 - **Aside:** no zoom costs more than a 2x screen zoom (6.2 against 2.9 ms at 1080p) because the Retina source is Lanczos-downscaled to the canvas. That is a separate optimization.
 
 Not checked: driving the editor UI (live playback pacing, scrubbing). The preview uses the same compositor and solver calls with explicit timeline time.
+
+## 89. ADR-89: Right-to-Left Captions
+
+Captions are laid out word by word, each word in its own box, so the words can be timed and animated. Offsets were accumulated left to right for every language, so an Arabic or Hebrew line put its first word on the left and read backwards. Each word was shaped correctly; only the order was wrong.
+
+- **Direction per line:** from the first strong letter of the line's text (Unicode bidi rules P2 and P3). RTL letters are the alphabetic scalars in U+0590 to U+08FF, U+FB1D to U+FDFF, U+FE70 to U+FEFF, U+10800 to U+10FFF and U+1E800 to U+1EFFF. Digits, punctuation and spaces are neutral; a line with no strong letter is left to right. A mixed line follows its first strong letter, and its words keep their logical order in that direction (no reordering of embedded runs).
+- **Mirroring:** a word's place is `contentWidth - leftToRightOffset - width`, using the content width at that time. This one rule covers every reveal style: the line reads from the right, `Expanding` grows from the right edge, `Slide in` arrives from the left, and `Word by word` pushes the previous word out to the right.
+- **Unchanged:** timing, box size, fonts, spring and the text shown on the timeline and in the inspector, which is drawn as a normal string.
+
+`--verify-motion` checks direction detection, word order in four styles for Arabic and English, growth from the right edge, and writes `caption-rtl.png`.
+
