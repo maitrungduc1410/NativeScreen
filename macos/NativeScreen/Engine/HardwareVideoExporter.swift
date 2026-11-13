@@ -251,9 +251,19 @@ public final class HardwareVideoExporter {
             if !enabledRes.contains(resolutionHeight) {
                 resolutionHeight = enabledRes.sorted(by: >).first(where: { $0 <= resolutionHeight }) ?? enabledRes.first ?? 1080
             }
-            if target != .file && mp4Codec == .both {
+            if (target != .file || !Self.allowsCompanionFile) && mp4Codec == .both {
                 mp4Codec = .h264
             }
+        }
+
+        /// `Both` writes a second `<name>-hevc.mp4` next to the chosen file. The sandboxed App Store build may only
+        /// write the file the save panel granted, so it offers H.264 or HEVC alone (ADR-85).
+        public static var allowsCompanionFile: Bool {
+            #if APPSTORE
+            return false
+            #else
+            return true
+            #endif
         }
 
         public static func resolutionLabel(forHeight h: Int) -> String {

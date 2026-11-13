@@ -6,7 +6,7 @@ export default {
   h1: "Gizlilik Politikası",
   note: "Bu çeviri yalnızca bilgi amaçlıdır. <a href=\"/privacy/\">İngilizce sürümden</a> farklı olması durumunda İngilizce sürüm geçerlidir.",
   lede: "Native Screen bilgisayarınızda kaydeder ve düzenler. Hesap yok, bize ait bir sunucu yok, analiz yok ve reklam yok. Uygulama kayıtlarınızı asla yüklemez.",
-  scope: "Bu politika, macOS ve Windows için Native Screen uygulamalarını (Microsoft Store sürümü dahil) ve bu web sitesini kapsar. Uygulama ücretsiz ve açık kaynaktır; aşağıdaki her şey <a href=\"{repo}\">kaynak kodda</a> doğrulanabilir.",
+  scope: "Bu politika, macOS ve Windows için Native Screen uygulamalarını (Microsoft Store ve Mac App Store sürümleri dahil) ve bu web sitesini kapsar. Uygulama ücretsiz ve açık kaynaktır; aşağıdaki her şey <a href=\"{repo}\">kaynak kodda</a> doğrulanabilir.",
 
   stayH: "Bilgisayarınızda kalanlar",
   stayP: "Native Screen ile oluşturduğunuz her şey bilgisayarınızda saklanır ve uygulama tarafından hiçbir yere gönderilmez:",
@@ -28,7 +28,8 @@ export default {
     ["Ekran kaydı", "Seçtiğiniz bir ekranı, pencereyi veya alanı kaydetmek için."],
     ["Mikrofon", "Mikrofonu açtığınızda sesinizi ve seslendirmelerinizi kaydetmek için."],
     ["Kamera", "Kamerayı açtığınızda kameranızı kaydetmek için."],
-    ["Erişilebilirlik (macOS)", "Pencereleri listelemek ve seçmek, ayrıca kayıt sırasında tıklamaları ve tuş basışlarını izlemek için."],
+    ["Erişilebilirlik (macOS, doğrudan indirme)", "Pencereleri listelemek ve seçmek, ayrıca kayıt sırasında tıklamaları ve tuş basışlarını izlemek için."],
+    ["Girdi İzleme (Mac App Store sürümü)", "Yalnızca kayıt sırasında: tuş basışları kısayol katmanı olarak gösterilir. Bu sürüm Erişilebilirlik yerine bu izni ister."],
     ["Konuşma tanıma (macOS)", "Apple'ın cihaz üzerindeki tanıma özelliğiyle altyazı oluşturmak için."],
     ["Klavye ve fare girişi (Windows)", "Yalnızca kayıt sırasında: tıklamalar otomatik yakınlaştırmaları ve tıklama efektlerini yönlendirir, tuş basışları kısayol gösterimine dönüşür."],
     ["Tam güven (Windows)", "Native Screen bir masaüstü uygulamasıdır. Windows ekran yakalama, sistem sesi yakalama, donanım video kodlama ve GPU özelliklerini kullanmak için tam erişime ihtiyaç duyar; paketlenmiş uygulamalar bunlara başka türlü erişemez."],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["Ne zaman", "Nereye", "Ne gönderilir"],
   leave: [
     ["Windows'ta altyazıları veya kamera arka planını kaldırmayı ilk kez kullandığınızda", "Hugging Face (huggingface.co)", "Model dosyasını indirmek için bir istek. Her indirmede olduğu gibi Hugging Face IP adresinizi görür. macOS uygulaması hiçbir model indirmez."],
-    ["Güncellemeleri denetleme ve indirme (macOS ve Microsoft Store dışındaki Windows)", "GitHub", "En son sürüm için bir istek ve varsa güncelleme dosyası. GitHub IP adresinizi ve standart istek başlıklarını görür. Siz veya kayıtlarınız hakkında hiçbir bilgi içermez. Otomatik denetimleri Ayarlar'dan kapatabilirsiniz."],
+    ["Güncellemeleri denetleme ve indirme (Mac App Store dışındaki macOS ve Microsoft Store dışındaki Windows)", "GitHub", "En son sürüm için bir istek ve varsa güncelleme dosyası. GitHub IP adresinizi ve standart istek başlıklarını görür. Siz veya kayıtlarınız hakkında hiçbir bilgi içermez. Otomatik denetimleri Ayarlar'dan kapatabilirsiniz."],
     ["Microsoft Store sürümü", "Microsoft", "Uygulamayı Store yükler ve günceller; uygulamanın kendi güncelleyicisi yoktur. Microsoft kendi <a href=\"https://privacy.microsoft.com/privacystatement\">gizlilik bildirimi</a> kapsamında tanılama verileri toplayabilir."],
+    ["Mac App Store sürümü", "Apple", "Uygulamayı App Store yükler ve günceller; uygulamanın kendi güncelleyicisi yoktur ve internete bağlanmaz. Apple kendi <a href=\"https://www.apple.com/legal/privacy/\">gizlilik politikası</a> kapsamında tanılama verileri toplayabilir."],
   ],
 
   agentsH: "YZ ajanları",
-  agentsP: "<strong>Ayarlar &gt; YZ ajanları</strong> seçeneğini açarsanız (varsayılan olarak kapalıdır), Claude, Codex veya Cursor gibi YZ ajanları Native Screen'i yalnızca bu bilgisayarda sizin kullanıcı hesabınızla çalışan programların açabildiği yerel bir bağlantı üzerinden kontrol edebilir. Bir ajan uygulamada sizin yapabildiklerinizi yapabilir: kayıt başlatmak (kayıt çubuğu ve geri sayımı her zaman gösterilir), projeleri açıp düzenlemek, proje bilgilerini ve karelerini okumak, videoları ve resimleri dosyalara dışa aktarmak ve bilgisayarınızdaki bir video veya resim dosyasını içe aktarılması için uygulamaya vermek. Uygulama bunun için internet üzerinden hiçbir şey göndermez, ancak ajan okuduklarını kendi YZ sağlayıcısına o sağlayıcının koşulları altında gönderebilir. Ajanların tüm erişimini durdurmak için ayarı kapatın.",
+  agentsP: "<strong>Ayarlar &gt; YZ ajanları</strong> seçeneğini açarsanız (varsayılan olarak kapalıdır), Claude, Codex veya Cursor gibi YZ ajanları Native Screen'i yalnızca bu bilgisayarda sizin kullanıcı hesabınızla çalışan programların açabildiği yerel bir bağlantı üzerinden kontrol edebilir. Bir ajan uygulamada sizin yapabildiklerinizi yapabilir: kayıt başlatmak (kayıt çubuğu ve geri sayımı her zaman gösterilir), projeleri açıp düzenlemek, proje bilgilerini ve karelerini okumak, videoları ve resimleri dosyalara dışa aktarmak ve bilgisayarınızdaki bir video veya resim dosyasını içe aktarılması için uygulamaya vermek. Uygulama bunun için internet üzerinden hiçbir şey göndermez, ancak ajan okuduklarını kendi YZ sağlayıcısına o sağlayıcının koşulları altında gönderebilir. Ajanların tüm erişimini durdurmak için ayarı kapatın. Mac App Store sürümünde bu özellik yoktur.",
 
   notH: "Yapmadıklarımız",
   notList: [

@@ -59,9 +59,14 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
 @main
 enum NativeScreenMain {
     static func main() {
+        #if APPSTORE
+        // Reopen the folders and projects the user granted in earlier runs before anything reads them.
+        SandboxAccess.restore()
+        #else
         if CommandLine.arguments.contains("--mcp") {
             MCPStdioBridge.run()
         }
+        #endif
         NativeScreenApp.main()
     }
 }

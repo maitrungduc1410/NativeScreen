@@ -12,6 +12,7 @@
 
 /* Begin PBXFileReference section */
 		2BB19C5E308CE10F008F49EA /* NativeScreen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = NativeScreen.app; path = "Native Screen.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2BB19C84308CE200008F49EA /* Native Screen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Native Screen.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -29,6 +30,11 @@
 				2BB19C70308CE110008F49EA /* Sparkle in Frameworks */,
 			);
 		};
+		2BB19C82308CE200008F49EA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -44,6 +50,7 @@
 			isa = PBXGroup;
 			children = (
 				2BB19C5E308CE10F008F49EA /* NativeScreen.app */,
+				2BB19C84308CE200008F49EA /* Native Screen.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -72,6 +79,24 @@
 			productReference = 2BB19C5E308CE10F008F49EA /* NativeScreen.app */;
 			productType = "com.apple.product-type.application";
 		};
+		2BB19C80308CE200008F49EA /* NativeScreen AppStore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2BB19C85308CE200008F49EA /* Build configuration list for PBXNativeTarget "NativeScreen AppStore" */;
+			buildPhases = (
+				2BB19C81308CE200008F49EA /* Sources */,
+				2BB19C82308CE200008F49EA /* Frameworks */,
+				2BB19C83308CE200008F49EA /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				2BB19C60308CE10F008F49EA /* NativeScreen */,
+			);
+			name = "NativeScreen AppStore";
+			productName = NativeScreen;
+			productReference = 2BB19C84308CE200008F49EA /* Native Screen.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -83,6 +108,9 @@
 				LastUpgradeCheck = 2710;
 				TargetAttributes = {
 					2BB19C5D308CE10F008F49EA = {
+						CreatedOnToolsVersion = 27.1;
+					};
+					2BB19C80308CE200008F49EA = {
 						CreatedOnToolsVersion = 27.1;
 					};
 				};
@@ -119,6 +147,7 @@
 			projectRoot = "";
 			targets = (
 				2BB19C5D308CE10F008F49EA /* NativeScreen */,
+				2BB19C80308CE200008F49EA /* NativeScreen AppStore */,
 			);
 		};
 /* End PBXProject section */
@@ -129,10 +158,20 @@
 			files = (
 			);
 		};
+		2BB19C83308CE200008F49EA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		2BB19C5A308CE10F008F49EA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		2BB19C81308CE200008F49EA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 			);
@@ -340,6 +379,88 @@
 			};
 			name = Release;
 		};
+		2BB19C86308CE200008F49EA /* Debug configuration for PBXNativeTarget "NativeScreen AppStore" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "NativeScreen-AppStore.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = C9FU286T96;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Info-AppStore.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Native Screen";
+				INFOPLIST_KEY_CFBundleName = "Native Screen";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Native Screen uses your camera to record a presenter overlay.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Native Screen uses your microphone to record voiceovers.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Native Screen records your screen or selected window to create product demos.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Native Screen uses on-device speech recognition to generate captions locally.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dmai.NativeScreen;
+				PRODUCT_NAME = "Native Screen";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG APPSTORE $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2BB19C87308CE200008F49EA /* Release configuration for PBXNativeTarget "NativeScreen AppStore" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "NativeScreen-AppStore.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = C9FU286T96;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Info-AppStore.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Native Screen";
+				INFOPLIST_KEY_CFBundleName = "Native Screen";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Native Screen uses your camera to record a presenter overlay.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Native Screen uses your microphone to record voiceovers.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Native Screen records your screen or selected window to create product demos.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Native Screen uses on-device speech recognition to generate captions locally.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dmai.NativeScreen;
+				PRODUCT_NAME = "Native Screen";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "APPSTORE $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -356,6 +477,14 @@
 			buildConfigurations = (
 				2BB19C6A308CE110008F49EA /* Debug configuration for PBXNativeTarget "NativeScreen" */,
 				2BB19C6B308CE110008F49EA /* Release configuration for PBXNativeTarget "NativeScreen" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		2BB19C85308CE200008F49EA /* Build configuration list for PBXNativeTarget "NativeScreen AppStore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2BB19C86308CE200008F49EA /* Debug configuration for PBXNativeTarget "NativeScreen AppStore" */,
+				2BB19C87308CE200008F49EA /* Release configuration for PBXNativeTarget "NativeScreen AppStore" */,
 			);
 			defaultConfigurationName = Release;
 		};

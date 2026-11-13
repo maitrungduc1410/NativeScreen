@@ -6,7 +6,7 @@ export default {
   h1: "Política de privacidad",
   note: "Esta traducción es solo informativa. Si difiere de la <a href=\"/privacy/\">versión en inglés</a>, prevalece la versión en inglés.",
   lede: "Native Screen graba y edita en tu ordenador. No hay cuenta, ni servidor nuestro, ni analíticas, ni anuncios. La app nunca sube tus grabaciones.",
-  scope: "Esta política se aplica a las apps de Native Screen para macOS y Windows (incluida la versión de Microsoft Store) y a este sitio web. La app es gratuita y de código abierto, así que todo lo que sigue puede comprobarse en el <a href=\"{repo}\">código fuente</a>.",
+  scope: "Esta política se aplica a las apps de Native Screen para macOS y Windows (incluidas las versiones de Microsoft Store y Mac App Store) y a este sitio web. La app es gratuita y de código abierto, así que todo lo que sigue puede comprobarse en el <a href=\"{repo}\">código fuente</a>.",
 
   stayH: "Lo que se queda en tu ordenador",
   stayP: "Todo lo que creas con Native Screen se guarda en tu ordenador y la app nunca lo envía a ninguna parte:",
@@ -28,7 +28,8 @@ export default {
     ["Grabación de pantalla", "Para grabar una pantalla, una ventana o un área que elijas."],
     ["Micrófono", "Para grabar tu voz y tus locuciones, cuando activas el micrófono."],
     ["Cámara", "Para grabar tu cámara, cuando la activas."],
-    ["Accesibilidad (macOS)", "Para listar y seleccionar ventanas, y para seguir clics y pulsaciones de teclas durante una grabación."],
+    ["Accesibilidad (macOS, descarga directa)", "Para listar y seleccionar ventanas, y para seguir clics y pulsaciones de teclas durante una grabación."],
+    ["Monitorización de entrada (versión de Mac App Store)", "Solo durante una grabación: las pulsaciones de teclas se muestran como atajos superpuestos. Esta versión lo pide en lugar de Accesibilidad."],
     ["Reconocimiento de voz (macOS)", "Para crear subtítulos con el reconocedor de Apple en el dispositivo."],
     ["Entrada de teclado y ratón (Windows)", "Solo durante una grabación: los clics generan zooms automáticos y efectos de clic, y las teclas se muestran como atajos."],
     ["Plena confianza (Windows)", "Native Screen es una app de escritorio. Necesita acceso completo para usar la captura de pantalla, la captura del audio del sistema, la codificación de vídeo por hardware y la GPU de Windows, a las que las apps empaquetadas no pueden acceder de otra forma."],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["Cuándo", "Adónde", "Qué se envía"],
   leave: [
     ["La primera vez que usas los subtítulos o la eliminación del fondo de la cámara en Windows", "Hugging Face (huggingface.co)", "Una solicitud para descargar el archivo del modelo. Hugging Face ve tu dirección IP, como en cualquier descarga. La app de macOS no descarga ningún modelo."],
-    ["Al buscar y descargar actualizaciones (macOS, y Windows fuera de Microsoft Store)", "GitHub", "Una solicitud de la última versión y, si la hay, el archivo de actualización. GitHub ve tu dirección IP y las cabeceras habituales de la solicitud. No incluye nada sobre ti ni sobre tus grabaciones. Puedes desactivar la comprobación automática en Ajustes."],
+    ["Al buscar y descargar actualizaciones (macOS fuera de Mac App Store, y Windows fuera de Microsoft Store)", "GitHub", "Una solicitud de la última versión y, si la hay, el archivo de actualización. GitHub ve tu dirección IP y las cabeceras habituales de la solicitud. No incluye nada sobre ti ni sobre tus grabaciones. Puedes desactivar la comprobación automática en Ajustes."],
     ["Versión de Microsoft Store", "Microsoft", "La Store instala y actualiza la app, que no tiene actualizador propio. Microsoft puede recopilar datos de diagnóstico según su propia <a href=\"https://privacy.microsoft.com/privacystatement\">declaración de privacidad</a>."],
+    ["Versión de Mac App Store", "Apple", "La App Store instala y actualiza la app, que no tiene actualizador propio ni se conecta a internet. Apple puede recopilar datos de diagnóstico según su propia <a href=\"https://www.apple.com/legal/privacy/\">política de privacidad</a>."],
   ],
 
   agentsH: "Agentes de IA",
-  agentsP: "Si activas <strong>Ajustes &gt; Agentes de IA</strong> (desactivado de forma predeterminada), agentes de IA como Claude, Codex o Cursor pueden controlar Native Screen mediante una conexión local que solo pueden abrir los programas que se ejecutan con tu cuenta de usuario en este ordenador. Un agente puede hacer lo mismo que tú en la app: iniciar una grabación (la barra de grabación y su cuenta atrás siempre se muestran), abrir y editar proyectos, leer los datos y fotogramas de los proyectos, exportar vídeos e imágenes a archivos y darle a la app un archivo de vídeo o imagen de tu ordenador para importarlo. La app no envía nada por internet para esto, pero el agente puede enviar lo que lee a su proveedor de IA según las condiciones de ese proveedor. Desactiva el ajuste para cortar todo acceso de los agentes.",
+  agentsP: "Si activas <strong>Ajustes &gt; Agentes de IA</strong> (desactivado de forma predeterminada), agentes de IA como Claude, Codex o Cursor pueden controlar Native Screen mediante una conexión local que solo pueden abrir los programas que se ejecutan con tu cuenta de usuario en este ordenador. Un agente puede hacer lo mismo que tú en la app: iniciar una grabación (la barra de grabación y su cuenta atrás siempre se muestran), abrir y editar proyectos, leer los datos y fotogramas de los proyectos, exportar vídeos e imágenes a archivos y darle a la app un archivo de vídeo o imagen de tu ordenador para importarlo. La app no envía nada por internet para esto, pero el agente puede enviar lo que lee a su proveedor de IA según las condiciones de ese proveedor. Desactiva el ajuste para cortar todo acceso de los agentes. La versión de Mac App Store no incluye esta función.",
 
   notH: "Lo que no hacemos",
   notList: [

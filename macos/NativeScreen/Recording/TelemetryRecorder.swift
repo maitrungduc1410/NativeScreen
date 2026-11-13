@@ -13,6 +13,8 @@ public final class TelemetryRecorder {
     private var samplingTimer: DispatchSourceTimer?
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
+    /// App Store build only: keystrokes from every app (ADR-85).
+    private var keyEventTap: KeyEventTap?
     private let queue = DispatchQueue(label: "com.nativescreen.telemetry", qos: .userInteractive)
     private var isPausedInternal: Bool = false
     private var pauseStartUptimeSec: TimeInterval?
@@ -98,10 +100,24 @@ public final class TelemetryRecorder {
             .scrollWheel, .keyDown
         ]
 
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+        #if APPSTORE
+        // Global key monitors need Accessibility, which the sandbox rules out: the tap delivers every keystroke,
+        // including the ones typed into this app, so the monitors below only take mouse events.
+        let monitorMask = mask.subtracting(.keyDown)
+        KeyEventTap.requestAccess()
+        keyEventTap = KeyEventTap { [weak self] event in
+            // Drawing on the screen is not a shortcut in the recording.
+            guard !(NSApp.keyWindow is LiveDrawingPanel) else { return }
             self?.handleNSEvent(event)
         }
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+        #else
+        let monitorMask = mask
+        #endif
+
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: monitorMask) { [weak self] event in
+            self?.handleNSEvent(event)
+        }
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: monitorMask) { [weak self] event in
             // Drawing on the screen is not a click or a shortcut in the recording (the strokes are saved on their own).
             if !(event.window is LiveDrawingPanel) {
                 self?.handleNSEvent(event)
@@ -121,6 +137,8 @@ public final class TelemetryRecorder {
             NSEvent.removeMonitor(local)
             localEventMonitor = nil
         }
+        keyEventTap?.invalidate()
+        keyEventTap = nil
         queue.sync {
             cursorAppender.close()
             clicksAppender.close()

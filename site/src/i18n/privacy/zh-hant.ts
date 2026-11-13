@@ -6,7 +6,7 @@ export default {
   h1: "隱私權政策",
   note: "本譯文僅供參考。如與<a href=\"/privacy/\">英文版本</a>有出入，以英文版本為準。",
   lede: "Native Screen 在你的電腦上錄影和編輯。沒有帳號，沒有我們的伺服器，沒有分析統計，也沒有廣告。App 從不上傳你的錄影內容。",
-  scope: "本政策適用於 macOS 和 Windows 版的 Native Screen App（包括 Microsoft Store 版本）以及本網站。此 App 免費且開源，因此以下所有內容都可以在<a href=\"{repo}\">原始碼</a>中查證。",
+  scope: "本政策適用於 macOS 和 Windows 版的 Native Screen App（包括 Microsoft Store 和 Mac App Store 版本）以及本網站。此 App 免費且開源，因此以下所有內容都可以在<a href=\"{repo}\">原始碼</a>中查證。",
 
   stayH: "留在你電腦上的內容",
   stayP: "你用 Native Screen 製作的一切都儲存在你的電腦上，App 絕不會將其傳送到任何地方：",
@@ -28,7 +28,8 @@ export default {
     ["螢幕錄影", "錄製你選擇的顯示器、視窗或區域。"],
     ["麥克風", "在你開啟麥克風時，錄製你的聲音和旁白。"],
     ["相機", "在你開啟相機時，錄製相機畫面。"],
-    ["輔助使用（macOS）", "列出並選擇視窗，以及在錄影期間追蹤點按和按鍵。"],
+    ["輔助使用（macOS，直接下載版）", "列出並選擇視窗，以及在錄影期間追蹤點按和按鍵。"],
+    ["輸入監控（Mac App Store 版本）", "僅在錄影期間：按鍵會顯示為快速鍵浮層。此版本要求這項權限，而不是輔助使用。"],
     ["語音辨識（macOS）", "使用 Apple 的裝置端辨識器產生字幕。"],
     ["鍵盤和滑鼠輸入（Windows）", "僅在錄影期間：點按用於自動縮放和點按效果，按鍵顯示為快速鍵。"],
     ["完全信任（Windows）", "Native Screen 是桌面 App。它需要完整存取權限才能使用 Windows 螢幕擷取、系統音訊擷取、硬體影片編碼和 GPU，封裝的 App 無法以其他方式使用這些功能。"],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["時機", "目的地", "傳送的內容"],
   leave: [
     ["在 Windows 上首次使用字幕或相機背景移除時", "Hugging Face（huggingface.co）", "一個下載模型檔案的要求。與任何下載一樣，Hugging Face 能看到你的 IP 位址。macOS App 不下載任何模型。"],
-    ["檢查和下載更新（macOS，以及 Microsoft Store 以外的 Windows 版本）", "GitHub", "一個取得最新版本資訊的要求，有新版本時還會下載更新檔案。GitHub 能看到你的 IP 位址和標準的要求標頭。其中不包含任何關於你或你錄影內容的資訊。你可以在設定中關閉自動檢查。"],
+    ["檢查和下載更新（Mac App Store 以外的 macOS，以及 Microsoft Store 以外的 Windows 版本）", "GitHub", "一個取得最新版本資訊的要求，有新版本時還會下載更新檔案。GitHub 能看到你的 IP 位址和標準的要求標頭。其中不包含任何關於你或你錄影內容的資訊。你可以在設定中關閉自動檢查。"],
     ["Microsoft Store 版本", "Microsoft", "由 Store 安裝和更新 App，App 本身沒有更新程式。Microsoft 可能會依據其<a href=\"https://privacy.microsoft.com/privacystatement\">隱私權聲明</a>收集診斷資料。"],
+    ["Mac App Store 版本", "Apple", "由 App Store 安裝和更新 App，App 本身沒有更新程式，也不會連線網際網路。Apple 可能會依據其<a href=\"https://www.apple.com/legal/privacy/\">隱私權政策</a>收集診斷資料。"],
   ],
 
   agentsH: "AI 代理程式",
-  agentsP: "如果你開啟<strong>設定 &gt; AI 代理程式</strong>（預設為關閉），Claude、Codex 或 Cursor 等 AI 代理程式可以透過本機連線控制 Native Screen，只有在這台電腦上以你的使用者帳號執行的程式才能開啟這個連線。代理程式可以做你在 App 中能做的事：開始錄影（錄製列及其倒數一律會顯示）、開啟和編輯專案、讀取專案資訊和畫面、將影片和影像輸出為檔案，以及把你電腦上的影片或影像檔案交給 App 匯入。App 不會為此透過網際網路傳送任何內容，但代理程式可能會依照其 AI 服務提供者的條款，將它讀取的內容傳送給該提供者。關閉此設定即可阻止代理程式的所有存取。",
+  agentsP: "如果你開啟<strong>設定 &gt; AI 代理程式</strong>（預設為關閉），Claude、Codex 或 Cursor 等 AI 代理程式可以透過本機連線控制 Native Screen，只有在這台電腦上以你的使用者帳號執行的程式才能開啟這個連線。代理程式可以做你在 App 中能做的事：開始錄影（錄製列及其倒數一律會顯示）、開啟和編輯專案、讀取專案資訊和畫面、將影片和影像輸出為檔案，以及把你電腦上的影片或影像檔案交給 App 匯入。App 不會為此透過網際網路傳送任何內容，但代理程式可能會依照其 AI 服務提供者的條款，將它讀取的內容傳送給該提供者。關閉此設定即可阻止代理程式的所有存取。Mac App Store 版本不包含此功能。",
 
   notH: "我們不做的事",
   notList: [

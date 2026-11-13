@@ -3754,25 +3754,27 @@ public struct WindowAndAreaPickerOverlayView: View {
                                 .font(.system(size: 13, weight: .regular, design: .default).monospacedDigit())
                                 .foregroundStyle(.white.opacity(0.85))
 
-                            Menu {
-                                ForEach(WindowSizePreset.presets) { preset in
-                                    Button(preset.label.localizedUI) {
-                                        WindowDiscoveryService.resizeWindow(
-                                            win,
-                                            toWidth: Double(preset.width),
-                                            height: Double(preset.height)
-                                        )
+                            if WindowDiscoveryService.canResize(win) {
+                                Menu {
+                                    ForEach(WindowSizePreset.presets) { preset in
+                                        Button(preset.label.localizedUI) {
+                                            WindowDiscoveryService.resizeWindow(
+                                                win,
+                                                toWidth: Double(preset.width),
+                                                height: Double(preset.height)
+                                            )
+                                        }
                                     }
+                                } label: {
+                                    Text("Resize")
+                                        .font(.system(size: 11.5, weight: .medium))
                                 }
-                            } label: {
-                                Text("Resize")
-                                    .font(.system(size: 11.5, weight: .medium))
+                                .menuStyle(.borderlessButton)
+                                .fixedSize()
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(.white.opacity(0.18), in: Capsule())
                             }
-                            .menuStyle(.borderlessButton)
-                            .fixedSize()
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(.white.opacity(0.18), in: Capsule())
                         }
 
                         Button {

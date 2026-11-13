@@ -2895,7 +2895,7 @@ private struct ExportSettingsModalView: View {
                                         VStack(alignment: .leading, spacing: 10) {
                                             sectionHeader(icon: "film", title: "Codec")
 
-                                            let codecChoices: [HardwareVideoExporter.MP4CodecOption] = (config.target == .file)
+                                            let codecChoices: [HardwareVideoExporter.MP4CodecOption] = (config.target == .file && HardwareVideoExporter.ExportConfiguration.allowsCompanionFile)
                                                 ? [.h264, .h265, .both]
                                                 : [.h264, .h265]
 

@@ -36,11 +36,17 @@ public final class MCPServer {
 
     /// Starts or stops listening to match `AppSettings.aiAgentsEnabled`.
     public func applySetting() {
+        #if APPSTORE
+        // The App Store build has no AI agent access (ADR-85): the sandbox keeps the socket and the stdio
+        // bridge in the app's container, and agents could not reach projects outside the folders the user picked.
+        return
+        #else
         if AppSettings.shared.aiAgentsEnabled {
             start()
         } else {
             stop()
         }
+        #endif
     }
 
     private func start() {

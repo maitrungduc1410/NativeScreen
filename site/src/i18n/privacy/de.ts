@@ -6,7 +6,7 @@ export default {
   h1: "Datenschutzerklärung",
   note: "Diese Übersetzung dient nur der Information. Weicht sie von der <a href=\"/privacy/\">englischen Fassung</a> ab, gilt die englische Fassung.",
   lede: "Native Screen nimmt auf deinem Computer auf und bearbeitet dort. Es gibt kein Konto, keinen Server von uns, keine Analyse und keine Werbung. Die App lädt deine Aufnahmen niemals hoch.",
-  scope: "Diese Erklärung gilt für die Native-Screen-Apps für macOS und Windows (einschließlich der Version aus dem Microsoft Store) und für diese Website. Die App ist kostenlos und Open Source, daher lässt sich alles Folgende im <a href=\"{repo}\">Quellcode</a> überprüfen.",
+  scope: "Diese Erklärung gilt für die Native-Screen-Apps für macOS und Windows (einschließlich der Versionen aus dem Microsoft Store und dem Mac App Store) und für diese Website. Die App ist kostenlos und Open Source, daher lässt sich alles Folgende im <a href=\"{repo}\">Quellcode</a> überprüfen.",
 
   stayH: "Was auf deinem Computer bleibt",
   stayP: "Alles, was du mit Native Screen erstellst, wird auf deinem Computer gespeichert und von der App nirgendwohin gesendet:",
@@ -28,7 +28,8 @@ export default {
     ["Bildschirmaufnahme", "Um einen Bildschirm, ein Fenster oder einen von dir gewählten Bereich aufzunehmen."],
     ["Mikrofon", "Um deine Stimme und Voiceovers aufzunehmen, wenn du das Mikrofon einschaltest."],
     ["Kamera", "Um deine Kamera aufzunehmen, wenn du sie einschaltest."],
-    ["Bedienungshilfen (macOS)", "Um Fenster aufzulisten und auszuwählen und um während einer Aufnahme Klicks und Tastendrücke zu verfolgen."],
+    ["Bedienungshilfen (macOS, direkter Download)", "Um Fenster aufzulisten und auszuwählen und um während einer Aufnahme Klicks und Tastendrücke zu verfolgen."],
+    ["Eingabeüberwachung (Version aus dem Mac App Store)", "Nur während einer Aufnahme: Tastendrücke werden als Tastenkürzel-Einblendungen gezeigt. Diese Version fragt danach statt nach Bedienungshilfen."],
     ["Spracherkennung (macOS)", "Um Untertitel mit der Spracherkennung von Apple auf dem Gerät zu erstellen."],
     ["Tastatur- und Mauseingabe (Windows)", "Nur während einer Aufnahme: Klicks steuern automatische Zooms und Klickeffekte, Tastendrücke werden als Tastenkürzel angezeigt."],
     ["Volle Vertrauensstellung (Windows)", "Native Screen ist eine Desktop-App. Sie braucht vollen Zugriff, um die Bildschirmaufnahme, die Aufnahme des Systemtons, die Hardware-Videokodierung und die GPU von Windows zu nutzen, die paketierte Apps sonst nicht erreichen."],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["Wann", "Wohin", "Was gesendet wird"],
   leave: [
     ["Wenn du unter Windows zum ersten Mal Untertitel oder das Entfernen des Kamerahintergrunds nutzt", "Hugging Face (huggingface.co)", "Eine Anfrage zum Herunterladen der Modelldatei. Hugging Face sieht deine IP-Adresse, wie bei jedem Download. Die macOS-App lädt keine Modelle herunter."],
-    ["Nach Updates suchen und sie herunterladen (macOS und Windows außerhalb des Microsoft Store)", "GitHub", "Eine Anfrage nach der neuesten Version und, falls es eine gibt, der Update-Datei. GitHub sieht deine IP-Adresse und die üblichen Anfrage-Header. Nichts über dich oder deine Aufnahmen ist enthalten. Die automatische Prüfung lässt sich in den Einstellungen ausschalten."],
+    ["Nach Updates suchen und sie herunterladen (macOS außerhalb des Mac App Store und Windows außerhalb des Microsoft Store)", "GitHub", "Eine Anfrage nach der neuesten Version und, falls es eine gibt, der Update-Datei. GitHub sieht deine IP-Adresse und die üblichen Anfrage-Header. Nichts über dich oder deine Aufnahmen ist enthalten. Die automatische Prüfung lässt sich in den Einstellungen ausschalten."],
     ["Version aus dem Microsoft Store", "Microsoft", "Der Store installiert und aktualisiert die App, die keinen eigenen Updater hat. Microsoft kann nach seiner eigenen <a href=\"https://privacy.microsoft.com/privacystatement\">Datenschutzerklärung</a> Diagnosedaten erheben."],
+    ["Version aus dem Mac App Store", "Apple", "Der App Store installiert und aktualisiert die App, die keinen eigenen Updater hat und keine Internetverbindungen aufbaut. Apple kann nach seiner eigenen <a href=\"https://www.apple.com/legal/privacy/\">Datenschutzrichtlinie</a> Diagnosedaten erheben."],
   ],
 
   agentsH: "KI-Agenten",
-  agentsP: "Wenn du <strong>Einstellungen &gt; KI-Agenten</strong> einschaltest (standardmäßig aus), können KI-Agenten wie Claude, Codex oder Cursor Native Screen über eine lokale Verbindung steuern, die nur Programme öffnen können, die auf diesem Computer unter deinem Benutzerkonto laufen. Ein Agent kann tun, was du in der App tun kannst: eine Aufnahme starten (die Aufnahmeleiste und ihr Countdown werden immer angezeigt), Projekte öffnen und bearbeiten, Projektdaten und Einzelbilder lesen, Videos und Bilder als Dateien exportieren und der App eine Video- oder Bilddatei von deinem Computer zum Importieren übergeben. Die App sendet dafür nichts über das Internet, aber der Agent kann, was er liest, nach den Bedingungen seines KI-Anbieters an diesen senden. Schalte die Einstellung aus, um jeden Zugriff durch Agenten zu beenden.",
+  agentsP: "Wenn du <strong>Einstellungen &gt; KI-Agenten</strong> einschaltest (standardmäßig aus), können KI-Agenten wie Claude, Codex oder Cursor Native Screen über eine lokale Verbindung steuern, die nur Programme öffnen können, die auf diesem Computer unter deinem Benutzerkonto laufen. Ein Agent kann tun, was du in der App tun kannst: eine Aufnahme starten (die Aufnahmeleiste und ihr Countdown werden immer angezeigt), Projekte öffnen und bearbeiten, Projektdaten und Einzelbilder lesen, Videos und Bilder als Dateien exportieren und der App eine Video- oder Bilddatei von deinem Computer zum Importieren übergeben. Die App sendet dafür nichts über das Internet, aber der Agent kann, was er liest, nach den Bedingungen seines KI-Anbieters an diesen senden. Schalte die Einstellung aus, um jeden Zugriff durch Agenten zu beenden. Die Version aus dem Mac App Store hat diese Funktion nicht.",
 
   notH: "Was wir nicht tun",
   notList: [

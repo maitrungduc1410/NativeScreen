@@ -146,6 +146,58 @@ the current Windows user can open. The execution alias nativescreen.exe is what 
 No account, no ads, no telemetry or analytics. Source code: https://github.com/maitrungduc1410/NativeScreen
 ```
 
+## Mac App Store (macOS)
+
+macOS has two channels built from the same source (`spec/06` ADR-85):
+
+| | GitHub (`.dmg`) | Mac App Store |
+| :-- | :-- | :-- |
+| Xcode target | `NativeScreen` | `NativeScreen AppStore` (Swift flag `APPSTORE`) |
+| Sandbox | off | on (`NativeScreen-AppStore.entitlements`) |
+| Signed by | Developer ID, notarized | Apple, at review |
+| Updates | Sparkle, from GitHub releases | the App Store. The target has no Sparkle and no update UI |
+| AI Agents (MCP) | yes | no |
+| Resize another app's window from the picker | yes | no (needs Accessibility) |
+| Keystrokes for keycaps | Accessibility | Input Monitoring (listen-only event tap) |
+| Default projects folder | `~/Native Screen Projects` | `~/Movies/Native Screen Projects` |
+| MP4 codec `Both` | yes | no (the second file is outside what the save panel grants) |
+
+Both use the bundle ID `com.dmai.NativeScreen`. Nothing in CI builds the App Store version yet.
+
+### Submitting
+
+1. App Store Connect > Apps > **+** > New App, platform macOS, bundle ID `com.dmai.NativeScreen`, SKU of your choice.
+   Fill in the listing, the privacy policy URL (`https://nativescreen.app/privacy/`) and App Privacy ("Data Not
+   Collected"). Screenshots are in `macos/store-listing/screenshots/en-us/` (see its README).
+2. Archive on a Mac with the version of the release:
+
+   ```bash
+   xcodebuild -project macos/NativeScreen.xcodeproj -scheme "NativeScreen AppStore" -configuration Release \
+     MARKETING_VERSION=1.2.0 CURRENT_PROJECT_VERSION=42 archive -archivePath build/NativeScreen-AppStore.xcarchive
+   ```
+
+   `CURRENT_PROJECT_VERSION` must grow with every upload.
+3. Open the archive in Xcode (Window > Organizer) > Distribute App > App Store Connect > Upload. Xcode signs it with
+   the Apple Distribution certificate and a Mac App Store profile (automatic signing makes both).
+4. In App Store Connect, pick the build for the version, answer the export compliance question (the app uses no
+   encryption beyond the system's; `ITSAppUsesNonExemptEncryption` is `NO`), paste the review notes below, and submit.
+
+### Notes for review
+
+```text
+Native Screen is a free, open source screen recorder and video editor. No account is needed.
+
+How to test: click the menu bar icon or the floating bar, pick a display, window or area, and press Record. Press
+Stop to open the editor, then Export.
+
+Permissions: Screen Recording (to record), Microphone and Camera (both off until turned on in the bar), Speech
+Recognition (captions, on device only), and Input Monitoring. Input Monitoring is used only while recording, through a
+listen-only event tap, to show the keyboard shortcuts the user pressed as on-screen keycaps in the video. Keystrokes
+are written into the project on the user's Mac and never leave it.
+
+Projects are saved in ~/Movies/Native Screen Projects unless the user picks another folder.
+```
+
 ## One-time setup
 
 All of this goes in **Settings > Secrets and variables > Actions** of the repository.

@@ -223,6 +223,16 @@ public enum WindowDiscoveryService {
         }
     }
 
+    /// Whether `resizeWindow` can work on `window`. The App Store build is sandboxed, and a sandboxed app cannot be
+    /// trusted for Accessibility, so it can only resize its own windows (ADR-85).
+    public static func canResize(_ window: CapturableWindowInfo) -> Bool {
+        #if APPSTORE
+        return window.pid == ProcessInfo.processInfo.processIdentifier
+        #else
+        return true
+        #endif
+    }
+
     /// Resizes a target application's window using macOS Accessibility API (`AXUIElement`).
     @discardableResult
     public static func resizeWindow(_ window: CapturableWindowInfo, toWidth width: Double, height: Double) -> Bool {

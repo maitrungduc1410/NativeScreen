@@ -945,6 +945,7 @@ public struct ExportStillFrameModalView: View {
         if panel.runModal() == .OK, let url = panel.url {
             exportDirectoryURL = url
             UserDefaults.standard.set(url.path, forKey: savedExportDirKey)
+            SandboxAccess.remember(url)
         }
     }
 

@@ -35,13 +35,17 @@ public final class AppSettings {
 
     /// Where new recordings and imported videos are saved.
     public var projectsDirectoryPath: String {
-        didSet { UserDefaults.standard.set(projectsDirectoryPath, forKey: Keys.projectsDirectory) }
+        didSet {
+            UserDefaults.standard.set(projectsDirectoryPath, forKey: Keys.projectsDirectory)
+            SandboxAccess.remember(URL(fileURLWithPath: projectsDirectoryPath, isDirectory: true))
+        }
     }
 
     /// Where style presets are stored.
     public var presetsDirectoryPath: String {
         didSet {
             UserDefaults.standard.set(presetsDirectoryPath, forKey: Keys.presetsDirectory)
+            SandboxAccess.remember(URL(fileURLWithPath: presetsDirectoryPath, isDirectory: true))
             ProjectPresetsStore.shared.loadPresetsFromDisk()
         }
     }
@@ -103,8 +107,15 @@ public final class AppSettings {
         static let lastProjectStyle = "NativeScreen.Settings.LastProjectStyle"
     }
 
+    #if APPSTORE
+    /// The sandbox lets the App Store build use ~/Movies without asking (`assets.movies.read-write`), so new
+    /// projects go there instead of the home folder (ADR-85).
+    static let defaultProjectsDirectoryPath = SandboxAccess.realHomeDirectory
+        .appendingPathComponent("Movies/Native Screen Projects", isDirectory: true).path
+    #else
     static let defaultProjectsDirectoryPath = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Native Screen Projects", isDirectory: true).path
+    #endif
 
     nonisolated static var defaultPresetsDirectoryPath: String {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first

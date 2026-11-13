@@ -6,7 +6,7 @@ export default {
   h1: "Chính sách quyền riêng tư",
   note: "Bản dịch này chỉ để tham khảo. Nếu có khác biệt với <a href=\"/privacy/\">bản tiếng Anh</a>, bản tiếng Anh được áp dụng.",
   lede: "Native Screen quay và dựng video ngay trên máy của bạn. Không có tài khoản, không có máy chủ nào của chúng tôi, không analytics và không quảng cáo. Ứng dụng không bao giờ tải bản ghi của bạn lên.",
-  scope: "Chính sách này áp dụng cho ứng dụng Native Screen trên macOS và Windows (kể cả bản trên Microsoft Store) và cho trang web này. Ứng dụng miễn phí và mã nguồn mở, nên mọi điều dưới đây đều có thể kiểm tra trong <a href=\"{repo}\">mã nguồn</a>.",
+  scope: "Chính sách này áp dụng cho ứng dụng Native Screen trên macOS và Windows (kể cả bản trên Microsoft Store và Mac App Store) và cho trang web này. Ứng dụng miễn phí và mã nguồn mở, nên mọi điều dưới đây đều có thể kiểm tra trong <a href=\"{repo}\">mã nguồn</a>.",
 
   stayH: "Những gì ở lại trên máy bạn",
   stayP: "Mọi thứ bạn tạo bằng Native Screen đều được lưu trên máy bạn và ứng dụng không bao giờ gửi đi đâu:",
@@ -28,7 +28,8 @@ export default {
     ["Ghi màn hình", "Để quay một màn hình, một cửa sổ hoặc một vùng bạn chọn."],
     ["Micro", "Để thu giọng nói và lời thuyết minh, khi bạn bật micro."],
     ["Camera", "Để quay camera, khi bạn bật nó."],
-    ["Trợ năng (macOS)", "Để liệt kê và chọn cửa sổ, và để theo dõi cú nhấp và phím bấm trong lúc quay."],
+    ["Trợ năng (macOS, bản tải trực tiếp)", "Để liệt kê và chọn cửa sổ, và để theo dõi cú nhấp và phím bấm trong lúc quay."],
+    ["Theo dõi đầu vào (bản Mac App Store)", "Chỉ trong lúc quay: phím bấm được hiện thành lớp phím tắt. Bản này xin quyền này thay cho Trợ năng."],
     ["Nhận dạng giọng nói (macOS)", "Để tạo phụ đề bằng bộ nhận dạng trên thiết bị của Apple."],
     ["Nhập liệu bàn phím và chuột (Windows)", "Chỉ trong lúc quay: cú nhấp tạo zoom tự động và hiệu ứng nhấp, phím bấm hiển thị thành phím tắt."],
     ["Toàn quyền (Windows)", "Native Screen là ứng dụng desktop. Nó cần toàn quyền để dùng tính năng ghi màn hình, thu âm thanh hệ thống, mã hóa video bằng phần cứng và GPU của Windows, những thứ mà ứng dụng đóng gói không thể truy cập theo cách khác."],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["Khi nào", "Đến đâu", "Gửi những gì"],
   leave: [
     ["Lần đầu bạn dùng phụ đề hoặc tách nền camera trên Windows", "Hugging Face (huggingface.co)", "Một yêu cầu tải tệp mô hình. Hugging Face thấy địa chỉ IP của bạn, như với mọi lượt tải xuống. Ứng dụng macOS không tải mô hình nào."],
-    ["Kiểm tra và tải bản cập nhật (macOS, và Windows ngoài Microsoft Store)", "GitHub", "Một yêu cầu lấy bản phát hành mới nhất và, khi có, tệp cập nhật. GitHub thấy địa chỉ IP của bạn và các header thông thường của yêu cầu. Không có thông tin nào về bạn hay bản ghi của bạn. Bạn có thể tắt tự động kiểm tra trong Cài đặt."],
+    ["Kiểm tra và tải bản cập nhật (macOS ngoài Mac App Store, và Windows ngoài Microsoft Store)", "GitHub", "Một yêu cầu lấy bản phát hành mới nhất và, khi có, tệp cập nhật. GitHub thấy địa chỉ IP của bạn và các header thông thường của yêu cầu. Không có thông tin nào về bạn hay bản ghi của bạn. Bạn có thể tắt tự động kiểm tra trong Cài đặt."],
     ["Bản trên Microsoft Store", "Microsoft", "Store cài đặt và cập nhật ứng dụng, ứng dụng không có trình cập nhật riêng. Microsoft có thể thu thập dữ liệu chẩn đoán theo <a href=\"https://privacy.microsoft.com/privacystatement\">tuyên bố quyền riêng tư</a> của họ."],
+    ["Bản trên Mac App Store", "Apple", "App Store cài đặt và cập nhật ứng dụng, ứng dụng không có trình cập nhật riêng và không kết nối internet. Apple có thể thu thập dữ liệu chẩn đoán theo <a href=\"https://www.apple.com/legal/privacy/\">chính sách quyền riêng tư</a> của họ."],
   ],
 
   agentsH: "AI agent",
-  agentsP: "Nếu bạn bật <strong>Cài đặt &gt; AI Agent</strong> (mặc định tắt), các AI agent như Claude, Codex hoặc Cursor có thể điều khiển Native Screen qua một kết nối cục bộ mà chỉ chương trình chạy dưới tài khoản người dùng của bạn trên máy này mới mở được. Agent có thể làm những gì bạn làm được trong ứng dụng: bắt đầu quay (thanh ghi hình và đếm ngược luôn hiện), mở và sửa dự án, đọc thông tin dự án và khung hình, xuất video và hình ảnh ra tệp, và đưa cho ứng dụng một tệp video hoặc hình ảnh trên máy bạn để nhập vào. Ứng dụng không gửi gì qua internet cho việc này, nhưng agent có thể gửi những gì nó đọc được tới nhà cung cấp AI của nó theo điều khoản của nhà cung cấp đó. Tắt cài đặt này để chặn mọi quyền truy cập của agent.",
+  agentsP: "Nếu bạn bật <strong>Cài đặt &gt; AI Agent</strong> (mặc định tắt), các AI agent như Claude, Codex hoặc Cursor có thể điều khiển Native Screen qua một kết nối cục bộ mà chỉ chương trình chạy dưới tài khoản người dùng của bạn trên máy này mới mở được. Agent có thể làm những gì bạn làm được trong ứng dụng: bắt đầu quay (thanh ghi hình và đếm ngược luôn hiện), mở và sửa dự án, đọc thông tin dự án và khung hình, xuất video và hình ảnh ra tệp, và đưa cho ứng dụng một tệp video hoặc hình ảnh trên máy bạn để nhập vào. Ứng dụng không gửi gì qua internet cho việc này, nhưng agent có thể gửi những gì nó đọc được tới nhà cung cấp AI của nó theo điều khoản của nhà cung cấp đó. Tắt cài đặt này để chặn mọi quyền truy cập của agent. Bản trên Mac App Store không có tính năng này.",
 
   notH: "Những điều chúng tôi không làm",
   notList: [

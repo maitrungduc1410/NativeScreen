@@ -34,9 +34,11 @@ struct SettingsView: View {
             ShortcutsSettingsTab()
                 .tabItem { Label("Shortcuts", systemImage: "command.circle") }
                 .tag(SettingsNavigation.Tab.shortcuts)
+            #if !APPSTORE
             AIAgentsSettingsTab()
                 .tabItem { Label("AI Agents", systemImage: "sparkles") }
                 .tag(SettingsNavigation.Tab.aiAgents)
+            #endif
         }
         .frame(width: 720, height: height, alignment: .top)
         .onPreferenceChange(SettingsTabHeightKey.self) { measured in

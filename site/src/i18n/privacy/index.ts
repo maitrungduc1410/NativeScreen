@@ -18,7 +18,7 @@ import ar from "./ar";
 export type Privacy = typeof en;
 
 /** The date shown as "Last updated". Change it with any change to the English text. */
-export const POLICY_DATE = new Date("2026-11-11T00:00:00Z");
+export const POLICY_DATE = new Date("2026-11-13T00:00:00Z");
 
 const all: Record<string, Privacy> = {
   en, vi, "zh-hans": zhHans, "zh-hant": zhHant, ja, ko, de, fr, es, it, "pt-br": ptBr, ru, cs, tr, ar,

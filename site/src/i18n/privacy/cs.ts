@@ -6,7 +6,7 @@ export default {
   h1: "Zásady ochrany soukromí",
   note: "Tento překlad slouží jen pro informaci. Pokud se liší od <a href=\"/privacy/\">anglické verze</a>, platí anglická verze.",
   lede: "Native Screen nahrává a upravuje na vašem počítači. Nemá žádný účet, žádný náš server, žádnou analytiku ani reklamy. Aplikace vaše záznamy nikdy nenahrává na internet.",
-  scope: "Tyto zásady se vztahují na aplikace Native Screen pro macOS a Windows (včetně verze z Microsoft Store) a na tento web. Aplikace je zdarma a s otevřeným kódem, takže vše níže lze ověřit ve <a href=\"{repo}\">zdrojovém kódu</a>.",
+  scope: "Tyto zásady se vztahují na aplikace Native Screen pro macOS a Windows (včetně verzí z Microsoft Store a Mac App Store) a na tento web. Aplikace je zdarma a s otevřeným kódem, takže vše níže lze ověřit ve <a href=\"{repo}\">zdrojovém kódu</a>.",
 
   stayH: "Co zůstává na vašem počítači",
   stayP: "Vše, co v Native Screen vytvoříte, se ukládá na vašem počítači a aplikace to nikam neposílá:",
@@ -28,7 +28,8 @@ export default {
     ["Nahrávání obrazovky", "K nahrávání displeje, okna nebo oblasti, kterou si vyberete."],
     ["Mikrofon", "K nahrávání vašeho hlasu a komentářů, když mikrofon zapnete."],
     ["Kamera", "K nahrávání kamery, když ji zapnete."],
-    ["Zpřístupnění (macOS)", "K zobrazení a výběru oken a ke sledování kliknutí a stisků kláves během nahrávání."],
+    ["Zpřístupnění (macOS, přímé stažení)", "K zobrazení a výběru oken a ke sledování kliknutí a stisků kláves během nahrávání."],
+    ["Sledování vstupu (verze z Mac App Store)", "Jen během nahrávání: stisky kláves se zobrazí jako překryvy zkratek. Tato verze o něj žádá místo zpřístupnění."],
     ["Rozpoznávání řeči (macOS)", "K vytváření titulků rozpoznáváním řeči od Applu na zařízení."],
     ["Vstup z klávesnice a myši (Windows)", "Jen během nahrávání: kliknutí řídí automatická přiblížení a efekty kliknutí, stisky kláves se zobrazují jako zkratky."],
     ["Plná důvěra (Windows)", "Native Screen je desktopová aplikace. Potřebuje plný přístup, aby mohla používat snímání obrazovky, snímání systémového zvuku, hardwarové kódování videa a GPU ve Windows, ke kterým se zabalené aplikace jinak nedostanou."],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["Kdy", "Kam", "Co se posílá"],
   leave: [
     ["Při prvním použití titulků nebo odstranění pozadí kamery ve Windows", "Hugging Face (huggingface.co)", "Požadavek na stažení souboru modelu. Hugging Face vidí vaši IP adresu jako u každého stahování. Aplikace pro macOS žádné modely nestahuje."],
-    ["Kontrola a stahování aktualizací (macOS a Windows mimo Microsoft Store)", "GitHub", "Požadavek na nejnovější verzi a, pokud existuje, soubor aktualizace. GitHub vidí vaši IP adresu a běžné hlavičky požadavku. Nic o vás ani o vašich záznamech se neposílá. Automatické kontroly můžete vypnout v Nastavení."],
+    ["Kontrola a stahování aktualizací (macOS mimo Mac App Store a Windows mimo Microsoft Store)", "GitHub", "Požadavek na nejnovější verzi a, pokud existuje, soubor aktualizace. GitHub vidí vaši IP adresu a běžné hlavičky požadavku. Nic o vás ani o vašich záznamech se neposílá. Automatické kontroly můžete vypnout v Nastavení."],
     ["Verze z Microsoft Store", "Microsoft", "Store aplikaci instaluje a aktualizuje, aplikace nemá vlastní aktualizační mechanismus. Microsoft může shromažďovat diagnostická data podle svého <a href=\"https://privacy.microsoft.com/privacystatement\">prohlášení o zásadách ochrany osobních údajů</a>."],
+    ["Verze z Mac App Store", "Apple", "App Store aplikaci instaluje a aktualizuje, aplikace nemá vlastní aktualizační mechanismus a nepřipojuje se k internetu. Apple může shromažďovat diagnostická data podle svých <a href=\"https://www.apple.com/legal/privacy/\">zásad ochrany osobních údajů</a>."],
   ],
 
   agentsH: "AI agenti",
-  agentsP: "Pokud zapnete <strong>Nastavení &gt; AI agenti</strong> (ve výchozím stavu vypnuto), AI agenti jako Claude, Codex nebo Cursor mohou ovládat Native Screen přes místní spojení, které mohou otevřít jen programy běžící pod vaším uživatelským účtem na tomto počítači. Agent může dělat to, co vy v aplikaci: spustit nahrávání (panel nahrávání a jeho odpočet se vždy zobrazí), otevírat a upravovat projekty, číst údaje a snímky projektů, exportovat videa a obrázky do souborů a předat aplikaci k importu video nebo obrázek z vašeho počítače. Aplikace kvůli tomu nic neposílá na internet, ale agent může to, co přečte, poslat svému poskytovateli AI podle jeho podmínek. Vypnutím nastavení zastavíte veškerý přístup agentů.",
+  agentsP: "Pokud zapnete <strong>Nastavení &gt; AI agenti</strong> (ve výchozím stavu vypnuto), AI agenti jako Claude, Codex nebo Cursor mohou ovládat Native Screen přes místní spojení, které mohou otevřít jen programy běžící pod vaším uživatelským účtem na tomto počítači. Agent může dělat to, co vy v aplikaci: spustit nahrávání (panel nahrávání a jeho odpočet se vždy zobrazí), otevírat a upravovat projekty, číst údaje a snímky projektů, exportovat videa a obrázky do souborů a předat aplikaci k importu video nebo obrázek z vašeho počítače. Aplikace kvůli tomu nic neposílá na internet, ale agent může to, co přečte, poslat svému poskytovateli AI podle jeho podmínek. Vypnutím nastavení zastavíte veškerý přístup agentů. Verze z Mac App Store tuto funkci nemá.",
 
   notH: "Co neděláme",
   notList: [

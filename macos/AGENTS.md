@@ -10,6 +10,12 @@ Always verify that the macOS project compiles cleanly using `xcodebuild` before 
 xcodebuild -project NativeScreen.xcodeproj -scheme NativeScreen -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
+When a change touches a feature the Mac App Store build turns off or changes (`#if APPSTORE`: updates, MCP, window resizing, keystroke capture, file access; `spec/06` ADR-85), also build the `NativeScreen AppStore` scheme:
+
+```bash
+xcodebuild -project NativeScreen.xcodeproj -scheme "NativeScreen AppStore" -configuration Debug CODE_SIGNING_ALLOWED=NO build
+```
+
 ## 2. Project Structure & Xcode 16+ Synchronized Root Group
 
 - `NativeScreen.xcodeproj` uses `PBXFileSystemSynchronizedRootGroup` pointing at the `NativeScreen/` source folder.

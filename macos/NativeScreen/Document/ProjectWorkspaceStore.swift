@@ -672,6 +672,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         let standardized = url.standardizedFileURL
         recentProjectURLs.removeAll { $0.standardizedFileURL == standardized }
         recentProjectURLs.insert(standardized, at: 0)
+        SandboxAccess.remember(standardized)
         if recentProjectURLs.count > 20 {
             recentProjectURLs = Array(recentProjectURLs.prefix(20))
         }

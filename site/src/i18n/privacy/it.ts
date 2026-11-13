@@ -6,7 +6,7 @@ export default {
   h1: "Informativa sulla privacy",
   note: "Questa traduzione è fornita solo a scopo informativo. In caso di differenze con la <a href=\"/privacy/\">versione inglese</a>, prevale la versione inglese.",
   lede: "Native Screen registra e monta sul tuo computer. Non ci sono account, server nostri, statistiche né pubblicità. L'app non carica mai le tue registrazioni.",
-  scope: "Questa informativa riguarda le app Native Screen per macOS e Windows (compresa la versione del Microsoft Store) e questo sito web. L'app è gratuita e open source, quindi tutto ciò che segue si può verificare nel <a href=\"{repo}\">codice sorgente</a>.",
+  scope: "Questa informativa riguarda le app Native Screen per macOS e Windows (comprese le versioni del Microsoft Store e del Mac App Store) e questo sito web. L'app è gratuita e open source, quindi tutto ciò che segue si può verificare nel <a href=\"{repo}\">codice sorgente</a>.",
 
   stayH: "Cosa resta sul tuo computer",
   stayP: "Tutto ciò che crei con Native Screen viene salvato sul tuo computer e l'app non lo invia mai da nessuna parte:",
@@ -28,7 +28,8 @@ export default {
     ["Registrazione dello schermo", "Per registrare uno schermo, una finestra o un'area che scegli."],
     ["Microfono", "Per registrare la tua voce e le voci fuori campo, quando attivi il microfono."],
     ["Fotocamera", "Per registrare la fotocamera, quando la attivi."],
-    ["Accessibilità (macOS)", "Per elencare e selezionare le finestre, e per seguire clic e tasti durante una registrazione."],
+    ["Accessibilità (macOS, download diretto)", "Per elencare e selezionare le finestre, e per seguire clic e tasti durante una registrazione."],
+    ["Monitoraggio input (versione del Mac App Store)", "Solo durante una registrazione: i tasti premuti diventano scorciatoie sovrapposte. Questa versione lo chiede al posto di Accessibilità."],
     ["Riconoscimento vocale (macOS)", "Per creare sottotitoli con il riconoscimento di Apple sul dispositivo."],
     ["Input da tastiera e mouse (Windows)", "Solo durante una registrazione: i clic guidano gli zoom automatici e gli effetti dei clic, i tasti diventano la visualizzazione delle scorciatoie."],
     ["Attendibilità completa (Windows)", "Native Screen è un'app desktop. Ha bisogno di accesso completo per usare la cattura dello schermo, la cattura dell'audio di sistema, la codifica video hardware e la GPU di Windows, che le app pacchettizzate non possono raggiungere in altro modo."],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["Quando", "Dove", "Cosa viene inviato"],
   leave: [
     ["La prima volta che usi i sottotitoli o la rimozione dello sfondo della fotocamera su Windows", "Hugging Face (huggingface.co)", "Una richiesta di download del file del modello. Hugging Face vede il tuo indirizzo IP, come per qualsiasi download. L'app per macOS non scarica alcun modello."],
-    ["Controllo e download degli aggiornamenti (macOS, e Windows al di fuori del Microsoft Store)", "GitHub", "Una richiesta dell'ultima versione e, se presente, del file di aggiornamento. GitHub vede il tuo indirizzo IP e le normali intestazioni della richiesta. Non è incluso nulla su di te o sulle tue registrazioni. Puoi disattivare il controllo automatico nelle Impostazioni."],
+    ["Controllo e download degli aggiornamenti (macOS al di fuori del Mac App Store, e Windows al di fuori del Microsoft Store)", "GitHub", "Una richiesta dell'ultima versione e, se presente, del file di aggiornamento. GitHub vede il tuo indirizzo IP e le normali intestazioni della richiesta. Non è incluso nulla su di te o sulle tue registrazioni. Puoi disattivare il controllo automatico nelle Impostazioni."],
     ["Versione del Microsoft Store", "Microsoft", "Lo Store installa e aggiorna l'app, che non ha un sistema di aggiornamento proprio. Microsoft può raccogliere dati di diagnostica secondo la propria <a href=\"https://privacy.microsoft.com/privacystatement\">informativa sulla privacy</a>."],
+    ["Versione del Mac App Store", "Apple", "L'App Store installa e aggiorna l'app, che non ha un sistema di aggiornamento proprio e non si connette a internet. Apple può raccogliere dati di diagnostica secondo la propria <a href=\"https://www.apple.com/legal/privacy/\">informativa sulla privacy</a>."],
   ],
 
   agentsH: "Agenti IA",
-  agentsP: "Se attivi <strong>Impostazioni &gt; Agenti IA</strong> (disattivato per impostazione predefinita), agenti IA come Claude, Codex o Cursor possono controllare Native Screen tramite una connessione locale che solo i programmi in esecuzione con il tuo account utente su questo computer possono aprire. Un agente può fare ciò che fai tu nell'app: avviare una registrazione (la barra di registrazione e il suo conto alla rovescia sono sempre visibili), aprire e modificare progetti, leggere i dati e i fotogrammi dei progetti, esportare video e immagini su file e passare all'app un file video o immagine dal tuo computer da importare. Per questo l'app non invia nulla su internet, ma l'agente può inviare ciò che legge al proprio fornitore di IA secondo i termini di quel fornitore. Disattiva l'impostazione per bloccare ogni accesso degli agenti.",
+  agentsP: "Se attivi <strong>Impostazioni &gt; Agenti IA</strong> (disattivato per impostazione predefinita), agenti IA come Claude, Codex o Cursor possono controllare Native Screen tramite una connessione locale che solo i programmi in esecuzione con il tuo account utente su questo computer possono aprire. Un agente può fare ciò che fai tu nell'app: avviare una registrazione (la barra di registrazione e il suo conto alla rovescia sono sempre visibili), aprire e modificare progetti, leggere i dati e i fotogrammi dei progetti, esportare video e immagini su file e passare all'app un file video o immagine dal tuo computer da importare. Per questo l'app non invia nulla su internet, ma l'agente può inviare ciò che legge al proprio fornitore di IA secondo i termini di quel fornitore. Disattiva l'impostazione per bloccare ogni accesso degli agenti. La versione del Mac App Store non include questa funzione.",
 
   notH: "Cosa non facciamo",
   notList: [

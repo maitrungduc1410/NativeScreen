@@ -6,7 +6,7 @@ export default {
   h1: "Politique de confidentialité",
   note: "Cette traduction est fournie à titre indicatif. En cas de différence avec la <a href=\"/privacy/\">version anglaise</a>, la version anglaise prévaut.",
   lede: "Native Screen enregistre et monte sur votre ordinateur. Il n’y a ni compte, ni serveur à nous, ni statistiques, ni publicité. L’app n’envoie jamais vos enregistrements.",
-  scope: "Cette politique s’applique aux apps Native Screen pour macOS et Windows (y compris la version du Microsoft Store) et à ce site web. L’app est gratuite et open source : tout ce qui suit peut être vérifié dans le <a href=\"{repo}\">code source</a>.",
+  scope: "Cette politique s’applique aux apps Native Screen pour macOS et Windows (y compris les versions du Microsoft Store et du Mac App Store) et à ce site web. L’app est gratuite et open source : tout ce qui suit peut être vérifié dans le <a href=\"{repo}\">code source</a>.",
 
   stayH: "Ce qui reste sur votre ordinateur",
   stayP: "Tout ce que vous créez avec Native Screen est stocké sur votre ordinateur et n’est jamais envoyé nulle part par l’app :",
@@ -28,7 +28,8 @@ export default {
     ["Enregistrement de l’écran", "Pour enregistrer un écran, une fenêtre ou une zone que vous choisissez."],
     ["Micro", "Pour enregistrer votre voix et vos voix off, quand vous activez le micro."],
     ["Caméra", "Pour enregistrer votre caméra, quand vous l’activez."],
-    ["Accessibilité (macOS)", "Pour lister et sélectionner les fenêtres, et pour suivre les clics et les touches pendant un enregistrement."],
+    ["Accessibilité (macOS, téléchargement direct)", "Pour lister et sélectionner les fenêtres, et pour suivre les clics et les touches pendant un enregistrement."],
+    ["Surveillance de l’entrée (version du Mac App Store)", "Pendant un enregistrement seulement : les touches deviennent des incrustations de raccourcis. Cette version la demande à la place de l’accessibilité."],
     ["Reconnaissance vocale (macOS)", "Pour créer des sous-titres avec la reconnaissance d’Apple sur l’appareil."],
     ["Saisie clavier et souris (Windows)", "Pendant un enregistrement uniquement : les clics déclenchent les zooms automatiques et les effets de clic, les touches deviennent l’affichage des raccourcis."],
     ["Confiance totale (Windows)", "Native Screen est une app de bureau. Elle a besoin d’un accès complet pour utiliser la capture d’écran, la capture du son système, l’encodage vidéo matériel et le GPU de Windows, que les apps empaquetées ne peuvent pas atteindre autrement."],
@@ -40,12 +41,13 @@ export default {
   leaveCols: ["Quand", "Où", "Ce qui est envoyé"],
   leave: [
     ["La première fois que vous utilisez les sous-titres ou la suppression de l’arrière-plan de la caméra sur Windows", "Hugging Face (huggingface.co)", "Une requête de téléchargement du fichier du modèle. Hugging Face voit votre adresse IP, comme pour tout téléchargement. L’app macOS ne télécharge aucun modèle."],
-    ["Recherche et téléchargement des mises à jour (macOS, et Windows hors Microsoft Store)", "GitHub", "Une requête pour la dernière version et, s’il y en a une, le fichier de mise à jour. GitHub voit votre adresse IP et les en-têtes de requête habituels. Rien sur vous ni sur vos enregistrements n’y figure. Vous pouvez désactiver la vérification automatique dans les Réglages."],
+    ["Recherche et téléchargement des mises à jour (macOS hors Mac App Store, et Windows hors Microsoft Store)", "GitHub", "Une requête pour la dernière version et, s’il y en a une, le fichier de mise à jour. GitHub voit votre adresse IP et les en-têtes de requête habituels. Rien sur vous ni sur vos enregistrements n’y figure. Vous pouvez désactiver la vérification automatique dans les Réglages."],
     ["Version du Microsoft Store", "Microsoft", "Le Store installe et met à jour l’app, qui n’a pas de système de mise à jour propre. Microsoft peut collecter des données de diagnostic selon sa propre <a href=\"https://privacy.microsoft.com/privacystatement\">déclaration de confidentialité</a>."],
+    ["Version du Mac App Store", "Apple", "L’App Store installe et met à jour l’app, qui n’a pas de système de mise à jour propre et ne se connecte pas à Internet. Apple peut collecter des données de diagnostic selon sa propre <a href=\"https://www.apple.com/legal/privacy/\">politique de confidentialité</a>."],
   ],
 
   agentsH: "Agents IA",
-  agentsP: "Si vous activez <strong>Réglages &gt; Agents IA</strong> (désactivé par défaut), des agents IA comme Claude, Codex ou Cursor peuvent piloter Native Screen par une connexion locale que seuls les programmes exécutés sous votre compte utilisateur sur cet ordinateur peuvent ouvrir. Un agent peut faire ce que vous faites dans l’app : lancer un enregistrement (la barre d’enregistrement et son compte à rebours sont toujours affichés), ouvrir et modifier des projets, lire les informations et les images des projets, exporter des vidéos et des images dans des fichiers, et donner à l’app un fichier vidéo ou image de votre ordinateur à importer. L’app n’envoie rien sur Internet pour cela, mais l’agent peut envoyer ce qu’il lit à son fournisseur d’IA selon les conditions de ce fournisseur. Désactivez le réglage pour couper tout accès des agents.",
+  agentsP: "Si vous activez <strong>Réglages &gt; Agents IA</strong> (désactivé par défaut), des agents IA comme Claude, Codex ou Cursor peuvent piloter Native Screen par une connexion locale que seuls les programmes exécutés sous votre compte utilisateur sur cet ordinateur peuvent ouvrir. Un agent peut faire ce que vous faites dans l’app : lancer un enregistrement (la barre d’enregistrement et son compte à rebours sont toujours affichés), ouvrir et modifier des projets, lire les informations et les images des projets, exporter des vidéos et des images dans des fichiers, et donner à l’app un fichier vidéo ou image de votre ordinateur à importer. L’app n’envoie rien sur Internet pour cela, mais l’agent peut envoyer ce qu’il lit à son fournisseur d’IA selon les conditions de ce fournisseur. Désactivez le réglage pour couper tout accès des agents. La version du Mac App Store n’inclut pas cette fonction.",
 
   notH: "Ce que nous ne faisons pas",
   notList: [

@@ -1,5 +1,23 @@
 import Foundation
 import Observation
+
+#if APPSTORE
+/// The Mac App Store build: the store installs and updates the app, and two updaters must never act on one
+/// install (ADR-85), so this updater is never available and its menu item and setting stay hidden.
+@Observable
+@MainActor
+public final class AppUpdater {
+    public static let shared = AppUpdater()
+    public private(set) var canCheckForUpdates = false
+    public var isAvailable: Bool { false }
+    public var automaticallyChecksForUpdates: Bool {
+        get { false }
+        set {}
+    }
+    private init() {}
+    public func checkForUpdates() {}
+}
+#else
 import Sparkle
 
 /// App updates through Sparkle. The feed is `appcast.xml` on the latest GitHub release (`SUFeedURL` in Info.plist),
@@ -51,3 +69,4 @@ public final class AppUpdater {
         controller?.checkForUpdates(nil)
     }
 }
+#endif
