@@ -13,7 +13,7 @@ Free and open source. Native on macOS and Windows.
 [All releases](https://github.com/maitrungduc1410/NativeScreen/releases)
 
 <a href="https://www.producthunt.com/products/native-screen?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-native-screen" target="_blank" rel="noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=dark"><img alt="Native Screen on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=light"></picture></a>
-<a href="https://get.microsoft.com/installer/download/9nxxndrd06wq?referrer=appbadge" target="_self"><picture><source media="(prefers-color-scheme: dark)" srcset="https://get.microsoft.com/images/en-us%20light.svg"><img alt="Get it from Microsoft" height="54" src="https://get.microsoft.com/images/en-us%20dark.svg"></picture></a>
+<a href="https://apps.microsoft.com/detail/9nxxndrd06wq?referrer=appbadge&mode=full" target="_blank" rel="noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="https://get.microsoft.com/images/en-us%20light.svg"><img alt="Get it from Microsoft" height="54" src="https://get.microsoft.com/images/en-us%20dark.svg"></picture></a>
 
 </div>
 

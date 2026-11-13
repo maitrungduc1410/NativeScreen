@@ -25,6 +25,7 @@ export default {
   h1b: "It comes out edited.",
   lede: "Native Screen turns a plain screen recording into a polished demo: zooms that follow your clicks, a cursor that glides, captions, backgrounds, and a real multi-track timeline when you want control. Everything runs on your computer.",
   dlMac: "Download for Mac",
+  heroExe: "Windows installer (unsigned)",
   dlWin: "Download for Windows",
   req: "macOS 14 or later · Windows 10 or 11 · MIT license",
   heroAria: "A recording of a web app, polished by Native Screen: background, smooth cursor, click ripples, automatic zooms and a camera bubble with a photo background and a sticker",

@@ -12,7 +12,8 @@ const t = dictOf(locale);
 const repo = "https://github.com/maitrungduc1410/NativeScreen";
 const dmg = `${repo}/releases/latest/download/NativeScreen.dmg`;
 const exe = `${repo}/releases/latest/download/NativeScreen-win-Setup.exe`;
-const store = "https://get.microsoft.com/installer/download/9nxxndrd06wq?referrer=appbadge";
+// The Store page, not the direct installer download: visitors see what they get before anything downloads.
+const store = "https://apps.microsoft.com/detail/9nxxndrd06wq?referrer=appbadge&mode=full";
 // Microsoft's own badge artwork, served from this site (public/assets/store), one per language: "dark" is the black
 // badge for the light theme, "light" the white one for the dark theme.
 const badge = (variant: "dark" | "light") => `/assets/store/${locale.slug}-${variant}.svg`;
@@ -152,9 +153,12 @@ const jsonLd = {
     <div class="hero-foot">
       <p class="lede">{t.lede}</p>
       <div class="cta">
-        <a class="button primary" data-download data-windows-label={t.dlWin} href={dmg}>{t.dlMac}</a>
-        <a class="button" data-download-alt href={exe}>Windows</a>
-        <p class="fine">{t.req}</p>
+        <a class="button primary" data-download-mac href={dmg}>{t.dlMac}</a>
+        <a class="store-badge" data-download-store href={store} target="_blank" rel="noopener noreferrer">
+          <img class="badge-for-light" src={badge("dark")} width="161" height="44" alt={t.dlStore}>
+          <img class="badge-for-dark" src={badge("light")} width="161" height="44" alt={t.dlStore}>
+        </a>
+        <p class="fine">{t.req} · <a href="#download">{t.heroExe}</a></p>
         <a class="ph-badge" href="https://www.producthunt.com/products/native-screen?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-native-screen" target="_blank" rel="noopener noreferrer">
           <img class="ph-light" alt="Native Screen on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=light">
           <img class="ph-dark" alt="Native Screen on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=dark">
@@ -434,7 +438,7 @@ const jsonLd = {
         <h3>Windows</h3>
         <p class="fine">{t.winFine}</p>
         <div class="dl-actions">
-          <a class="store-badge" href={store} target="_self">
+          <a class="store-badge" href={store} target="_blank" rel="noopener noreferrer">
             <img class="badge-for-light" src={badge("dark")} width="161" height="44" alt={t.dlStore}>
             <img class="badge-for-dark" src={badge("light")} width="161" height="44" alt={t.dlStore}>
           </a>

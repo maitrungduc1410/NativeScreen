@@ -261,7 +261,8 @@ video.media { aspect-ratio: 16 / 9; object-fit: cover; }
 .dl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .dl-actions + p { color: var(--ink-2); font-size: 14px; margin-top: 16px; }
 /* Microsoft Store badge: the black one on the light theme, the white one on the dark theme. Same height as a button. */
-.store-badge { display: inline-flex; border-radius: 6px; }
+.store-badge { display: inline-flex; border-radius: 6px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+.store-badge:hover { transform: translate(0, -4px); box-shadow: 0 12px 40px 20px rgba(0, 0, 0, 0.05); }
 .store-badge img { display: block; height: 44px; width: auto; }
 .store-badge .badge-for-dark { display: none; }
 @media (prefers-color-scheme: dark) {

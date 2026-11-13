@@ -70,15 +70,15 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") langMenu.open = false; });
   }
 
-  // Primary download button matches the visitor's system.
+  // On Windows the Microsoft Store comes first (the signed build), and the Mac download steps back.
   const isWindows = /Windows/i.test(navigator.userAgent);
   if (isWindows) {
-    const primary = document.querySelector("[data-download]");
-    const alt = document.querySelector("[data-download-alt]");
-    if (primary && alt) {
-      [primary.href, alt.href] = [alt.href, primary.href];
-      primary.textContent = primary.dataset.windowsLabel;
-      alt.textContent = "macOS";
+    const mac = document.querySelector("[data-download-mac]");
+    const store = document.querySelector("[data-download-store]");
+    if (mac && store) {
+      mac.before(store);
+      mac.classList.remove("primary");
+      mac.textContent = "macOS";
     }
   }
 

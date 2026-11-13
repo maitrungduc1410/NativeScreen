@@ -25,6 +25,7 @@ export default {
   h1b: "편집까지 끝.",
   lede: "Native Screen은 평범한 화면 녹화를 완성도 높은 데모로 바꿉니다. 클릭을 따라가는 줌, 미끄러지듯 움직이는 커서, 자막, 배경, 그리고 직접 다루고 싶을 때 쓰는 진짜 멀티 트랙 타임라인까지. 모두 내 컴퓨터에서 실행됩니다.",
   dlMac: "Mac용 다운로드",
+  heroExe: "Windows 설치 프로그램(서명 없음)",
   dlWin: "Windows용 다운로드",
   req: "macOS 14 이상 · Windows 10 또는 11 · MIT 라이선스",
   heroAria: "Native Screen으로 다듬은 웹 앱 녹화: 배경, 부드러운 커서, 클릭 물결, 자동 줌, 사진 배경과 스티커가 있는 카메라 버블",
