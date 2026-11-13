@@ -72,7 +72,6 @@ public sealed partial class EditorSession
             Math.Max(16, SourceHeight * crop.Height),
             camera.Scale,
             HasRecordedCamera,
-            trajectory.DurationMs,
             cameraOnly: IsCameraOnly,
             faceTrack: FaceTrack);
         return new CanvasCoordinateTransform(canvasWidth, canvasHeight, stage.ScreenRect, crop, camera.IsLoupeMode ? Point01.Center : camera.Center01, camera.IsLoupeMode ? 1 : camera.Scale);

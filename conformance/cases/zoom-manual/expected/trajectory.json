@@ -293,11 +293,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.681703746926432,
-      "cy" : 0.3761110816410694,
+      "cx" : 0.72,
+      "cy" : 0.35,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.819853296088508
+      "scale" : 2.2
     },
     "cursor" : {
       "kind" : "iBeam",
@@ -310,11 +310,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5852564894402047,
-      "cy" : 0.44187057538167823,
+      "cx" : 0.72,
+      "cy" : 0.35,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.268037397493955
+      "scale" : 2.2
     },
     "cursor" : {
       "kind" : "pointingHand",
@@ -327,11 +327,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5225634219915881,
-      "cy" : 0.48461584864209917,
+      "cx" : 0.72,
+      "cy" : 0.35,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.0592573659827258
+      "scale" : 2.2
     },
     "cursor" : {
       "kind" : "pointingHand",
@@ -344,11 +344,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5027796360943478,
-      "cy" : 0.4981047935720354,
+      "cx" : 0.72,
+      "cy" : 0.35,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.006939484302624
+      "scale" : 2.2
     },
     "cursor" : {
       "kind" : "pointingHand",
@@ -361,11 +361,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.72,
+      "cy" : 0.35,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 2.2
     },
     "cursor" : {
       "clickProgress" : 0.4259259259259266,
@@ -379,11 +379,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.6654163353173138,
+      "cy" : 0.3872161350109225,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.6952690925688945
     },
     "cursor" : {
       "clickProgress" : 0.8888888888888888,
@@ -397,11 +397,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5907591929904498,
+      "cy" : 0.43811873205196555,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.2903605297958771
     },
     "cursor" : {
       "kind" : "crosshair",
@@ -414,11 +414,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5414488112790583,
+      "cy" : 0.4717394468551876,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.1145360156432493
     },
     "cursor" : {
       "kind" : "arrow",
@@ -431,11 +431,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5172288044639162,
+      "cy" : 0.4882530878655113,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.0446221247763285
     },
     "cursor" : {
       "kind" : "arrow",
@@ -448,11 +448,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5068727817801123,
+      "cy" : 0.4953140124226499,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.017335348380028
     },
     "cursor" : {
       "kind" : "arrow",
@@ -465,11 +465,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5026964029666834,
+      "cy" : 0.4981615434318063,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.0067302906005602
     },
     "cursor" : {
       "kind" : "arrow",
@@ -482,11 +482,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5010509968955997,
+      "cy" : 0.4992834112075449,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.0026125852427608
     },
     "cursor" : {
       "kind" : "arrow",
@@ -499,11 +499,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5004086167657976,
+      "cy" : 0.49949345029033304,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.0010141268306372
     },
     "cursor" : {
       "kind" : "arrow",

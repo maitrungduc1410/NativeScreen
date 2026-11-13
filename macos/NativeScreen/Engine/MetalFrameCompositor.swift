@@ -1756,8 +1756,8 @@ public final class MetalFrameCompositor {
     /// How long a timeline layout change (segment boundary, silence hide, voiceover hide) takes to animate.
     private static let stageTransitionMs = 380.0
 
-    /// Placement at `sourceTimeMs`, blended across layout changes on the timeline (see `timelineStageLayout`).
-    /// Depends only on the project and the time, so preview and export produce the same frames.
+    /// Placement at `sourceTimeMs`, blending from the previous layout for `stageTransitionMs` after a change on the
+    /// timeline. Depends only on the project and the time, so preview and export produce the same frames.
     static func resolvedStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
@@ -1810,11 +1810,6 @@ public final class MetalFrameCompositor {
     }
 
     /// Placement from the timeline's layout segments, with transitions.
-    /// A change animates over `stageTransitionMs` after it happens, except leaving a timeline item that changes the
-    /// stage (a camera layout segment, or a voiceover that hides the recording): that animates over the item's last
-    /// `stageTransitionMs`, so nothing of it is left once the playhead leaves it, mirroring how it enters at the start.
-    /// An item shorter than two transitions splits its length between the way in and the way out. Hiding the camera
-    /// during silence has no timeline item and keeps animating after the change.
     private static func timelineStageLayout(
         session: ProjectSession,
         sourceTimeMs: Double,
@@ -1822,86 +1817,28 @@ public final class MetalFrameCompositor {
         screenSourceSize: CGSize,
         zoomScale: Double
     ) -> StageLayout {
-        func raw(_ key: StageLayout.Key) -> StageLayout {
-            Self.rawStageLayout(key: key, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
-        }
         let keyNow = Self.stageKey(session: session, at: sourceTimeMs)
-        var stage = raw(keyNow)
-
-        // 1. Blend in from the layout before a change behind the playhead.
+        let current = Self.rawStageLayout(key: keyNow, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
         let windowStart = sourceTimeMs - Self.stageTransitionMs
-        if windowStart > 0 {
-            let keyBefore = Self.stageKey(session: session, at: windowStart)
-            if keyBefore != keyNow {
-                // Binary-search the change point inside the window (to ~1 ms).
-                var lo = windowStart
-                var hi = sourceTimeMs
-                while hi - lo > 1.0 {
-                    let mid = (lo + hi) * 0.5
-                    if Self.stageKey(session: session, at: mid) == keyNow {
-                        hi = mid
-                    } else {
-                        lo = mid
-                    }
-                }
-                // Leaving an item already animated before its end (step 2).
-                let isAnimatedExit = Self.exitingStageItem(session: session, at: lo).map { $0.end <= hi + 0.01 } ?? false
-                if !isAnimatedExit {
-                    let duration = Self.enteredStageItem(session: session, at: hi).map(Self.itemTransitionMs) ?? Self.stageTransitionMs
-                    let previous = raw(Self.stageKey(session: session, at: lo))
-                    stage = StageLayout.blend(previous, stage, StageLayout.ease(CGFloat((sourceTimeMs - hi) / duration)))
-                }
+        guard windowStart > 0 else { return current }
+        let keyBefore = Self.stageKey(session: session, at: windowStart)
+        guard keyBefore != keyNow else { return current }
+
+        // Binary-search the change point inside the window (to ~1 ms).
+        var lo = windowStart
+        var hi = sourceTimeMs
+        while hi - lo > 1.0 {
+            let mid = (lo + hi) * 0.5
+            if Self.stageKey(session: session, at: mid) == keyNow {
+                hi = mid
+            } else {
+                lo = mid
             }
         }
-
-        // 2. Blend out toward the layout after an item that ends just ahead of the playhead.
-        if let item = Self.exitingStageItem(session: session, at: sourceTimeMs) {
-            let duration = Self.itemTransitionMs(item)
-            let exitStart = item.end - duration
-            if sourceTimeMs > exitStart {
-                let next = raw(Self.stageKey(session: session, at: item.end + 0.5))
-                stage = StageLayout.blend(stage, next, StageLayout.ease(CGFloat((sourceTimeMs - exitStart) / duration)))
-            }
-        }
-        return stage
-    }
-
-    /// Transition length at either end of a timeline item.
-    private static func itemTransitionMs(_ item: (start: Double, end: Double)) -> Double {
-        min(Self.stageTransitionMs, max(1.0, (item.end - item.start) * 0.5))
-    }
-
-    /// The item active at `t` whose way out animates inside it (the one ending first if several do). Not when an item
-    /// of the same kind takes over right at its end (that one animates in), and not at the end of the recording.
-    private static func exitingStageItem(session: ProjectSession, at t: Double) -> (start: Double, end: Double)? {
-        let recordingEndMs = session.metadata.durationMs - 1.0
-        var found: (start: Double, end: Double)?
-        func consider(_ start: Double, _ end: Double) {
-            if end < recordingEndMs, found.map({ end < $0.end }) ?? true {
-                found = (start, end)
-            }
-        }
-        if let segment = session.activeCameraLayoutSegment(atSourceMs: t),
-           session.activeCameraLayoutSegment(atSourceMs: segment.sourceEndMs + 0.5) == nil {
-            consider(segment.sourceStartMs, segment.sourceEndMs)
-        }
-        for voiceover in session.activeVoiceovers(atSourceMs: t) where voiceover.hideRecording {
-            if !session.isOriginalRecordingHiddenAndMutedByVoiceover(atSourceMs: voiceover.sourceEndMs + 0.5) {
-                consider(voiceover.sourceStartMs, voiceover.sourceEndMs)
-            }
-        }
-        return found
-    }
-
-    /// The item that starts at `t` (within 2 ms), to shorten the way in of a short one.
-    private static func enteredStageItem(session: ProjectSession, at t: Double) -> (start: Double, end: Double)? {
-        if let segment = session.activeCameraLayoutSegment(atSourceMs: t), abs(segment.sourceStartMs - t) <= 2.0 {
-            return (segment.sourceStartMs, segment.sourceEndMs)
-        }
-        if let voiceover = session.activeVoiceovers(atSourceMs: t).first(where: { $0.hideRecording && abs($0.sourceStartMs - t) <= 2.0 }) {
-            return (voiceover.sourceStartMs, voiceover.sourceEndMs)
-        }
-        return nil
+        let previousKey = Self.stageKey(session: session, at: lo)
+        let previous = Self.rawStageLayout(key: previousKey, session: session, canvasRect: canvasRect, screenSourceSize: screenSourceSize, zoomScale: zoomScale)
+        let progress = StageLayout.ease(CGFloat((sourceTimeMs - hi) / Self.stageTransitionMs))
+        return StageLayout.blend(previous, current, progress)
     }
 
     // Live preview spring state (edits glide; playback and scrubbing follow the timeline exactly).

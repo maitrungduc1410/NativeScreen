@@ -70,7 +70,6 @@ public sealed class LoadedProject
             sourceH,
             zoom,
             HasRecordedCamera,
-            Metadata.DurationMs,
             cameraOnly: IsCameraOnly);
     }
 }

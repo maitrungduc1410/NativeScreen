@@ -18,4 +18,4 @@ Do not edit by hand. Regenerate after changing the macOS engines.
 - Default canvas is 1280×720. Aspect-ratio cases use a canvas with a 720 px short side (9:16 is 720×1280).
 - `shortcuts.json` includes `typingSuggestions` from the same keystrokes.
 
-Cases: basic, wallpaper-blur, mesh, masks, zoom-follow, zoom-manual, loupe, cursor-styles, drag-sync, slices-speed-cut, camera-overlay, camera-split, camera-split-auto, camera-split-flipped, camera-cutout, camera-layout-transitions, camera-layout-exit, captions-dark, captions-light, keycaps, device-mockup, device-mockup-iphone, custom-look-warmth, aspect-16x9, aspect-9x16, aspect-1x1, aspect-4x3
+Cases: basic, wallpaper-blur, mesh, masks, zoom-follow, zoom-manual, loupe, cursor-styles, drag-sync, slices-speed-cut, camera-overlay, camera-split, camera-split-auto, camera-split-flipped, camera-cutout, camera-layout-transitions, captions-dark, captions-light, keycaps, device-mockup, device-mockup-iphone, custom-look-warmth, aspect-16x9, aspect-9x16, aspect-1x1, aspect-4x3

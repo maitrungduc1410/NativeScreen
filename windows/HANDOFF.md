@@ -27,52 +27,19 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
-## 2026-11-13, A timeline item leaves no effect after its end (zoom, loupe, voiceover hide, captions)
+## 2026-11-13, Back to animating out after an item ends (layout exits and ADR-84 reverted)
 
 ### Writer
-- **Rule (`spec/06` ADR-84):** the preview shows exactly the items under the playhead. An item animates out inside its last moments, so nothing of it is left once the playhead leaves it. Before, zooms, loupes, voiceover hides and captions began their way out on the item's end and kept moving after it (a zoom for about 1.2 s).
-- **Checked and already fine:** masks and annotations (drawn only inside their items), shortcut keycaps (fade inside their display window), camera layout segments (done in the last entry).
-- **macOS changes, to port one to one:**
-  1. `SpringTrajectorySolver.swift` (camera loop), port to `NativeScreen.Core/Motion/SpringTrajectorySolver.cs`:
-     - `zoomOutSettleMs`: step the camera spring with `stepClampedSpring` from 2.0 to target 1.0 at the solver `dt` until within 0.02 (at most 1500 ms).
-     - Per zoom `releaseMs`: 0 when the next zoom starts within 1 ms of its end or the zoom is instant, otherwise `min(zoomOutSettleMs, duration / 2)`.
-     - In a zoom with `tMs > end - releaseMs`: treat it as inactive for the targets (scale 1, focus 0.5, loupe presence 0, keep its loupe config). Weight `w = smoothstep((tMs - releaseStart) / releaseMs)`.
-     - After stepping the springs, output `rectX * (1 - w)`, `rectY * (1 - w)`, `1 + (rectW - 1) * (1 - w)` and `loupePresence * (1 - w)`. Recover the center from these, and use them for `isLoupeMode`. On these frames the scale velocity is the finite difference of the output scale.
-     - With no zoom active and at least one zoom behind (`zoomCursorIdx > 0`): set the rect to (0, 0, 1) with zero velocities, loupe scale 1 and presence 0 with zero velocities. Still spring the loupe center toward its target (the pre-warm).
-  2. `MetalFrameCompositor.swift` `timelineStageLayout`, port to `StageLayoutEngine.cs`: the exit rule now covers voiceovers that hide the recording as well as layout segments.
-     - `exitingStageItem(t)`: the earliest ending of these, if any: the layout segment at `t`, when no layout segment is active at `end + 0.5`; each voiceover at `t` with `hideRecording`, when the recording is not hidden by a voiceover at `end + 0.5`. Both only when `end < recordingDurationMs - 1`.
-     - `enteredStageItem(t)`: a layout segment or a hiding voiceover starting within 2 ms of `t`.
-     - Step 1 skips the blend when `exitingStageItem(lo).end <= hi + 0.01`, and uses `itemTransitionMs(enteredStageItem(hi))` (`min(380, max(1, length / 2))`) for the way in.
-     - Step 2 blends toward `StageKey(end + 0.5)` over the exiting item's last `itemTransitionMs`.
-  3. `CaptionLineLayout.swift`, port to `NativeScreen.Core/Captions/CaptionLineLayout.cs`:
-     - `Line.fadeOutStartMs`: defaults to `endMs`. In `linesByTrack`, after sorting a track's lines, a line whose next line does not start within 1 ms of its end gets `endMs - min(150, (endMs - startMs) / 2)`.
-     - The box opacity target and `targetWordOpacity` use `fadeOutStartMs` instead of `endMs`. Word offsets keep `endMs`.
-     - `frame` returns nothing when no line has `startMs <= t <= endMs`.
-- **Built on macOS:** BUILD SUCCEEDED. Conformance regenerated, and only these changed: `zoom-manual`, `zoom-follow` (trajectory, stage, frames), `loupe` (trajectory, one frame), `captions-dark`, `captions-light` (captions.json), and `camera-layout-exit` (project now has a hiding voiceover at 5000 to 5600 ms, plus its `stage.json`). Every other case gives the same json as before. `zoom-manual` scale: 2.2 at 3200, 1.268 at 3600, 1.007 at 4000, 1 on the block's end at 4200 (was 2.2 there and 1.007 at 5400).
-- **How to verify:** `verify.ps1`: `ConformanceTests` and `FrameFixtureTests` fail on the cases above until the port is in. In the app: add a zoom in the middle of a recording and scrub out of its right edge: the frame is at 1x on the edge and stays still after it. Same for a loupe, a voiceover with "Hide recording" (the camera is back on its end), and a caption block followed by a gap (the caption is gone on its end).
-- **Open VERIFY items:** none beyond the above.
-- **Risks / unsure:** the zoom release length comes from the spring, so it changes with the motion preset (it is measured, not a constant). Windows must measure it with its own `StepClampedSpring` at the same `dt` to match.
-
-## 2026-11-12, Camera layout segments animate out before their end
-
-### Writer
-- **Bug:** a layout segment (say `Fullscreen camera`) animated in when the playhead entered it, but the way out only started after the playhead had left it, so the camera stayed fullscreen past the segment's right edge. Both platforms ran every stage transition for 380 ms after the change point.
-- **Fix (macOS, `MetalFrameCompositor.swift` `timelineStageLayout`):**
-  1. Unchanged: a change behind the playhead blends in from the previous layout over 380 ms, found by the binary search. New: when the change is the start of a segment, the length is `segmentTransitionMs(segment) = min(380, max(1, (end - start) / 2))`.
-  2. Skip step 1 when the change is leaving a segment that "animates its exit": the segment active at `lo` animates its exit and no segment is active at `hi`.
-  3. New: if a segment is active at `t` and animates its exit, with `d = segmentTransitionMs(segment)` and `exitStart = end - d`, when `t > exitStart` blend the step 1 result toward `Raw(StageKey(end + 0.5))` with `Ease((t - exitStart) / d)`.
-  - `animatesExit(segment)`: `segment.end < recordingDurationMs - 1` and no enabled segment is active at `end + 0.5` (back to back segments keep the old behavior: the next one animates in).
-  - Silence and voiceover hides are unchanged.
-- **Conformance:** regenerated on macOS. All 26 existing cases give the same `stage.json` as before. New case `conformance/cases/camera-layout-exit` (default overlay, `Fullscreen camera` 1000 to 3000 ms, `Split screen` 4000 to 4400 ms): fullscreen is reached at 1400, half way back at 2800, normal at 3000; the 400 ms split peaks at 4200 and is back to normal at 4400. `conformance/README.md` lists it. `spec/06` updated.
-- **Port (Windows):** `NativeScreen.Core/Layout/StageLayoutEngine.cs` `Resolve` (the method with the `TransitionMs` binary search): the same three steps. It needs the recording duration; pass it in from the callers (preview and export) next to `hasRecordedCamera`. `ActiveLayout(document, t)` already matches `activeCameraLayoutSegment` (inclusive end, skips disabled, nil when the track is hidden).
-- **How to verify:** `verify.ps1`: `ConformanceTests` and `FrameFixtureTests` pick up `camera-layout-exit` by folder, so they fail until the port is in and pass after. In the app: add a `Fullscreen camera` segment in the middle of a camera project and scrub out of its right edge: the camera is back in its corner when the playhead reaches the edge, and stays there after it.
-- **Open VERIFY items:** none beyond the above.
-
-### Verifier
-- **Result:** PASS. `ConformanceTests` picks up `camera-layout-exit` and matches its `stage.json`; the other 26 cases are unchanged.
-- **verify.ps1:** Debug x64 solution build, 0 warnings. Core 333, Rendering 34 (`FrameFixtureTests` included), Media 29 passed.
-- **Changes made:** `StageLayoutEngine.Resolved` has the three steps (`SegmentTransitionMs`, `AnimatesExit`). The recording length comes from the new `SpringTrajectorySolver.DurationMs` (the `durationMs` it was built with, from `metadata.json`), so preview, export and the canvas transform get it without new plumbing; `Resolve` takes it as a required `recordingDurationMs` after `hasRecordedCamera`. `LoadedProject.StageAt` passes `Metadata.DurationMs`.
-- **Next:** scrub out of a `Fullscreen camera` segment in the app.
+- **Decision:** a segment means "start the effect here, and start undoing it here". So the way out starts on the segment's end and runs after it, as it did before 2026-11-12. Animating out inside the segment's last moments made the frames look worse and edits harder to place. Reverted on both platforms:
+  - the camera layout exit (Windows part of `d70210c`, macOS part of `b4e9346`);
+  - ADR-84 (`7ece21c`): zoom, loupe, voiceover "Hide recording" and caption exits.
+  - Kept: the "Add camera layout" popover and flyout, and the translations.
+- **macOS:** `MetalFrameCompositor.swift`, `SpringTrajectorySolver.swift`, `CaptionLineLayout.swift` and `ConformanceFixtureGenerator.swift` are back to their code before those commits. `spec/06` ADR-84 is removed and the stage note is back to "blend over 380 ms after the change".
+- **Windows (done on the Mac, not built):** `StageLayoutEngine.cs` and `SpringTrajectorySolver.cs` are back to their code before `d70210c`. The `recordingDurationMs` argument and `SpringTrajectorySolver.DurationMs` are gone, and so are the callers that passed them (`LoadedProject.cs`, `EditorSession.Annotations.cs`, `FrameCompositor.Compose.cs`, `PreviewOverlay.cs`; its `Loc.T` mask hint stays).
+- **Port (Windows):** if the ADR-84 port (zoom, loupe, voiceover, captions) was made locally and never pushed, discard it. Nothing else to port.
+- **Conformance:** `camera-layout-exit` is deleted. `zoom-manual`, `zoom-follow`, `loupe`, `captions-dark` and `captions-light` are back to their files before `7ece21c`. Regenerated on macOS to check: every case's json matches the files in the repo.
+- **How to verify:** `verify.ps1` builds with 0 warnings and every conformance case passes. In the app, scrub out of a zoom or a `Fullscreen camera` segment: the zoom out or the layout change starts when the playhead leaves the segment.
+- **Open VERIFY items:** the Windows changes above were made without a Windows build.
 
 ## 2026-11-12, Quick dock: camera layouts behind one button
 

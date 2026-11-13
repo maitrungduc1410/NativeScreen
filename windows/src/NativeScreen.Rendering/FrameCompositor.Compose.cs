@@ -113,7 +113,7 @@ public sealed partial class FrameCompositor
         var cropWidth = Math.Max(16, screenWidth * document.Canvas.CropRect01.Width);
         var cropHeight = Math.Max(16, screenHeight * document.Canvas.CropRect01.Height);
         var stage = new StageLayoutEngine().Resolve(
-            document, request.SourceMs, width, height, cropWidth, cropHeight, camera.Scale, request.HasCamera && !request.CameraOnly, request.Trajectory.DurationMs, cameraOnly: request.CameraOnly, faceTrack: request.FaceTrack);
+            document, request.SourceMs, width, height, cropWidth, cropHeight, camera.Scale, request.HasCamera && !request.CameraOnly, cameraOnly: request.CameraOnly, faceTrack: request.FaceTrack);
         var screen = stage.ScreenRect;
         // A camera-only picture that fills the canvas has no frame: no corners, inset or shadow.
         var fillsCanvas = request.CameraOnly && document.Camera.CameraOnlyFraming.FillsCanvas();

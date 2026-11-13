@@ -81,12 +81,11 @@ public sealed class StageLayoutEngine
         double sourceHeight,
         double zoomScale,
         bool hasRecordedCamera,
-        double recordingDurationMs,
         bool cameraHiddenBySilence = false,
         bool cameraOnly = false,
         FaceTrack? faceTrack = null)
     {
-        var layout = Resolved(document, sourceMs, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, hasRecordedCamera, recordingDurationMs, cameraHiddenBySilence, cameraOnly);
+        var layout = Resolved(document, sourceMs, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, hasRecordedCamera, cameraHiddenBySilence, cameraOnly);
         // A camera-only picture that fills the canvas replaces the screen rect, so every user of the stage agrees (spec/06 ADR-77).
         var screenRect = cameraOnly && document.Camera.CameraOnlyFraming.FillsCanvas()
             ? CameraOnlyLayout.FillRect(canvasWidth, canvasHeight, sourceWidth, sourceHeight, CameraOnlyLayout.FaceCenter01(document, faceTrack, sourceMs), document.Camera.FaceTrackingZoom)
@@ -171,65 +170,42 @@ public sealed class StageLayoutEngine
         double sourceHeight,
         double zoomScale,
         bool hasRecordedCamera,
-        double recordingDurationMs,
         bool cameraHiddenBySilence,
         bool cameraOnly)
     {
-        Layout RawAt(double t) => Raw(StageKey(document, t, hasRecordedCamera, cameraHiddenBySilence), document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, cameraOnly);
-
         var now = StageKey(document, sourceMs, hasRecordedCamera, cameraHiddenBySilence);
-        var stage = Raw(now, document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, cameraOnly);
-
-        // 1. Blend in from the layout before a change behind the playhead.
+        var current = Raw(now, document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, cameraOnly);
         var windowStart = sourceMs - TransitionMs;
-        if (windowStart > 0 && !StageKey(document, windowStart, hasRecordedCamera, cameraHiddenBySilence).Same(now))
+        if (windowStart <= 0)
         {
-            var lo = windowStart;
-            var hi = sourceMs;
-            while (hi - lo > 1)
-            {
-                var mid = (lo + hi) * 0.5;
-                if (StageKey(document, mid, hasRecordedCamera, cameraHiddenBySilence).Same(now))
-                {
-                    hi = mid;
-                }
-                else
-                {
-                    lo = mid;
-                }
-            }
+            return current;
+        }
 
-            // Leaving a segment that already animated out before its end (step 2).
-            var animatedExit = ActiveLayout(document, lo) is { } left && AnimatesExit(document, left, recordingDurationMs) && ActiveLayout(document, hi) is null;
-            if (!animatedExit)
+        var before = StageKey(document, windowStart, hasRecordedCamera, cameraHiddenBySilence);
+        if (before.Same(now))
+        {
+            return current;
+        }
+
+        var lo = windowStart;
+        var hi = sourceMs;
+        while (hi - lo > 1)
+        {
+            var mid = (lo + hi) * 0.5;
+            if (StageKey(document, mid, hasRecordedCamera, cameraHiddenBySilence).Same(now))
             {
-                var duration = ActiveLayout(document, hi) is { } entered && Math.Abs(entered.SourceStartMs - hi) <= 2 ? SegmentTransitionMs(entered) : TransitionMs;
-                stage = Blend(RawAt(lo), stage, Ease((sourceMs - hi) / duration));
+                hi = mid;
+            }
+            else
+            {
+                lo = mid;
             }
         }
 
-        // 2. Blend out toward the layout after a segment that ends just ahead of the playhead, so it is back to normal at the
-        // segment's end, mirroring the way in (spec/06, layout motion).
-        if (ActiveLayout(document, sourceMs) is { } segment && AnimatesExit(document, segment, recordingDurationMs))
-        {
-            var duration = SegmentTransitionMs(segment);
-            var exitStart = segment.SourceEndMs - duration;
-            if (sourceMs > exitStart)
-            {
-                stage = Blend(stage, RawAt(segment.SourceEndMs + 0.5), Ease((sourceMs - exitStart) / duration));
-            }
-        }
-
-        return stage;
+        var previous = Raw(StageKey(document, lo, hasRecordedCamera, cameraHiddenBySilence), document, canvasWidth, canvasHeight, sourceWidth, sourceHeight, zoomScale, cameraOnly);
+        var progress = Ease((sourceMs - hi) / TransitionMs);
+        return Blend(previous, current, progress);
     }
-
-    /// <summary>Transition length at either end of a layout segment: a short one splits its length between the way in and out.</summary>
-    private static double SegmentTransitionMs(CameraLayoutSegment segment) =>
-        Math.Min(TransitionMs, Math.Max(1, (segment.SourceEndMs - segment.SourceStartMs) * 0.5));
-
-    /// <summary>Whether leaving the segment animates inside it: not when another segment starts right at its end (that one animates in), and not at the end of the recording.</summary>
-    private static bool AnimatesExit(ProjectDocument document, CameraLayoutSegment segment, double recordingDurationMs) =>
-        segment.SourceEndMs < recordingDurationMs - 1 && ActiveLayout(document, segment.SourceEndMs + 0.5) is null;
 
     private static Key StageKey(ProjectDocument document, double t, bool hasRecordedCamera, bool silenceOverride)
     {

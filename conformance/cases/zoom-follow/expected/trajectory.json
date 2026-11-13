@@ -379,11 +379,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.3013813211557645,
-      "cy" : 0.29705127652682206,
+      "cx" : 0.25506995037487057,
+      "cy" : 0.25,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.6832110800737556
+      "scale" : 2
     },
     "cursor" : {
       "clickProgress" : 0.8888888888888888,
@@ -397,11 +397,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.4106461316957406,
-      "cy" : 0.40870893413495013,
+      "cx" : 0.25506995037487057,
+      "cy" : 0.25,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.2233644979116283
+      "scale" : 2
     },
     "cursor" : {
       "kind" : "crosshair",
@@ -414,11 +414,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.47697004037739527,
-      "cy" : 0.4764713046024226,
+      "cx" : 0.3332355303689608,
+      "cy" : 0.2806317464437526,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.0493811383189386
+      "scale" : 2
     },
     "cursor" : {
       "kind" : "arrow",
@@ -431,11 +431,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.4971860957102609,
-      "cy" : 0.4971251730542921,
+      "cx" : 0.44848001149548444,
+      "cy" : 0.325794076527869,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1.00578290358552
+      "scale" : 2
     },
     "cursor" : {
       "kind" : "arrow",
@@ -448,11 +448,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5020978314223896,
+      "cy" : 0.3468059779938585,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 2
     },
     "cursor" : {
       "kind" : "arrow",
@@ -465,11 +465,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5100224941246825,
+      "cy" : 0.3909276974426819,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.579390910474079
     },
     "cursor" : {
       "kind" : "arrow",
@@ -482,11 +482,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5059678768341678,
+      "cy" : 0.4423261099082145,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.241967108163231
     },
     "cursor" : {
       "kind" : "arrow",
@@ -499,11 +499,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5027296384420357,
+      "cy" : 0.47423073280168737,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.0954466797027087
     },
     "cursor" : {
       "kind" : "arrow",
@@ -516,11 +516,11 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
+      "cx" : 0.5011288051745254,
+      "cy" : 0.48939880377129386,
       "loupePresence" : 0,
       "loupeScale" : 1,
-      "scale" : 1
+      "scale" : 1.0371851039802735
     },
     "cursor" : {
       "kind" : "arrow",

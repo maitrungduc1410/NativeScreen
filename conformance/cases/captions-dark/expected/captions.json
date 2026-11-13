@@ -147,7 +147,7 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 0.1858649425635365,
+        "opacity" : 1,
         "text" : "frame"
       }
     ]
@@ -242,7 +242,7 @@
     "words" : [
       {
         "isSpokenNow" : true,
-        "opacity" : 0.971255759554278,
+        "opacity" : 1,
         "text" : "today"
       }
     ]
@@ -250,7 +250,11 @@
   {
     "sourceMs" : 4800,
     "words" : [
-
+      {
+        "isSpokenNow" : true,
+        "opacity" : 0.5390565868621443,
+        "text" : "today"
+      }
     ]
   },
   {

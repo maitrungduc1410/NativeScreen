@@ -327,10 +327,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.20518484393160516,
-      "cy" : 0.2324882917363086,
-      "loupePresence" : 0.6060221673865334,
-      "loupeScale" : 1.898184706108066,
+      "cx" : 0.20046646952864206,
+      "cy" : 0.22948073230143404,
+      "loupePresence" : 1,
+      "loupeScale" : 2.4,
       "scale" : 1
     },
     "cursor" : {
@@ -344,10 +344,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.20504134174319744,
-      "cy" : 0.23246720654165373,
-      "loupePresence" : 0.1562263136202913,
-      "loupeScale" : 1.3087237687261892,
+      "cx" : 0.20453913385220795,
+      "cy" : 0.23296630115038186,
+      "loupePresence" : 1,
+      "loupeScale" : 2.4,
       "scale" : 1
     },
     "cursor" : {
@@ -361,10 +361,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.20504134174319744,
-      "cy" : 0.23246720654165373,
-      "loupePresence" : 0.027428799619267422,
-      "loupeScale" : 1.0975652561272018,
+      "cx" : 0.22893442643229642,
+      "cy" : 0.2515654919411779,
+      "loupePresence" : 1,
+      "loupeScale" : 2.4,
       "scale" : 1
     },
     "cursor" : {
@@ -379,10 +379,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
-      "loupePresence" : 0.002566070717937334,
-      "loupeScale" : 1.0304253619445323,
+      "cx" : 0.2728798381888803,
+      "cy" : 0.2739017931024639,
+      "loupePresence" : 1,
+      "loupeScale" : 2.4,
       "scale" : 1
     },
     "cursor" : {
@@ -397,10 +397,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1.0094668625513008,
+      "cx" : 0.33313086642397033,
+      "cy" : 0.29999602398598646,
+      "loupePresence" : 1,
+      "loupeScale" : 2.4,
       "scale" : 1
     },
     "cursor" : {
@@ -414,10 +414,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1,
+      "cx" : 0.3487140896333879,
+      "cy" : 0.29999602398598646,
+      "loupePresence" : 0.4797001112005147,
+      "loupeScale" : 1.6715801556807206,
       "scale" : 1
     },
     "cursor" : {
@@ -431,10 +431,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1,
+      "cx" : 0.3488552690003077,
+      "cy" : 0.29999602398598646,
+      "loupePresence" : 0.15808738006167222,
+      "loupeScale" : 1.221322332086341,
       "scale" : 1
     },
     "cursor" : {
@@ -448,10 +448,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1,
+      "cx" : 0.3488552690003077,
+      "cy" : 0.29999602398598646,
+      "loupePresence" : 0.04963573665565256,
+      "loupeScale" : 1.0694900313179145,
       "scale" : 1
     },
     "cursor" : {
@@ -465,10 +465,10 @@
   },
   {
     "camera" : {
-      "cx" : 0.5,
-      "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1,
+      "cx" : 0.3488552690003077,
+      "cy" : 0.29999602398598646,
+      "loupePresence" : 0.015461890903521477,
+      "loupeScale" : 1.0216466472649315,
       "scale" : 1
     },
     "cursor" : {
@@ -484,8 +484,8 @@
     "camera" : {
       "cx" : 0.5,
       "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1,
+      "loupePresence" : 0.004810087901979459,
+      "loupeScale" : 1.0067341230627722,
       "scale" : 1
     },
     "cursor" : {
@@ -501,8 +501,8 @@
     "camera" : {
       "cx" : 0.5,
       "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1,
+      "loupePresence" : 0.0014960481214026365,
+      "loupeScale" : 1.0020944673699654,
       "scale" : 1
     },
     "cursor" : {
@@ -518,8 +518,8 @@
     "camera" : {
       "cx" : 0.5,
       "cy" : 0.5,
-      "loupePresence" : 0,
-      "loupeScale" : 1,
+      "loupePresence" : 0.0004652876469277105,
+      "loupeScale" : 1.0006514027056992,
       "scale" : 1
     },
     "cursor" : {
