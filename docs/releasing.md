@@ -106,8 +106,14 @@ The Store page text and images for all 15 UI languages are in `windows/store-lis
 3. How it was made: the text comes from the website copy in `site/src/i18n/<language>.ts` (`lede`, the feature headings
    and paragraphs, `desc` as the short description), plus 7 search terms per language. The screenshots are a recording of
    `tools/demo-page` (made-up data) opened in an app window without an address bar, styled with zooms, captions and
-   annotations, then opened with `NS_LANGUAGE=<id>` for each language with the caption and annotation text translated.
-   The editor, Captions, a selected annotation and the Export panel are captured at 12.6 s.
+   annotations, then opened with `NS_LANGUAGE=<id>` for each language with the caption and annotation text translated:
+   a selected annotation (12.6 s) and the Export panel in the dark theme, and the Background tab in the light theme
+   (9 s). The second shot is a camera-only recording with an AI background and a sticker, on the Camera Style tab.
+   Each shot is the editor window's own pixels (`PrintWindow`), not a copy of the screen, so a notification on screen
+   cannot end up in it. A caption block under the shot time is moved so its whole text shows: words get time in
+   proportion to their length, so longer languages reveal their last word later. Arabic captions are typed in reverse
+   word order for these shots, because both apps lay a caption's words out left to right (a known bug), and in the
+   right order the Arabic would read backwards.
 
 **Restricted capabilities** asks why the app needs runFullTrust, in at most 500 characters:
 
