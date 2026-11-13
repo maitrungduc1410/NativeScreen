@@ -138,6 +138,8 @@ export default {
   winAlt: "El editor de Native Screen en Windows",
   winFine: "Windows 10 u 11 · x64",
   dlExe: "Descargar instalador",
+  dlStore: "Obtener de Microsoft",
+  winStore: "La versión de Microsoft Store está firmada y la Store la mantiene actualizada. El instalador es la misma app, desde GitHub.",
   whyH: "Por qué Windows muestra un aviso azul",
   whyP: "Los certificados de firma para Windows cuestan dinero cada año, y Native Screen es un proyecto gratuito y de código abierto, así que por ahora la app no está firmada. Buscaremos la forma de mejorar esto. Mientras tanto, SmartScreen muestra “Windows protegió su PC” la primera vez. Haz clic en <strong>Más información</strong> y luego en <strong>Ejecutar de todas formas</strong>. Puedes comparar el archivo con el SHA-256 de la página de la versión, o compilarlo desde el código fuente.",
   older: "Las versiones anteriores y las notas de cada versión están en {link}.",

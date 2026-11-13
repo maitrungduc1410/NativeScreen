@@ -138,6 +138,8 @@ export default {
   winAlt: "Der Editor von Native Screen unter Windows",
   winFine: "Windows 10 oder 11 · x64",
   dlExe: "Installer laden",
+  dlStore: "Bei Microsoft herunterladen",
+  winStore: "Die Version aus dem Microsoft Store ist signiert und wird vom Store aktuell gehalten. Das Installationsprogramm ist dieselbe App, von GitHub.",
   whyH: "Warum Windows eine blaue Warnung zeigt",
   whyP: "Signaturzertifikate für Windows kosten jedes Jahr Geld, und Native Screen ist ein kostenloses Open-Source-Projekt. Deshalb ist die App noch nicht signiert. Wir suchen nach einer Lösung dafür. Bis dahin zeigt SmartScreen beim ersten Start „Der Computer wurde durch Windows geschützt“. Klicke auf <strong>Weitere Informationen</strong> und dann auf <strong>Trotzdem ausführen</strong>. Du kannst die Datei mit dem SHA-256-Wert auf der Release-Seite vergleichen oder sie selbst aus dem Quellcode bauen.",
   older: "Ältere Versionen und Versionshinweise findest du auf {link}.",

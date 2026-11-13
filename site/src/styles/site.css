@@ -258,6 +258,18 @@ video.media { aspect-ratio: 16 / 9; object-fit: cover; }
 .dl h3 { font-size: 32px; display: flex; align-items: center; gap: 12px; }
 .dl .fine { margin: 6px 0 20px; }
 .dl > p:last-child, .dl details { color: var(--ink-2); font-size: 14px; margin-top: 16px; }
+.dl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.dl-actions + p { color: var(--ink-2); font-size: 14px; margin-top: 16px; }
+/* Microsoft Store badge: the black one on the light theme, the white one on the dark theme. Same height as a button. */
+.store-badge { display: inline-flex; border-radius: 6px; }
+.store-badge img { display: block; height: 44px; width: auto; }
+.store-badge .badge-for-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .store-badge .badge-for-light { display: none; }
+  :root:not([data-theme="light"]) .store-badge .badge-for-dark { display: block; }
+}
+:root[data-theme="dark"] .store-badge .badge-for-light { display: none; }
+:root[data-theme="dark"] .store-badge .badge-for-dark { display: block; }
 details summary { cursor: pointer; color: var(--ink); }
 details p { margin: 10px 0 0; }
 

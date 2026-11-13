@@ -13,6 +13,7 @@ Free and open source. Native on macOS and Windows.
 [All releases](https://github.com/maitrungduc1410/NativeScreen/releases)
 
 <a href="https://www.producthunt.com/products/native-screen?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-native-screen" target="_blank" rel="noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=dark"><img alt="Native Screen on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=light"></picture></a>
+<a href="https://get.microsoft.com/installer/download/9nxxndrd06wq?referrer=appbadge" target="_self"><picture><source media="(prefers-color-scheme: dark)" srcset="https://get.microsoft.com/images/en-us%20light.svg"><img alt="Get it from Microsoft" height="54" src="https://get.microsoft.com/images/en-us%20dark.svg"></picture></a>
 
 </div>
 
@@ -79,14 +80,15 @@ See it move on the [website](https://nativescreen.app/).
 | | Requirement | Download |
 | :-- | :-- | :-- |
 | macOS | macOS 14 or later, Apple silicon or Intel | [NativeScreen.dmg](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg) |
-| Windows | Windows 10 or 11, x64 | [NativeScreen-win-Setup.exe](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe) |
+| Windows | Windows 10 or 11, x64 | [Microsoft Store](https://apps.microsoft.com/detail/9nxxndrd06wq) or [NativeScreen-win-Setup.exe](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe) |
 
 **macOS.** Open the DMG and drag Native Screen to Applications. The app is signed and notarized by Apple. On first
 launch macOS asks for Screen Recording permission, and for camera and microphone when you turn them on. Updates arrive
 inside the app (`Native Screen > Check for Updates...`).
 
-**Windows.** Signing certificates cost money every year, and Native Screen is free and open source, so the Windows
-build is not code signed yet. We will look for a way to improve this. For now Windows SmartScreen shows a blue "Windows protected your PC" screen the first time. Click **More info**, then
+**Windows.** The Microsoft Store version is signed and kept up to date by the Store, so it installs without a warning.
+The installer from GitHub is the same app. Signing certificates cost money every year, and Native Screen is free and
+open source, so the installer is not code signed yet. We will look for a way to improve this. For now Windows SmartScreen shows a blue "Windows protected your PC" screen the first time. Click **More info**, then
 **Run anyway**. You can check the download against the SHA-256 shown on the release page. Updates install themselves
 after that.
 

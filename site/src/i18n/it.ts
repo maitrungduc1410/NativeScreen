@@ -138,6 +138,8 @@ export default {
   winAlt: "L'editor di Native Screen su Windows",
   winFine: "Windows 10 o 11 · x64",
   dlExe: "Scarica il programma di installazione",
+  dlStore: "Scarica da Microsoft",
+  winStore: "La versione del Microsoft Store è firmata e lo Store la mantiene aggiornata. Il programma di installazione è la stessa app, da GitHub.",
   whyH: "Perché Windows mostra un avviso blu",
   whyP: "I certificati di firma per Windows costano ogni anno e Native Screen è un progetto gratuito e open source, quindi l'app non è ancora firmata. Cercheremo un modo per migliorare. Per ora, la prima volta SmartScreen mostra «PC protetto da Windows». Fai clic su <strong>Ulteriori informazioni</strong>, poi su <strong>Esegui comunque</strong>. Puoi confrontare il file con lo SHA-256 nella pagina della release, o compilarlo tu dal codice sorgente.",
   older: "Le versioni precedenti e le note di rilascio sono su {link}.",

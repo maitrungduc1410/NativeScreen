@@ -138,6 +138,8 @@ export default {
   winAlt: "Windows의 Native Screen 편집기",
   winFine: "Windows 10 또는 11 · x64",
   dlExe: "설치 프로그램 다운로드",
+  dlStore: "Microsoft에서 다운로드",
+  winStore: "Microsoft Store 버전은 서명되어 있고 스토어가 최신 상태로 유지합니다. 설치 프로그램은 GitHub에서 받는 같은 앱입니다.",
   whyH: "Windows가 파란 경고를 띄우는 이유",
   whyP: "Windows용 서명 인증서는 해마다 비용이 들고 Native Screen은 무료 오픈 소스 프로젝트라, 앱이 아직 서명되지 않았습니다. 개선할 방법을 찾아보겠습니다. 지금은 처음 실행할 때 SmartScreen이 ‘Windows의 PC 보호’ 화면을 띄웁니다. <strong>추가 정보</strong>를 누른 뒤 <strong>실행</strong>을 누르세요. 릴리스 페이지의 SHA-256과 파일을 비교하거나 소스에서 직접 빌드할 수도 있습니다.",
   older: "이전 버전과 릴리스 노트는 {link}에 있습니다.",

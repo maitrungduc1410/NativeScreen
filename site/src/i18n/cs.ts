@@ -138,6 +138,8 @@ export default {
   winAlt: "Editor Native Screen ve Windows",
   winFine: "Windows 10 nebo 11 · x64",
   dlExe: "Stáhnout instalátor",
+  dlStore: "Získat od Microsoftu",
+  winStore: "Verze z Microsoft Store je podepsaná a Store ji udržuje aktuální. Instalátor je stejná aplikace, z GitHubu.",
   whyH: "Proč Windows ukazuje modré varování",
   whyP: "Podpisové certifikáty pro Windows stojí každý rok peníze a Native Screen je bezplatný projekt s otevřeným kódem, takže aplikace zatím podepsaná není. Budeme hledat způsob, jak to zlepšit. Zatím SmartScreen při prvním spuštění ukáže „Systém Windows ochránil váš počítač“. Klikněte na <strong>Další informace</strong> a pak na <strong>Přesto spustit</strong>. Soubor můžete porovnat s SHA-256 na stránce vydání, nebo si ho sestavit sami ze zdrojového kódu.",
   older: "Starší verze a poznámky k vydání najdete na {link}.",

@@ -138,6 +138,8 @@ export default {
   winAlt: "Windows 版の Native Screen エディタ",
   winFine: "Windows 10 / 11 · x64",
   dlExe: "インストーラーをダウンロード",
+  dlStore: "Microsoft から入手",
+  winStore: "Microsoft Store 版は署名済みで、ストアが最新の状態に保ちます。インストーラーは同じアプリの GitHub 版です。",
   whyH: "Windows で青い警告が出る理由",
   whyP: "Windows のコード署名証明書には毎年費用がかかり、Native Screen は無料のオープンソースプロジェクトなので、今はまだ署名していません。ここは改善する方法を探していきます。当面は、初回起動時に SmartScreen が「Windows によって PC が保護されました」と表示します。<strong>詳細情報</strong>をクリックし、<strong>実行</strong>を選んでください。リリースページの SHA-256 でファイルを確認することも、ソースから自分でビルドすることもできます。",
   older: "過去のバージョンとリリースノートは {link} にあります。",

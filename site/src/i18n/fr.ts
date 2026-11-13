@@ -138,6 +138,8 @@ export default {
   winAlt: "L’éditeur Native Screen sur Windows",
   winFine: "Windows 10 ou 11 · x64",
   dlExe: "Télécharger l’installateur",
+  dlStore: "Télécharger depuis Microsoft",
+  winStore: "La version du Microsoft Store est signée et tenue à jour par le Store. Le programme d’installation est la même app, depuis GitHub.",
   whyH: "Pourquoi Windows affiche un avertissement bleu",
   whyP: "Les certificats de signature pour Windows coûtent de l’argent chaque année, et Native Screen est un projet gratuit et open source : l’app n’est donc pas encore signée. Nous allons chercher un moyen d’améliorer ça. En attendant, SmartScreen affiche « Windows a protégé votre ordinateur » la première fois. Cliquez sur <strong>Informations complémentaires</strong>, puis sur <strong>Exécuter quand même</strong>. Vous pouvez comparer le fichier avec le SHA-256 indiqué sur la page de la version, ou le compiler vous-même à partir du code source.",
   older: "Les anciennes versions et les notes de version sont sur {link}.",

@@ -138,6 +138,8 @@ export default {
   winAlt: "Windows 上的 Native Screen 编辑器",
   winFine: "Windows 10 或 11 · x64",
   dlExe: "下载安装程序",
+  dlStore: "从 Microsoft 获取",
+  winStore: "Microsoft Store 版本已签名，并由商店保持更新。安装程序是同一款应用，来自 GitHub。",
   whyH: "为什么 Windows 会显示蓝色警告",
   whyP: "Windows 的代码签名证书每年都要花钱，而 Native Screen 是免费的开源项目，所以目前还没有签名。我们会想办法改善这一点。现在第一次运行时，SmartScreen 会显示“Windows 已保护你的电脑”。点击<strong>更多信息</strong>，再点击<strong>仍要运行</strong>。你可以用发布页面上的 SHA-256 校验文件，也可以自己从源码构建。",
   older: "旧版本和更新说明在 {link}。",

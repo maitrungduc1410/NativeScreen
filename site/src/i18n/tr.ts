@@ -138,6 +138,8 @@ export default {
   winAlt: "Windows'ta Native Screen düzenleyicisi",
   winFine: "Windows 10 veya 11 · x64",
   dlExe: "Yükleyiciyi indir",
+  dlStore: "Microsoft'tan alın",
+  winStore: "Microsoft Store sürümü imzalıdır ve Store tarafından güncel tutulur. Yükleyici aynı uygulamadır, GitHub'dan.",
   whyH: "Windows neden mavi bir uyarı gösteriyor",
   whyP: "Windows imza sertifikaları her yıl para tutar ve Native Screen ücretsiz, açık kaynak bir projedir; bu yüzden uygulama henüz imzalı değil. Bunu iyileştirmenin bir yolunu arayacağız. Şimdilik SmartScreen ilk seferde “Windows bilgisayarınızı korudu” uyarısını gösterir. <strong>Ek bilgi</strong>'ye, ardından <strong>Yine de çalıştır</strong>'a tıklayın. Dosyayı sürüm sayfasındaki SHA-256 ile karşılaştırabilir ya da kaynaktan kendiniz derleyebilirsiniz.",
   older: "Eski sürümler ve sürüm notları {link} sayfasında.",

@@ -12,6 +12,10 @@ const t = dictOf(locale);
 const repo = "https://github.com/maitrungduc1410/NativeScreen";
 const dmg = `${repo}/releases/latest/download/NativeScreen.dmg`;
 const exe = `${repo}/releases/latest/download/NativeScreen-win-Setup.exe`;
+const store = "https://get.microsoft.com/installer/download/9nxxndrd06wq?referrer=appbadge";
+// Microsoft's own badge artwork, served from this site (public/assets/store), one per language: "dark" is the black
+// badge for the light theme, "light" the white one for the dark theme.
+const badge = (variant: "dark" | "light") => `/assets/store/${locale.slug}-${variant}.svg`;
 const older = t.older.replace("{link}", `<a href="${repo}/releases">GitHub Releases</a>`);
 const ogImage = ogImageOf(locale.slug);
 
@@ -429,7 +433,14 @@ const jsonLd = {
         <img class="media shot dl-shot" src="/assets/shots/editor-windows.jpg" width="2395" height="1504" loading="lazy" alt={t.winAlt}>
         <h3>Windows</h3>
         <p class="fine">{t.winFine}</p>
-        <a class="button primary" href={exe}>{t.dlExe}</a>
+        <div class="dl-actions">
+          <a class="store-badge" href={store} target="_self">
+            <img class="badge-for-light" src={badge("dark")} width="161" height="44" alt={t.dlStore}>
+            <img class="badge-for-dark" src={badge("light")} width="161" height="44" alt={t.dlStore}>
+          </a>
+          <a class="button" href={exe}>{t.dlExe}</a>
+        </div>
+        <p>{t.winStore}</p>
         <details>
           <summary>{t.whyH}</summary>
           <p set:html={t.whyP}></p>

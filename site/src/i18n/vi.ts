@@ -138,6 +138,8 @@ export default {
   winAlt: "Trình dựng Native Screen trên Windows",
   winFine: "Windows 10 hoặc 11 · x64",
   dlExe: "Tải bộ cài",
+  dlStore: "Tải từ Microsoft Store",
+  winStore: "Bản trên Microsoft Store đã được ký và được Store tự cập nhật. Bộ cài là cùng ứng dụng đó, tải từ GitHub.",
   whyH: "Vì sao Windows hiện cảnh báo màu xanh",
   whyP: "Chứng chỉ ký ứng dụng cho Windows tốn tiền mỗi năm, mà Native Screen là dự án mã nguồn mở miễn phí nên hiện chưa được ký. Chúng tôi sẽ tìm cách cải thiện chuyện này. Hiện tại, lần đầu mở app SmartScreen sẽ hiện “Windows protected your PC”. Bấm <strong>More info</strong>, rồi <strong>Run anyway</strong>. Bạn có thể đối chiếu file với mã SHA-256 trên trang release, hoặc tự build từ mã nguồn.",
   older: "Các phiên bản cũ và ghi chú phát hành có trên {link}.",
