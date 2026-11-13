@@ -27,7 +27,7 @@ Where the Swift code and a spec disagree, the Swift code wins.
 | `Engine/HardwareVideoExporter.swift` (`ExportConfiguration`, formats, compression, estimators) | `Core/Export/*` | Settings model and file-size / duration estimators exact. The encoding pipeline is Windows-specific (`Media/Export`). |
 | `Document/ProjectSession.swift` | split | Logic → Core services: undo stack (snapshot based), selection/split/move/resize rules, mask keyframe math, typing-suggestion detection, shortcut clustering and normalization, camera layout track, voiceover track, transcript edits. UI state (hover, selection, playhead, popovers) → `App/ViewModels/ProjectSessionViewModel`. |
 | `Document/ProjectWorkspaceStore.swift` | `App/Workspace/*` | Recent projects, window management, save prompts, presets store, directories. |
-| `Document/AppSettings.swift`, `EditorViewPreferences.swift` | `App/Settings/*` | Stored in `%LOCALAPPDATA%\NativeScreen\settings.json`. |
+| `Document/AppSettings.swift`, `EditorViewPreferences.swift` | `App/Settings/*` | Stored in `%LOCALAPPDATA%\NativeScreen Data\settings.json`, outside the installer's folder (ADR-90). |
 | `Document/TimelineSnapping.swift` | `Core/Timeline/TimelineSnapping.cs` | Targets and nearest-edge rules exact (ADR-43); the guide line is App. |
 | `Document/AppLanguage.swift`, `Localizable.xcstrings` | `App/Localization/*` | Same languages and the same catalog file as the source of truth (ADR-44). |
 | `Document/VideoProjectImporter.swift` | `Media/Import/VideoProjectImporter.cs` | Same package layout. |

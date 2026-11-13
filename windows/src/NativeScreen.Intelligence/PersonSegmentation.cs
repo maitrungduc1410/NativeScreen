@@ -14,7 +14,7 @@ public static class PersonSegmentationModel
 
     public const string SizeText = "26 MB";
 
-    public static string LocalPath { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "Models", "modnet.onnx");
+    public static string LocalPath { get; } = UserDataFolder.PathOf("Models", "modnet.onnx");
 
     public static bool IsInstalled => File.Exists(LocalPath) && new FileInfo(LocalPath).Length == Bytes;
 

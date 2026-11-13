@@ -6,7 +6,7 @@ using Windows.UI;
 
 namespace NativeScreen.App;
 
-/// <summary>Settings stored in %LOCALAPPDATA%\NativeScreen\settings.json.</summary>
+/// <summary>Settings stored in settings.json of the user data folder (<see cref="NativeScreen.Core.UserDataFolder"/>).</summary>
 public sealed class AppSettings
 {
     public string Appearance { get; set; } = "dark";
@@ -66,8 +66,7 @@ public sealed class AppSettings
     public string ProjectsDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Native Screen Projects");
 
-    private static string FilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "settings.json");
+    private static string FilePath => NativeScreen.Core.UserDataFolder.PathOf("settings.json");
 
     public static AppSettings Shared { get; } = Load();
 

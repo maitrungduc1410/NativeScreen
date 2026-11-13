@@ -367,7 +367,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
     }
 
-    public static string PresetsDirectory { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "Presets");
+    public static string PresetsDirectory { get; } = UserDataFolder.PathOf("Presets");
 
     public ProjectPresetStore Presets { get; } = new(PresetsDirectory);
 

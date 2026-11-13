@@ -24,7 +24,7 @@ public static class BuiltInBackgroundMusic
 
     private static string CachePath(string trackName)
     {
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "BackgroundAudio");
+        var directory = UserDataFolder.PathOf("BackgroundAudio");
         Directory.CreateDirectory(directory);
         return Path.Combine(directory, Slug(trackName) + ".wav");
     }

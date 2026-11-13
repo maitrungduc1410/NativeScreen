@@ -15,7 +15,7 @@ public sealed record WhisperModel(string Tier, string FileName, string SizeText,
 
     public static WhisperModel ForTier(string tier) => All.FirstOrDefault(model => model.Tier == tier) ?? All[1];
 
-    public static string Directory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NativeScreen", "WhisperModels");
+    public static string Directory => UserDataFolder.PathOf("WhisperModels");
 
     public string LocalPath => Path.Combine(Directory, FileName);
 

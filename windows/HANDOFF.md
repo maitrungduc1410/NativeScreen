@@ -27,6 +27,15 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-13, ADR-90: User data outside the installer's folder (Windows only)
+
+### Verifier
+- **Bug:** uninstalling the GitHub build deletes `%LOCALAPPDATA%\NativeScreen`, which also held settings, presets and downloaded models. Found when the owner moved from the GitHub build to the Store build.
+- **Changes made:** `Core/Storage/UserDataFolder.cs` (new folder `%LOCALAPPDATA%\NativeScreen Data`, one-time migration of the known items, `NS_LOCAL_APP_DATA` override). `AppTheme`, `EditorTools`, `BuiltInBackgroundMusic`, `PersonSegmentation` and `WhisperTranscriber` use it. Test assemblies point it at a temporary folder.
+- **Result:** PASS. Core 360 (5 new in `UserDataFolderTests`), Rendering 38, Media 29; Release build 0 warnings. The app started against a sandbox copy of an old folder moved `settings.json` and `Presets`, kept `current` and `Update.exe`, and read the same settings.
+- **Spec updates:** spec/06 ADR-90, spec/08 settings row, AGENTS.md command row.
+- **Writer:** nothing to port. New Windows code that stores user data must use `UserDataFolder.PathOf`.
+
 ## 2026-11-14, ADR-89: Right-to-left captions (macOS first)
 
 ### Writer

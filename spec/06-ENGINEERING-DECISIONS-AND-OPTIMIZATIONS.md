@@ -1604,3 +1604,13 @@ Captions are laid out word by word, each word in its own box, so the words can b
 
 - **Windows.** `Core/Captions/CaptionLineLayout.cs`: `Line.IsRightToLeft` from `IsRightToLeft(text)`, which walks the `Rune`s and lets the first letter decide (the same ranges; `Rune.IsLetter` only differs from `isAlphabetic` on combining marks, which never come first). The expanding line is anchored at the right edge and `TargetWordOffset` mirrors `LeftToRightWordOffset`. DirectWrite still draws each word on its own and shapes it joined. `CaptionDirectionTests` has the macOS checks with a fixed-width measure.
 
+## 90. ADR-90: Windows User Data Outside the Installer's Folder
+
+The GitHub build's installer uses the package id `NativeScreen` and installs into `%LOCALAPPDATA%\NativeScreen`. The app kept its own data in that same folder: `settings.json`, `Presets`, `Models` (person model), `WhisperModels` and `BackgroundAudio`. Uninstalling that build deletes the whole folder, so a user who removed it in order to install the Store build lost their settings and presets and had to download the models again.
+
+- **Folder:** `%LOCALAPPDATA%\NativeScreen Data` (`Core/Storage/UserDataFolder.cs`). Every user data path goes through `UserDataFolder.PathOf`. The package id stays `NativeScreen`, because changing it would stop updates for existing installs.
+- **Migration, once per start:** each known item that exists in the old folder and not in the new one is moved there (a rename, so the models are not copied). If a move fails because a file is in use or access is denied, `settings.json` and `Presets` are copied instead and the models stay where they are, to be downloaded again when needed. The installer's own files (`current`, `packages`, `Update.exe`) are never touched. The migration never throws and never overwrites newer data.
+- **Store build:** an MSIX app's writes to `%LOCALAPPDATA%` go to its package's private copy, which Windows removes on uninstall, and this applies to the new folder name as well. That is the Store's normal behavior.
+- **Tests and trial runs:** `NS_LOCAL_APP_DATA=<folder>` replaces `%LOCALAPPDATA%` for user data. The Core and Rendering test assemblies set it to `%TEMP%\ns-test-local-app-data` in a module initializer, so tests never move or write real data. `UserDataFolderTests` covers the move, the installer's files, existing data, files in use and a repeated run.
+- **macOS:** not affected. The app's data lives in its own container and Application Support, apart from the app bundle.
+
