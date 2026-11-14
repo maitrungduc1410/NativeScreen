@@ -33,44 +33,43 @@ Windows has two channels built from the same source (`spec/06` ADR-81):
 
 | | GitHub (`Setup.exe`) | Microsoft Store (MSIX) |
 | :-- | :-- | :-- |
-| Built by | `windows` job: `dotnet publish` + `vpk pack` | `store` job: `windows/scripts/package-msix.ps1` (`NsPackage=true`) |
+| Built by | `windows` job: `dotnet publish` + `vpk pack` | built locally: `windows/scripts/package-msix.ps1` (`NsPackage=true`) |
 | Signed by | nobody yet (SmartScreen warns) | Microsoft, at certification |
 | Updates | Velopack, from GitHub releases | the Store. The Store build has no Velopack and no update UI |
 | MCP command | the exe path | the execution alias `%LOCALAPPDATA%\Microsoft\WindowsApps\nativescreen.exe` |
 | Explorer "Open in Native Screen" | yes | no |
 
-The `store` job runs only for stable versions (no `-beta` suffix, pre-release off). It uploads the `.msix` as the
-`store-msix` artifact of the workflow run, not to the GitHub release, because an unsigned MSIX cannot be installed by
-users. The package version is `major.minor.build.0` (the Store needs a zero revision), so every Store submission
+The Store package is built on a Windows machine, not in CI, and only for stable versions. It never goes on the GitHub
+release, because an unsigned MSIX cannot be installed by users. The package version is `major.minor.build.0` (the Store needs a zero revision), so every Store submission
 needs a higher `major.minor.build` than the last one.
 
 ### Submitting
 
-1. Run **Release** as usual. When it finishes, download `store-msix` from the run's summary page.
+1. Build the package locally with the Store identity and the release version (command under **Store identity**). It
+   lands in `windows/artifacts/msix/`.
 2. Partner Center > Apps and games > Native Screen > start a submission (or update it) > Packages: upload the
    `.msix`. Partner Center checks that its identity matches the reserved name.
 3. Fill in the listing, age rating and privacy policy URL (the app asks for microphone and camera, so a privacy policy
    is required), and paste the certification notes below into **Submission options > Notes for certification**.
 4. Submit. Certification takes from a few hours to a few days; Microsoft signs the package and the Store delivers it.
 
-Submitting from CI with the `msstore` CLI (an Entra app: tenant id, client id, client secret, seller id) can be added
-later. Until then, nothing in CI talks to Partner Center.
+Nothing in CI builds the Store package or talks to Partner Center.
 
 ### Store identity
 
 After the app name is reserved, Partner Center > Apps and games > Native Screen > Product management > **Product
-identity** shows three values. Put them in **Settings > Secrets and variables > Actions > Variables**:
+identity** shows three values:
 
-| Variable | Product identity field | Looks like |
+| Script argument | Product identity field | Looks like |
 | :-- | :-- | :-- |
-| `NS_STORE_IDENTITY_NAME` | Package/Identity/Name | `<number>.<name>` |
-| `NS_STORE_PUBLISHER` | Package/Identity/Publisher | `CN=<GUID>` |
-| `NS_STORE_PUBLISHER_DISPLAY_NAME` | Package/Properties/PublisherDisplayName | your publisher name |
+| `-IdentityName` | Package/Identity/Name | `<number>.<name>` |
+| `-Publisher` | Package/Identity/Publisher | `CN=<GUID>` |
+| `-PublisherDisplayName` | Package/Properties/PublisherDisplayName | your publisher name |
 
 They are not secrets, but keep them out of the repository: `Package.appxmanifest` holds local values (`NativeScreen`,
 `CN=NativeScreen`) so a test package builds anywhere, and the build writes the real ones into a copy under `obj/`
-(MSBuild properties `NsStoreIdentityName`, `NsStorePublisher`, `NsStorePublisherDisplayName`). The `store` job stops
-if any of them is missing. To build the Store package locally:
+(MSBuild properties `NsStoreIdentityName`, `NsStorePublisher`, `NsStorePublisherDisplayName`). To build the Store
+package:
 
 ```powershell
 powershell windows/scripts/package-msix.ps1 -IdentityName "<Name>" -Publisher "CN=<GUID>" -PublisherDisplayName "<Publisher>" -Version 1.2.0
