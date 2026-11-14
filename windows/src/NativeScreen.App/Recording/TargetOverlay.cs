@@ -97,14 +97,16 @@ internal sealed class TargetOverlay : IDisposable
         ClassAtom = RegisterClassExW(ref cls);
     }
 
-    public TargetOverlay(CaptureTargetMode mode, CaptureDisplay initialDisplay, Action<CaptureTarget> start, Action cancelled)
+    public TargetOverlay(CaptureTargetMode mode, CaptureDisplay initialDisplay, Action<CaptureTarget> start, Action cancelled, nint recordingBar = 0)
     {
         this.mode = mode;
         this.start = start;
         this.cancelled = cancelled;
         display = initialDisplay;
         screen = CaptureTargets.VirtualScreen();
-        windows = mode == CaptureTargetMode.Window ? CaptureTargets.WindowsFrontToBack() : [];
+        // The recording bar is not a target. It is only left out of capture while recording, so it is removed here; without
+        // this, a pick opened from its Window button started on the bar itself, since the pointer was still on it.
+        windows = mode == CaptureTargetMode.Window ? CaptureTargets.WindowsFrontToBack().Where(window => window.Handle != recordingBar).ToList() : [];
         var width = Math.Min((int)(1280 * display.Scale), (int)(display.Bounds.Width * 0.7));
         var height = Math.Min((int)(720 * display.Scale), (int)(display.Bounds.Height * 0.7));
         area = new PixelRect(display.Bounds.X + (display.Bounds.Width - width) / 2, display.Bounds.Y + (display.Bounds.Height - height) / 2, width, height);

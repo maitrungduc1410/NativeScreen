@@ -57,8 +57,6 @@ public sealed partial class RecordingHudWindow : Window
     private DateTime startedAt;
     private TimeSpan pausedTotal;
     private DateTime? pausedAt;
-    private (int X, int Y)? dragPointer;
-    private Windows.Graphics.PointInt32 dragWindow;
     private (double DurationMs, bool HasWebcam, bool HasMicrophone, bool HasSystemAudio) lastDuration;
     private bool lastRecordingFailed;
     private bool isShown;
@@ -98,9 +96,14 @@ public sealed partial class RecordingHudWindow : Window
                 FitToContent();
             }
         };
-        root.PointerPressed += DragStarted;
-        root.PointerMoved += DragMoved;
-        root.PointerReleased += DragEnded;
+        SystemDrag.Attach(this, root);
+        AppWindow.Changed += (_, change) =>
+        {
+            if (change.DidPositionChange && isShown)
+            {
+                RememberPlace();
+            }
+        };
         root.KeyDown += (_, args) =>
         {
             if (args.Key == Windows.System.VirtualKey.Escape)
@@ -248,36 +251,38 @@ public sealed partial class RecordingHudWindow : Window
         return (area.X + (area.Width - width) / 2, area.Y + area.Height - height - (int)(BottomMargin * scale));
     }
 
-    private void DragStarted(object sender, PointerRoutedEventArgs args)
-    {
-        GetCursorPos(out var cursor);
-        dragPointer = (cursor.X, cursor.Y);
-        dragWindow = AppWindow.Position;
-        root.CapturePointer(args.Pointer);
-    }
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? placeSave;
 
-    private void DragMoved(object sender, PointerRoutedEventArgs args)
+    /// <summary>
+    /// Keeps the center of the bar after it moves. Windows moves it (SystemDrag), so the place is saved once the moves stop,
+    /// not on every step.
+    /// </summary>
+    private void RememberPlace()
     {
-        if (dragPointer is { } start)
+        if (placeSave is null)
         {
-            GetCursorPos(out var cursor);
-            AppWindow.Move(new Windows.Graphics.PointInt32(dragWindow.X + cursor.X - start.X, dragWindow.Y + cursor.Y - start.Y));
+            placeSave = DispatcherQueue.CreateTimer();
+            placeSave.Interval = TimeSpan.FromMilliseconds(400);
+            placeSave.IsRepeating = false;
+            placeSave.Tick += (_, _) => SavePlace();
         }
+
+        placeSave.Start();
     }
 
-    private void DragEnded(object sender, PointerRoutedEventArgs args)
+    private void SavePlace()
     {
-        if (dragPointer is null)
+        var position = AppWindow.Position;
+        var size = AppWindow.Size;
+        var x = position.X + size.Width / 2;
+        var y = position.Y + size.Height / 2;
+        if (AppSettings.Shared.HudX == x && AppSettings.Shared.HudY == y)
         {
             return;
         }
 
-        dragPointer = null;
-        root.ReleasePointerCaptures();
-        var position = AppWindow.Position;
-        var size = AppWindow.Size;
-        AppSettings.Shared.HudX = position.X + size.Width / 2;
-        AppSettings.Shared.HudY = position.Y + size.Height / 2;
+        AppSettings.Shared.HudX = x;
+        AppSettings.Shared.HudY = y;
         AppSettings.Shared.Save();
     }
 
@@ -423,7 +428,7 @@ public sealed partial class RecordingHudWindow : Window
             overlay = null;
             pickingMode = null;
             ShowIdle();
-        });
+        }, Handle);
         ShowIdle();
         // The bar sits above the picker and stays usable, like the HUD panel over the overlay on macOS.
         SetWindowPos(Handle, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize);

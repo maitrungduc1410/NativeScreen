@@ -25,8 +25,6 @@ internal sealed class CameraPreviewWindow : Window
     private readonly WriteableBitmap bitmap = new(Pixels, Pixels);
     private readonly byte[] bgra = new byte[Pixels * Pixels * 4];
     private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcher;
-    private (int X, int Y)? dragPointer;
-    private Windows.Graphics.PointInt32 dragWindow;
     private long lastFrameMs;
     private int pending;
 
@@ -38,9 +36,7 @@ internal sealed class CameraPreviewWindow : Window
         image.Source = bitmap;
         root.Children.Add(image);
         root.Children.Add(new Border { BorderThickness = new Thickness(1), BorderBrush = Ui.Rgb(1, 1, 1, 0.18), IsHitTestVisible = false });
-        root.PointerPressed += DragStarted;
-        root.PointerMoved += DragMoved;
-        root.PointerReleased += DragEnded;
+        SystemDrag.Attach(this, root);
         Content = root;
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
@@ -93,28 +89,6 @@ internal sealed class CameraPreviewWindow : Window
         Volatile.Write(ref pending, 0);
     }
 
-    private void DragStarted(object sender, PointerRoutedEventArgs args)
-    {
-        GetCursorPos(out var cursor);
-        dragPointer = (cursor.X, cursor.Y);
-        dragWindow = AppWindow.Position;
-        root.CapturePointer(args.Pointer);
-    }
-
-    private void DragMoved(object sender, PointerRoutedEventArgs args)
-    {
-        if (dragPointer is { } start)
-        {
-            GetCursorPos(out var cursor);
-            AppWindow.Move(new Windows.Graphics.PointInt32(dragWindow.X + cursor.X - start.X, dragWindow.Y + cursor.Y - start.Y));
-        }
-    }
-
-    private void DragEnded(object sender, PointerRoutedEventArgs args)
-    {
-        dragPointer = null;
-        root.ReleasePointerCaptures();
-    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Point32

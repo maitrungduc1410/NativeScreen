@@ -27,6 +27,20 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-14, ADR-96: Recording bar and camera bubble move like a title bar; the window picker leaves the bar out (Windows only)
+
+### Verifier
+- **Bugs (owner):**
+  - Dragging the recording bar lagged behind the pointer, in the Store build too.
+  - Picking a window from the bar first offered the bar itself, because the pointer was still on its Window button.
+- **Changes made:**
+  - New `Recording/SystemDrag.cs` (caption regions, controls click-through), used by the bar and the camera bubble instead of `AppWindow.Move` per pointer move.
+  - The bar saves its place once it stops moving.
+  - `TargetOverlay` takes the bar's handle and leaves it out of the window list.
+- **Measured:** see ADR-96. The bar's buttons still work: Window opens the picker, which now offers the window behind the bar.
+- **Not reproduced:** a lag when dragging the editor by its title bar (see ADR-96). Needs the owner's steps.
+- **Writer:** nothing to port.
+
 ## 2026-11-14, ADR-95: Cursor presses in on clicks, theme hands fold the index finger (macOS first)
 
 ### Writer
@@ -40,6 +54,16 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 2. `FrameCompositor.Compose.cs`: copy `PressAmount` in the cropped state (line 931).
 3. `DrawCursor` (line 553): multiply `spriteScale` by `1 - 0.08 * press`. When the sprite is a theme hand, fold the finger. Simplest check: have `OverlayRasterizer.CursorSprite` also return `chosen.Name.Kind`, and fold only when it is `pointinghand` and `CustomCursorSprite` returned null (ring and touch have no hand and fall back to the pointer, so they only scale). The layer is the full 100 × 100 view box at 256 px, as on macOS, so the seam is at the same place: the part of the sprite above 30 % of its height from the top is squashed toward that seam by `1 - 0.42 * press`, the rest unchanged, and the hotspot y moves with it (`seam - (seam - hotspotY) * fold`, top-down). Easiest is in the cursor pixel shader or by drawing the sprite as two quads (finger above the seam with the squash, palm below with one extra row of overlap so no line shows at the seam).
 4. Conformance: fixtures do not carry `pressAmount` yet, so frames with a click near a hand may differ between the platforms until this lands.
+
+### Verifier
+- **Result:** PASS.
+- **Changes made:**
+  - `Core/Motion/SpringTrajectorySolver.cs`: `ButtonPress`, `ButtonPresses`, `PressAmount(tMs, presses, from)`, `PressEndMs`, `CursorFrameState.PressAmount`, filled at each 120 Hz step with a window start index, interpolated in the evaluate step.
+  - `FrameCompositor.Compose.cs`: copied in the cropped state; `DrawCursor` scales and folds.
+  - `OverlayRasterizer.IsThemeHand`, `HandFingerSeam01`.
+  - `Shaders/TexturedQuad.hlsl`: a `fold` constant (seam, squash) that remaps v above the seam. One pass, continuous, so no extra palm row is needed and a tilted cursor folds along its own axis.
+- **Tests:** `CursorPressTests` (5): quick click timing (0.5 at 5 ms after down and at 190 ms, gone at 260 ms), long hold, double click stays above 0.75, `held`, other button, missing up, skip index. `CursorPressRenderingTests` (2): the classic hand keeps its fingertip row (within 3 px) and is more than 15 % shorter at full press, back to the same box afterwards; the arrow keeps its tip and is 88 to 96 % of its height. Frames checked by eye: no line at the seam. Core 366, Rendering 40.
+- **Not checked:** the other eight themes on screen (same seam, same code), and a real project played in the app.
 
 ## 2026-11-14, ADR-93: Shortcut segments in an emerald palette (macOS first)
 
