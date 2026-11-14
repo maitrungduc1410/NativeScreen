@@ -1644,3 +1644,13 @@ Shortcut segments had a view of their own. They were a see-through gradient (42 
 - **Keycap color:** the segment no longer follows the keycap color chosen in the inspector. That color still drives the keycaps in the video; the timeline colors a row by what it is, like every other track.
 
 Windows draws shortcuts with the camera layout palette and a violet add ghost; the port is in `windows/HANDOFF.md`.
+
+## 91. ADR-91: Known Issue, Not Fixed: Window Capture Can Write One or Two Shrunk or Shifted Frames
+
+Seen once, on macOS, recording a Chrome window (3840 × 2160, 60 fps). About 1.7 s after a click on a download link, while Chrome put its download icon in the toolbar, `display.mp4` got two frames out of place: in the first the whole window is scaled down slightly, leaving a black band along the right and bottom edges; in the second it is shifted right, leaving a band on the left. The next frame is normal again. In playback it shows as a short jump; paused on that frame it looks like a black scrollbar. Nothing moved on the real screen.
+
+- **Cause (likely):** in single-window capture ScreenCaptureKit fits the window into the output size, and for a moment it saw the window with a different extent (Chrome's download animation is the guess, not proven). Every frame carries `SCStreamFrameInfo.contentRect` and `contentScale`; `ScreenCaptureEngine` checks only `status == .complete` and writes the frame.
+- **Fix if it is needed:** for window capture only, hold frames whose `contentRect` / `contentScale` differ from the steady state. If the steady state comes back within about 150 ms, drop the held frames; otherwise write them with their own times. A change the user makes (resizing, moving to another display, full screen) lasts longer, so its frames are written exactly as today, only up to 150 ms later. Display and area capture always fill the frame and need nothing. Check whether `Windows.Graphics.Capture` does the same before porting.
+- **Workaround:** cut the two frames out in the editor; the cut is not visible.
+
+Left as is because it was seen once and the cost of holding frames is not worth it until it shows up again.

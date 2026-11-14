@@ -36,6 +36,7 @@
 - [x] Mouse clicks & scroll logger (`telemetry/clicks.jsonl`).
 - [x] Keystroke timestamp logger (`telemetry/keys.jsonl`) for typing-aware auto-zoom hold, typing speed-up suggestions, and 3D shortcut keycaps.
 - [x] System/App Audio capture (via `ScreenCaptureKit` audio stream) & Microphone capture (`AVCaptureSession`) to separate `.m4a` tracks.
+- [ ] Window capture: drop frames whose window content is briefly shrunk or shifted (known issue, deferred; see `spec/06` ADR-91).
 
 ### 1.4. GPU Metal Compositor & Preview Canvas (0% Idle CPU)
 - [x] `MTKView` Metal preview renderer with on-demand rendering (`isPaused = true` when playback is paused -> **0.0% Idle CPU**).
