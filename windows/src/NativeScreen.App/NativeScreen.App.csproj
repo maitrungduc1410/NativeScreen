@@ -74,17 +74,26 @@
     <XmlPoke XmlInputPath="$(NsStoreManifest)" Namespaces="$(NsManifestNamespaces)" Query="/m:Package/m:Properties/m:PublisherDisplayName" Value="$(NsStorePublisherDisplayName)" />
     <Message Importance="high" Text="Store manifest: $(NsStoreIdentityName), $(NsStorePublisher), $(NsStorePublisherDisplayName), $(NsPackageVersion)" />
   </Target>
-  <!-- The Windows App SDK and the inference packages both bring onnxruntime.dll and DirectML.dll, and a package holds one
+  <!-- The Windows App SDK and the inference packages both bring onnxruntime.dll, onnxruntime_providers_shared.dll and DirectML.dll, and a package holds one
        file per path. Keep the copies the unpackaged build ends up with (the Windows App SDK's), so both builds load the
        same native runtime (spec/06 ADR-81). -->
   <Target Name="NsDropDuplicateInferenceDlls" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(NsPackage)' == 'true'">
     <ItemGroup>
-      <NsDuplicateInferenceDll Include="@(PackagingOutputs)" Condition="$([System.String]::Copy('%(PackagingOutputs.FullPath)').ToLowerInvariant().Contains('\microsoft.ml.onnxruntime.directml\')) and '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'onnxruntime.dll'" />
+      <NsDuplicateInferenceDll Include="@(PackagingOutputs)" Condition="$([System.String]::Copy('%(PackagingOutputs.FullPath)').ToLowerInvariant().Contains('\microsoft.ml.onnxruntime.directml\')) and ('%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'onnxruntime.dll' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'onnxruntime_providers_shared.dll')" />
       <NsDuplicateInferenceDll Include="@(PackagingOutputs)" Condition="$([System.String]::Copy('%(PackagingOutputs.FullPath)').ToLowerInvariant().Contains('\microsoft.ai.directml\')) and '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'DirectML.dll'" />
       <PackagingOutputs Remove="@(NsDuplicateInferenceDll)" />
       <!-- Symbols never go in the package; leaving them out also skips the symbol package step. Like the publish trim
            below: the DirectML debug layer, and speech runtimes for other processors (this package is x64). -->
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Extension)' == '.pdb' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'DirectML.Debug.dll' or $([System.String]::Copy('%(PackagingOutputs.FullPath)').Contains('\win-arm64\')) or $([System.String]::Copy('%(PackagingOutputs.FullPath)').Contains('\win-x86\'))" />
+    </ItemGroup>
+  </Target>
+  <!-- Windows App SDK 1.8 also lists its copies in the publish files, so the SDK's duplicate check stops the MSIX build
+       before packaging. Drop the inference packages' copies there too: DirectML is the same 1.15.4, and the SDK's onnxruntime 1.23 runs the 1.24 API (spec/06 ADR-97). -->
+  <Target Name="NsDropDuplicateInferenceDllsFromPublish" AfterTargets="ComputeFilesToPublish" BeforeTargets="_HandleFileConflictsForPublish" Condition="'$(NsPackage)' == 'true'">
+    <ItemGroup>
+      <NsDuplicatePublishDll Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.FullPath)').ToLowerInvariant().Contains('\microsoft.ml.onnxruntime.directml\')) and ('%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime.dll' or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime_providers_shared.dll')" />
+      <NsDuplicatePublishDll Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.FullPath)').ToLowerInvariant().Contains('\microsoft.ai.directml\')) and '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'DirectML.dll'" />
+      <ResolvedFileToPublish Remove="@(NsDuplicatePublishDll)" />
     </ItemGroup>
   </Target>
   <!-- Publishing an unpackaged app leaves out its compiled XAML and resource index, and WinUI then fails at startup. -->
