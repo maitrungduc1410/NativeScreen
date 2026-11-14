@@ -30,7 +30,6 @@ public struct InspectorSidebarView: View {
     @State private var gradientHueShift: Double = 0.5
     @State private var isHoveringImageDropZone: Bool = false
     @State private var selectedShortcutTrackId: String = "default-shortcuts-track"
-    @State private var isRecordingShortcutKeys: Bool = false
     @State private var shortcutKeyRecorderMonitor: Any? = nil
     @State private var hoveredScreenAnimPreset: String? = nil
     @State private var hoveredCursorAnimPreset: String? = nil
@@ -4972,17 +4971,17 @@ public struct InspectorSidebarView: View {
 
                 // Interactive `Record shortcut...` Button
                 Button {
-                    if isRecordingShortcutKeys {
+                    if session.isRecordingShortcutKeys {
                         stopShortcutKeyRecording()
                     } else {
                         startShortcutKeyRecording(for: cluster)
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: isRecordingShortcutKeys ? "record.circle.fill" : "keyboard")
+                        Image(systemName: session.isRecordingShortcutKeys ? "record.circle.fill" : "keyboard")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(isRecordingShortcutKeys ? Color.red : .ink.opacity(0.90))
-                        Text(isRecordingShortcutKeys ? "Press any shortcut on keyboard... (ESC to cancel)" : "Record shortcut keys...")
+                            .foregroundStyle(session.isRecordingShortcutKeys ? Color.red : .ink.opacity(0.90))
+                        Text(session.isRecordingShortcutKeys ? "Press any shortcut on keyboard... (ESC to cancel)" : "Record shortcut keys...")
                             .font(.system(size: 12.5, weight: .regular))
                             .foregroundStyle(.ink.opacity(0.92))
                     }
@@ -4990,12 +4989,12 @@ public struct InspectorSidebarView: View {
                     .frame(height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(isRecordingShortcutKeys ? Color.red.opacity(0.16) : Color.ink.opacity(0.04))
+                            .fill(session.isRecordingShortcutKeys ? Color.red.opacity(0.16) : Color.ink.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(
-                                isRecordingShortcutKeys
+                                session.isRecordingShortcutKeys
                                     ? Color.red.opacity(0.65)
                                     : Color.ink.opacity(0.08),
                                 lineWidth: 1
@@ -5162,7 +5161,7 @@ public struct InspectorSidebarView: View {
 
     private func startShortcutKeyRecording(for cluster: ProjectSession.ShortcutPressCluster) {
         stopShortcutKeyRecording()
-        isRecordingShortcutKeys = true
+        session.isRecordingShortcutKeys = true
         shortcutKeyRecorderMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 { // ESC cancels key recording
                 stopShortcutKeyRecording()
@@ -5296,7 +5295,7 @@ public struct InspectorSidebarView: View {
     }
 
     private func stopShortcutKeyRecording() {
-        isRecordingShortcutKeys = false
+        session.isRecordingShortcutKeys = false
         if let monitor = shortcutKeyRecorderMonitor {
             NSEvent.removeMonitor(monitor)
             shortcutKeyRecorderMonitor = nil

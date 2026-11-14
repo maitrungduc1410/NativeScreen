@@ -71,6 +71,8 @@ public final class ProjectSession: Identifiable {
     public var transcriptErrorMessage: String?
     public var isScanningSensitiveData: Bool = false
     public var isScanningFaces: Bool = false
+    /// The inspector is recording the keys for a shortcut segment; the editor's own key shortcuts stand aside until it ends.
+    public var isRecordingShortcutKeys: Bool = false
     public var isRecordingVoiceover: Bool = false
     public var voiceoverRecordingStartSourceMs: Double = 0.0
     public var voiceoverRecordingTrackIndex: Int = 0

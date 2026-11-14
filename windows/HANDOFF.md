@@ -27,6 +27,25 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-14, ADR-90: Shortcut segments in an emerald palette (macOS first)
+
+### Writer
+- **Status:** done on macOS. Windows needs the color part below. No format change.
+- **Swift:** `SegmentShaderPalette.shortcut` (`shortcutLight`, `shortcutDark`) and `ShortcutTimelineSegmentView` in `Views/MultiTrackTimelineView.swift`. Spec: ADR-90.
+- **Why:** shortcut segments had their own see-through look tinted with the keycap color (`#4D2FF5` by default), the same violet as the zoom row. They now use the shared segment body in emerald, the one hue no other row uses.
+- **Verified on macOS:** both schemes build. In light and dark: selecting one shortcut dims the other shortcuts to 30 %, selecting an annotation leaves shortcuts solid, the selected shortcut gets the palette outline. The hover `+` preview was not checked by hand.
+
+### Port
+1. `windows/src/NativeScreen.App/TimelineView.cs`, `Palette`: add `Shortcut` with
+   - light: top `C(0.180, 0.620, 0.416)`, bottom `C(0.310, 0.765, 0.553)`, ring `C(0.760, 0.957, 0.863)`, selected `C(0.220, 0.700, 0.470, 0.85)`;
+   - dark: top `C(0.110, 0.420, 0.278)`, bottom `C(0.165, 0.600, 0.400)`, ring `C(0.600, 0.906, 0.761)`, selected `DarkSelected`.
+2. `DrawShortcuts` (line 1465): pass `Palette.Shortcut` instead of `Palette.Layout`.
+3. `GhostStyle.Shortcut` (line 2300, see-through violet): replace its use in `DrawShortcuts` (line 1453) with `GhostStyle.Of(Palette.Shortcut)`, as the other rows do, and remove it if nothing else uses it.
+4. macOS also dims the other items of a row's kind to 30 % while one is selected. Windows does not do this on any row yet; leave that out of this port.
+
+### Verifier
+- **Result:** pending port.
+
 <<<<<<< HEAD
 ## 2026-11-13, ADR-90: User data outside the installer's folder (Windows only)
 

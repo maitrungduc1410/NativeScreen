@@ -1616,3 +1616,13 @@ The GitHub build's installer uses the package id `NativeScreen` and installs int
 =======
 Checked on a 21 s recording whose two detected emails overlap by 0.5 s: two tracks, no overlap, and a second scan leaves the same two tracks. Windows: `TranscriptEditing.Replace` has the same single-track code and needs the same change (see `windows/HANDOFF.md`).
 >>>>>>> 1e4188a (fix(mac): keep automatic masks from overlapping, add Product Hunt gallery)
+
+## 90. ADR-90: Shortcut Segments Drawn Like the Other Tracks, in Emerald
+
+Shortcut segments had a view of their own. They were a see-through gradient (42 % at the top to 8 % at the bottom) with a light glow along the bottom, a white outline when selected and a colored shadow, tinted with the keycap color, which is `#4D2FF5` by default. Three problems came out of that. They always looked dimmed next to the solid segments of every other track, so they seemed to dim along with any selection and only "lit up" when clicked. Their default color is the dark zoom fill and close to the light one, so the two rows read as the same thing. And selecting a shortcut did not dim the other shortcuts, the rule every other track follows.
+
+- **Body:** `ShortcutTimelineSegmentView` now draws `SegmentBodyCanvas` with a `.shortcut` palette, the selection outline in that palette, and the same opacity rules as `TimelineInteractiveSegmentView`: 0.50 when hidden, 0.30 when another shortcut is selected. Selecting an item on another track leaves shortcuts alone, as it leaves every other track. The bottom glow and the shadow are gone. Its drag, resize, track move and menu are unchanged.
+- **Color:** emerald, the one hue no other row uses (clip amber, zoom violet, mask and voiceover magenta, caption teal, annotation coral, camera layout gray). Light `#2E9E6A` to `#4FC38D`, dark `#1C6B47` to `#2A9966`, built the way the other palettes are. The hover `+` preview uses the same palette.
+- **Keycap color:** the segment no longer follows the keycap color chosen in the inspector. That color still drives the keycaps in the video; the timeline colors a row by what it is, like every other track.
+
+Windows draws shortcuts with the camera layout palette and a violet add ghost; the port is in `windows/HANDOFF.md`.

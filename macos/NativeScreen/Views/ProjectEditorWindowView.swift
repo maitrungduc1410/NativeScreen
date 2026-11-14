@@ -977,6 +977,8 @@ public struct ProjectEditorWindowView: View {
         }
 
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // While the inspector records a shortcut's keys, every key (C, Space, ⌘K...) belongs to the recorder.
+            if session.isRecordingShortcutKeys { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
             // `⌘K` toggles the Command Menu from anywhere (even when the search field inside Command Menu is focused!)

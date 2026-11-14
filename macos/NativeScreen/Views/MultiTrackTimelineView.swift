@@ -1499,7 +1499,6 @@ public struct MultiTrackTimelineView: View {
                let previewSpan = hoverAddShortcutSpan(trackId: track.id, clusters: clusters, contentWidth: contentWidth, totalTimelineMs: totalTimelineMs) {
                 let pX = CGFloat(previewSpan.tStartMs / totalTimelineMs) * contentWidth
                 let pW = max(24.0, CGFloat((previewSpan.tEndMs - previewSpan.tStartMs) / totalTimelineMs) * contentWidth)
-                let primaryPurple = Color(red: 0.302, green: 0.184, blue: 0.961)
 
                 Button {
                     session.isPlaying = false
@@ -1511,29 +1510,14 @@ public struct MultiTrackTimelineView: View {
                     )
                 } label: {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        primaryPurple.opacity(0.26),
-                                        primaryPurple.opacity(0.06)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(primaryPurple.opacity(0.62), lineWidth: 1.0)
-
+                        SegmentBodyCanvas(palette: .shortcut, isSelected: false, isPlayed: false)
                         Image(systemName: "plus")
-
                             .accessibilityLabel(Text("Add"))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.ink.opacity(0.88))
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.96))
                     }
                     .frame(width: pW, height: maskRowHeight)
-                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .offset(x: pX)
@@ -1546,6 +1530,7 @@ public struct MultiTrackTimelineView: View {
                     let blockW = max(2.0, CGFloat((tEndMs - tStartMs) / totalTimelineMs) * contentWidth)
                     let isItemHidden = trackHidden || session.isShortcutHidden(cluster)
                     let isSelected = (session.selectedShortcutId == cluster.id)
+                    let isOtherSelected = (session.selectedShortcutId != nil && !isSelected)
 
                     ShortcutTimelineSegmentView(
                         session: session,
@@ -1559,6 +1544,7 @@ public struct MultiTrackTimelineView: View {
                         startMs: tStartMs,
                         endMs: tEndMs,
                         isSelected: isSelected,
+                        isDimmedBySelection: isOtherSelected,
                         isHidden: isItemHidden
                     )
                 }
@@ -2961,6 +2947,29 @@ private struct SegmentShaderPalette: Equatable {
     static let caption = adaptive(dark: captionDark, light: captionLight)
     static let cameraLayout = adaptive(dark: cameraLayoutDark, light: cameraLayoutLight)
     static let annotation = adaptive(dark: annotationDark, light: annotationLight)
+    static let shortcut = adaptive(dark: shortcutDark, light: shortcutLight)
+
+    /// Shortcut (`#1C6B47`, emerald): a hue no other track uses. The keycaps in the video keep their own color.
+    static let shortcutDark = SegmentShaderPalette(
+        fillTop: Color(red: 0.110, green: 0.420, blue: 0.278),
+        fillBottom: Color(red: 0.165, green: 0.600, blue: 0.400),
+        innerEdgeGlow: Color(red: 0.086, green: 0.336, blue: 0.222).opacity(0.80),
+        activeInnerEdgeGlow: Color(red: 0.086, green: 0.336, blue: 0.222).opacity(0.50),
+        playedInnerEdgeGlow: Color(red: 0.110, green: 0.420, blue: 0.278).opacity(0.50),
+        ringBorder: Color(red: 0.600, green: 0.906, blue: 0.761),
+        playedRingBorder: Color(red: 0.165, green: 0.600, blue: 0.400),
+        selectedOuterOutline: Color(red: 0.200, green: 0.700, blue: 0.470).opacity(0.80)
+    )
+    static let shortcutLight = SegmentShaderPalette(
+        fillTop: Color(red: 0.180, green: 0.620, blue: 0.416),
+        fillBottom: Color(red: 0.310, green: 0.765, blue: 0.553),
+        innerEdgeGlow: Color(red: 0.090, green: 0.450, blue: 0.280).opacity(0.35),
+        activeInnerEdgeGlow: Color(red: 0.090, green: 0.450, blue: 0.280).opacity(0.22),
+        playedInnerEdgeGlow: Color(red: 0.180, green: 0.620, blue: 0.416).opacity(0.35),
+        ringBorder: Color(red: 0.760, green: 0.957, blue: 0.863),
+        playedRingBorder: Color(red: 0.310, green: 0.765, blue: 0.553),
+        selectedOuterOutline: Color(red: 0.220, green: 0.700, blue: 0.470).opacity(0.85)
+    )
 
     /// Annotation (`#A6422A`, coral): the color an arrow is by default.
     static let annotationDark = SegmentShaderPalette(
@@ -4085,6 +4094,8 @@ private struct ShortcutTimelineSegmentView: View {
     let startMs: Double
     let endMs: Double
     let isSelected: Bool
+    /// Another shortcut is selected; drawn like the other tracks' items (`TimelineInteractiveSegmentView`).
+    let isDimmedBySelection: Bool
     let isHidden: Bool
     @Environment(TimelineSnapController.self) private var snap
 
@@ -4107,26 +4118,6 @@ private struct ShortcutTimelineSegmentView: View {
     /// Matches `TimelineInteractiveSegmentView.labelInset`.
     private let labelInset: CGFloat = 16.0
 
-    private var segmentColor: Color {
-        let style = session.effectiveShortcutStyle(for: cluster)
-        switch style.colorMode {
-        case .defaultDark:
-            return Color(red: 0.302, green: 0.184, blue: 0.961) // `#4D2FF5`
-        case .solid:
-            return Color(hex: style.solidColorHex)
-        case .gradient:
-            return Color(hex: style.gradientStartHex)
-        }
-    }
-
-    private var segmentEndColor: Color {
-        let style = session.effectiveShortcutStyle(for: cluster)
-        if style.colorMode == .gradient {
-            return Color(hex: style.gradientEndHex)
-        }
-        return segmentColor
-    }
-
     var body: some View {
         let segWidth = max(12.0, width)
         let adaptiveEdgeHitWidth = min(edgeHitWidth, max(5.0, segWidth * 0.34))
@@ -4137,52 +4128,36 @@ private struct ShortcutTimelineSegmentView: View {
             withAttributes: [.font: NSFont.systemFont(ofSize: 12.0, weight: .semibold)]
         ).width)
         let showsLabel = segWidth - labelInset * 2.0 >= labelWidth
+        // Same rules as `TimelineInteractiveSegmentView`: `0.50` when hidden, `0.30` when another shortcut is selected.
+        let bodyOpacity: Double = (isHidden ? 0.50 : 1.0) * (isDimmedBySelection ? 0.30 : 1.0)
 
         ZStack {
-            // 1. Gradient (`primary.opacity(0.4) -> primary.opacity(0.0)`)
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            segmentColor.opacity(isHidden ? 0.14 : (isSelected ? 0.56 : 0.42)),
-                            segmentEndColor.opacity(isHidden ? 0.03 : (isSelected ? 0.18 : 0.08))
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+            // 1. The same shaded body as every other track, in the shortcut palette.
+            EquatableView(
+                content: SegmentBodyCanvas(
+                    palette: .shortcut,
+                    isSelected: isSelected,
+                    isPlayed: session.playedTimelineItemIds.contains(cluster.id)
                 )
+            )
+            .opacity(bodyOpacity)
 
-            // 2. Inner bottom glow (`W_:before`: `inset: 4px 2px; opacity: 0.3; linear-gradient(to top, primary.opacity(0.4), transparent)`)
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            segmentEndColor.opacity(isHidden ? 0.05 : 0.24),
-                            Color.clear
-                        ],
-                        startPoint: .bottom,
-                        endPoint: .top
-                    )
-                )
-                .padding(.vertical, 4)
-                .padding(.horizontal, 2)
+            // 2. Outer 1px selection outline, as on the other tracks.
+            if isSelected {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(SegmentShaderPalette.shortcut.selectedOuterOutline, lineWidth: 1.0)
+                    .padding(-1.5)
+                    .allowsHitTesting(false)
+            }
 
-            // 3. Outer 1px Outline (`outline: 1px solid primary`, bright when selected!)
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(
-                    isSelected
-                        ? Color.white.opacity(0.95)
-                        : segmentColor.opacity(isHidden ? (isHovered ? 0.45 : 0.22) : (isHovered ? 0.95 : 0.85)),
-                    lineWidth: isSelected ? 1.4 : 1.0
-                )
-
-            // 4. Centered Shortcut Label (`⌥ ⌃ Space`, `⌘ A`, `⌫`, `⌘ →`, `D`)
+            // 3. Centered Shortcut Label (`⌥ ⌃ Space`, `⌘ A`, `⌫`, `⌘ →`, `D`)
             if showsLabel {
                 Text(cluster.compactTimelineLabel)
                     .font(.system(size: 12.0, weight: .semibold))
-                    .foregroundStyle(.white.opacity(isHidden ? 0.38 : 0.96))
+                    .foregroundStyle(.white.opacity(0.96))
                     .lineLimit(1)
                     .fixedSize()
+                    .opacity(bodyOpacity)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
@@ -4205,10 +4180,6 @@ private struct ShortcutTimelineSegmentView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: showsLabel)
         .frame(width: segWidth, height: height)
-        .shadow(
-            color: isHidden ? .clear : segmentColor.opacity(isSelected ? 0.40 : (isHovered ? 0.32 : 0.18)),
-            radius: 6
-        )
         .overlay(
             RightClickDetectorView { pointInView, parentView in
                 session.selectShortcut(cluster.id)
