@@ -38,12 +38,24 @@ public sealed class OverlayRasterizer : IDisposable
 
     public ID2D1Factory1 Factory => factory;
 
+    /// <summary>In every theme hand, the view box above this height (from the top) holds only the index finger (ADR-95).</summary>
+    public const double HandFingerSeam01 = 0.30;
+
+    private readonly HashSet<string> handSprites = [];
+
+    /// <summary>True when the sprite <see cref="CursorSprite"/> draws for this kind is a theme hand, whose index finger can fold.</summary>
+    public bool IsThemeHand(CursorConfig config, string cursorType) =>
+        !config.AlwaysUsePointer && MapKind(cursorType) == "pointinghand" && handSprites.Contains(SpriteKey(config, cursorType));
+
+    private static string SpriteKey(CursorConfig config, string cursorType) =>
+        $"{CursorSpriteName.NormalizeThemeId(config.ThemeId)}|{config.VariantId}|{(config.AlwaysUsePointer ? "arrow" : cursorType)}";
+
     /// <summary>Same mapping as the macOS sprite provider: telemetry kind to file kind, falling back to the pointer.</summary>
     public (RenderLayer Layer, double HotspotX, double HotspotY)? CursorSprite(CursorConfig config, string cursorType)
     {
         var theme = CursorSpriteName.NormalizeThemeId(config.ThemeId);
         var type = config.AlwaysUsePointer ? "arrow" : cursorType;
-        var key = $"{theme}|{config.VariantId}|{type}";
+        var key = SpriteKey(config, cursorType);
         if (sprites.TryGetValue(key, out var cached))
         {
             return cached;
@@ -102,6 +114,10 @@ public sealed class OverlayRasterizer : IDisposable
         AddSvgDropShadow(layer, size);
         var result = (layer, chosen.Name.HotspotX, chosen.Name.HotspotY);
         sprites[key] = result;
+        if (chosen.Name.Kind == "pointinghand")
+        {
+            handSprites.Add(key);
+        }
         return result;
     }
 

@@ -11,6 +11,92 @@ public sealed class SpringTrajectorySolver
         public string CursorType { get; set; } = "arrow";
         public double? ActiveClickProgress { get; set; }
         public ClickWave[] ClickWaves { get; set; } = [];
+
+        /// <summary>How far the cursor is pressed in, 0 (up) to 1 (down). See <see cref="PressAmount"/> (spec/06 ADR-95).</summary>
+        public double PressAmount { get; set; }
+    }
+
+    /// <summary>One mouse button hold, from button down to button up, in telemetry ms.</summary>
+    public readonly record struct ButtonPress(double DownMs, double UpMs);
+
+    /// <summary>The press starts slightly before the button goes down, so the finger lands as the ripple starts.</summary>
+    public const double PressLeadMs = 30;
+    public const double PressInMs = 70;
+    public const double PressOutMs = 140;
+
+    /// <summary>A quick click is held at least this long, or the press is too short to see.</summary>
+    public const double PressMinHoldMs = 120;
+
+    /// <summary>
+    /// Pairs every left or right button down with the next up of the same button. A down with no up holds for the minimum
+    /// time. A <c>held</c> button (a cut that starts while it is down) is already fully pressed at its time.
+    /// </summary>
+    public static List<ButtonPress> ButtonPresses(IReadOnlyList<ClickEvent> clicks)
+    {
+        var sorted = clicks.OrderBy(click => click.T).ToList();
+        var presses = new List<ButtonPress>();
+        for (var index = 0; index < sorted.Count; index++)
+        {
+            var click = sorted[index];
+            if (click.Type is not ("down" or "held") || click.Button == "other")
+            {
+                continue;
+            }
+
+            double? upMs = null;
+            for (var next = index + 1; next < sorted.Count; next++)
+            {
+                if (sorted[next].Type == "up" && sorted[next].Button == click.Button)
+                {
+                    upMs = sorted[next].T;
+                    break;
+                }
+            }
+
+            var downMs = click.Type == "held" ? click.T - PressLeadMs - PressInMs : click.T;
+            presses.Add(new ButtonPress(downMs, upMs ?? click.T));
+        }
+
+        return presses;
+    }
+
+    /// <summary>
+    /// Eases in before the button goes down, holds while it is down (at least <see cref="PressMinHoldMs"/>), eases out after
+    /// it goes up. Overlapping presses (double clicks) take the larger amount, so the cursor does not snap up between them.
+    /// <paramref name="from"/> skips presses already over.
+    /// </summary>
+    public static double PressAmount(double tMs, IReadOnlyList<ButtonPress> presses, int from = 0)
+    {
+        var amount = 0.0;
+        for (var index = from; index < presses.Count; index++)
+        {
+            var press = presses[index];
+            var start = press.DownMs - PressLeadMs;
+            if (start > tMs)
+            {
+                break;
+            }
+
+            var releaseAt = Math.Max(press.UpMs, press.DownMs + PressMinHoldMs);
+            if (tMs >= PressEndMs(press))
+            {
+                continue;
+            }
+
+            var pressIn = Smoothstep(Math.Min(1, (tMs - start) / PressInMs));
+            var pressOut = tMs <= releaseAt ? 1 : 1 - Smoothstep((tMs - releaseAt) / PressOutMs);
+            amount = Math.Max(amount, Math.Min(pressIn, pressOut));
+        }
+
+        return amount;
+    }
+
+    public static double PressEndMs(ButtonPress press) => Math.Max(press.UpMs, press.DownMs + PressMinHoldMs) + PressOutMs;
+
+    private static double Smoothstep(double x)
+    {
+        var t = Math.Clamp(x, 0, 1);
+        return t * t * (3 - 2 * t);
     }
 
     public sealed class CameraFrameState
@@ -225,7 +311,8 @@ public sealed class SpringTrajectorySolver
             Opacity = c0.Opacity + (c1.Opacity - c0.Opacity) * frac,
             CursorType = c0.CursorType,
             ActiveClickProgress = c0.ActiveClickProgress,
-            ClickWaves = c0.ClickWaves
+            ClickWaves = c0.ClickWaves,
+            PressAmount = c0.PressAmount + (c1.PressAmount - c0.PressAmount) * frac
         };
         // The planned path is per ms, finer than the 120 Hz states, so clicks between steps stay exact.
         if (PlannedCursor is { } planned)
@@ -271,6 +358,8 @@ public sealed class SpringTrajectorySolver
         var downClicks = clickEvents.Where(click => click.Type == "down").OrderBy(click => click.T).ToList();
         var downs = downClicks.Select(click => Math.Max(0, click.T)).ToList();
         var rippleWindow = 0;
+        var presses = ButtonPresses(clickEvents);
+        var pressWindowStart = 0;
         var curX = first.X;
         var curY = first.Y;
         var velX = 0.0;
@@ -438,6 +527,13 @@ public sealed class SpringTrajectorySolver
                 }
             }
 
+            while (pressWindowStart < presses.Count && PressEndMs(presses[pressWindowStart]) <= tMs)
+            {
+                pressWindowStart++;
+            }
+
+            var pressAmount = PressAmount(tMs, presses, pressWindowStart);
+
             for (var wave = 0; wave < clickWaves.Count; wave++)
             {
                 clickWaves[wave] = clickWaves[wave] with { AgeMs = clickWaves[wave].AgeMs + stepMs };
@@ -464,7 +560,8 @@ public sealed class SpringTrajectorySolver
                 Opacity = document.Cursor.Hidden ? 0 : opacity,
                 CursorType = kind,
                 ActiveClickProgress = ripple,
-                ClickWaves = clickWaves.Count == 0 ? [] : clickWaves.ToArray()
+                ClickWaves = clickWaves.Count == 0 ? [] : clickWaves.ToArray(),
+                PressAmount = pressAmount
             });
         }
 

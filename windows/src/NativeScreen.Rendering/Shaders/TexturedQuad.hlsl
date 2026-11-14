@@ -9,6 +9,9 @@ cbuffer Quad : register(b0)
     float opacity;
     float blackSilhouette;
     float pad;
+    // A cursor hand's index finger folding on a click (spec/06 ADR-95): above v = fold.x the sprite is squashed toward that
+    // seam by fold.y. The map is continuous at the seam, so the finger does not tear. fold.y = 0 turns it off.
+    float4 fold;
 };
 
 Texture2D<float4> image : register(t0);
@@ -24,6 +27,11 @@ float4 main(float4 position : SV_Position) : SV_Target
 {
     float3 px = float3(position.xy, 1);
     float2 uv = float2(dot(mapU.xyz, px), dot(mapV.xyz, px));
+    if (fold.y > 0.0 && fold.y < 0.999 && uv.y < fold.x)
+    {
+        uv.y = fold.x - (fold.x - uv.y) / fold.y;
+    }
+
     if (any(uv < 0.0) || any(uv > 1.0))
     {
         discard;

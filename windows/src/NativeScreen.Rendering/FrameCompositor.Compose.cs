@@ -559,16 +559,29 @@ public sealed partial class FrameCompositor
 
         _graphics.Context.ClearState();
         overlays ??= new OverlayRasterizer(_graphics.Device);
-        var sprite = overlays.CustomCursorSprite(document.Cursor, cursor.CursorType, packageDirectory) ?? overlays.CursorSprite(document.Cursor, cursor.CursorType);
+        var custom = overlays.CustomCursorSprite(document.Cursor, cursor.CursorType, packageDirectory);
+        var sprite = custom ?? overlays.CursorSprite(document.Cursor, cursor.CursorType);
         RebindPipeline(target);
         if (sprite is not { } found)
         {
             return;
         }
 
-        var spriteScale = 32.0 * CompositeMetrics.CanvasScale(height) * document.Cursor.Scale / found.Layer.Height;
+        // A click pushes the cursor in around its hotspot, and a theme hand folds its index finger onto it (spec/06 ADR-95).
+        var press = Math.Clamp(cursor.PressAmount, 0, 1);
+        var spriteScale = 32.0 * CompositeMetrics.CanvasScale(height) * document.Cursor.Scale / found.Layer.Height * (1 - 0.08 * press);
+        var hotspotY = found.HotspotY;
+        var fold = default(Vector4);
+        if (press > 0.001 && custom is null && overlays.IsThemeHand(document.Cursor, cursor.CursorType))
+        {
+            var seam = Math.Round(found.Layer.Height * OverlayRasterizer.HandFingerSeam01) / found.Layer.Height;
+            var squash = 1 - 0.42 * press;
+            hotspotY = seam - (seam - hotspotY) * squash;
+            fold = new Vector4((float)seam, (float)squash, 0, 0);
+        }
+
         var transform =
-            Matrix3x2.CreateTranslation((float)(-found.HotspotX * found.Layer.Width), (float)(-found.HotspotY * found.Layer.Height))
+            Matrix3x2.CreateTranslation((float)(-found.HotspotX * found.Layer.Width), (float)(-hotspotY * found.Layer.Height))
             * Matrix3x2.CreateScale((float)spriteScale)
             * Matrix3x2.CreateRotation((float)-cursor.RotationRadians)
             * Matrix3x2.CreateTranslation((float)(screen.X + cursor.Position01.X * screen.Width), (float)(screen.Y + cursor.Position01.Y * screen.Height));
@@ -577,7 +590,7 @@ public sealed partial class FrameCompositor
             new Vector4(inverse.M11 / found.Layer.Width, inverse.M21 / found.Layer.Width, inverse.M31 / found.Layer.Width, 0),
             new Vector4(inverse.M12 / found.Layer.Height, inverse.M22 / found.Layer.Height, inverse.M32 / found.Layer.Height, 0));
         _graphics.Context.OMSetBlendState(_sourceOver);
-        DrawQuad(found.Layer.View, map, default, 0, (float)cursor.Opacity);
+        DrawQuad(found.Layer.View, map, default, 0, (float)cursor.Opacity, fold: fold);
     }
 
     // Direct2D leaves the shared immediate context in an unknown state.
@@ -936,7 +949,8 @@ public sealed partial class FrameCompositor
             Opacity = cursor.Opacity,
             CursorType = cursor.CursorType,
             ActiveClickProgress = cursor.ActiveClickProgress,
-            ClickWaves = waves
+            ClickWaves = waves,
+            PressAmount = cursor.PressAmount
         };
     }
 
@@ -990,12 +1004,12 @@ public sealed partial class FrameCompositor
         return output;
     }
 
-    private void DrawQuad(ID3D11ShaderResourceView view, QuadMap map, Vector4 clip, float clipRadius, float opacity, bool blackSilhouette = false)
+    private void DrawQuad(ID3D11ShaderResourceView view, QuadMap map, Vector4 clip, float clipRadius, float opacity, bool blackSilhouette = false, Vector4 fold = default)
     {
         var context = _graphics.Context;
         context.PSSetShader(_quad);
         context.PSSetShaderResource(0, view);
-        context.UpdateSubresource(new QuadConstants(map.U, map.V, clip, clipRadius, opacity, new Vector2(blackSilhouette ? 1 : 0, 0)), quadConstants!);
+        context.UpdateSubresource(new QuadConstants(map.U, map.V, clip, clipRadius, opacity, new Vector2(blackSilhouette ? 1 : 0, 0), fold), quadConstants!);
         context.PSSetConstantBuffer(0, quadConstants);
         context.Draw(3, 0);
         context.PSSetShaderResource(0, null!);
@@ -1038,7 +1052,7 @@ public sealed partial class FrameCompositor
     private readonly record struct BoxConstants(Vector4 Rect, float Radius, float RingWidth, Vector2 Pad, Vector4 Color);
 
     [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct QuadConstants(Vector4 MapU, Vector4 MapV, Vector4 Clip, float ClipRadius, float Opacity, Vector2 Pad);
+    private readonly record struct QuadConstants(Vector4 MapU, Vector4 MapV, Vector4 Clip, float ClipRadius, float Opacity, Vector2 Pad, Vector4 Fold);
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly record struct BlurConstants(Vector2 TexelStep, float Sigma, float Pad);
