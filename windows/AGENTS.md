@@ -97,6 +97,7 @@ If a command changes, update this table in the same commit.
 - Never run a large Gaussian blur per frame: bake static layers (background, shadow, rounded mask, bezel) into textures
   keyed by their inputs.
 - 120 Hz values never go through XAML data binding.
+- Windows App SDK stays on 1.8 (`Directory.Packages.props`): 2.x makes every window lag when dragged on Windows 10 (`spec/06` ADR-97). Check an empty WinUI window on Windows 10 before changing it.
 - Bounded queues everywhere between producer and consumer; memory must stay flat for any project length.
 
 **Code**

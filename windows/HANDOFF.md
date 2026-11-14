@@ -27,6 +27,15 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-14, ADR-97: Windows App SDK 1.8 instead of 2.6.4 (Windows only)
+
+### Verifier
+- **Bug (owner):** every window of the app (editor, recording bar, Store build) trailed the pointer badly when dragged on Windows 10. The ADR-96 change alone did not fix it.
+- **Cause:** Windows App SDK 2.6.4 on Windows 10. An empty WinUI 3 window lagged the same way on 2.6.4 and was smooth on 1.8.260921001 (owner's own screen recordings).
+- **Changes made:** `Directory.Packages.props`: `Microsoft.WindowsAppSDK` 2.6.4 to 1.8.260921001. No code changes.
+- **Result:** PASS. Core 366, Rendering 40, Media 29. Checked by hand by the owner: the editor and the recording bar drag smoothly.
+- **Writer:** keep the pin. Do not move to Windows App SDK 2.x without first dragging an empty WinUI window on Windows 10 (spec/06 ADR-97).
+
 ## 2026-11-14, ADR-96: Recording bar and camera bubble move like a title bar; the window picker leaves the bar out (Windows only)
 
 ### Verifier
