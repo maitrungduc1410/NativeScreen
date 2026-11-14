@@ -143,6 +143,7 @@ export default {
   winStore: "Die Version aus dem Microsoft Store ist signiert und wird vom Store aktuell gehalten. Das Installationsprogramm ist dieselbe App, von GitHub.",
   whyH: "Warum Windows eine blaue Warnung zeigt",
   whyP: "Signaturzertifikate für Windows kosten jedes Jahr Geld, und Native Screen ist ein kostenloses Open-Source-Projekt. Deshalb ist die App noch nicht signiert. Wir suchen nach einer Lösung dafür. Bis dahin zeigt SmartScreen beim ersten Start „Der Computer wurde durch Windows geschützt“. Klicke auf <strong>Weitere Informationen</strong> und dann auf <strong>Trotzdem ausführen</strong>. Du kannst die Datei mit dem SHA-256-Wert auf der Release-Seite vergleichen oder sie selbst aus dem Quellcode bauen.",
+  whyStore: "Diese Warnung erscheint nur beim Installer von GitHub. Die Version aus dem {link} ist signiert, wird also ohne Warnung installiert und aktualisiert sich selbst. Wir empfehlen, Native Screen dort zu laden.",
   older: "Ältere Versionen und Versionshinweise findest du auf {link}.",
 
   footer: "Native Screen · MIT-Lizenz · © Duc Trung Mai",

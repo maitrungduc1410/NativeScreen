@@ -143,6 +143,7 @@ export default {
   winStore: "Microsoft Store 版本已签名，并由商店保持更新。安装程序是同一款应用，来自 GitHub。",
   whyH: "为什么 Windows 会显示蓝色警告",
   whyP: "Windows 的代码签名证书每年都要花钱，而 Native Screen 是免费的开源项目，所以目前还没有签名。我们会想办法改善这一点。现在第一次运行时，SmartScreen 会显示“Windows 已保护你的电脑”。点击<strong>更多信息</strong>，再点击<strong>仍要运行</strong>。你可以用发布页面上的 SHA-256 校验文件，也可以自己从源码构建。",
+  whyStore: "只有从 GitHub 下载的安装程序才会出现这个警告。{link} 版本已签名，安装时不会有任何警告，并且会自动更新。我们建议从 Microsoft Store 获取 Native Screen。",
   older: "旧版本和更新说明在 {link}。",
 
   footer: "Native Screen · MIT 许可证 · © Duc Trung Mai",

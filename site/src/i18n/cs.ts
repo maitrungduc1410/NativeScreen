@@ -143,6 +143,7 @@ export default {
   winStore: "Verze z Microsoft Store je podepsaná a Store ji udržuje aktuální. Instalátor je stejná aplikace, z GitHubu.",
   whyH: "Proč Windows ukazuje modré varování",
   whyP: "Podpisové certifikáty pro Windows stojí každý rok peníze a Native Screen je bezplatný projekt s otevřeným kódem, takže aplikace zatím podepsaná není. Budeme hledat způsob, jak to zlepšit. Zatím SmartScreen při prvním spuštění ukáže „Systém Windows ochránil váš počítač“. Klikněte na <strong>Další informace</strong> a pak na <strong>Přesto spustit</strong>. Soubor můžete porovnat s SHA-256 na stránce vydání, nebo si ho sestavit sami ze zdrojového kódu.",
+  whyStore: "Toto varování uvidíte jen u instalátoru z GitHubu. Verze z {link} je podepsaná, takže se nainstaluje bez varování a aktualizuje se sama. Doporučujeme stáhnout Native Screen odtud.",
   older: "Starší verze a poznámky k vydání najdete na {link}.",
 
   footer: "Native Screen · Licence MIT · © Duc Trung Mai",

@@ -143,6 +143,7 @@ export default {
   winStore: "La versión de Microsoft Store está firmada y la Store la mantiene actualizada. El instalador es la misma app, desde GitHub.",
   whyH: "Por qué Windows muestra un aviso azul",
   whyP: "Los certificados de firma para Windows cuestan dinero cada año, y Native Screen es un proyecto gratuito y de código abierto, así que por ahora la app no está firmada. Buscaremos la forma de mejorar esto. Mientras tanto, SmartScreen muestra “Windows protegió su PC” la primera vez. Haz clic en <strong>Más información</strong> y luego en <strong>Ejecutar de todas formas</strong>. Puedes comparar el archivo con el SHA-256 de la página de la versión, o compilarlo desde el código fuente.",
+  whyStore: "Este aviso solo aparece con el instalador de GitHub. La versión de {link} está firmada, así que se instala sin ningún aviso y se actualiza sola. Te recomendamos descargar Native Screen desde allí.",
   older: "Las versiones anteriores y las notas de cada versión están en {link}.",
 
   footer: "Native Screen · Licencia MIT · © Duc Trung Mai",

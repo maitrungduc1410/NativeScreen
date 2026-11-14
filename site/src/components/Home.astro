@@ -18,6 +18,7 @@ const store = "https://apps.microsoft.com/detail/9nxxndrd06wq?referrer=appbadge&
 // badge for the light theme, "light" the white one for the dark theme.
 const badge = (variant: "dark" | "light") => `/assets/store/${locale.slug}-${variant}.svg`;
 const older = t.older.replace("{link}", `<a href="${repo}/releases">GitHub Releases</a>`);
+const whyStore = t.whyStore.replace("{link}", `<a href="${store}" target="_blank" rel="noopener noreferrer">Microsoft Store</a>`);
 const ogImage = ogImageOf(locale.slug);
 
 const jsonLd = {
@@ -447,6 +448,7 @@ const jsonLd = {
         <p>{t.winStore}</p>
         <details>
           <summary>{t.whyH}</summary>
+          <p set:html={whyStore}></p>
           <p set:html={t.whyP}></p>
         </details>
       </div>
