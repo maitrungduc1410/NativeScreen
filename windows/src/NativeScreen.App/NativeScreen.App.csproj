@@ -87,12 +87,21 @@
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Extension)' == '.pdb' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'DirectML.Debug.dll' or $([System.String]::Copy('%(PackagingOutputs.FullPath)').Contains('\win-arm64\')) or $([System.String]::Copy('%(PackagingOutputs.FullPath)').Contains('\win-x86\'))" />
     </ItemGroup>
   </Target>
-  <!-- Windows App SDK 1.8 also lists its copies in the publish files, so the SDK's duplicate check stops the MSIX build
-       before packaging. Drop the inference packages' copies there too: DirectML is the same 1.15.4, and the SDK's onnxruntime 1.23 runs the 1.24 API (spec/06 ADR-97). -->
-  <Target Name="NsDropDuplicateInferenceDllsFromPublish" AfterTargets="ComputeFilesToPublish" BeforeTargets="_HandleFileConflictsForPublish" Condition="'$(NsPackage)' == 'true'">
+  <!-- Windows App SDK 1.8 also lists some of its copies in the publish files (all three for the MSIX, only DirectML.dll
+       for the installer's dotnet publish), so the SDK's duplicate check stopped both. Drop an inference package's copy
+       only when the SDK's copy of that file is listed too; otherwise it is the only one and must stay. The two are
+       interchangeable: DirectML is the same 1.15.4, and the SDK's onnxruntime 1.23 runs the 1.24 API (spec/06 ADR-97). -->
+  <Target Name="NsDropDuplicateInferenceDllsFromPublish" AfterTargets="ComputeFilesToPublish" BeforeTargets="_HandleFileConflictsForPublish">
     <ItemGroup>
-      <NsDuplicatePublishDll Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.FullPath)').ToLowerInvariant().Contains('\microsoft.ml.onnxruntime.directml\')) and ('%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime.dll' or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime_providers_shared.dll')" />
-      <NsDuplicatePublishDll Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.FullPath)').ToLowerInvariant().Contains('\microsoft.ai.directml\')) and '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'DirectML.dll'" />
+      <NsInferencePublishDll Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime.dll' or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime_providers_shared.dll' or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'DirectML.dll'" />
+      <NsPackageInferenceDll Include="@(NsInferencePublishDll)" Condition="$([System.String]::Copy('%(NsInferencePublishDll.FullPath)').ToLowerInvariant().Contains('\microsoft.ml.onnxruntime.directml\')) or $([System.String]::Copy('%(NsInferencePublishDll.FullPath)').ToLowerInvariant().Contains('\microsoft.ai.directml\'))" />
+      <NsSdkInferenceDll Include="@(NsInferencePublishDll)" Exclude="@(NsPackageInferenceDll)" />
+    </ItemGroup>
+    <PropertyGroup>
+      <NsSdkInferenceNames>;@(NsSdkInferenceDll->'%(Filename)%(Extension)', ';');</NsSdkInferenceNames>
+    </PropertyGroup>
+    <ItemGroup>
+      <NsDuplicatePublishDll Include="@(NsPackageInferenceDll)" Condition="$(NsSdkInferenceNames.Contains(';%(NsPackageInferenceDll.Filename)%(NsPackageInferenceDll.Extension);'))" />
       <ResolvedFileToPublish Remove="@(NsDuplicatePublishDll)" />
     </ItemGroup>
   </Target>
