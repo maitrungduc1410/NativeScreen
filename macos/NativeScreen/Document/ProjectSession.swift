@@ -4024,9 +4024,7 @@ public final class ProjectSession: Identifiable {
         mutate { doc in
             doc.background.hideSensitiveData = enabled
             if !enabled {
-                for tIdx in doc.timeline.maskTracks.indices {
-                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoSensitiveMask }
-                }
+                Self.replaceAutoMasks(in: &doc.timeline, where: { $0.isAutoSensitiveMask }, with: [])
             }
         }
         if enabled {
@@ -4065,17 +4063,7 @@ public final class ProjectSession: Identifiable {
             guard self.document.background.hideSensitiveData else { return }
 
             self.mutate { doc in
-                for tIdx in doc.timeline.maskTracks.indices {
-                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoSensitiveMask }
-                }
-                if !detected.isEmpty {
-                    let newTrack = MaskTrack(
-                        name: doc.timeline.maskTracks.isEmpty ? "Masks" : "Masks \(doc.timeline.maskTracks.count + 1)",
-                        isHidden: false,
-                        items: detected
-                    )
-                    doc.timeline.maskTracks.append(newTrack)
-                }
+                Self.replaceAutoMasks(in: &doc.timeline, where: { $0.isAutoSensitiveMask }, with: detected)
             }
         }
     }
@@ -4084,9 +4072,7 @@ public final class ProjectSession: Identifiable {
         mutate { doc in
             doc.background.hideFaces = enabled
             if !enabled {
-                for tIdx in doc.timeline.maskTracks.indices {
-                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoFaceMask }
-                }
+                Self.replaceAutoMasks(in: &doc.timeline, where: { $0.isAutoFaceMask }, with: [])
             }
         }
         if enabled {
@@ -4110,18 +4096,33 @@ public final class ProjectSession: Identifiable {
             guard self.document.background.hideFaces else { return }
 
             self.mutate { doc in
-                for tIdx in doc.timeline.maskTracks.indices {
-                    doc.timeline.maskTracks[tIdx].items.removeAll { $0.isAutoFaceMask }
-                }
-                if !detected.isEmpty {
-                    let newTrack = MaskTrack(
-                        name: doc.timeline.maskTracks.isEmpty ? "Masks" : "Masks \(doc.timeline.maskTracks.count + 1)",
-                        isHidden: false,
-                        items: detected
-                    )
-                    doc.timeline.maskTracks.append(newTrack)
-                }
+                Self.replaceAutoMasks(in: &doc.timeline, where: { $0.isAutoFaceMask }, with: detected)
             }
+        }
+    }
+
+    /// Swaps one kind of automatic mask for a fresh scan. A track never holds two masks at the same time, so the scan's
+    /// masks are packed into as few new tracks as fit them (two regions on screen together go on two tracks), and a
+    /// track the old masks leave empty is removed. User masks and their tracks are left alone (spec/06 ADR-89).
+    static func replaceAutoMasks(in timeline: inout TimelineConfig, where isKind: (MaskItem) -> Bool, with detected: [MaskItem]) {
+        timeline.maskTracks.removeAll { track in
+            !track.items.isEmpty && track.items.allSatisfy(isKind)
+        }
+        for index in timeline.maskTracks.indices {
+            timeline.maskTracks[index].items.removeAll(where: isKind)
+        }
+
+        var lanes: [[MaskItem]] = []
+        for item in detected.sorted(by: { $0.sourceStartMs < $1.sourceStartMs }) {
+            if let lane = lanes.firstIndex(where: { ($0.last?.sourceEndMs ?? 0) <= item.sourceStartMs }) {
+                lanes[lane].append(item)
+            } else {
+                lanes.append([item])
+            }
+        }
+        for items in lanes {
+            let name = timeline.maskTracks.isEmpty ? "Masks" : "Masks \(timeline.maskTracks.count + 1)"
+            timeline.maskTracks.append(MaskTrack(name: name, isHidden: false, items: items))
         }
     }
 

@@ -1592,16 +1592,15 @@ Before 2026-10-26 the telemetry clock started before capture, so cursor, clicks 
 
 Not checked: driving the editor UI (live playback pacing, scrubbing). The preview uses the same compositor and solver calls with explicit timeline time.
 
-## 89. ADR-89: Right-to-Left Captions
+## 89. ADR-89: Automatic Masks Packed Into Tracks Without Overlaps
 
-Captions are laid out word by word, each word in its own box, so the words can be timed and animated. Offsets were accumulated left to right for every language, so an Arabic or Hebrew line put its first word on the left and read backwards. Each word was shaped correctly; only the order was wrong.
+A track never holds two items at the same time: adding, moving and the MCP tools all check it, and the timeline draws one row per track. The sensitive data and face scans broke that rule. Each scan put everything it found on one new track, so two regions on screen together (an email in a sidebar that is still visible when a settings page with another email slides in) landed on the same row, drawn on top of each other. A rescan also removed the old automatic masks but kept their track, so every scan left an empty "Masks n" row behind.
 
-- **Direction per line:** from the first strong letter of the line's text (Unicode bidi rules P2 and P3). RTL letters are the alphabetic scalars in U+0590 to U+08FF, U+FB1D to U+FDFF, U+FE70 to U+FEFF, U+10800 to U+10FFF and U+1E800 to U+1EFFF. Digits, punctuation and spaces are neutral; a line with no strong letter is left to right. A mixed line follows its first strong letter, and its words keep their logical order in that direction (no reordering of embedded runs).
-- **Mirroring:** a word's place is `contentWidth - leftToRightOffset - width`, using the content width at that time. This one rule covers every reveal style: the line reads from the right, `Expanding` grows from the right edge, `Slide in` arrives from the left, and `Word by word` pushes the previous word out to the right.
-- **Unchanged:** timing, box size, fonts, spring and the text shown on the timeline and in the inspector, which is drawn as a normal string.
+- **Packing:** `ProjectSession.replaceAutoMasks` sorts the scan's masks by start and puts each one on the first new track whose last mask has ended by then (`end <= start`, so back-to-back masks share a row), opening another track only when none fits. The result is the fewest rows that hold the scan without overlaps.
+- **Own tracks:** automatic masks still go on tracks of their own, never into the user's free space, so turning the scan off or rescanning removes exactly what the scan made.
+- **Old tracks:** a track made only of the kind being replaced is removed with its masks. A track that also holds a user mask (one dragged in by hand, say) stays, minus the automatic ones. Turning a scan off goes through the same function with no masks, so it leaves no empty row either.
 
-`--verify-motion` checks direction detection, word order in four styles for Arabic and English, growth from the right edge, and writes `caption-rtl.png`.
-
+<<<<<<< HEAD
 - **Windows.** `Core/Captions/CaptionLineLayout.cs`: `Line.IsRightToLeft` from `IsRightToLeft(text)`, which walks the `Rune`s and lets the first letter decide (the same ranges; `Rune.IsLetter` only differs from `isAlphabetic` on combining marks, which never come first). The expanding line is anchored at the right edge and `TargetWordOffset` mirrors `LeftToRightWordOffset`. DirectWrite still draws each word on its own and shapes it joined. `CaptionDirectionTests` has the macOS checks with a fixed-width measure.
 
 ## 90. ADR-90: Windows User Data Outside the Installer's Folder
@@ -1614,3 +1613,6 @@ The GitHub build's installer uses the package id `NativeScreen` and installs int
 - **Tests and trial runs:** `NS_LOCAL_APP_DATA=<folder>` replaces `%LOCALAPPDATA%` for user data. The Core and Rendering test assemblies set it to `%TEMP%\ns-test-local-app-data` in a module initializer, so tests never move or write real data. `UserDataFolderTests` covers the move, the installer's files, existing data, files in use and a repeated run.
 - **macOS:** not affected. The app's data lives in its own container and Application Support, apart from the app bundle.
 
+=======
+Checked on a 21 s recording whose two detected emails overlap by 0.5 s: two tracks, no overlap, and a second scan leaves the same two tracks. Windows: `TranscriptEditing.Replace` has the same single-track code and needs the same change (see `windows/HANDOFF.md`).
+>>>>>>> 1e4188a (fix(mac): keep automatic masks from overlapping, add Product Hunt gallery)

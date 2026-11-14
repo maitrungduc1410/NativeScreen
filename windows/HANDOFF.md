@@ -27,6 +27,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+<<<<<<< HEAD
 ## 2026-11-13, ADR-90: User data outside the installer's folder (Windows only)
 
 ### Verifier
@@ -37,24 +38,24 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Writer:** nothing to port. New Windows code that stores user data must use `UserDataFolder.PathOf`.
 
 ## 2026-11-14, ADR-89: Right-to-left captions (macOS first)
+=======
+## 2026-11-14, ADR-89: Automatic masks packed into tracks without overlaps (macOS first)
+>>>>>>> 1e4188a (fix(mac): keep automatic masks from overlapping, add Product Hunt gallery)
 
 ### Writer
-- **Bug:** found on Windows while making the Arabic Store screenshots (docs/releasing.md). Both apps place a caption's words left to right, so an Arabic or Hebrew line reads backwards. Each word is shaped correctly; only the word order is wrong.
-- **macOS:** fixed in `Engine/CaptionLineLayout.swift`. `Line.isRightToLeft` is set in `makeLine` from `isRightToLeft(text)`. `targetWordOffset` mirrors the old offset (now `leftToRightWordOffset`) inside the content width at that time, and `.expanding` anchors the content rect at `full.maxX - width`. Specs: spec/07 Captions, ADR-89.
-- **Verified on macOS:** both schemes build; `--verify-motion` 66 checks, including 10 new caption checks; `caption-rtl.png` shows "مرحبا بكم في التطبيق" reading from the right. Not checked: captions from a real Arabic transcript (word timings from speech).
+- **Status:** fixed on macOS. Windows has the same bug and needs the port below. No format change.
+- **Bug:** the sensitive data and face scans put everything they found on one new track. Two regions on screen at the same time (an email in a sidebar while a settings page with another email slides in) end up as two overlapping masks on one row, drawn on top of each other. Every rescan also left the emptied old track behind as an empty "Masks n" row. Every other path keeps one item per moment per track.
+- **Swift:** `ProjectSession.replaceAutoMasks(in:where:with:)` in `Document/ProjectSession.swift`, used by `rescanSensitiveDataMasks`, `rescanFaceMasks`, and the turn-off branch of `setHideSensitiveData` / `setHideFaces`. Spec: ADR-89.
+- **Rule (port as is):**
+  1. Remove every track that is non-empty and made only of masks of this kind. Then remove masks of this kind from the remaining tracks (a track that also holds a user mask stays).
+  2. Sort the detected masks by `SourceStartMs`. Put each on the first new lane whose last mask has `SourceEndMs <= SourceStartMs` of this one; otherwise open a new lane.
+  3. Append one track per lane, named `"Masks"` when there are no tracks yet, else `"Masks {count + 1}"`.
+- **Verified on macOS:** both schemes build. On a 21 s recording whose two detected emails overlap by 0.5 s (0 to 9.3 s and 8.8 to 16.8 s), the scan now makes two tracks with one mask each, the old auto track is gone, and a second scan gives the same two tracks.
 
 ### Port
-Same structure in `windows/src/NativeScreen.Core/Captions/CaptionLineLayout.cs`:
-1. `Line`: add `IsRightToLeft`, set in `MakeLine` from the joined word text.
-2. `IsRightToLeft(string)`: walk the code points (`Rune`). The first one that is a letter decides: RTL if it is in U+0590 to U+08FF, U+FB1D to U+FDFF, U+FE70 to U+FEFF, U+10800 to U+10FFF or U+1E800 to U+1EFFF, otherwise LTR. Non-letters (digits, Arabic-Indic digits, punctuation, spaces, marks) are skipped. No letter: LTR. Swift tests `isAlphabetic`; `Rune.IsLetter` differs only on combining marks (Arabic harakat), which never precede a word's first letter, so it gives the same direction.
-3. `TargetContentRect`: for `CaptionLineGrowth.Expanding` on an RTL line, `X = full.X + full.Width - width` (line 348 today sets only `Width`).
-4. `TargetWordOffset`: rename the current body to `LeftToRightWordOffset`; for an RTL line return `TargetContentRect(geometry, timeMs).Width - leftToRight - geometry.Sizes[index].Width`. No change to `LayOut`, sizes, timing or the spring.
-5. DirectWrite draws each word on its own, as before. Check that a single Arabic word renders joined (it should, as DirectWrite shapes the run).
-
-### Acceptance
-- Port the caption checks from `MotionRegressionChecks.swift` ("caption direction comes from the first strong letter", the four styles for Arabic and English, "right-to-left caption grows from the right edge") as Core tests with a fixed-width measure.
-- Render "مرحبا بكم في التطبيق" bottom center at 1280x720: first word on the right, compare with the macOS `caption-rtl.png` within spec/08 text tolerances.
-- Retake the Arabic Store screenshots with the caption typed in its normal order, and update the note in docs/releasing.md.
+1. `windows/src/NativeScreen.Core/Editing/TranscriptEditing.cs`, `AutoMaskBuilder.Replace`: replace the single `new MaskTrack { ..., Items = detected }` with the rule above. Callers in `NativeScreen.App/EditorTools.cs` (lines 861, 899, 919, 942) already pass `[]` to turn a scan off and need no change.
+2. `windows/tests/NativeScreen.Core.Tests/TranscriptEditingTests.cs`: keep `HitsOnNearbyFramesMergeIntoOneTrackedMask` passing and add a test with two auto masks that overlap in time: expect two tracks, no overlap within any track, and the same result after a second `Replace`. Add one with a user mask on a track that also holds an auto mask: the track stays with the user mask only. And `Replace(document, kind, [])` after a scan leaves no empty track.
+3. Run the writer checks from `AGENTS.md` §2 (`dotnet build` / `dotnet test` for Core).
 
 ### Verifier
 - **Result:** PASS.
