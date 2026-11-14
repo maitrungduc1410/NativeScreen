@@ -125,6 +125,10 @@ public sealed partial class EditorWindow : Window
         overlay.PackageDirectory = source.PackagePath;
         overlay.RedrawRequested = () => DrawPreview();
         PreviewCanvas.SizeChanged += (_, _) => overlay.Refresh();
+        PreviewHoverDim.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(150) };
+        PreviewFrame.PointerEntered += (_, _) => StylePreviewHover(true);
+        PreviewFrame.PointerExited += (_, _) => StylePreviewHover(false);
+        StylePreviewHover(false);
 
         SetTitleBar(TitleBar);
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
@@ -190,7 +194,9 @@ public sealed partial class EditorWindow : Window
         }
 
         var scale = TitleBar.XamlRoot.RasterizationScale;
-        var rects = new[] { Region(TitleLeft, scale), Region(TitleCenter, scale), Region(TitleRight, scale) };
+        var rects = cropHeader is { } crop
+            ? new[] { Region(crop, scale) }
+            : new[] { Region(TitleLeft, scale), Region(TitleCenter, scale), Region(TitleRight, scale) };
         InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, rects);
     }
 
@@ -756,8 +762,25 @@ public sealed partial class EditorWindow : Window
         DrawPreview();
     }
 
+    private bool previewHovered;
+
+    /// <summary>
+    /// The preview's outline and hover dim, as on macOS: ink at 8 % (28 % and 1.5 px on hover) and a 3.5 % ink wash. The
+    /// outline keeps a white recording apart from the light editor around it, where the flat style has no shadow.
+    /// </summary>
+    private void StylePreviewHover(bool hovered)
+    {
+        previewHovered = hovered;
+        var ink = ((Microsoft.UI.Xaml.Media.SolidColorBrush)Ui.Pal("Ink95")).Color;
+        PreviewHoverDim.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(ink);
+        PreviewHoverDim.Opacity = hovered ? 0.035 : 0;
+        PreviewRing.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb((byte)(hovered ? 71 : 20), ink.R, ink.G, ink.B));
+        PreviewRing.BorderThickness = new Thickness(hovered ? 1.5 : 1);
+    }
+
     private void ThemeChanged()
     {
+        StylePreviewHover(previewHovered);
         RefreshTabRail();
         inspector.Rebuild();
         timeline.Rebuild();
@@ -1181,6 +1204,29 @@ public sealed partial class EditorWindow : Window
             }
 
             e.Handled = true;
+            return;
+        }
+
+        // The crop editor covers the window: Esc discards, Enter confirms (not while a value is typed), and no other key
+        // reaches the editor behind it.
+        if (cropKeys is { } crop)
+        {
+            var typingValue = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox;
+            if (e.Key == VirtualKey.Escape)
+            {
+                crop(false);
+                e.Handled = true;
+            }
+            else if (e.Key == VirtualKey.Enter && !typingValue)
+            {
+                crop(true);
+                e.Handled = true;
+            }
+            else if (!typingValue && e.Key is not (VirtualKey.Tab or VirtualKey.Enter or VirtualKey.Space))
+            {
+                e.Handled = true;
+            }
+
             return;
         }
 

@@ -120,7 +120,13 @@
 
                 <Grid x:Name="PreviewHost" Grid.Row="1">
                     <Border x:Name="PreviewFrame" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="10">
-                        <Grid><SwapChainPanel x:Name="Preview" /><Canvas x:Name="PreviewCanvas" Background="Transparent" /></Grid>
+                        <Grid>
+                            <SwapChainPanel x:Name="Preview" />
+                            <!-- Hover dim and the outline that keeps the frame apart from the editor, as on macOS -->
+                            <Border x:Name="PreviewHoverDim" IsHitTestVisible="False" CornerRadius="10" Opacity="0" />
+                            <Border x:Name="PreviewRing" IsHitTestVisible="False" CornerRadius="10" BorderThickness="1" />
+                            <Canvas x:Name="PreviewCanvas" Background="Transparent" />
+                        </Grid>
                     </Border>
                     <Border
                         HorizontalAlignment="Left"
@@ -238,7 +244,7 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 CornerRadius="14"
-                Background="#FF111114"
+                Background="{ThemeResource SurfaceModal}"
                 BorderBrush="{ThemeResource Ink10}"
                 BorderThickness="1"
                 Tapped="SwallowTap">

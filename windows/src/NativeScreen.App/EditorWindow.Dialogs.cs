@@ -40,6 +40,7 @@ public sealed partial class EditorWindow
         }
 
         exportSettings.Normalize();
+        ExportCard.Background = Ui.Pal("SurfaceModal");
         ExportCard.Width = 740;
         ExportCard.Height = double.NaN;
         ExportCard.Padding = new Thickness(28, 26, 28, 26);
@@ -407,6 +408,7 @@ public sealed partial class EditorWindow
         exportCancel = cancel;
         session.BeginExport();
         var started = DateTime.UtcNow;
+        ExportCard.Background = Ui.Pal("SurfaceModal");
         ExportCard.Width = 740;
         ExportCard.Height = double.NaN;
         ExportCard.Padding = new Thickness(28, 26, 28, 26);
@@ -477,6 +479,7 @@ public sealed partial class EditorWindow
         var folderText = new TextBlock { Text = folder, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Ui.Pal("Ink60") };
         Ui.Tip(folderText, folder);
 
+        ExportCard.Background = Ui.Pal("SurfaceModal");
         ExportCard.Width = 660;
         ExportCard.Height = 460;
         ExportCard.Padding = new Thickness(0);
@@ -490,8 +493,14 @@ public sealed partial class EditorWindow
         var content = new Grid { ColumnSpacing = 22, Padding = new Thickness(22), Height = 342 };
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
         content.ColumnDefinitions.Add(new ColumnDefinition());
+        // The frame renders in the background; a small spinner shows until it is there, as on macOS.
         var image = new Image { Stretch = Stretch.Uniform };
-        content.Children.Add(new Border { Width = 240, Height = 298, CornerRadius = new CornerRadius(8), Background = Ui.Rgb(0, 0, 0, 0.45), Child = image });
+        var loading = new ProgressRing { IsActive = true, Width = 20, Height = 20, Foreground = Ui.Pal("Ink45"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var well = new Grid();
+        well.Children.Add(loading);
+        well.Children.Add(image);
+        var shade = AppTheme.Current == ElementTheme.Light ? 0.05 : 0.45;
+        content.Children.Add(new Border { Width = 240, Height = 298, CornerRadius = new CornerRadius(8), Background = Ui.Rgb(0, 0, 0, shade), Child = well });
 
         var form = new StackPanel { Spacing = 14 };
         Grid.SetColumn(form, 1);
@@ -551,7 +560,7 @@ public sealed partial class EditorWindow
         buttons.Children.Add(export);
         ExportBody.Children.Add(buttons);
         ExportOverlay.Visibility = Visibility.Visible;
-        _ = LoadStillPreview(image, sourceMs);
+        _ = LoadStillPreview(image, loading, sourceMs);
     }
 
     private static Grid StillRow(string title, UIElement field)
@@ -566,19 +575,31 @@ public sealed partial class EditorWindow
         return row;
     }
 
-    private async Task LoadStillPreview(Image image, double sourceMs)
+    private async Task LoadStillPreview(Image image, ProgressRing loading, double sourceMs)
     {
         var directory = Directory.CreateTempSubdirectory("ns-still-").FullName;
         var path = Path.Combine(directory, "preview.png");
         try
         {
             await new ProjectExporter(CurrentExportSource()).ExportStillAsync(path, sourceMs, 900, false);
-            image.Source = new BitmapImage(new Uri(path));
+            var bitmap = new BitmapImage();
+            // The spinner goes once the picture is decoded, so the well is never empty in between.
+            bitmap.ImageOpened += (_, _) => StopLoading(loading);
+            bitmap.ImageFailed += (_, _) => StopLoading(loading);
+            bitmap.UriSource = new Uri(path);
+            image.Source = bitmap;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
+            StopLoading(loading);
             ShowToast(Loc.F("Could not render the preview: %@", exception.Message));
         }
+    }
+
+    private static void StopLoading(ProgressRing loading)
+    {
+        loading.IsActive = false;
+        loading.Visibility = Visibility.Collapsed;
     }
 
     private async Task ExportStill(string name, string folder, Button button)

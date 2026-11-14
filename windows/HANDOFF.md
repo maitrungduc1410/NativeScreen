@@ -27,11 +27,11 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
-## 2026-11-14, ADR-90: Shortcut segments in an emerald palette (macOS first)
+## 2026-11-14, ADR-93: Shortcut segments in an emerald palette (macOS first)
 
 ### Writer
 - **Status:** done on macOS. Windows needs the color part below. No format change.
-- **Swift:** `SegmentShaderPalette.shortcut` (`shortcutLight`, `shortcutDark`) and `ShortcutTimelineSegmentView` in `Views/MultiTrackTimelineView.swift`. Spec: ADR-90.
+- **Swift:** `SegmentShaderPalette.shortcut` (`shortcutLight`, `shortcutDark`) and `ShortcutTimelineSegmentView` in `Views/MultiTrackTimelineView.swift`. Spec: ADR-93.
 - **Why:** shortcut segments had their own see-through look tinted with the keycap color (`#4D2FF5` by default), the same violet as the zoom row. They now use the shared segment body in emerald, the one hue no other row uses.
 - **Verified on macOS:** both schemes build. In light and dark: selecting one shortcut dims the other shortcuts to 30 %, selecting an annotation leaves shortcuts solid, the selected shortcut gets the palette outline. The hover `+` preview was not checked by hand.
 
@@ -44,27 +44,43 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 4. macOS also dims the other items of a row's kind to 30 % while one is selected. Windows does not do this on any row yet; leave that out of this port.
 
 ### Verifier
-- **Result:** pending port.
+- **Result:** PASS.
+- **Changes made:** `TimelineView.cs`: `Palette.Shortcut` with the values above. The dark selected color is the macOS `selectedOuterOutline` (`C(0.2, 0.7, 0.47, 0.8)`), because Windows now draws the outer outline from each palette (ADR-92) and no longer has `DarkSelected`. Shortcut blocks and their add ghost use it (`GhostStyle.Of`), and the violet `GhostStyle.Shortcut` is removed. The see-through keycap-colored look from ADR-92 is gone; the label keeps 12 pt semibold at 96 % white, as `ShortcutTimelineSegmentView` does.
+- **Checked:** screenshots of a project with two shortcuts, in light and dark: emerald body, ring, readable label. Step 4 (dimming the other items of a row) is left out, as asked.
 
-<<<<<<< HEAD
-## 2026-11-13, ADR-90: User data outside the installer's folder (Windows only)
+## 2026-11-14, ADR-92: Editor chrome like macOS (Windows only)
 
 ### Verifier
-- **Bug:** uninstalling the GitHub build deletes `%LOCALAPPDATA%\NativeScreen`, which also held settings, presets and downloaded models. Found when the owner moved from the GitHub build to the Store build.
-- **Changes made:** `Core/Storage/UserDataFolder.cs` (new folder `%LOCALAPPDATA%\NativeScreen Data`, one-time migration of the known items, `NS_LOCAL_APP_DATA` override). `AppTheme`, `EditorTools`, `BuiltInBackgroundMusic`, `PersonSegmentation` and `WhisperTranscriber` use it. Test assemblies point it at a temporary folder.
-- **Result:** PASS. Core 360 (5 new in `UserDataFolderTests`), Rendering 38, Media 29; Release build 0 warnings. The app started against a sandbox copy of an old folder moved `settings.json` and `Presets`, kept `current` and `Update.exe`, and read the same settings.
-- **Spec updates:** spec/06 ADR-90, spec/08 settings row, AGENTS.md command row.
-- **Writer:** nothing to port. New Windows code that stores user data must use `UserDataFolder.PathOf`.
+- **Asked by the owner:**
+  - Export modals in the light theme.
+  - Crop editor with Confirm and Discard, size, position, presets, Reset and Esc.
+  - Semibold segment titles.
+  - Preview hover, outline and click.
+  - Shortcut segment colors.
+  - Outer selection outline.
+- **Changes made:**
+  - `EditorWindow.Dialogs.cs` and `EditorWindow.xaml`: modal surface.
+  - `EditorWindow.Tools.cs`: crop editor, plus the new `CursorGrid.cs`.
+  - `EditorWindow.xaml.cs`: crop keys and preview hover.
+  - `PreviewOverlay.cs`: a press opens Background.
+  - `TimelineView.cs`: titles, outline, shortcut style, dark outline colors.
+- **Result:** PASS on the light theme with a copy of a project (`NS_LOCAL_APP_DATA` sandbox), checked on screenshots:
+  - Export and still-frame modals are light.
+  - The crop editor shows all controls. Typing a width of 1920 narrows the frame; Esc discards; Enter applies the crop.
+  - The selected zoom has the outer outline, and shortcuts show the purple wash.
+  - Hover strengthens the preview outline, and a click on the preview opens Background from the Zoom editor.
+  - Core 360 tests pass; the Release build has 0 warnings.
+- **Not checked:**
+  - The dark theme on screen. The colors come from the macOS dark palette.
+  - The camera crop on screen. It uses the same editor.
+- **Writer:** nothing to port.
 
-## 2026-11-14, ADR-89: Right-to-left captions (macOS first)
-=======
-## 2026-11-14, ADR-89: Automatic masks packed into tracks without overlaps (macOS first)
->>>>>>> 1e4188a (fix(mac): keep automatic masks from overlapping, add Product Hunt gallery)
+## 2026-11-14, ADR-91: Automatic masks packed into tracks without overlaps (macOS first)
 
 ### Writer
 - **Status:** fixed on macOS. Windows has the same bug and needs the port below. No format change.
 - **Bug:** the sensitive data and face scans put everything they found on one new track. Two regions on screen at the same time (an email in a sidebar while a settings page with another email slides in) end up as two overlapping masks on one row, drawn on top of each other. Every rescan also left the emptied old track behind as an empty "Masks n" row. Every other path keeps one item per moment per track.
-- **Swift:** `ProjectSession.replaceAutoMasks(in:where:with:)` in `Document/ProjectSession.swift`, used by `rescanSensitiveDataMasks`, `rescanFaceMasks`, and the turn-off branch of `setHideSensitiveData` / `setHideFaces`. Spec: ADR-89.
+- **Swift:** `ProjectSession.replaceAutoMasks(in:where:with:)` in `Document/ProjectSession.swift`, used by `rescanSensitiveDataMasks`, `rescanFaceMasks`, and the turn-off branch of `setHideSensitiveData` / `setHideFaces`. Spec: ADR-91.
 - **Rule (port as is):**
   1. Remove every track that is non-empty and made only of masks of this kind. Then remove masks of this kind from the remaining tracks (a track that also holds a user mask stays).
   2. Sort the detected masks by `SourceStartMs`. Put each on the first new lane whose last mask has `SourceEndMs <= SourceStartMs` of this one; otherwise open a new lane.
@@ -75,6 +91,41 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 1. `windows/src/NativeScreen.Core/Editing/TranscriptEditing.cs`, `AutoMaskBuilder.Replace`: replace the single `new MaskTrack { ..., Items = detected }` with the rule above. Callers in `NativeScreen.App/EditorTools.cs` (lines 861, 899, 919, 942) already pass `[]` to turn a scan off and need no change.
 2. `windows/tests/NativeScreen.Core.Tests/TranscriptEditingTests.cs`: keep `HitsOnNearbyFramesMergeIntoOneTrackedMask` passing and add a test with two auto masks that overlap in time: expect two tracks, no overlap within any track, and the same result after a second `Replace`. Add one with a user mask on a track that also holds an auto mask: the track stays with the user mask only. And `Replace(document, kind, [])` after a scan leaves no empty track.
 3. Run the writer checks from `AGENTS.md` §2 (`dotnet build` / `dotnet test` for Core).
+
+### Verifier
+- **Result:** PASS.
+- **Changes made:** `AutoMaskBuilder.Replace` in `Core/Editing/TranscriptEditing.cs` as in the port steps: whole auto-only tracks go, user tracks keep their own masks, the new masks are packed into lanes by start (`End <= Start` shares a lane), one track per lane.
+- **Tests:** `HitsOnNearbyFramesMergeIntoOneTrackedMask` still passes. New `AutomaticMasksArePackedIntoTracksWithoutOverlaps`: the macOS case (0 to 9.3 s and 8.8 to 16.8 s) plus a back-to-back mask gives two new tracks with no overlap, a rescan gives the same tracks, turning the scan off leaves only the user track with its user mask. Core 361.
+- **Not checked:** a real scan in the app (it needs the OCR or face model on a recording with two regions at once).
+
+## 2026-11-13, ADR-90: User data outside the installer's folder (Windows only)
+
+### Verifier
+- **Bug:** uninstalling the GitHub build deletes `%LOCALAPPDATA%\NativeScreen`, which also held settings, presets and downloaded models. Found when the owner moved from the GitHub build to the Store build.
+- **Changes made:** `Core/Storage/UserDataFolder.cs` (new folder `%LOCALAPPDATA%\NativeScreen Data`, one-time migration of the known items, `NS_LOCAL_APP_DATA` override). `AppTheme`, `EditorTools`, `BuiltInBackgroundMusic`, `PersonSegmentation` and `WhisperTranscriber` use it. Test assemblies point it at a temporary folder.
+- **Result:** PASS. Core 360 (5 new in `UserDataFolderTests`), Rendering 38, Media 29; Release build 0 warnings. The app started against a sandbox copy of an old folder moved `settings.json` and `Presets`, kept `current` and `Update.exe`, and read the same settings.
+- **Spec updates:** spec/06 ADR-90, spec/08 settings row, AGENTS.md command row.
+- **Writer:** nothing to port. New Windows code that stores user data must use `UserDataFolder.PathOf`.
+
+## 2026-11-14, ADR-89: Right-to-left captions (macOS first)
+
+### Writer
+- **Bug:** found on Windows while making the Arabic Store screenshots (docs/releasing.md). Both apps place a caption's words left to right, so an Arabic or Hebrew line reads backwards. Each word is shaped correctly; only the word order is wrong.
+- **macOS:** fixed in `Engine/CaptionLineLayout.swift`. `Line.isRightToLeft` is set in `makeLine` from `isRightToLeft(text)`. `targetWordOffset` mirrors the old offset (now `leftToRightWordOffset`) inside the content width at that time, and `.expanding` anchors the content rect at `full.maxX - width`. Specs: spec/07 Captions, ADR-89.
+- **Verified on macOS:** both schemes build; `--verify-motion` 66 checks, including 10 new caption checks; `caption-rtl.png` shows "مرحبا بكم في التطبيق" reading from the right. Not checked: captions from a real Arabic transcript (word timings from speech).
+
+### Port
+Same structure in `windows/src/NativeScreen.Core/Captions/CaptionLineLayout.cs`:
+1. `Line`: add `IsRightToLeft`, set in `MakeLine` from the joined word text.
+2. `IsRightToLeft(string)`: walk the code points (`Rune`). The first one that is a letter decides: RTL if it is in U+0590 to U+08FF, U+FB1D to U+FDFF, U+FE70 to U+FEFF, U+10800 to U+10FFF or U+1E800 to U+1EFFF, otherwise LTR. Non-letters (digits, Arabic-Indic digits, punctuation, spaces, marks) are skipped. No letter: LTR. Swift tests `isAlphabetic`; `Rune.IsLetter` differs only on combining marks (Arabic harakat), which never precede a word's first letter, so it gives the same direction.
+3. `TargetContentRect`: for `CaptionLineGrowth.Expanding` on an RTL line, `X = full.X + full.Width - width` (line 348 today sets only `Width`).
+4. `TargetWordOffset`: rename the current body to `LeftToRightWordOffset`; for an RTL line return `TargetContentRect(geometry, timeMs).Width - leftToRight - geometry.Sizes[index].Width`. No change to `LayOut`, sizes, timing or the spring.
+5. DirectWrite draws each word on its own, as before. Check that a single Arabic word renders joined (it should, as DirectWrite shapes the run).
+
+### Acceptance
+- Port the caption checks from `MotionRegressionChecks.swift` ("caption direction comes from the first strong letter", the four styles for Arabic and English, "right-to-left caption grows from the right edge") as Core tests with a fixed-width measure.
+- Render "مرحبا بكم في التطبيق" bottom center at 1280x720: first word on the right, compare with the macOS `caption-rtl.png` within spec/08 text tolerances.
+- Retake the Arabic Store screenshots with the caption typed in its normal order, and update the note in docs/releasing.md.
 
 ### Verifier
 - **Result:** PASS.

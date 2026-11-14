@@ -1592,15 +1592,16 @@ Before 2026-10-26 the telemetry clock started before capture, so cursor, clicks 
 
 Not checked: driving the editor UI (live playback pacing, scrubbing). The preview uses the same compositor and solver calls with explicit timeline time.
 
-## 89. ADR-89: Automatic Masks Packed Into Tracks Without Overlaps
+## 89. ADR-89: Right-to-Left Captions
 
-A track never holds two items at the same time: adding, moving and the MCP tools all check it, and the timeline draws one row per track. The sensitive data and face scans broke that rule. Each scan put everything it found on one new track, so two regions on screen together (an email in a sidebar that is still visible when a settings page with another email slides in) landed on the same row, drawn on top of each other. A rescan also removed the old automatic masks but kept their track, so every scan left an empty "Masks n" row behind.
+Captions are laid out word by word, each word in its own box, so the words can be timed and animated. Offsets were accumulated left to right for every language, so an Arabic or Hebrew line put its first word on the left and read backwards. Each word was shaped correctly; only the order was wrong.
 
-- **Packing:** `ProjectSession.replaceAutoMasks` sorts the scan's masks by start and puts each one on the first new track whose last mask has ended by then (`end <= start`, so back-to-back masks share a row), opening another track only when none fits. The result is the fewest rows that hold the scan without overlaps.
-- **Own tracks:** automatic masks still go on tracks of their own, never into the user's free space, so turning the scan off or rescanning removes exactly what the scan made.
-- **Old tracks:** a track made only of the kind being replaced is removed with its masks. A track that also holds a user mask (one dragged in by hand, say) stays, minus the automatic ones. Turning a scan off goes through the same function with no masks, so it leaves no empty row either.
+- **Direction per line:** from the first strong letter of the line's text (Unicode bidi rules P2 and P3). RTL letters are the alphabetic scalars in U+0590 to U+08FF, U+FB1D to U+FDFF, U+FE70 to U+FEFF, U+10800 to U+10FFF and U+1E800 to U+1EFFF. Digits, punctuation and spaces are neutral; a line with no strong letter is left to right. A mixed line follows its first strong letter, and its words keep their logical order in that direction (no reordering of embedded runs).
+- **Mirroring:** a word's place is `contentWidth - leftToRightOffset - width`, using the content width at that time. This one rule covers every reveal style: the line reads from the right, `Expanding` grows from the right edge, `Slide in` arrives from the left, and `Word by word` pushes the previous word out to the right.
+- **Unchanged:** timing, box size, fonts, spring and the text shown on the timeline and in the inspector, which is drawn as a normal string.
 
-<<<<<<< HEAD
+`--verify-motion` checks direction detection, word order in four styles for Arabic and English, growth from the right edge, and writes `caption-rtl.png`.
+
 - **Windows.** `Core/Captions/CaptionLineLayout.cs`: `Line.IsRightToLeft` from `IsRightToLeft(text)`, which walks the `Rune`s and lets the first letter decide (the same ranges; `Rune.IsLetter` only differs from `isAlphabetic` on combining marks, which never come first). The expanding line is anchored at the right edge and `TargetWordOffset` mirrors `LeftToRightWordOffset`. DirectWrite still draws each word on its own and shapes it joined. `CaptionDirectionTests` has the macOS checks with a fixed-width measure.
 
 ## 90. ADR-90: Windows User Data Outside the Installer's Folder
@@ -1613,11 +1614,28 @@ The GitHub build's installer uses the package id `NativeScreen` and installs int
 - **Tests and trial runs:** `NS_LOCAL_APP_DATA=<folder>` replaces `%LOCALAPPDATA%` for user data. The Core and Rendering test assemblies set it to `%TEMP%\ns-test-local-app-data` in a module initializer, so tests never move or write real data. `UserDataFolderTests` covers the move, the installer's files, existing data, files in use and a repeated run.
 - **macOS:** not affected. The app's data lives in its own container and Application Support, apart from the app bundle.
 
-=======
-Checked on a 21 s recording whose two detected emails overlap by 0.5 s: two tracks, no overlap, and a second scan leaves the same two tracks. Windows: `TranscriptEditing.Replace` has the same single-track code and needs the same change (see `windows/HANDOFF.md`).
->>>>>>> 1e4188a (fix(mac): keep automatic masks from overlapping, add Product Hunt gallery)
+## 91. ADR-91: Automatic Masks Packed Into Tracks Without Overlaps
 
-## 90. ADR-90: Shortcut Segments Drawn Like the Other Tracks, in Emerald
+A track never holds two items at the same time: adding, moving and the MCP tools all check it, and the timeline draws one row per track. The sensitive data and face scans broke that rule. Each scan put everything it found on one new track, so two regions on screen together (an email in a sidebar that is still visible when a settings page with another email slides in) landed on the same row, drawn on top of each other. A rescan also removed the old automatic masks but kept their track, so every scan left an empty "Masks n" row behind.
+
+- **Packing:** `ProjectSession.replaceAutoMasks` sorts the scan's masks by start and puts each one on the first new track whose last mask has ended by then (`end <= start`, so back-to-back masks share a row), opening another track only when none fits. The result is the fewest rows that hold the scan without overlaps.
+- **Own tracks:** automatic masks still go on tracks of their own, never into the user's free space, so turning the scan off or rescanning removes exactly what the scan made.
+- **Old tracks:** a track made only of the kind being replaced is removed with its masks. A track that also holds a user mask (one dragged in by hand, say) stays, minus the automatic ones. Turning a scan off goes through the same function with no masks, so it leaves no empty row either.
+
+Checked on a 21 s recording whose two detected emails overlap by 0.5 s: two tracks, no overlap, and a second scan leaves the same two tracks. Windows: `TranscriptEditing.Replace` has the same single-track code and needs the same change (see `windows/HANDOFF.md`).
+
+## 92. ADR-92: Windows Editor Chrome Matches macOS
+
+The owner listed several places where the Windows editor looked or behaved unlike macOS. Each follows the macOS view now.
+
+- **Export and still-frame modals:** the card used a fixed dark fill, so in the light theme its dark-on-light text was invisible. It now uses `SurfaceModal`, set again each time the card opens, so a theme change in between applies. The still-frame preview well is black at 45 % (dark) or 5 % (light), as on macOS, and shows a small `ProgressRing` until the rendered frame has decoded (`ImageOpened`), or until rendering fails.
+- **Crop editor (recording and camera):** laid out like `StandaloneCropWindowView`. The top bar has Size W × H, the preset menu (Full Original, 16:9, 9:16, 1:1, 4:3), Position X Y and Reset; Reset fades when nothing is cropped. Eight dark handles ringed in white surround the frame, with a dashed rule-of-thirds grid and a 62 % black shade outside the crop. Confirm changes and Discard changes are centered below. Unlike macOS, the size and position fields are editable, in pixels of the recording. A typed size keeps the position when it fits. The preset menu names the preset the crop matches (Full Original, 16:9 Widescreen, Custom, ...) instead of the macOS "Select...", which read like cut-off text; the button grows with the translated name. The top bar covers the title bar, so while it is open its controls are the window's only click-through region (`UpdateTitleBarRegions`) and the rest of the bar drags the window. The frame follows window resizes. `RootKeyDown` routes keys while the editor is open: Esc discards; Enter confirms, unless a field is being typed in, where Enter commits the value; other keys never reach the timeline behind it.
+- **Segment titles:** 11.5 pt semibold at 55 % white, as on macOS (was 11 pt regular).
+- **Selection outline:** a 1 px line in the palette's `selectedOuterOutline` color, 1.5 px outside the segment; the segment keeps its normal ring. A rounded WinUI panel clips its children, so a child with a negative margin is cut off. The outline is therefore the segment's sibling on the timeline canvas: it follows the segment's place and size on `LayoutUpdated` and joins its row's wiggle.
+- **Shortcut segments:** replaced by ADR-93 (the emerald palette); only the 12 pt semibold, 96 % white label remains from this change.
+- **Preview:** a 1 px ink outline at 8 % always marks the frame's edge. In the flat style there is no shadow, so without it a white recording merged into the light editor. On hover the outline goes to 28 % and 1.5 px and a 3.5 % ink wash fades in over 150 ms. A press on the bare preview (not on a mask, annotation, keycap or caption) closes what is open and shows the Background inspector. While a new mask is being placed, a press does not do this.
+
+## 93. ADR-93: Shortcut Segments Drawn Like the Other Tracks, in Emerald
 
 Shortcut segments had a view of their own. They were a see-through gradient (42 % at the top to 8 % at the bottom) with a light glow along the bottom, a white outline when selected and a colored shadow, tinted with the keycap color, which is `#4D2FF5` by default. Three problems came out of that. They always looked dimmed next to the solid segments of every other track, so they seemed to dim along with any selection and only "lit up" when clicked. Their default color is the dark zoom fill and close to the light one, so the two rows read as the same thing. And selecting a shortcut did not dim the other shortcuts, the rule every other track follows.
 

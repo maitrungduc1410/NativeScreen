@@ -67,6 +67,11 @@ internal sealed partial class PreviewOverlay
                 session.SelectCaption(caption);
                 args.Handled = true;
             }
+            else if (ReferenceEquals(args.OriginalSource, canvas) && session.PendingAddMaskType is null)
+            {
+                // A press on the bare preview, not on a mask or annotation handle: whatever is open closes and the Background inspector shows.
+                session.SelectTab(InspectorTab.Background);
+            }
         };
         canvas.PointerMoved += Moved;
         canvas.PointerReleased += Released;

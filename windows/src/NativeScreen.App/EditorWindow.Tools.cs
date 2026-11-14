@@ -19,6 +19,12 @@ namespace NativeScreen.App;
 public sealed partial class EditorWindow
 {
     private const double MinimumCrop = 0.05;
+
+    /// <summary>Closes the open crop editor, confirming or discarding; null when none is open.</summary>
+    private Action<bool>? cropKeys;
+
+    /// <summary>The crop editor's top bar while it covers the title bar; its controls are the window's only click-through region.</summary>
+    private FrameworkElement? cropHeader;
     private string stillFormat = "png";
     private int stillHeight = 1440;
 
@@ -408,8 +414,18 @@ public sealed partial class EditorWindow
         ShowCropOverlay(still.Item1, still.Width, still.Height, session.Document.Camera.CropRect01, crop => session.Mutate(document => document.Camera.CropRect01 = crop));
     }
 
+    /// <summary>
+    /// The crop editor for the recording or the camera, laid out like the macOS crop window: size, preset and position
+    /// above, the frame with eight handles in the middle, Confirm changes and Discard changes below. Enter confirms and
+    /// Esc discards (<see cref="cropKeys"/>).
+    /// </summary>
     private void ShowCropOverlay(byte[] bgra, int width, int height, Rect01 start, Action<Rect01> applyCrop)
     {
+        if (cropKeys is not null)
+        {
+            return;
+        }
+
         var bitmap = new WriteableBitmap(width, height);
         using (var stream = bitmap.PixelBuffer.AsStream())
         {
@@ -417,29 +433,68 @@ public sealed partial class EditorWindow
         }
 
         bitmap.Invalidate();
-        var available = new Windows.Foundation.Size(Root.ActualWidth * 0.8, Root.ActualHeight * 0.72);
-        var fit = Math.Min(available.Width / width, available.Height / height);
-        var viewWidth = width * fit;
-        var viewHeight = height * fit;
         var (left, top, right, bottom) = (start.X, start.Y, start.X + start.Width, start.Y + start.Height);
+        var viewWidth = 1.0;
+        var viewHeight = 1.0;
 
-        var canvas = new Canvas { Width = viewWidth, Height = viewHeight };
-        canvas.Children.Add(new Image { Source = bitmap, Width = viewWidth, Height = viewHeight, Stretch = Stretch.Fill });
-        var shades = Enumerable.Range(0, 4).Select(_ => new Border { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(150, 0, 0, 0)), IsHitTestVisible = false }).ToArray();
+        var canvas = new Canvas();
+        var picture = new Image { Source = bitmap, Stretch = Stretch.Fill };
+        canvas.Children.Add(picture);
+        var shades = Enumerable.Range(0, 4).Select(_ => new Border { Background = Ui.Rgb(0, 0, 0, 0.62), IsHitTestVisible = false }).ToArray();
         foreach (var shade in shades)
         {
             canvas.Children.Add(shade);
         }
 
-        var frame = new Border { BorderBrush = new SolidColorBrush(Colors.White), BorderThickness = new Thickness(2), Background = new SolidColorBrush(Colors.Transparent) };
-        canvas.Children.Add(frame);
-        var handles = Enumerable.Range(0, 4).Select(_ => new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = new SolidColorBrush(Colors.White) }).ToArray();
-        foreach (var handle in handles)
+        var thirds = Enumerable.Range(0, 4).Select(_ => new Microsoft.UI.Xaml.Shapes.Line
         {
-            canvas.Children.Add(handle);
+            Stroke = Ui.Rgb(1, 1, 1, 0.28),
+            StrokeThickness = 1,
+            StrokeDashArray = [4, 4],
+            IsHitTestVisible = false
+        }).ToArray();
+        foreach (var line in thirds)
+        {
+            canvas.Children.Add(line);
         }
 
-        Action? layoutExtras = null;
+        // Dragging inside the frame moves the crop without changing its size.
+        var frame = new CursorGrid(InputSystemCursorShape.SizeAll) { BorderBrush = Ui.Rgb(1, 1, 1, 0.85), BorderThickness = new Thickness(1.5), Background = Ui.Rgb(0, 0, 0, 0.004) };
+        canvas.Children.Add(frame);
+
+        // Four corners, then the top, bottom, left and right edges: a dark dot ringed in white inside a larger hit area.
+        var handles = Enumerable.Range(0, 8).Select(index =>
+        {
+            var hit = new CursorGrid(index switch { 0 or 3 => InputSystemCursorShape.SizeNorthwestSoutheast, 1 or 2 => InputSystemCursorShape.SizeNortheastSouthwest, 4 or 5 => InputSystemCursorShape.SizeNorthSouth, _ => InputSystemCursorShape.SizeWestEast }) { Width = 26, Height = 26, Background = Ui.Rgb(0, 0, 0, 0.004) };
+            hit.Children.Add(new Border
+            {
+                Width = 13,
+                Height = 13,
+                CornerRadius = new CornerRadius(6.5),
+                Background = Ui.Rgb(0.16, 0.16, 0.2),
+                BorderBrush = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(2),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            canvas.Children.Add(hit);
+            return hit;
+        }).ToArray();
+
+        NumberBox Field(string name)
+        {
+            var box = new NumberBox { Width = 76, Minimum = 0, SmallChange = 1, LargeChange = 10, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden, NumberFormatter = new Windows.Globalization.NumberFormatting.DecimalFormatter { FractionDigits = 0, IntegerDigits = 1 } };
+            A11y.Name(box, name);
+            return box;
+        }
+
+        var widthBox = Field("Width");
+        var heightBox = Field("Height");
+        var xBox = Field("X");
+        var yBox = Field("Y");
+        Button? reset = null;
+        TextBlock? presetText = null;
+        var syncing = false;
 
         void Layout()
         {
@@ -449,22 +504,63 @@ public sealed partial class EditorWindow
             Place(shades[2], 0, y, x, h);
             Place(shades[3], x + w, y, viewWidth - x - w, h);
             Place(frame, x, y, w, h);
-            Canvas.SetLeft(handles[0], x - 9);
-            Canvas.SetTop(handles[0], y - 9);
-            Canvas.SetLeft(handles[1], x + w - 9);
-            Canvas.SetTop(handles[1], y - 9);
-            Canvas.SetLeft(handles[2], x - 9);
-            Canvas.SetTop(handles[2], y + h - 9);
-            Canvas.SetLeft(handles[3], x + w - 9);
-            Canvas.SetTop(handles[3], y + h - 9);
-            layoutExtras?.Invoke();
+            (thirds[0].X1, thirds[0].Y1, thirds[0].X2, thirds[0].Y2) = (x + w / 3, y, x + w / 3, y + h);
+            (thirds[1].X1, thirds[1].Y1, thirds[1].X2, thirds[1].Y2) = (x + w * 2 / 3, y, x + w * 2 / 3, y + h);
+            (thirds[2].X1, thirds[2].Y1, thirds[2].X2, thirds[2].Y2) = (x, y + h / 3, x + w, y + h / 3);
+            (thirds[3].X1, thirds[3].Y1, thirds[3].X2, thirds[3].Y2) = (x, y + h * 2 / 3, x + w, y + h * 2 / 3);
+            (double X, double Y)[] spots = [(x, y), (x + w, y), (x, y + h), (x + w, y + h), (x + w / 2, y), (x + w / 2, y + h), (x, y + h / 2), (x + w, y + h / 2)];
+            for (var index = 0; index < handles.Length; index++)
+            {
+                Canvas.SetLeft(handles[index], spots[index].X - 13);
+                Canvas.SetTop(handles[index], spots[index].Y - 13);
+            }
+
+            syncing = true;
+            widthBox.Value = Math.Round((right - left) * width);
+            heightBox.Value = Math.Round((bottom - top) * height);
+            xBox.Value = Math.Round(left * width);
+            yBox.Value = Math.Round(top * height);
+            syncing = false;
+            if (presetText is not null)
+            {
+                presetText.Text = Loc.T(PresetName());
+            }
+
+            if (reset is not null)
+            {
+                reset.IsEnabled = !IsFull();
+                reset.Opacity = reset.IsEnabled ? 1 : 0.45;
+            }
         }
 
-        void DragWith(UIElement element, Action<double, double> apply)
+        // The preset the crop matches, so the menu says what is chosen (the macOS "Select..." read like cut-off text).
+        string PresetName()
+        {
+            if (IsFull())
+            {
+                return "Full Original";
+            }
+
+            var ratio = (right - left) * width / Math.Max(1e-9, (bottom - top) * height);
+            foreach (var (name, value) in new[] { ("16:9 Widescreen", 16.0 / 9), ("9:16 Vertical", 9.0 / 16), ("1:1 Square", 1.0), ("4:3 Classic", 4.0 / 3) })
+            {
+                if (Math.Abs(ratio - value) <= value * 0.005)
+                {
+                    return name;
+                }
+            }
+
+            return "Custom";
+        }
+
+        bool IsFull() => left <= 0.0005 && top <= 0.0005 && right >= 0.9995 && bottom >= 0.9995;
+
+        void DragWith(UIElement element, Action<double, double> apply, Action<Windows.Foundation.Point>? pressed = null)
         {
             var dragging = false;
             element.PointerPressed += (_, args) =>
             {
+                pressed?.Invoke(args.GetCurrentPoint(canvas).Position);
                 dragging = element.CapturePointer(args.Pointer);
                 args.Handled = true;
             };
@@ -488,42 +584,12 @@ public sealed partial class EditorWindow
         DragWith(handles[1], (x, y) => (right, top) = (Math.Max(x, left + MinimumCrop), Math.Min(y, bottom - MinimumCrop)));
         DragWith(handles[2], (x, y) => (left, bottom) = (Math.Min(x, right - MinimumCrop), Math.Max(y, top + MinimumCrop)));
         DragWith(handles[3], (x, y) => (right, bottom) = (Math.Max(x, left + MinimumCrop), Math.Max(y, top + MinimumCrop)));
-        Layout();
-
-        // Thirds grid, edge handles and the size readout.
-        var thirds = Enumerable.Range(0, 4).Select(_ => new Border { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(90, 255, 255, 255)), IsHitTestVisible = false }).ToArray();
-        var edges = Enumerable.Range(0, 4).Select(index => new Border { Background = new SolidColorBrush(Colors.White), CornerRadius = new CornerRadius(3), Width = index < 2 ? 34 : 6, Height = index < 2 ? 6 : 34 }).ToArray();
-        var readout = new TextBlock { FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new SolidColorBrush(Colors.White) };
-        layoutExtras = () =>
-        {
-            var (x, y, w, h) = (left * viewWidth, top * viewHeight, (right - left) * viewWidth, (bottom - top) * viewHeight);
-            Place(thirds[0], x + w / 3, y, 1, h);
-            Place(thirds[1], x + w * 2 / 3, y, 1, h);
-            Place(thirds[2], x, y + h / 3, w, 1);
-            Place(thirds[3], x, y + h * 2 / 3, w, 1);
-            Canvas.SetLeft(edges[0], x + w / 2 - 17);
-            Canvas.SetTop(edges[0], y - 3);
-            Canvas.SetLeft(edges[1], x + w / 2 - 17);
-            Canvas.SetTop(edges[1], y + h - 3);
-            Canvas.SetLeft(edges[2], x - 3);
-            Canvas.SetTop(edges[2], y + h / 2 - 17);
-            Canvas.SetLeft(edges[3], x + w - 3);
-            Canvas.SetTop(edges[3], y + h / 2 - 17);
-            readout.Text = Loc.F("Size %lld × %lld", (long)Math.Round((right - left) * width), (long)Math.Round((bottom - top) * height))
-                + "    " + Loc.T("Position") + $" {Math.Round(left * width)} {Math.Round(top * height)}";
-        };
-
-        // Dragging inside the frame moves the crop without changing its size.
-        frame.IsHitTestVisible = true;
-        frame.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
+        DragWith(handles[4], (_, y) => top = Math.Min(y, bottom - MinimumCrop));
+        DragWith(handles[5], (_, y) => bottom = Math.Max(y, top + MinimumCrop));
+        DragWith(handles[6], (x, _) => left = Math.Min(x, right - MinimumCrop));
+        DragWith(handles[7], (x, _) => right = Math.Max(x, left + MinimumCrop));
         var grabX = 0.0;
         var grabY = 0.0;
-        frame.PointerPressed += (_, args) =>
-        {
-            var point = args.GetCurrentPoint(canvas).Position;
-            grabX = point.X / viewWidth - left;
-            grabY = point.Y / viewHeight - top;
-        };
         DragWith(frame, (x, y) =>
         {
             var w = right - left;
@@ -532,68 +598,183 @@ public sealed partial class EditorWindow
             top = Math.Clamp(y - grabY, 0, 1 - h);
             right = left + w;
             bottom = top + h;
+        }, point =>
+        {
+            grabX = point.X / viewWidth - left;
+            grabY = point.Y / viewHeight - top;
         });
 
-        foreach (var line in thirds)
+        // Typed values are pixels of the recording; a new size keeps the position when it fits.
+        void Typed(NumberBox box, Action<double> apply) => box.ValueChanged += (_, args) =>
         {
-            canvas.Children.Add(line);
+            if (syncing || double.IsNaN(args.NewValue))
+            {
+                Layout();
+                return;
+            }
+
+            apply(args.NewValue);
+            Layout();
+        };
+        Typed(widthBox, value =>
+        {
+            var w = Math.Clamp(value / width, MinimumCrop, 1);
+            left = Math.Min(left, 1 - w);
+            right = left + w;
+        });
+        Typed(heightBox, value =>
+        {
+            var h = Math.Clamp(value / height, MinimumCrop, 1);
+            top = Math.Min(top, 1 - h);
+            bottom = top + h;
+        });
+        Typed(xBox, value =>
+        {
+            var w = right - left;
+            left = Math.Clamp(value / width, 0, 1 - w);
+            right = left + w;
+        });
+        Typed(yBox, value =>
+        {
+            var h = bottom - top;
+            top = Math.Clamp(value / height, 0, 1 - h);
+            bottom = top + h;
+        });
+
+        void Aspect(double ratio)
+        {
+            var aspect = width / (double)Math.Max(1, height);
+            var newWidth = 1.0;
+            var newHeight = aspect / ratio;
+            if (newHeight > 1)
+            {
+                newHeight = 1;
+                newWidth = ratio / aspect;
+            }
+
+            (left, top, right, bottom) = ((1 - newWidth) / 2, (1 - newHeight) / 2, (1 + newWidth) / 2, (1 + newHeight) / 2);
+            Layout();
         }
 
-        foreach (var edge in edges)
-        {
-            canvas.Children.Add(edge);
-        }
-
-        DragWith(edges[0], (_, y) => top = Math.Min(y, bottom - MinimumCrop));
-        DragWith(edges[1], (_, y) => bottom = Math.Max(y, top + MinimumCrop));
-        DragWith(edges[2], (x, _) => left = Math.Min(x, right - MinimumCrop));
-        DragWith(edges[3], (x, _) => right = Math.Max(x, left + MinimumCrop));
-        Layout();
-
-        var overlay = new Grid { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(230, 10, 10, 14)) };
-        Grid.SetRowSpan(overlay, 8);
-        Grid.SetColumnSpan(overlay, 8);
-        void Close() => Root.Children.Remove(overlay);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Center };
-        buttons.Children.Add(Ui.Option("Cancel", false, Close));
-        buttons.Children.Add(Ui.Option("Reset", false, () =>
+        void Full()
         {
             (left, top, right, bottom) = (0, 0, 1, 1);
             Layout();
-        }));
-        foreach (var (title, ratio) in new[] { ("16:9", 16.0 / 9), ("9:16", 9.0 / 16), ("1:1", 1.0), ("4:3", 4.0 / 3) })
-        {
-            var chosen = ratio;
-            buttons.Children.Add(Ui.Option(title, false, () =>
-            {
-                var aspect = width / (double)Math.Max(1, height);
-                var newWidth = 1.0;
-                var newHeight = aspect / chosen;
-                if (newHeight > 1)
-                {
-                    newHeight = 1;
-                    newWidth = chosen / aspect;
-                }
-
-                (left, top, right, bottom) = ((1 - newWidth) / 2, (1 - newHeight) / 2, (1 + newWidth) / 2, (1 + newHeight) / 2);
-                Layout();
-            }));
         }
 
-        var apply = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = Loc.T("Apply") };
-        apply.Click += (_, _) =>
+        // Header: Size W × H, a preset menu, Position X Y and Reset.
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        StackPanel Group(params UIElement[] items)
         {
-            var crop = new Rect01(left, top, right - left, bottom - top);
-            applyCrop(crop);
-            Close();
+            var group = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+            foreach (var item in items)
+            {
+                if (item is FrameworkElement element)
+                {
+                    element.VerticalAlignment = VerticalAlignment.Center;
+                }
+
+                group.Children.Add(item);
+            }
+
+            return group;
+        }
+
+        header.Children.Add(Group(Ui.Text("Size", 12.5, "Ink60"), widthBox, Ui.Text("×", 12.5, "Ink60"), heightBox));
+        var presets = new MenuFlyout();
+        void Preset(string title, Action pick)
+        {
+            var item = new MenuFlyoutItem { Text = Loc.T(title) };
+            item.Click += (_, _) => pick();
+            presets.Items.Add(item);
+        }
+
+        Preset("Full Original", Full);
+        presets.Items.Add(new MenuFlyoutSeparator());
+        Preset("16:9 Widescreen", () => Aspect(16.0 / 9));
+        Preset("9:16 Vertical", () => Aspect(9.0 / 16));
+        Preset("1:1 Square", () => Aspect(1));
+        Preset("4:3 Classic", () => Aspect(4.0 / 3));
+        var presetLabel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        presetLabel.Children.Add(Ui.Icon("", 12, Ui.Pal("Ink88")));
+        presetLabel.Children.Add(presetText = Ui.Text("Full Original", 12.5, "Ink88"));
+        presetText.TextTrimming = TextTrimming.None;
+        presetText.Text = Loc.T(PresetName());
+        var presetButton = new DropDownButton { Content = presetLabel, Flyout = presets, Height = 32, CornerRadius = new CornerRadius(7) };
+        A11y.Name(presetButton, "Select...");
+        header.Children.Add(presetButton);
+        header.Children.Add(Group(Ui.Text("Position", 12.5, "Ink60"), xBox, yBox));
+        var resetLabel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        resetLabel.Children.Add(Ui.Icon("", 11, Ui.Pal("Ink88")));
+        resetLabel.Children.Add(Ui.Text("Reset", 12.5, "Ink88"));
+        reset = new Button { Content = resetLabel, Height = 32, CornerRadius = new CornerRadius(7) };
+        A11y.Name(reset, "Reset");
+        reset.Click += (_, _) => Full();
+        header.Children.Add(reset);
+
+        // Footer: the two macOS buttons, centered.
+        var overlay = new Grid { Background = Ui.Pal("SurfaceModal"), Padding = new Thickness(28, 0, 28, 0) };
+        overlay.RowDefinitions.Add(new RowDefinition { Height = new GridLength(60) });
+        overlay.RowDefinitions.Add(new RowDefinition());
+        overlay.RowDefinitions.Add(new RowDefinition { Height = new GridLength(76) });
+        Grid.SetRowSpan(overlay, 8);
+        Grid.SetColumnSpan(overlay, 8);
+
+        void Close(bool confirm)
+        {
+            if (confirm)
+            {
+                applyCrop(new Rect01(left, top, right - left, bottom - top));
+            }
+
+            cropKeys = null;
+            cropHeader = null;
+            Root.Children.Remove(overlay);
+            UpdateTitleBarRegions();
+        }
+
+        var confirmLabel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        confirmLabel.Children.Add(new TextBlock { Text = Loc.T("Confirm changes"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        confirmLabel.Children.Add(Ui.Icon("", 11, new SolidColorBrush(Colors.White)));
+        var confirm = new Button { Style = Ui.StyleOf("NsPrimaryButton"), Content = confirmLabel, Height = 38, Padding = new Thickness(18, 0, 18, 0), CornerRadius = new CornerRadius(8) };
+        A11y.Name(confirm, "Confirm changes");
+        confirm.Click += (_, _) => Close(true);
+        var discard = new Button { Content = new TextBlock { Text = Loc.T("Discard changes"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, Height = 38, Padding = new Thickness(18, 0, 18, 0), CornerRadius = new CornerRadius(9) };
+        A11y.Name(discard, "Discard changes");
+        discard.Click += (_, _) => Close(false);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        buttons.Children.Add(confirm);
+        buttons.Children.Add(discard);
+
+        // The frame fills the middle row at the recording's aspect ratio, and follows window resizes.
+        var area = new Grid();
+        canvas.HorizontalAlignment = HorizontalAlignment.Center;
+        canvas.VerticalAlignment = VerticalAlignment.Center;
+        area.Children.Add(canvas);
+        area.SizeChanged += (_, args) =>
+        {
+            var fit = Math.Min(Math.Max(1, args.NewSize.Width) / width, Math.Max(1, args.NewSize.Height) / height);
+            viewWidth = Math.Max(1, width * fit);
+            viewHeight = Math.Max(1, height * fit);
+            canvas.Width = viewWidth;
+            canvas.Height = viewHeight;
+            picture.Width = viewWidth;
+            picture.Height = viewHeight;
+            Layout();
         };
-        buttons.Children.Add(apply);
-        var stack = new StackPanel { Spacing = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        stack.Children.Add(readout);
-        stack.Children.Add(canvas);
-        stack.Children.Add(buttons);
-        overlay.Children.Add(stack);
+
+        overlay.Children.Add(header);
+        Grid.SetRow(area, 1);
+        overlay.Children.Add(area);
+        Grid.SetRow(buttons, 2);
+        overlay.Children.Add(buttons);
+        Layout();
         Root.Children.Add(overlay);
+        cropKeys = Close;
+        // The header sits in the title bar: only its controls take clicks, the rest drags the window.
+        cropHeader = header;
+        header.SizeChanged += (_, _) => UpdateTitleBarRegions();
+        confirm.Loaded += (_, _) => confirm.Focus(FocusState.Programmatic);
     }
 
     private static void Place(FrameworkElement element, double x, double y, double width, double height)

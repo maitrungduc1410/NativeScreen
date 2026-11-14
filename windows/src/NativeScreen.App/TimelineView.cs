@@ -1441,6 +1441,17 @@ internal sealed class TimelineView
         return y;
     }
 
+    /// <summary>A shortcut's label is the keys, at 12 pt semibold and 96 % white, as on macOS (ShortcutTimelineSegmentView).</summary>
+    private static void StyleShortcutLabel(BlockGrid block)
+    {
+        if (block.Title is { } title)
+        {
+            title.FontSize = 12;
+            title.Foreground = new SolidColorBrush(Color.FromArgb(245, 255, 255, 255));
+            block.FitLabels(animated: false);
+        }
+    }
+
     private double DrawShortcuts(double y)
     {
         var captions = session.Document.Captions;
@@ -1450,7 +1461,7 @@ internal sealed class TimelineView
             AddRowTarget(
                 y,
                 MaskRowHeight,
-                GhostStyle.Shortcut,
+                GhostStyle.Of(Palette.Shortcut),
                 () => session.Shortcuts().Where(item => item.TrackId == trackId).Select(item => session.Mapper.TimelineSpan(item.DisplayStartMs, item.DisplayEndMs)).OfType<(double Start, double End)>(),
                 450,
                 1800,
@@ -1462,7 +1473,10 @@ internal sealed class TimelineView
             foreach (var shortcut in clusters)
             {
                 var (left, width) = Place(shortcut.DisplayStartMs, shortcut.DisplayEndMs);
-                var block = Block(left, y, width, MaskRowHeight, Palette.Layout, shortcut.Label, null, shortcut.Id == session.SelectedShortcutId, trackHidden || SegmentEdits.IsShortcutHidden(session.Document, shortcut));
+                var shortcutSelected = shortcut.Id == session.SelectedShortcutId;
+                var shortcutHidden = trackHidden || SegmentEdits.IsShortcutHidden(session.Document, shortcut);
+                var block = Block(left, y, width, MaskRowHeight, Palette.Shortcut, shortcut.Label, null, shortcutSelected, shortcutHidden);
+                StyleShortcutLabel(block);
                 block.KindName = Loc.T("Shortcut");
                 Follow(block, shortcut.DisplayStartMs, shortcut.DisplayEndMs);
                 var pressed = shortcut;
@@ -1769,19 +1783,33 @@ internal sealed class TimelineView
             Height = height,
             CornerRadius = new CornerRadius(height >= 40 ? 9 : 7),
             Background = Ui.Gradient(palette.Top, palette.Bottom),
-            BorderBrush = new SolidColorBrush(selected ? palette.Selected : palette.Ring),
-            BorderThickness = new Thickness(selected ? 2 : 1),
+            BorderBrush = new SolidColorBrush(palette.Ring),
+            BorderThickness = new Thickness(1),
             Opacity = dimmed ? 0.35 : 1
         };
+        if (selected)
+        {
+            // Selection is a 1 px outline 1.5 px outside the block, as on macOS. A rounded panel clips its children, so the
+            // outline is the block's sibling on the canvas and follows its place and size.
+            block.Outline = new Border
+            {
+                CornerRadius = new CornerRadius(block.CornerRadius.TopLeft + 2.5),
+                BorderBrush = new SolidColorBrush(palette.Selected),
+                BorderThickness = new Thickness(1),
+                IsHitTestVisible = false
+            };
+        }
+
         // Both lines are centered and offset by Translation, so a label that collapses moves without a layout pass.
         var text = new Grid { Margin = new Thickness(BlockGrid.LabelInset - 1, 0, BlockGrid.LabelInset - 1, 0), IsHitTestVisible = false };
         text.Children.Add(block.Title = new TextBlock
         {
             Text = title,
-            FontSize = 11,
+            FontSize = 11.5,
+            FontWeight = FontWeights.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = new SolidColorBrush(Color.FromArgb(170, 255, 255, 255)),
+            Foreground = new SolidColorBrush(Color.FromArgb(140, 255, 255, 255)),
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxLines = 1
         });
@@ -1834,6 +1862,26 @@ internal sealed class TimelineView
         Canvas.SetTop(block, y);
         canvas.Children.Add(block);
         ElementCompositionPreview.SetIsTranslationEnabled(block, true);
+        if (block.Outline is { } outline)
+        {
+            canvas.Children.Add(outline);
+            void Follow()
+            {
+                if (block.Outline is null)
+                {
+                    return;
+                }
+
+                Canvas.SetLeft(outline, Canvas.GetLeft(block) - 2.5);
+                Canvas.SetTop(outline, Canvas.GetTop(block) - 2.5);
+                outline.Width = block.Width + 5;
+                outline.Height = block.Height + 5;
+            }
+
+            Follow();
+            block.SizeChanged += (_, _) => Follow();
+            block.LayoutUpdated += (_, _) => Follow();
+        }
         var row = blockRows.IndexOf(y);
         if (row < 0)
         {
@@ -1842,6 +1890,11 @@ internal sealed class TimelineView
         }
 
         wigglingBlocks.Add((block, row));
+        if (block.Outline is { } ring)
+        {
+            ElementCompositionPreview.SetIsTranslationEnabled(ring, true);
+            wigglingBlocks.Add((ring, row));
+        }
         return block;
     }
 
@@ -2264,7 +2317,6 @@ internal sealed class TimelineView
 
     private sealed record Palette(Color Top, Color Bottom, Color Ring, Color Selected)
     {
-        private static readonly Color DarkSelected = Color.FromArgb(255, 255, 255, 255);
 
         private static Color C(double r, double g, double b, double a = 1) =>
             Color.FromArgb((byte)Math.Round(a * 255), (byte)Math.Round(r * 255), (byte)Math.Round(g * 255), (byte)Math.Round(b * 255));
@@ -2275,6 +2327,7 @@ internal sealed class TimelineView
         private static readonly Palette MaskLight = new(C(0.733, 0.31, 0.522), C(0.851, 0.475, 0.663), C(0.98, 0.82, 0.898), C(0.8, 0.38, 0.6, 0.85));
         private static readonly Palette CaptionLight = new(C(0.106, 0.561, 0.616), C(0.231, 0.722, 0.773), C(0.7, 0.941, 0.969), C(0.18, 0.69, 0.757, 0.85));
         private static readonly Palette LayoutLight = new(C(0.533, 0.478, 0.51), C(0.69, 0.643, 0.667), C(0.918, 0.89, 0.906), C(0.62, 0.561, 0.6, 0.85));
+        private static readonly Palette ShortcutLight = new(C(0.18, 0.62, 0.416), C(0.31, 0.765, 0.553), C(0.76, 0.957, 0.863), C(0.22, 0.7, 0.47, 0.85));
         private static readonly Palette AnnotationLight = new(C(0.894, 0.42, 0.29), C(0.957, 0.565, 0.447), C(1, 0.86, 0.81), C(0.92, 0.47, 0.33, 0.85));
 
         private static bool IsLight => AppTheme.Current == ElementTheme.Light;
@@ -2285,20 +2338,20 @@ internal sealed class TimelineView
         public static Palette Caption => IsLight ? CaptionLight : CaptionDark;
         public static Palette Layout => IsLight ? LayoutLight : LayoutDark;
         public static Palette Annotation => IsLight ? AnnotationLight : AnnotationDark;
+        public static Palette Shortcut => IsLight ? ShortcutLight : ShortcutDark;
 
-        private static readonly Palette ClipDark = new(Color.FromArgb(255, 147, 97, 12), Color.FromArgb(255, 218, 144, 18), Color.FromArgb(255, 244, 198, 119), DarkSelected);
-        private static readonly Palette ZoomDark = new(Color.FromArgb(255, 77, 47, 245), Color.FromArgb(255, 139, 120, 249), Color.FromArgb(255, 244, 242, 254), DarkSelected);
-        private static readonly Palette MaskDark = new(Color.FromArgb(255, 130, 52, 90), Color.FromArgb(255, 183, 75, 128), Color.FromArgb(255, 220, 166, 192), DarkSelected);
-        private static readonly Palette CaptionDark = new(Color.FromArgb(255, 22, 99, 110), Color.FromArgb(255, 31, 143, 158), Color.FromArgb(255, 153, 222, 231), DarkSelected);
-        private static readonly Palette LayoutDark = new(Color.FromArgb(255, 101, 87, 94), Color.FromArgb(255, 141, 124, 132), Color.FromArgb(255, 209, 200, 205), DarkSelected);
-        private static readonly Palette AnnotationDark = new(C(0.651, 0.259, 0.165), C(0.851, 0.38, 0.255), C(0.98, 0.78, 0.72), DarkSelected);
+        private static readonly Palette ClipDark = new(Color.FromArgb(255, 147, 97, 12), Color.FromArgb(255, 218, 144, 18), Color.FromArgb(255, 244, 198, 119), C(0.925, 0.62, 0.094, 0.8));
+        private static readonly Palette ZoomDark = new(Color.FromArgb(255, 77, 47, 245), Color.FromArgb(255, 139, 120, 249), Color.FromArgb(255, 244, 242, 254), C(0.627, 0.569, 0.98, 0.8));
+        private static readonly Palette MaskDark = new(Color.FromArgb(255, 130, 52, 90), Color.FromArgb(255, 183, 75, 128), Color.FromArgb(255, 220, 166, 192), C(0.776, 0.365, 0.569, 0.8));
+        private static readonly Palette CaptionDark = new(Color.FromArgb(255, 22, 99, 110), Color.FromArgb(255, 31, 143, 158), Color.FromArgb(255, 153, 222, 231), C(0.176, 0.69, 0.757, 0.8));
+        private static readonly Palette LayoutDark = new(Color.FromArgb(255, 101, 87, 94), Color.FromArgb(255, 141, 124, 132), Color.FromArgb(255, 209, 200, 205), C(0.66, 0.596, 0.627, 0.8));
+        private static readonly Palette ShortcutDark = new(C(0.11, 0.42, 0.278), C(0.165, 0.6, 0.4), C(0.6, 0.906, 0.761), C(0.2, 0.7, 0.47, 0.8));
+        private static readonly Palette AnnotationDark = new(C(0.651, 0.259, 0.165), C(0.851, 0.38, 0.255), C(0.98, 0.78, 0.72), C(0.9, 0.45, 0.32, 0.8));
     }
 
-    /// <summary>A block-colored ghost for most rows; shortcuts have their own see-through purple.</summary>
+    /// <summary>A ghost in the colors of the row's blocks.</summary>
     private sealed record GhostStyle(Color Top, Color Bottom, Color Ring, double Radius, double IconSize)
     {
-        public static readonly GhostStyle Shortcut = new(Color.FromArgb(66, 77, 47, 245), Color.FromArgb(15, 77, 47, 245), Color.FromArgb(158, 77, 47, 245), 7, 12);
-
         public static GhostStyle Of(Palette palette) => new(palette.Top, palette.Bottom, Color.FromArgb(184, palette.Ring.R, palette.Ring.G, palette.Ring.B), 10, 15);
     }
 
@@ -2385,6 +2438,9 @@ internal sealed class TimelineView
         public TextBlock? Title { get; set; }
 
         public TextBlock? Subtitle { get; set; }
+
+        /// <summary>The selection outline outside the block, when selected.</summary>
+        public Border? Outline { get; set; }
 
         public bool SubtitleTruncates
         {
