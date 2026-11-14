@@ -119,10 +119,7 @@ internal static class CursorThemeCards
                     sprite.Opacity = 0;
                     sprite.OpacityTransition = new ScalarTransition { Duration = fade };
                     // Variants of a theme share one shape, and a sprite at zero opacity cannot be measured.
-                    if (first.RenderTransform is TranslateTransform centered)
-                    {
-                        sprite.RenderTransform = new TranslateTransform { X = centered.X, Y = centered.Y };
-                    }
+                    sprite.Translation = first.Translation;
 
                     sprites.Children.Add(sprite);
                 }
@@ -164,7 +161,9 @@ internal static class CursorThemeCards
 
         if (Offsets.TryGetValue(file, out var offset))
         {
-            image.RenderTransform = new TranslateTransform { X = offset.X * image.ActualWidth, Y = offset.Y * image.ActualHeight };
+            // Translation, not RenderTransform: an element with a RenderTransform cannot take the OpacityTransition the hover
+            // cycle gives it (WinUI throws "Access is denied" and the app ends).
+            image.Translation = new System.Numerics.Vector3((float)(offset.X * image.ActualWidth), (float)(offset.Y * image.ActualHeight), 0);
         }
     }
 
@@ -174,7 +173,7 @@ internal static class CursorThemeCards
         try
         {
             // Measured without the last correction, which would otherwise be counted in.
-            image.RenderTransform = null;
+            image.Translation = System.Numerics.Vector3.Zero;
             await bitmap.RenderAsync(image);
             var pixels = (await bitmap.GetPixelsAsync()).ToArray();
             var (width, height) = (bitmap.PixelWidth, bitmap.PixelHeight);

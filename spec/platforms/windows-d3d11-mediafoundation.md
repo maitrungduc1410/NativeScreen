@@ -224,3 +224,4 @@ Rules:
 | `SwapChainPanel` and XAML airspace | Popups over the preview must be XAML `Popup` or separate windows, not other swap chains. |
 | WASAPI device changes | Handle `IMMNotificationClient` (device removed / default changed) during recording and playback. |
 | Timer resolution | Do not use `Thread.Sleep` for pacing; use waitable objects (swap chain latency, WASAPI events, `CreateWaitableTimerEx` high resolution). |
+| `OpacityTransition` (or another implicit transition) on an element that has a `RenderTransform` | WinUI throws `UnauthorizedAccessException` ("Access is denied ... RenderTransform property in use") from the setter, and inside an event handler that ends the app. Offset such elements with `Translation`, which works with the transitions (`CursorThemeCards` centers its sprites this way). Likewise, rounded panels clip their children: draw an outline outside an element as a sibling, not a child with a negative margin (ADR-92). |
