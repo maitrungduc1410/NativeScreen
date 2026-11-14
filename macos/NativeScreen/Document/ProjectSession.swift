@@ -4105,7 +4105,7 @@ public final class ProjectSession: Identifiable {
 
     /// Swaps one kind of automatic mask for a fresh scan. A track never holds two masks at the same time, so the scan's
     /// masks are packed into as few new tracks as fit them (two regions on screen together go on two tracks), and a
-    /// track the old masks leave empty is removed. User masks and their tracks are left alone (spec/06 ADR-89).
+    /// track the old masks leave empty is removed. User masks and their tracks are left alone (spec/06 ADR-91).
     static func replaceAutoMasks(in timeline: inout TimelineConfig, where isKind: (MaskItem) -> Bool, with detected: [MaskItem]) {
         timeline.maskTracks.removeAll { track in
             !track.items.isEmpty && track.items.allSatisfy(isKind)

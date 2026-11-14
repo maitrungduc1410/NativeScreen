@@ -346,18 +346,38 @@ public static class AutoMaskBuilder
         });
     }
 
-    /// <summary>Replaces one kind of automatic mask in the document, in a track of its own.</summary>
+    /// <summary>
+    /// Replaces one kind of automatic mask in the document (spec/06 ADR-91, replaceAutoMasks on macOS). A track made only of
+    /// that kind goes with its masks; a track that also holds a user mask stays without them. The new masks are packed, in
+    /// start order, into as few new tracks as hold them without two at the same time; back-to-back masks share a track.
+    /// </summary>
     public static void Replace(ProjectDocument document, Predicate<MaskItem> kind, List<MaskItem> detected)
     {
-        foreach (var track in document.Timeline.MaskTracks)
+        var tracks = document.Timeline.MaskTracks;
+        tracks.RemoveAll(track => track.Items.Count > 0 && track.Items.TrueForAll(kind));
+        foreach (var track in tracks)
         {
             track.Items.RemoveAll(kind);
         }
 
-        if (detected.Count > 0)
+        var lanes = new List<List<MaskItem>>();
+        foreach (var item in detected.OrderBy(item => item.SourceStartMs))
         {
-            var name = document.Timeline.MaskTracks.Count == 0 ? "Masks" : $"Masks {document.Timeline.MaskTracks.Count + 1}";
-            document.Timeline.MaskTracks.Add(new MaskTrack { Id = EditorSession.NewId(), Name = name, Items = detected });
+            var lane = lanes.Find(lane => lane[^1].SourceEndMs <= item.SourceStartMs);
+            if (lane is null)
+            {
+                lanes.Add([item]);
+            }
+            else
+            {
+                lane.Add(item);
+            }
+        }
+
+        foreach (var items in lanes)
+        {
+            var name = tracks.Count == 0 ? "Masks" : $"Masks {tracks.Count + 1}";
+            tracks.Add(new MaskTrack { Id = EditorSession.NewId(), Name = name, Items = items });
         }
     }
 

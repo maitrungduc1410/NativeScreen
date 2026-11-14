@@ -125,6 +125,48 @@ public sealed class TranscriptEditingTests
         Assert.Equal(1, document.Timeline.MaskTracks.Sum(track => track.Items.Count));
     }
 
+    /// <summary>Automatic masks never overlap on one track, and a rescan or turning the scan off leaves no empty rows (ADR-91).</summary>
+    [Fact]
+    public void AutomaticMasksArePackedIntoTracksWithoutOverlaps()
+    {
+        static MaskItem Auto(string id, double start, double end) => new() { Id = id, SourceStartMs = start, SourceEndMs = end, IsAutoSensitiveMask = true };
+        var document = new ProjectDocument();
+        var user = new MaskItem { Id = "user", SourceStartMs = 0, SourceEndMs = 4000 };
+        document.Timeline.MaskTracks.Add(new MaskTrack { Id = "mine", Name = "Masks", Items = [user, Auto("old-in-mine", 5000, 6000)] });
+        document.Timeline.MaskTracks.Add(new MaskTrack { Id = "old", Name = "Masks 2", Items = [Auto("old", 0, 1000)] });
+        List<MaskItem> Scan() => [Auto("b", 8800, 16800), Auto("a", 0, 9300), Auto("c", 16800, 20000)];
+
+        static void NoOverlaps(ProjectDocument document)
+        {
+            foreach (var track in document.Timeline.MaskTracks)
+            {
+                var items = track.Items.OrderBy(item => item.SourceStartMs).ToList();
+                for (var index = 1; index < items.Count; index++)
+                {
+                    Assert.True(items[index - 1].SourceEndMs <= items[index].SourceStartMs, track.Name);
+                }
+            }
+        }
+
+        AutoMaskBuilder.Replace(document, item => item.IsAutoSensitiveMask, Scan());
+        var tracks = document.Timeline.MaskTracks;
+        Assert.Equal(["mine", null, null], tracks.Select(track => track.Id == "mine" ? "mine" : null));
+        Assert.Equal(["user"], tracks[0].Items.Select(item => item.Id));
+        Assert.Equal(["a", "c"], tracks[1].Items.Select(item => item.Id));
+        Assert.Equal(["b"], tracks[2].Items.Select(item => item.Id));
+        Assert.Equal(["Masks", "Masks 2", "Masks 3"], tracks.Select(track => track.Name));
+        NoOverlaps(document);
+
+        AutoMaskBuilder.Replace(document, item => item.IsAutoSensitiveMask, Scan());
+        Assert.Equal(3, tracks.Count);
+        Assert.Equal(["a", "c"], tracks[1].Items.Select(item => item.Id));
+        NoOverlaps(document);
+
+        AutoMaskBuilder.Replace(document, item => item.IsAutoSensitiveMask, []);
+        Assert.Equal(["mine"], tracks.Select(track => track.Id));
+        Assert.Equal(["user"], tracks[0].Items.Select(item => item.Id));
+    }
+
     [Theory]
     [InlineData("reach me at someone@example.com please", true)]
     [InlineData("token sk-abcdefghijklmnop", true)]
