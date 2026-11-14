@@ -27,6 +27,20 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-14, ADR-95: Cursor presses in on clicks, theme hands fold the index finger (macOS first)
+
+### Writer
+- **Status:** done on macOS. Windows needs all of it. No format change, no new setting, no new assets.
+- **Swift:** `SpringTrajectorySolver` (`ButtonPress`, `buttonPresses(from:)`, `pressAmount(atMs:presses:)`, `pressEndMs`, `CursorFrameState.pressAmount`), `MetalFrameCompositor.renderCursorAndRipple` and `foldingIndexFinger(of:hotspotY:amount:)`, `CursorSpriteProvider.handFingerSeam01` and `isThemeHand(themeId:alwaysUsePointer:cursorType:)`. Spec: ADR-95.
+- **Why:** telemetry already has button down and up and the cursor kind, so the cursor can show the press: it pushes in, and a hand bends its finger onto the click.
+- **Verified on macOS:** both schemes build. The fold was rendered at 0, 0.33, 0.66 and 1 for classic, dart-color, outline and pixel hands: the fingertip stays on the hotspot and there is no line at the seam. Checked by hand in a playing project on 2026-11-14.
+
+### Port
+1. `windows/src/NativeScreen.Core/Motion/SpringTrajectorySolver.cs`: add `PressAmount` (double, default 0) to `CursorFrameState`. Add the same `ButtonPress` pairing and `PressAmount(tMs, presses)` as Swift: lead 30 ms, in 70 ms, min hold 120 ms, out 140 ms, smoothstep, max over overlapping presses, `held` starts fully pressed (down time moved back by lead + in). Left and right buttons only. Keep a window start index so the loop stays linear. Fill it where the state is built (line 459) and interpolate it linearly where the evaluate step builds `cursor` (line 218).
+2. `FrameCompositor.Compose.cs`: copy `PressAmount` in the cropped state (line 931).
+3. `DrawCursor` (line 553): multiply `spriteScale` by `1 - 0.08 * press`. When the sprite is a theme hand, fold the finger. Simplest check: have `OverlayRasterizer.CursorSprite` also return `chosen.Name.Kind`, and fold only when it is `pointinghand` and `CustomCursorSprite` returned null (ring and touch have no hand and fall back to the pointer, so they only scale). The layer is the full 100 × 100 view box at 256 px, as on macOS, so the seam is at the same place: the part of the sprite above 30 % of its height from the top is squashed toward that seam by `1 - 0.42 * press`, the rest unchanged, and the hotspot y moves with it (`seam - (seam - hotspotY) * fold`, top-down). Easiest is in the cursor pixel shader or by drawing the sprite as two quads (finger above the seam with the squash, palm below with one extra row of overlap so no line shows at the seam).
+4. Conformance: fixtures do not carry `pressAmount` yet, so frames with a click near a hand may differ between the platforms until this lands.
+
 ## 2026-11-14, ADR-93: Shortcut segments in an emerald palette (macOS first)
 
 ### Writer

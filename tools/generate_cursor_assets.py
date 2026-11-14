@@ -119,7 +119,8 @@ OUTLINE_ARROW = rounded_corners(arrow_points(tail_width=14.0), arrow_corners(2.5
 DART_HOTSPOT = (14, 6)
 DART = rounded_path([(14, 6), (31, 86), (45, 58), (77, 45)], 7.0)
 
-# Hand, one contour: index finger up, three knuckles, thumb on the left.
+# Hand, one contour: index finger up, three knuckles, thumb on the left. Above y = 30 (outline included) there must be
+# nothing but the index finger: the app folds that part on a click (CursorSpriteProvider.handFingerSeam01).
 HAND_HOTSPOT = (43, 8)
 HAND = (
     "M37,14 a6,6 0 0 1 12,0 V42 a5.5,5.5 0 0 1 11,0 V45 a5.5,5.5 0 0 1 11,1 V48 a5,5 0 0 1 10,1 V66 "

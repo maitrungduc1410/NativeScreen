@@ -29,6 +29,59 @@ public struct SpringTrajectorySolver: Sendable {
         public var cursorType: String
         public var activeClickProgress: Double? // 0.0 -> 1.0 during the click circle
         public var clickWaves: [ClickWave] = []
+        /// How far the cursor is pressed in, 0 (up) to 1 (down). See `pressAmount(atMs:presses:)`.
+        public var pressAmount: Double = 0
+    }
+
+    /// One mouse button hold, from button down to button up, in telemetry ms.
+    public struct ButtonPress: Sendable {
+        public var downMs: Double
+        public var upMs: Double
+    }
+
+    /// The press starts slightly before the button goes down, so the finger lands as the ripple starts.
+    public static let pressLeadMs = 30.0
+    public static let pressInMs = 70.0
+    public static let pressOutMs = 140.0
+    /// A quick click is held at least this long, or the press is too short to see.
+    public static let pressMinHoldMs = 120.0
+
+    /// Pairs every left or right button down with the next up of the same button. A down with no up holds for the
+    /// minimum time. A `held` button (a cut that starts while it is down) is already fully pressed at its time.
+    public static func buttonPresses(from clicks: [ClickEvent]) -> [ButtonPress] {
+        let sorted = clicks.sorted { $0.t < $1.t }
+        var presses: [ButtonPress] = []
+        for (index, click) in sorted.enumerated() where (click.type == "down" || click.type == "held") && click.button != "other" {
+            let up = sorted[(index + 1)...].first { $0.type == "up" && $0.button == click.button }
+            let downMs = click.type == "held" ? click.t - pressLeadMs - pressInMs : click.t
+            presses.append(ButtonPress(downMs: downMs, upMs: up?.t ?? click.t))
+        }
+        return presses
+    }
+
+    /// Eases in before the button goes down, holds while it is down (at least `pressMinHoldMs`), eases out after it
+    /// goes up. Overlapping presses (double clicks) take the larger amount, so the cursor does not snap up between them.
+    public static func pressAmount(atMs tMs: Double, presses: ArraySlice<ButtonPress>) -> Double {
+        var amount = 0.0
+        for press in presses {
+            let start = press.downMs - pressLeadMs
+            if start > tMs { break }
+            let releaseAt = max(press.upMs, press.downMs + pressMinHoldMs)
+            guard tMs < pressEndMs(press) else { continue }
+            let pressIn = smoothstep(min(1.0, (tMs - start) / pressInMs))
+            let pressOut = tMs <= releaseAt ? 1.0 : 1.0 - smoothstep((tMs - releaseAt) / pressOutMs)
+            amount = max(amount, min(pressIn, pressOut))
+        }
+        return amount
+    }
+
+    public static func pressEndMs(_ press: ButtonPress) -> Double {
+        max(press.upMs, press.downMs + pressMinHoldMs) + pressOutMs
+    }
+
+    private static func smoothstep(_ x: Double) -> Double {
+        let t = max(0.0, min(1.0, x))
+        return t * t * (3.0 - 2.0 * t)
     }
 
     /// A click whose ripple is still spreading, from where the cursor was when the button went down.
@@ -200,6 +253,8 @@ public struct SpringTrajectorySolver: Sendable {
             let firstPos = cursorEvents.first.map { Point01(x: $0.x, y: $0.y) } ?? .center
             let downClickTimesMs: [Double] = clickEvents.compactMap { $0.type == "down" ? max(0.0, $0.t) : nil }.sorted()
             let downClickPositions = clickEvents.filter { $0.type == "down" }.sorted { $0.t < $1.t }
+            let presses = Self.buttonPresses(from: clickEvents)
+            var pressWindowStart = 0
             var rippleWindowStart = 0
 
             var curX = firstPos.x
@@ -333,6 +388,11 @@ public struct SpringTrajectorySolver: Sendable {
                     }
                 }
 
+                while pressWindowStart < presses.count && Self.pressEndMs(presses[pressWindowStart]) <= tMs {
+                    pressWindowStart += 1
+                }
+                let pressAmount = Self.pressAmount(atMs: tMs, presses: presses[pressWindowStart...])
+
                 for waveIndex in clickWaves.indices {
                     clickWaves[waveIndex].ageMs += stepMs
                 }
@@ -356,7 +416,8 @@ public struct SpringTrajectorySolver: Sendable {
                         opacity: document.cursor.hidden ? 0.0 : currentOpacity,
                         cursorType: cursorKind,
                         activeClickProgress: activeRipple,
-                        clickWaves: clickWaves
+                        clickWaves: clickWaves,
+                        pressAmount: pressAmount
                     )
                 )
             }
@@ -847,7 +908,8 @@ public struct SpringTrajectorySolver: Sendable {
             opacity: c0.opacity + (c1.opacity - c0.opacity) * frac,
             cursorType: c0.cursorType,
             activeClickProgress: c0.activeClickProgress,
-            clickWaves: c0.clickWaves
+            clickWaves: c0.clickWaves,
+            pressAmount: c0.pressAmount + (c1.pressAmount - c0.pressAmount) * frac
         )
         // The planned path is per ms, finer than the 120 Hz states, so clicks between steps stay exact.
         if let plannedCursor {

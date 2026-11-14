@@ -1140,11 +1140,21 @@ public final class MetalFrameCompositor {
             alwaysUsePointer: cursorConfig.alwaysUsePointer,
             cursorType: cursorState.cursorType
         )
+        let press = CGFloat(max(0.0, min(1.0, cursorState.pressAmount)))
         let targetSpriteHeight = 32.0 * canvasScale * CGFloat(cursorConfig.scale)
-        let spriteScale = targetSpriteHeight / max(1.0, rawSprite.extent.height)
+        // Pressing pushes the cursor in a little, around the hotspot.
+        let spriteScale = targetSpriteHeight / max(1.0, rawSprite.extent.height) * (1.0 - 0.08 * press)
 
         let hotspotX = CGFloat(hotspot01.x) * rawSprite.extent.width
-        let hotspotY = CGFloat(1.0 - hotspot01.y) * rawSprite.extent.height
+        var hotspotY = CGFloat(1.0 - hotspot01.y) * rawSprite.extent.height
+        var sprite = rawSprite
+        if press > 0.001, custom == nil, CursorSpriteProvider.shared.isThemeHand(
+            themeId: cursorConfig.themeId,
+            alwaysUsePointer: cursorConfig.alwaysUsePointer,
+            cursorType: cursorState.cursorType
+        ) {
+            (sprite, hotspotY) = Self.foldingIndexFinger(of: rawSprite, hotspotY: hotspotY, amount: press)
+        }
 
         var transform = CGAffineTransform.identity
         transform = transform.translatedBy(x: cx, y: cy)
@@ -1154,7 +1164,7 @@ public final class MetalFrameCompositor {
         transform = transform.scaledBy(x: spriteScale, y: spriteScale)
         transform = transform.translatedBy(x: -hotspotX, y: -hotspotY)
 
-        var transformedCursor = rawSprite.transformed(by: transform)
+        var transformedCursor = sprite.transformed(by: transform)
         if cursorState.opacity < 0.99 {
             transformedCursor = transformedCursor.applyingFilter("CIColorMatrix", parameters: [
                 "inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(cursorState.opacity))
@@ -1163,6 +1173,23 @@ public final class MetalFrameCompositor {
 
         result = transformedCursor.composited(over: result)
         return result
+    }
+
+    /// Folds the index finger of a theme hand: the part above the knuckles is squashed toward them, so the finger
+    /// looks bent down onto the screen. The map is continuous at the seam, so there is no visible cut. Returns the
+    /// new hotspot height, so the fingertip stays on the click.
+    static func foldingIndexFinger(of sprite: CIImage, hotspotY: CGFloat, amount: CGFloat) -> (CIImage, CGFloat) {
+        let ext = sprite.extent
+        let seamY = (ext.minY + ext.height * (1.0 - CursorSpriteProvider.handFingerSeam01)).rounded()
+        let fold = 1.0 - 0.42 * amount
+        let finger = sprite
+            .cropped(to: CGRect(x: ext.minX, y: seamY, width: ext.width, height: ext.maxY - seamY))
+            .clampedToExtent()
+            .transformed(by: CGAffineTransform(translationX: 0, y: seamY).scaledBy(x: 1, y: fold).translatedBy(x: 0, y: -seamY))
+            .cropped(to: CGRect(x: ext.minX, y: seamY, width: ext.width, height: (ext.maxY - seamY) * fold))
+        // One extra row under the finger, so resampling does not leave a faint line at the seam.
+        let palm = sprite.cropped(to: CGRect(x: ext.minX, y: ext.minY, width: ext.width, height: seamY - ext.minY + 1))
+        return (finger.composited(over: palm), seamY + (hotspotY - seamY) * fold)
     }
 
     // MARK: - Pass 6: 3D Keyboard Shortcut Keycaps Renderer (`renderShortcutKeycapsOverlay`)

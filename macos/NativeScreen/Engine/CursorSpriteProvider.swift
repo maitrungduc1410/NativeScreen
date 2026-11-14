@@ -250,6 +250,16 @@ public final class CursorSpriteProvider {
         return nsImg
     }
 
+    /// In every theme hand, the view box above this height (from the top) holds only the index finger. Clicks fold
+    /// that part. `tools/generate_cursor_assets.py` keeps the hands within it.
+    public static let handFingerSeam01: CGFloat = 0.30
+
+    /// True when the sprite drawn for this cursor kind is a theme hand, whose index finger can fold on a click.
+    public func isThemeHand(themeId: String, alwaysUsePointer: Bool, cursorType: String) -> Bool {
+        guard !alwaysUsePointer, mapTelemetryCursorKind(cursorType) == "pointinghand" else { return false }
+        return CursorThemePreset.theme(withId: themeId).allSprites.contains { $0.kind == "pointinghand" }
+    }
+
     /// The custom picture for a recorded cursor kind, if the user set one for it.
     public static func customImage(for cursorType: String, config: CursorConfig) -> CustomCursorImage? {
         if config.alwaysUsePointer { return config.customPointer }

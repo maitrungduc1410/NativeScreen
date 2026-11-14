@@ -1645,7 +1645,7 @@ Shortcut segments had a view of their own. They were a see-through gradient (42 
 
 Windows draws shortcuts with the camera layout palette and a violet add ghost; the port is in `windows/HANDOFF.md`.
 
-## 91. ADR-91: Known Issue, Not Fixed: Window Capture Can Write One or Two Shrunk or Shifted Frames
+## 94. ADR-94: Known Issue, Not Fixed: Window Capture Can Write One or Two Shrunk or Shifted Frames
 
 Seen once, on macOS, recording a Chrome window (3840 × 2160, 60 fps). About 1.7 s after a click on a download link, while Chrome put its download icon in the toolbar, `display.mp4` got two frames out of place: in the first the whole window is scaled down slightly, leaving a black band along the right and bottom edges; in the second it is shifted right, leaving a band on the left. The next frame is normal again. In playback it shows as a short jump; paused on that frame it looks like a black scrollbar. Nothing moved on the real screen.
 
@@ -1654,3 +1654,14 @@ Seen once, on macOS, recording a Chrome window (3840 × 2160, 60 fps). About 1.7
 - **Workaround:** cut the two frames out in the editor; the cut is not visible.
 
 Left as is because it was seen once and the cost of holding frames is not worth it until it shows up again.
+
+## 95. ADR-95: The Cursor Presses In on Clicks, and a Hand Folds Its Finger
+
+Telemetry already has each button down and up (`clicks.jsonl`) and the system cursor kind of every sample (`cursor.jsonl`), so the editor knows when a click starts, how long the button is held and whether the cursor was a hand at the time. The cursor now shows the press:
+
+- **Timing:** `SpringTrajectorySolver.pressAmount` goes 0 to 1 with a smoothstep, starting 30 ms before the button goes down and taking 70 ms, so the finger lands as the ripple starts. It stays at 1 while the button is held, at least 120 ms (a normal click is 50 to 100 ms and would be too short to see), then eases back over 140 ms. Left and right buttons count; a down with no up holds for the minimum. Overlapping presses (double clicks) take the larger amount. A run that starts at a cut while a button is held (`held`) starts fully pressed. The amount is part of `CursorFrameState`, solved at 120 Hz on edited time like the ripple, and interpolated between steps.
+- **Every cursor:** scales to 92 % around its hotspot at full press.
+- **Theme hands:** the index finger also folds. Above 30 % of the view box from the top (`CursorSpriteProvider.handFingerSeam01`) every theme hand, pixel included, holds only the index finger; `tools/generate_cursor_assets.py` keeps it that way. That strip is squashed toward the seam to 58 % at full press, and the hotspot moves with it, so the fingertip stays on the click and the palm drops toward it, as a hand does when it taps. The map is continuous at the seam, so the finger does not tear; the palm keeps one extra row under the finger so resampling leaves no faint line. Custom hand pictures only scale, since their shape is unknown.
+- **No new assets or settings:** a second "pressed" sprite per theme would need a crossfade, which shows two fingers halfway. Folding the one sprite is smooth at every amount and works for all 9 themes. There is no toggle yet; it is always on, also in exports.
+
+Windows has neither the press amount nor the fold yet; the port is in `windows/HANDOFF.md`.
