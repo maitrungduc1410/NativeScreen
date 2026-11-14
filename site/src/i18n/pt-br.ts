@@ -25,7 +25,6 @@ export default {
   h1b: "Já sai editado.",
   lede: "O Native Screen transforma uma gravação de tela comum em uma demo bem-acabada: zooms que seguem seus cliques, um cursor que desliza, legendas, fundos e uma linha do tempo de verdade, com várias faixas, quando você quer ter controle. Tudo roda no seu computador.",
   dlMac: "Baixar para Mac",
-  heroExe: "Instalador para Windows (sem assinatura)",
   dlWin: "Baixar para Windows",
   req: "macOS 14 ou posterior · Windows 10 ou 11 · Licença MIT",
   heroAria: "Gravação de um app web finalizada no Native Screen: fundo, cursor suave, ondas nos cliques, zooms automáticos e bolha de câmera com foto de fundo e figurinha",

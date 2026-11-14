@@ -25,7 +25,6 @@ export default {
   h1b: "Vyjde to sestříhané.",
   lede: "Native Screen promění obyčejný záznam obrazovky ve vyladěnou ukázku: přiblížení, která sledují vaše kliknutí, kurzor, který klouže, titulky, pozadí a skutečnou časovou osu s více stopami, když chcete mít vše pod kontrolou. Vše běží na vašem počítači.",
   dlMac: "Stáhnout pro Mac",
-  heroExe: "Instalátor pro Windows (nepodepsaný)",
   dlWin: "Stáhnout pro Windows",
   req: "macOS 14 nebo novější · Windows 10 nebo 11 · Licence MIT",
   heroAria: "Záznam webové aplikace vyladěný v Native Screen: pozadí, plynulý kurzor, vlnky kliknutí, automatická přiblížení a bublina kamery s fotkou v pozadí a nálepkou",

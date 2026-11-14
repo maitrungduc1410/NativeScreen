@@ -25,7 +25,6 @@ export default {
   h1b: "Ra video đã dựng xong.",
   lede: "Native Screen biến một bản quay màn hình bình thường thành video demo chỉn chu: zoom theo từng cú click, con trỏ di chuyển mượt mà, phụ đề, nền, và một timeline nhiều track thực thụ khi bạn muốn tự tay chỉnh. Mọi thứ đều chạy ngay trên máy bạn.",
   dlMac: "Tải cho Mac",
-  heroExe: "Bộ cài Windows (chưa ký)",
   dlWin: "Tải cho Windows",
   req: "macOS 14 trở lên · Windows 10 hoặc 11 · Giấy phép MIT",
   heroAria: "Bản quay một web app được Native Screen làm đẹp: nền, con trỏ mượt, hiệu ứng click, zoom tự động và khung camera có ảnh nền kèm sticker",

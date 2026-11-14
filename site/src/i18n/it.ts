@@ -25,7 +25,6 @@ export default {
   h1b: "Esce già montato.",
   lede: "Native Screen trasforma una semplice registrazione dello schermo in una demo curata: zoom che seguono i tuoi clic, un cursore che scivola, sottotitoli, sfondi e una vera timeline multitraccia quando vuoi il controllo. Tutto gira sul tuo computer.",
   dlMac: "Scarica per Mac",
-  heroExe: "Programma di installazione Windows (non firmato)",
   dlWin: "Scarica per Windows",
   req: "macOS 14 o successivo · Windows 10 o 11 · Licenza MIT",
   heroAria: "Una registrazione di una web app rifinita da Native Screen: sfondo, cursore fluido, onde al clic, zoom automatici e una bolla della fotocamera con sfondo fotografico e uno sticker",

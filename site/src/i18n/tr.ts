@@ -25,7 +25,6 @@ export default {
   h1b: "Kurgulanmış çıksın.",
   lede: "Native Screen sade bir ekran kaydını özenli bir tanıtıma dönüştürür: tıklamalarınızı izleyen yakınlaştırmalar, kayarak ilerleyen bir imleç, altyazılar, arka planlar ve kontrol istediğinizde gerçek bir çok izli zaman çizelgesi. Hepsi kendi bilgisayarınızda çalışır.",
   dlMac: "Mac için indir",
-  heroExe: "Windows yükleyicisi (imzasız)",
   dlWin: "Windows için indir",
   req: "macOS 14 veya üstü · Windows 10 veya 11 · MIT lisansı",
   heroAria: "Native Screen ile cilalanmış bir web uygulaması kaydı: arka plan, akıcı imleç, tıklama dalgaları, otomatik yakınlaştırmalar ve fotoğraf arka planlı, çıkartmalı bir kamera balonu",

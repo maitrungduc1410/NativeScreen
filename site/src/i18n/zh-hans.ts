@@ -25,7 +25,6 @@ export default {
   h1b: "直接成片。",
   lede: "Native Screen 能把普通录屏变成精致的演示视频：缩放跟着点击走，光标顺滑移动，还有字幕、背景，需要精细控制时也有真正的多轨时间线。所有处理都在你的电脑上完成。",
   dlMac: "下载 Mac 版",
-  heroExe: "Windows 安装程序（未签名）",
   dlWin: "下载 Windows 版",
   req: "macOS 14 或更高版本 · Windows 10 或 11 · MIT 许可证",
   heroAria: "一段网页应用录屏，经 Native Screen 润色：背景、平滑光标、点击波纹、自动缩放，以及带照片背景和贴纸的摄像头画面",

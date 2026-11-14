@@ -25,7 +25,6 @@ export default {
   h1b: "就剪好了。",
   lede: "Native Screen 能把普通的螢幕錄影變成精緻的展示：跟著點按走的縮放、滑順的游標、字幕、背景，需要掌控時還有真正的多軌時間軸。全部在你的電腦上執行。",
   dlMac: "下載 Mac 版",
-  heroExe: "Windows 安裝程式（未簽署）",
   dlWin: "下載 Windows 版",
   req: "macOS 14 或以上 · Windows 10 或 11 · MIT 授權",
   heroAria: "經 Native Screen 潤飾的網頁 App 錄影：背景、平滑游標、點按漣漪、自動縮放，以及帶照片背景和貼圖的相機泡泡",

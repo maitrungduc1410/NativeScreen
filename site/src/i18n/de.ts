@@ -25,7 +25,6 @@ export default {
   h1b: "Fertig geschnitten.",
   lede: "Native Screen macht aus einer einfachen Bildschirmaufnahme eine saubere Demo: Zooms, die deinen Klicks folgen, ein Cursor, der gleitet, Untertitel, Hintergründe und eine echte Mehrspur-Timeline, wenn du selbst Hand anlegen willst. Alles läuft auf deinem Computer.",
   dlMac: "Für Mac laden",
-  heroExe: "Windows-Installationsprogramm (unsigniert)",
   dlWin: "Für Windows laden",
   req: "macOS 14 oder neuer · Windows 10 oder 11 · MIT-Lizenz",
   heroAria: "Aufnahme einer Web-App, aufpoliert mit Native Screen: Hintergrund, ruhiger Cursor, Klick-Wellen, automatische Zooms und eine Kamerablase mit Fotohintergrund und Sticker",
