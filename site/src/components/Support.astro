@@ -1,0 +1,104 @@
+---
+import "../styles/site.css";
+import { locales, dictOf, pathOf, SITE, type Locale } from "../i18n";
+import { privacyPathOf } from "../i18n/privacy";
+import { supportOf, supportPathOf, SUPPORT_EMAIL } from "../i18n/support";
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = dictOf(locale);
+const s = supportOf(locale);
+const repo = "https://github.com/maitrungduc1410/NativeScreen";
+const html = (text: string) => text.replaceAll("{repo}", repo).replaceAll("{privacy}", privacyPathOf(locale.slug)).replaceAll("{email}", SUPPORT_EMAIL);
+const url = SITE + supportPathOf(locale.slug);
+---
+<!doctype html>
+<html lang={locale.lang} dir={"dir" in locale ? locale.dir : "ltr"}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{s.title}</title>
+  <meta name="description" content={s.desc}>
+  <link rel="canonical" href={url}>
+  {locales.map((l) => <link rel="alternate" hreflang={l.lang} href={SITE + supportPathOf(l.slug)}>)}
+  <link rel="alternate" hreflang="x-default" href={SITE + supportPathOf("en")}>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f3ee">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141312">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Native Screen">
+  <meta property="og:url" content={url}>
+  <meta property="og:title" content={s.title}>
+  <meta property="og:description" content={s.desc}>
+  <meta property="og:locale" content={locale.og}>
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="apple-touch-icon" href="/assets/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <script is:inline>
+    try { const t = localStorage.getItem("ns-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-row">
+    <a class="wordmark" href={pathOf(locale.slug)} aria-label={t.homeAria}>
+      <img src="/assets/icon.png" alt="" width="28" height="28">
+      <span>Native Screen</span>
+    </a>
+    <a class="back" href={pathOf(locale.slug)}>{s.back}</a>
+    <details class="lang-menu">
+      <summary aria-label={t.language}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+        <span class="lang-name">{locale.name}</span>
+      </summary>
+      <ul>
+        {locales.map((l) => (
+          <li><a href={supportPathOf(l.slug)} hreflang={l.lang} lang={l.lang} data-lang-link={l.slug} aria-current={l.slug === locale.slug ? "page" : undefined}>{l.name}</a></li>
+        ))}
+      </ul>
+    </details>
+  </div>
+</header>
+
+<main class="wrap legal">
+  <h1>{s.h1}</h1>
+  <p class="lede">{s.lede}</p>
+
+  <h2>{s.contactH}</h2>
+  <div>
+    <table>
+      <tbody>
+        <tr><td>{s.email}</td><td><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a><br>{s.emailNote}</td></tr>
+        <tr><td>{s.issues}</td><td><a href={`${repo}/issues`}>github.com/maitrungduc1410/NativeScreen/issues</a><br>{s.issuesNote}</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>{s.tipsP}</p>
+  <ul>{s.tips.map((item) => <li>{item}</li>)}</ul>
+
+  <h2>{s.faqH}</h2>
+  {s.faq.map(([q, a]) => (
+    <>
+      <h3>{q}</h3>
+      <p set:html={html(a)}></p>
+    </>
+  ))}
+
+  <h2>{s.moreH}</h2>
+  <p set:html={html(s.moreP)}></p>
+</main>
+
+<footer class="footer wrap">
+  <p>{t.footer}</p>
+  <p><a href={repo}>{t.source}</a> · <a href={`${repo}/issues`}>{t.report}</a> · <a href={privacyPathOf(locale.slug)}>{t.privacy}</a></p>
+</footer>
+
+<script>
+  import "../scripts/main.js";
+</script>
+</body>
+</html>

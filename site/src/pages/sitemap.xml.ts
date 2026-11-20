@@ -1,5 +1,6 @@
 import { locales, urlOf, SITE } from "../i18n";
 import { privacyPathOf } from "../i18n/privacy";
+import { supportPathOf } from "../i18n/support";
 
 const lastmod = new Date().toISOString().slice(0, 10);
 const alternates = [
@@ -10,11 +11,16 @@ const privacyAlternates = [
   ...locales.map((l) => `<xhtml:link rel="alternate" hreflang="${l.lang}" href="${SITE}${privacyPathOf(l.slug)}"/>`),
   `<xhtml:link rel="alternate" hreflang="x-default" href="${SITE}${privacyPathOf("en")}"/>`,
 ].join("");
+const supportAlternates = [
+  ...locales.map((l) => `<xhtml:link rel="alternate" hreflang="${l.lang}" href="${SITE}${supportPathOf(l.slug)}"/>`),
+  `<xhtml:link rel="alternate" hreflang="x-default" href="${SITE}${supportPathOf("en")}"/>`,
+].join("");
 
 export function GET() {
   const urls =
     locales.map((l) => `<url><loc>${urlOf(l.slug)}</loc><lastmod>${lastmod}</lastmod>${alternates}</url>`).join("") +
-    locales.map((l) => `<url><loc>${SITE}${privacyPathOf(l.slug)}</loc><lastmod>${lastmod}</lastmod>${privacyAlternates}</url>`).join("");
+    locales.map((l) => `<url><loc>${SITE}${privacyPathOf(l.slug)}</loc><lastmod>${lastmod}</lastmod>${privacyAlternates}</url>`).join("") +
+    locales.map((l) => `<url><loc>${SITE}${supportPathOf(l.slug)}</loc><lastmod>${lastmod}</lastmod>${supportAlternates}</url>`).join("");
   const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${urls}</urlset>`;
   return new Response(xml, { headers: { "Content-Type": "application/xml" } });
 }

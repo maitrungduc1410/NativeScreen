@@ -2,6 +2,7 @@
 import "../styles/site.css";
 import { locales, dictOf, pathOf, urlOf, ogImageOf, SITE, type Locale } from "../i18n";
 import { privacyPathOf } from "../i18n/privacy";
+import { supportOf, supportPathOf } from "../i18n/support";
 
 interface Props {
   locale: Locale;
@@ -460,7 +461,7 @@ const jsonLd = {
 
 <footer class="footer wrap">
   <p>{t.footer}</p>
-  <p><a href={repo}>{t.source}</a> · <a href={`${repo}/issues`}>{t.report}</a> · <a href={`${repo}/tree/master/spec`}>{t.spec}</a> · <a href={privacyPathOf(locale.slug)}>{t.privacy}</a></p>
+  <p><a href={repo}>{t.source}</a> · <a href={`${repo}/issues`}>{t.report}</a> · <a href={`${repo}/tree/master/spec`}>{t.spec}</a> · <a href={privacyPathOf(locale.slug)}>{t.privacy}</a> · <a href={supportPathOf(locale.slug)}>{supportOf(locale).footerLink}</a></p>
   <div class="featured-on">
     <a class="ln-badge" href="https://launchnest.io/p/native-screen" target="_blank" rel="noopener">
       <img class="ln-light" src="https://launchnest.io/badge/native-screen.svg?variant=featured&theme=light" alt="Native Screen on LaunchNest" width="220" height="56" loading="lazy">

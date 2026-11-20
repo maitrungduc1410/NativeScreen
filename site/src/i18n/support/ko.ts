@@ -1,0 +1,35 @@
+export default {
+  title: "지원 · Native Screen",
+  desc: "macOS와 Windows용 Native Screen 지원: 문의, 버그 제보, 자주 묻는 질문.",
+  back: "홈으로",
+  h1: "지원",
+  lede: "Native Screen 사용 중 도움이 필요하거나, 버그를 발견했거나, 아이디어가 있다면 연락해 주세요. 모든 메시지는 앱을 만드는 사람이 직접 읽습니다.",
+
+  contactH: "문의하기",
+  email: "이메일",
+  emailNote: "질문, 문제, 공개하고 싶지 않은 내용은 이메일로 보내 주세요.",
+  issues: "GitHub Issues",
+  issuesNote: "버그 제보와 기능 요청용입니다. 다른 사람도 함께 보고 의견을 더할 수 있습니다.",
+  tipsP: "문제를 더 빨리 해결할 수 있도록 다음 내용을 함께 보내 주세요.",
+  tips: [
+    "Native Screen 버전(Native Screen 정보에서 확인)과 설치한 곳(Mac App Store, Microsoft Store 또는 웹사이트)",
+    "macOS 또는 Windows 버전과 컴퓨터 모델",
+    "어떤 작업을 했는지, 무엇을 기대했는지, 실제로 어떻게 되었는지. 가능하면 스크린샷이나 짧은 녹화도 함께",
+  ],
+
+  faqH: "자주 묻는 질문",
+  faq: [
+    ["녹화 화면이 검게 나오거나 앱이 화면을 인식하지 못합니다.", "Native Screen에는 화면 기록 권한이 필요합니다. macOS에서는 시스템 설정 &gt; 개인정보 보호 및 보안 &gt; 화면 및 시스템 오디오 녹음(macOS 14에서는 화면 기록)에서 Native Screen을 켠 다음 앱을 종료하고 다시 여세요. Windows에서는 권한이 필요 없습니다. 특정 창만 계속 검게 나온다면 그 앱이 화면 캡처를 막고 있을 수 있습니다."],
+    ["카메라나 마이크가 작동하지 않습니다.", "macOS에서는 시스템 설정 &gt; 개인정보 보호 및 보안 &gt; 카메라 또는 마이크에서 Native Screen을 허용하세요. Windows에서는 설정 &gt; 개인 정보 및 보안 &gt; 카메라 또는 마이크를 확인하세요. 그런 다음 녹화를 시작하기 전에 녹화 바에서 장치를 선택하세요."],
+    ["녹화 파일은 어디에 저장되나요?", "녹화는 각각 프로젝트로 프로젝트 폴더에 저장됩니다. 설정에서 위치를 확인하고 바꿀 수 있습니다. Mac App Store 버전의 기본 위치는 동영상 &gt; Native Screen Projects입니다. 내보낸 동영상과 이미지는 내보낼 때 선택한 폴더에 저장됩니다."],
+    ["앱은 어떻게 업데이트하나요?", "Mac App Store와 Microsoft Store가 자동으로 업데이트합니다. 웹사이트에서 받았다면 앱이 직접 업데이트를 확인하며, macOS에서는 Native Screen &gt; Check for Updates를 선택할 수도 있습니다."],
+    ["실행하려면 무엇이 필요한가요?", "Apple 실리콘 또는 Intel 기반 macOS 14 이상, 또는 Windows 10이나 11(x64)이 필요합니다."],
+    ["정말 무료인가요?", "네. Native Screen은 MIT 라이선스의 무료 오픈 소스입니다. 계정, 구독, 워터마크가 없습니다."],
+    ["삭제는 어떻게 하나요?", "macOS에서는 응용 프로그램에서 Native Screen을 휴지통으로 드래그하세요. Windows에서는 설정 &gt; 앱에서 제거하세요. 프로젝트와 내보낸 파일은 직접 삭제하기 전까지 컴퓨터에 남아 있습니다."],
+  ],
+
+  moreH: "더 보기",
+  moreP: "데이터 처리 방식은 <a href=\"{privacy}\">개인정보 처리방침</a>에서 확인하세요(데이터는 컴퓨터 밖으로 나가지 않습니다). 소스 코드와 릴리스 노트는 <a href=\"{repo}\">GitHub</a>에 있습니다.",
+
+  footerLink: "지원",
+};
