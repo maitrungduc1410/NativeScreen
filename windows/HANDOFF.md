@@ -27,6 +27,72 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-20, ADR-98: Crash logs, and the editor preview no longer takes the app down (Windows only)
+
+### Writer
+- **Status:** written on macOS from reading the code and a user's event log. Nothing is built or changed. Windows does all of it.
+- **User report:** Record, then Stop, and the app closes. First recording, first project. Happened twice in a row.
+  - Store build 1.0.7.0, Windows 10 22H2 (`10.0.19041.6456`), NVIDIA GTX 950.
+  - Application Error 1000: `Microsoft.UI.Xaml.dll` 3.1.8.0, exception `0xc000027b`, offset `0x3a7515`. Same offset both times.
+  - WER 1001 (MoAppCrash): P5 `combase.dll`, P8 `0x80004003`.
+- **What that means:** `0xc000027b` is a stowed exception: an exception nobody caught on the UI thread reached XAML, which fail-fasts the process. `0x80004003` is the HRESULT .NET gives a `NullReferenceException`. So most likely a C# null reference on the UI thread, not a driver or Media Foundation crash. The app has no `UnhandledException` handler and writes no log, so we have no stack.
+- **Main suspect (not proven):** `StopAndOpen()` is started as `_ = StopAndOpen()`, so its own exceptions end in the task and do not crash. The first UI-thread code after it that can is `EditorWindow.AttachPreview` (`EditorWindow.xaml.cs:792`), `async void` on `Preview.Loaded`. Nothing guards `new FrameCompositor()`, `CreateSwapChain`, `SetSwapChain`, `new PreviewRenderer`, `FitPreview`, `DrawPreview`. `OpenPlayback` only catches `SharpGenException`. Other `async void` handlers exist (14, mostly user actions in the editor) and the global handler below covers them.
+- **GTX 950:** Maxwell, D3D feature level 12_1, so D3D 11.1 and D2D are fine, but the driver may be old. If the stack lands in the decoder, the video processor or `FrameCompositor`, look at the GPU path first.
+- **Owner decisions:**
+  - One file per crash.
+  - Keep full paths and names in the log as they are (no redaction), it is for debugging.
+  - The log controls live in **Settings > General**, under a new "Troubleshooting" heading.
+  - No "Report on GitHub" button. No privacy page change.
+
+### Port
+1. **`CrashLog` (new, `NativeScreen.App/CrashLog.cs`).**
+   - Folder: `UserDataFolder.PathOf("Logs")`.
+   - A crash writes `crash-yyyy-MM-dd_HH-mm-ss.txt` (local time). A caught error that did not end the app (step 2, `UnobservedTaskException`, and step 6) writes `error-....txt`. Keep the newest 10 of each, delete older ones after writing.
+   - Write synchronously (`File.WriteAllText`) inside the handler. The handler must never throw: wrap everything, and use an `Interlocked` flag so an exception while logging does not log again.
+   - Do not create D3D or call slow APIs in the handler. Collect machine info once at startup on a background thread and cache it.
+   - Contents, in this order:
+     - Kind (`UI thread`, `background thread`, `unobserved task`, `editor preview`), and whether the process is ending.
+     - Time (local and UTC), app version, Store or GitHub build (`AppPackage.IsPackaged`), Windows version with build and UBR, x64/ARM64.
+     - GPU name and driver version (DXGI adapter description, plus the driver version from the registry or `CheckInterfaceSupport`), RAM.
+     - `exception.ToString()` (type, message, stack, inner exceptions). For `AggregateException`, every inner. For `COMException`/`SharpGenException`, the HRESULT in hex.
+     - Breadcrumbs (step 3), oldest first.
+2. **Register the handlers.**
+   - `Program.Main`, before `Application.Start`: `AppDomain.CurrentDomain.UnhandledException` (background threads: capture, hooks, webcam, app audio, timers) and `TaskScheduler.UnobservedTaskException` (log as error, then `SetObserved()`).
+   - `App` constructor, after `InitializeComponent()`: `UnhandledException` (UI thread). Log as a crash and leave `Handled` false: after an unknown exception the app's state can't be trusted.
+   - Check in the test that the UI handler gets a real stack for an `async void` throw. If WinUI gives only a message, say so in the Verifier notes.
+3. **Breadcrumbs (`CrashLog.Note(string)`).** A ring of the last 100 lines in memory, thread safe, each with ms since launch. Nothing is written to disk unless there is a crash or an error. Note at least:
+   - recording started (mode, mic, camera, system audio on/off), paused, resumed, Stop pressed, `StopRecorder` done (duration, failed or not), `RecordingPackage.Finish` done, discard;
+   - `Projects.Open` start and end, `EditorWindow` created, each `AttachPreview` step (compositor built, swap chain size, renderer made, each playback opened), preview failed, editor closed;
+   - export started, finished, failed.
+4. **Next launch.** If there is a `crash-*` file newer than the one in `AppSettings.LastSeenCrashLog` (new setting, a file name), show once: "Native Screen closed unexpectedly on {date time}." with **Open log folder**, **Copy crash report** and **Close**. Any button marks it seen. The app starts with only the recording bar, which is too small for a `ContentDialog`, so use a small window of its own (or a task dialog with custom buttons). Pick what fits the app best.
+5. **Settings > General > Troubleshooting** (at the end of the tab).
+   - A line: "Last crash: {date time}" or "No crashes recorded".
+   - **Open log folder:** Explorer with the newest crash file selected (`explorer /select,"<file>"`), or the folder when there is none.
+   - **Copy crash report:** the newest crash file's text to the clipboard. Disabled when there is none.
+6. **Store build path.** A packaged app's new files under `%LOCALAPPDATA%` are redirected to `%LOCALAPPDATA%\Packages\<family name>\LocalCache\Local\...`. Explorer runs outside the package and won't find the path the app sees. Before handing a path to Explorer, map it: when `AppPackage.IsPackaged` and the path is under `LocalApplicationData`, use `ApplicationData.Current.LocalCacheFolder.Path` + `Local` + the rest. Check on the installed MSIX where "NativeScreen Data" really is (ADR-90 may already tell you), then check that the button opens the right place.
+7. **Guard the preview (`AttachPreview`).** Catch every exception around the whole body (it is the top of an `async void`, so a plain `catch (Exception)` is right here).
+   - Write an `error-` file with breadcrumbs.
+   - Dispose what was made (renderer, swap chain, compositor, playbacks) and leave them null, so `DrawPreview` and closing still work.
+   - Show it in the preview area, the same way `PreviewFailed` (`EditorWindow.xaml.cs:723`) does, with the exception message.
+   - The editor stays open and the project stays saved.
+8. **Strings** go in the shared catalog `macos/NativeScreen/Localizable.xcstrings` with all languages (ADR-44): "Troubleshooting", "Last crash: %@", "No crashes recorded", "Open log folder", "Copy crash report", "Native Screen closed unexpectedly on %@.", "Close", "Preview could not start: %@" (reuse any key that already exists).
+9. **Spec:** add ADR-98 to `spec/06` (why: no stack on a user's crash; one file per crash; where the files are and how the Store path is mapped; the preview guard). Add the Troubleshooting rows wherever the spec lists Settings > General.
+
+### How to verify
+- A test switch, only in Debug builds: `NS_CRASH_TEST` = `ui` (throw a `NullReferenceException` in an `async void` on the dispatcher after launch), `background` (throw on a new thread), `task` (a faulted task, then `GC.Collect` and `WaitForPendingFinalizers`), `preview` (throw inside `AttachPreview` after the compositor is built).
+- `ui` and `background`: the app closes, a `crash-` file exists with the right kind, a real stack and breadcrumbs. Next launch shows the prompt once. After Close, a second launch shows nothing, and Settings still shows the crash with both buttons working.
+- `task`: an `error-` file, the app keeps running, no prompt next launch.
+- `preview`: record a few seconds and stop. The editor opens with the message in the preview area, the app stays up, an `error-` file exists. Close the editor and record again: it works.
+- More than 10 crashes: only the newest 10 files are left.
+- **Store MSIX installed** (not only a Debug run): Open log folder lands on the real file, Copy gives the full text.
+- `verify.ps1` passes.
+- If you have a Windows 10 machine, or an older NVIDIA GPU, try the user's steps there: record the display for a few seconds, Stop.
+- Native crashes (access violation, stack overflow) can't be logged this way. Windows Event Viewer still has them.
+
+### After
+Ship it in the next Store and GitHub release. The owner will ask the user to repeat Record, then Stop, and send the `crash-` or `error-` file. That stack decides the real fix.
+
+
 ## 2026-11-14, ADR-97: Windows App SDK 1.8 instead of 2.6.4 (Windows only)
 
 ### Verifier
