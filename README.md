@@ -81,6 +81,7 @@ See it move on the [website](https://nativescreen.app/).
 | :-- | :-- | :-- |
 | macOS | macOS 14 or later, Apple silicon or Intel | [NativeScreen.dmg](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen.dmg) |
 | Windows | Windows 10 or 11, x64 | [Microsoft Store](https://apps.microsoft.com/detail/9nxxndrd06wq) or [NativeScreen-win-Setup.exe](https://github.com/maitrungduc1410/NativeScreen/releases/latest/download/NativeScreen-win-Setup.exe) |
+| Linux (recorder preview) | Wayland with the ScreenCast portal and PipeWire | Build from source, see [`linux/README.md`](linux/README.md) |
 
 **macOS.** Open the DMG and drag Native Screen to Applications. The app is signed and notarized by Apple. On first
 launch macOS asks for Screen Recording permission, and for camera and microphone when you turn them on. Updates arrive
@@ -136,12 +137,22 @@ dotnet run --project windows/src/NativeScreen.App -c Debug -p:Platform=x64
 
 `pwsh windows/scripts/verify.ps1` builds everything and runs the tests.
 
+**Linux (recorder):** Rust, GStreamer with VA-API and PipeWire. Recordings open in the macOS and Windows editors; a
+Linux editor is planned ([`spec/09`](spec/09-LINUX-PORT-PLAN.md)).
+
+```bash
+cargo install --path linux/nativescreen --root ~/.local
+```
+
+`cargo test --manifest-path linux/nativescreen/Cargo.toml` runs the tests, including the shared conformance fixtures.
+
 ## Repository
 
 | Path | What is there |
 | :-- | :-- |
 | [`macos/`](macos/) | macOS app (SwiftUI, Metal, ScreenCaptureKit) |
 | [`windows/`](windows/) | Windows app (WinUI 3, Direct3D 11, Media Foundation) |
+| [`linux/`](linux/README.md) | Linux recorder (Wayland portal, PipeWire, GStreamer/VA-API) and its shell plugin |
 | [`spec/`](spec/README.md) | File format, rendering math, engineering decisions and the feature checklist |
 | [`conformance/`](conformance/) | Reference projects and frames both apps must match |
 | [`site/`](site/) | The website |

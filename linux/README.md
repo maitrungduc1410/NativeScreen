@@ -26,7 +26,7 @@ noctalia msg plugins source add nativescreen path /usr/share/nativescreen/noctal
 noctalia msg plugins enable nativescreen/recorder
 ```
 
-Debug the cursor kind detection with `NATIVESCREEN_DEBUG=1 nativescreen record`.
+See [Troubleshooting](#troubleshooting) for `NATIVESCREEN_DEBUG`.
 
 ## Use
 
@@ -51,3 +51,16 @@ starts/stops, right click chooses another screen, middle click opens the project
 ```bash
 noctalia msg plugin nativescreen/recorder:service all toggle
 ```
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| :-- | :-- |
+| `missing GStreamer elements: ...` | Install the package named in the message (`mp4mux` is in `gst-plugins-good`). |
+| `clicks.jsonl` / `keys.jsonl` empty, no auto-zoom | No read access to `/dev/input`: `sudo usermod -aG input $USER`, then log out and in. |
+| A click gives no zoom | Clicks in the last second of a recording are ignored, as on macOS and Windows. |
+| Slow start on a laptop with an NVIDIA GPU | The recorder pins `LIBVA_DRIVER_NAME` to the integrated GPU's driver so the discrete GPU is not woken up. Setting `LIBVA_DRIVER_NAME` yourself overrides that. |
+| The picker opens every time | The portal did not return a restore token; `--pick` also forces the picker. |
+
+`NATIVESCREEN_DEBUG=1 nativescreen record` prints each startup step with its time and every cursor bitmap with
+the cursor kind it matched.
