@@ -237,3 +237,24 @@ Windows verifier recorded `PASS` for it in `windows/HANDOFF.md`.
 - [ ] **5.7 Intelligence:** Whisper captions and transcript editing, person cutout (ONNX), OCR and face masks, face tracking.
 - [ ] **5.8 Packaging:** MSIX, `.nativescreen` file association and icon, signing.
   - [ ] Microsoft Store MSIX next to the Velopack installer (`spec/06` ADR-81): no updater in the Store build, identity from build properties, execution alias for MCP, borderless capture capability, tiles, CI job. The package builds and passes `package-msix.ps1`'s checks; installing it and the Windows App Certification Kit are still to do (`windows/HANDOFF.md`).
+
+## Phase 6: NativeScreen for Linux (Wayland portal + PipeWire + GStreamer/VA-API)
+*Goal: record on Linux into the same `.nativescreen` packages, then edit and export natively.*
+
+Plan: [`spec/09-LINUX-PORT-PLAN.md`](./09-LINUX-PORT-PLAN.md). Implementation guide:
+[`platforms/linux-pipewire-vaapi.md`](./platforms/linux-pipewire-vaapi.md). Reference setup: Umbriel compositor + Noctalia shell.
+
+- [ ] **6.1 Recorder:** ScreenCast portal (monitor/window, remembered pick), PipeWire capture with cursor metadata, VA-API H.264 + system audio into fragmented `display.mp4`, optional `microphone.m4a`, `metadata.json` + `project.json` with auto-zooms.
+  - [x] Auto-zoom port checked against every `conformance/cases/*/expected/autozoom.json`.
+  - [x] Recording verified on Umbriel (2880×1800, `vah264enc`, system audio AAC stereo, cursor telemetry, `scaleFactor` 2).
+  - [ ] A Linux recording opened in the macOS or Windows editor with the cursor aligned.
+  - [x] Cursor kinds named from the Xcursor theme (`cursor_kind.rs`); the live arrow matches exactly; `refreshRate` from the compositor (120 Hz).
+- [ ] **6.2 Input telemetry:** evdev clicks (with touchpad taps), scroll and keys in the shared vocabulary.
+- [ ] **6.3 Noctalia plugin:** service, bar widget with timer, control-center tile, IPC (`nativescreen/recorder`).
+  - [x] Service + IPC verified on Noctalia 5.5 (toggle start/stop, state mirrored from the status file).
+  - [x] Bar widget checked on screen (idle camera glyph; red stop square + running timer while recording).
+  - [ ] Control-center tile checked on screen.
+- [ ] **6.4 Editor and export:** GTK 4 + libadwaita UI, Vulkan compositor matching `spec/07`, GStreamer VA-API decode/encode, 0% idle CPU.
+- [ ] **6.5 Packaging:** AUR package, `.desktop` entry and MIME type for `.nativescreen`.
+  - [x] `PKGBUILD` (binary, `.desktop`, plugin as a Noctalia path source) builds and passes `check()`.
+  - [ ] Published to the AUR; MIME type once a Linux editor exists.

@@ -1,0 +1,54 @@
+{
+  "notify": {
+    "failed": "NativeScreen quay thất bại",
+    "missing": "Không tìm thấy {bin}. Hãy build từ linux/nativescreen và đặt vào PATH.",
+    "no-input": "Không ghi được click và phím: thêm tài khoản vào nhóm input để bật auto-zoom theo click.",
+    "recording": "NativeScreen đang quay",
+    "saved": "Đã lưu project NativeScreen"
+  },
+  "settings": {
+    "allow_window": {
+      "description": "Cho phép chọn từng cửa sổ, không chỉ toàn màn hình.",
+      "label": "Cho phép quay cửa sổ"
+    },
+    "auto_zoom": {
+      "description": "Tự tạo zoom từ các click khi dừng quay.",
+      "label": "Tự động zoom"
+    },
+    "binary": {
+      "description": "Tên lệnh hoặc đường dẫn đầy đủ tới recorder nativescreen.",
+      "label": "Chương trình quay"
+    },
+    "directory": {
+      "label": "Thư mục project"
+    },
+    "hide_inactive": {
+      "label": "Ẩn widget khi không quay"
+    },
+    "microphone": {
+      "label": "Ghi micro"
+    },
+    "quality": {
+      "description": "Lượng tử hoá từ 0 đến 51; càng thấp càng nét và file càng lớn.",
+      "label": "Chất lượng video"
+    },
+    "system_audio": {
+      "label": "Ghi âm thanh hệ thống"
+    },
+    "typed_keys": {
+      "description": "Lưu cả phím thường đã gõ, không chỉ việc đang gõ. Phím tắt luôn được lưu.",
+      "label": "Ghi phím đã gõ"
+    }
+  },
+  "shortcut": {
+    "record": "NativeScreen",
+    "recording": "Đang quay"
+  },
+  "tooltip": {
+    "finishing": "Đang ghi project...",
+    "idle": "Quay bằng NativeScreen (chuột phải: chọn màn hình, chuột giữa: mở thư mục)",
+    "missing": "Không tìm thấy recorder nativescreen",
+    "picking": "Chọn vùng cần quay",
+    "recording": "Dừng quay"
+  }
+}

@@ -1,0 +1,41 @@
+# Builds the Linux recorder and the Noctalia plugin from this checkout:
+#   cd linux/packaging/arch && makepkg -si
+pkgname=nativescreen-recorder
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='NativeScreen screen recorder for Wayland (writes .nativescreen projects) with a Noctalia plugin'
+arch=('x86_64' 'aarch64')
+license=('MIT')
+depends=('pipewire' 'xdg-desktop-portal' 'gstreamer' 'gst-plugins-base' 'gst-plugins-good'
+         'gst-plugins-bad' 'gst-plugin-pipewire')
+makedepends=('cargo' 'clang' 'pkgconf')
+optdepends=('gst-plugin-va: hardware H.264 encoding (VA-API)'
+            'gst-plugins-ugly: x264 software encoding fallback'
+            'noctalia: bar widget and control-center tile')
+install=nativescreen-recorder.install
+# makepkg's -flto turns libspa's C shims into LTO objects that rust-lld cannot link.
+options=('!lto')
+_root="$(realpath "$startdir/../../..")"
+
+build() {
+  cd "$_root/linux/nativescreen"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo build --release --locked
+}
+
+check() {
+  cd "$_root/linux/nativescreen"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo test --release --locked
+}
+
+package() {
+  install -Dm755 "$srcdir/target/release/nativescreen" "$pkgdir/usr/bin/nativescreen"
+  install -Dm644 "$_root/linux/packaging/nativescreen-recorder.desktop" \
+    "$pkgdir/usr/share/applications/nativescreen-recorder.desktop"
+  local plugins="$pkgdir/usr/share/nativescreen/noctalia-plugins"
+  install -Dm644 "$_root/linux/noctalia-plugin/catalog.toml" "$plugins/catalog.toml"
+  cp -r "$_root/linux/noctalia-plugin/recorder" "$plugins/recorder"
+  find "$plugins" -type f -exec chmod 644 {} +
+  install -Dm644 "$_root/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

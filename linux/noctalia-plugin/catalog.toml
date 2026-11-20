@@ -1,0 +1,16 @@
+# Index of the plugins in this directory, so it can be added as a Noctalia plugin source:
+#   noctalia msg plugins source add nativescreen path /usr/share/nativescreen/noctalia-plugins
+# Keep in sync with recorder/plugin.toml.
+
+[[plugin]]
+id           = "nativescreen/recorder"
+name         = "NativeScreen"
+version      = "0.1.0"
+author       = "nativescreen"
+license      = "MIT"
+icon         = "video"
+description  = "Record cinematic demo videos into NativeScreen projects."
+deprecated   = false
+plugin_api   = 24
+tags         = ["recording", "video"]
+dependencies = ["nativescreen"]

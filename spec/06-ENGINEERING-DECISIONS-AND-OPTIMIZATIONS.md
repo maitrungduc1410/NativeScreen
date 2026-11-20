@@ -1686,3 +1686,43 @@ On the owner's Windows 10 22H2 machine (19045, 200 % scale), every window of the
 - **Native inference files:** 1.8 brings its own `onnxruntime.dll`, `onnxruntime_providers_shared.dll` (1.23) and `DirectML.dll` (1.15.4), and lists them in the publish files, so the MSIX build stopped on duplicates before packaging, and so did the installer's `dotnet publish` (it lists only the SDK's DirectML). `NsDropDuplicateInferenceDllsFromPublish` drops an inference package's copy only when the SDK's copy of the same file is listed too, as `NsDropDuplicateInferenceDlls` already did for the payload (ADR-81). The MSIX and the plain build therefore run the managed OnnxRuntime 1.24.4 on the SDK's native 1.23, and the installer keeps the package's native 1.24.4. A hand-written one-node Conv model runs through it on DirectML and on the CPU with the same output as on native 1.24.4. The person model itself was not run, because it was not on the machine.
 - **Kept from ADR-96:** the recording bar still moves through caption regions. With 1.8 it keeps up like any title bar.
 - **Changing the version needs a clean build:** the self-contained runtime files are copied only when the package file is newer, so after a downgrade the old `Microsoft.UI.Xaml.dll` (and the rest) stayed in `NativeScreen.App/bin` and Visual Studio kept running 2.x. Delete `windows/src/NativeScreen.App/bin` and `obj` after any Windows App SDK change, and check the file version of `Microsoft.UI.Xaml.dll` in the output (3.1.8 for 1.8).
+
+## 98. ADR-98: Linux Recorder: Cursor From PipeWire Metadata, Clicks From evdev, One Clock
+
+The Linux build (spec/09, `linux/nativescreen/`) records on Wayland, where no client can read the global pointer or
+global input. It gets them like this:
+
+- **Cursor position: `SPA_META_Cursor`, not the frames.** The ScreenCast portal is asked for `CursorMode::METADATA`, so
+  the cursor is left out of the video (as `showsCursor = false` on macOS) and every PipeWire buffer can carry the cursor
+  position in stream pixels. Buffers with an empty chunk carry only a cursor move; they update `cursor.jsonl` and are not
+  encoded. The position is divided by the negotiated frame size, so it is normalized to the recorded area (spec/02 §2)
+  whatever the output scale.
+- **Cursor kind from the theme's own pictures.** The portal sends the cursor bitmap, not its name. The compositor draws
+  that bitmap from the Xcursor theme, so `cursor_kind.rs` loads the theme files for each kind (`default`, `pointer`,
+  `text`, `crosshair`, `ew-resize`, `ns-resize`, `grab`, `grabbing`), reduces each size to a 16×16 alpha mask plus the
+  hotspot, and gives an incoming bitmap the kind of the closest mask (distance ≤ 0.16, else `arrow`), cached per bitmap.
+  Umbriel sends the picture in the **top-left corner of a transparent 256×256 canvas** (a 48 px cursor at scale 2), so
+  the bitmap is compared through a top-left window of each theme size that holds all its visible pixels; comparing the
+  whole canvas makes every cursor a dot in the corner. Measured on Umbriel: the arrow matches the theme at distance 0.000.
+  The bitmap arrives with every buffer, so the cache key is a hash of the visible pixels.
+- **Clicks and keys: evdev.** Read-only access to `/dev/input/event*` (the `input` group). A click takes the latest
+  cursor sample as its position. Touchpad taps never reach evdev as buttons (libinput makes them in user space), so a
+  touch shorter than 200 ms that moves less than ~1.5 mm is a click (two fingers: right). Without access the recording
+  still works and only the cursor track is written; the shell says so. Key events use the Windows/macOS vocabulary;
+  plain typing is stored without the key unless asked.
+- **One clock.** The first accepted frame sets `t0`; video PTS and every telemetry `t` are `t0.elapsed()`. Audio runs
+  in the same GStreamer pipeline behind a closed `valve`; on the first frame the valve opens and the `appsrc` pad gets
+  an offset equal to the running time at that moment, so both tracks start together in `display.mp4`. Pushing video
+  with PTS from 0 without the offset would put it far behind the live audio's running time.
+- **CQP, not VBR.** The stream is variable frame rate (a frame only on damage, `framerate=0/1`), so bit-rate targets
+  have no frame rate to work with. `vah264enc rate-control=cqp` (x264 `pass=quant` as fallback) keeps quality constant.
+- **Auto-zoom parity.** `autozoom.rs` is a line-by-line port of `AutoZoomClusterGenerator`; its test runs every
+  `conformance/cases/*/expected/autozoom.json`. New recordings use scale 1.8 like Windows.
+- **Shell integration through a status file, not D-Bus.** `$XDG_RUNTIME_DIR/nativescreen/status.json` (atomic
+  replace) is enough for the Noctalia plugin to poll every 500 ms with `readFile`, costs nothing while idle, and works for
+  any bar or script. A dead recorder is detected by `/proc/<pid>/comm`.
+- **Refresh rate from the compositor.** The portal format only caps the frame rate (it said 60 on a 120 Hz panel), so
+  `refreshRate` comes from the current mode of the output at the stream position (`umbriel outputs`), falling back to
+  the negotiated maximum.
+- **Packaging: no LTO.** `makepkg` builds with `-flto`; libspa's C shims then become LTO objects that `rust-lld` cannot
+  link (`undefined symbol: libspa_rs_meta_cursor_is_valid`...). The PKGBUILD sets `options=('!lto')`.

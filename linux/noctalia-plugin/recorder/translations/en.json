@@ -1,0 +1,54 @@
+{
+  "notify": {
+    "failed": "NativeScreen recording failed",
+    "missing": "{bin} was not found. Build it from linux/nativescreen and put it on PATH.",
+    "no-input": "Clicks and keys are not recorded: add yourself to the input group to enable auto-zoom from clicks.",
+    "recording": "NativeScreen is recording",
+    "saved": "NativeScreen project saved"
+  },
+  "settings": {
+    "allow_window": {
+      "description": "Let the screen picker offer single windows, not only whole screens.",
+      "label": "Allow window capture"
+    },
+    "auto_zoom": {
+      "description": "Create zooms from clicks when the recording stops.",
+      "label": "Auto zoom"
+    },
+    "binary": {
+      "description": "Command name or full path of the nativescreen recorder.",
+      "label": "Recorder binary"
+    },
+    "directory": {
+      "label": "Projects folder"
+    },
+    "hide_inactive": {
+      "label": "Hide widget while idle"
+    },
+    "microphone": {
+      "label": "Record microphone"
+    },
+    "quality": {
+      "description": "Encoder quantizer from 0 to 51; lower is better quality and larger files.",
+      "label": "Video quality"
+    },
+    "system_audio": {
+      "label": "Record system audio"
+    },
+    "typed_keys": {
+      "description": "Store which plain keys were typed, not only that typing happened. Shortcuts are always stored.",
+      "label": "Record typed keys"
+    }
+  },
+  "shortcut": {
+    "record": "NativeScreen",
+    "recording": "Recording"
+  },
+  "tooltip": {
+    "finishing": "Writing the project...",
+    "idle": "Record with NativeScreen (right click: choose screen, middle click: open folder)",
+    "missing": "nativescreen recorder not found",
+    "picking": "Choose what to record",
+    "recording": "Stop recording"
+  }
+}

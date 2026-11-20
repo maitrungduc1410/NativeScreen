@@ -1,6 +1,6 @@
 # AGENTS.md: NativeScreen Root Guide
 
-This repository contains **NativeScreen**, a 100% native, high-performance screen recorder and cinematic demo video editor for macOS (SwiftUI + AppKit + Metal) and Windows (WinUI 3 + Direct3D 11).
+This repository contains **NativeScreen**, a 100% native, high-performance screen recorder and cinematic demo video editor for macOS (SwiftUI + AppKit + Metal), Windows (WinUI 3 + Direct3D 11) and Linux (Wayland portal + PipeWire + GStreamer/VA-API; recorder first).
 
 ## 1. Mandatory Reading Before Making Changes
 
@@ -13,6 +13,7 @@ Before implementing features or modifying data structures, consult the specifica
 - [`spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md`](./spec/06-ENGINEERING-DECISIONS-AND-OPTIMIZATIONS.md): Architectural Decision Records (ADRs), root-cause analyses, mathematical trade-offs, and performance optimizations across the engine and UI.
 - [`spec/07-RENDERING-PARITY.md`](./spec/07-RENDERING-PARITY.md): Every compositor pass and CoreImage behavior stated explicitly so the Windows renderer produces the same frames.
 - [`spec/08-WINDOWS-PORT-PLAN.md`](./spec/08-WINDOWS-PORT-PLAN.md): Swift → C# porting map, conformance fixtures, Windows phases and acceptance checks.
+- [`spec/09-LINUX-PORT-PLAN.md`](./spec/09-LINUX-PORT-PLAN.md) & [`spec/platforms/linux-pipewire-vaapi.md`](./spec/platforms/linux-pipewire-vaapi.md): Linux recorder, Noctalia shell plugin, and the editor/export plan.
 - [`spec/platforms/macos-metal-videotoolbox.md`](./spec/platforms/macos-metal-videotoolbox.md) & [`spec/platforms/windows-d3d11-mediafoundation.md`](./spec/platforms/windows-d3d11-mediafoundation.md): Platform-specific GPU compositor, hardware video decode/encode, and windowing blueprints.
 
 ## 2. Core Engineering Rules (All Platforms)
@@ -26,7 +27,7 @@ Before implementing features or modifying data structures, consult the specifica
    - Raw recorded media and telemetry in `recording/` are **strictly immutable** after capture (Non-Linear Editing).
 3. **Performance & Resource Discipline:**
    - **0.0% Idle CPU:** GPU preview views (`MTKView` on macOS, `SwapChainPanel` on Windows) must pause their render loop (`isPaused = true`) when playback is paused, rendering only on demand (`needsDisplay = true`).
-   - **Zero FFmpeg:** Use native OS media frameworks (`ScreenCaptureKit`, `AVFoundation`, `VideoToolbox`, `Metal` on macOS; `Windows.Graphics.Capture`, `Media Foundation`, `Direct3D 11` on Windows).
+   - **Zero FFmpeg:** Use native OS media frameworks (`ScreenCaptureKit`, `AVFoundation`, `VideoToolbox`, `Metal` on macOS; `Windows.Graphics.Capture`, `Media Foundation`, `Direct3D 11` on Windows; ScreenCast portal, `PipeWire`, `GStreamer` with VA-API on Linux, never `gst-libav`).
 4. **Privacy & Security Hygiene:**
    - Never commit machine-specific paths, local usernames, `xcuserdata`, or proprietary third-party assets.
    - Use Conventional Commits (`feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`) with author `Duc Trung Mai <maitrungduc1410@gmail.com>`.
@@ -40,3 +41,4 @@ Before implementing features or modifying data structures, consult the specifica
 
 - **macOS App (`macos/`):** Read [`macos/AGENTS.md`](./macos/AGENTS.md) before editing Swift/macOS code.
 - **Windows App (`windows/`):** Read [`windows/AGENTS.md`](./windows/AGENTS.md) before editing C#/Windows code. It defines the writer (macOS) and verifier (Windows) roles.
+- **Linux (`linux/`):** Read [`linux/AGENTS.md`](./linux/AGENTS.md) before editing the Rust recorder or the Noctalia plugin.

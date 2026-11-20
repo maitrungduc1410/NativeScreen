@@ -1,0 +1,95 @@
+# NativeScreen recorder for Noctalia.
+#
+# The `nativescreen` binary does the capture (ScreenCast portal + PipeWire, cursor metadata, evdev
+# clicks/keys) and writes a .nativescreen package. This plugin only drives it:
+# - the headless [[service]] starts/stops the binary and mirrors $XDG_RUNTIME_DIR/nativescreen/status.json
+#   into the shared "status" state;
+# - the bar [[widget]] and the control-center [[shortcut]] mirror "status" and write "command".
+
+id = "nativescreen/recorder"
+name = "NativeScreen"
+version = "0.1.0"
+plugin_api = 24
+author = "nativescreen"
+license = "MIT"
+dependencies = ["nativescreen"]
+tags = ["recording", "video"]
+icon = "video"
+description = "Record cinematic demo videos into NativeScreen projects."
+
+[[setting]]
+key = "binary"
+type = "string"
+label_key = "settings.binary.label"
+description_key = "settings.binary.description"
+default = "nativescreen"
+advanced = true
+
+[[setting]]
+key = "directory"
+type = "folder"
+label_key = "settings.directory.label"
+default = "~/Videos/NativeScreen"
+
+[[setting]]
+key = "system_audio"
+type = "bool"
+label_key = "settings.system_audio.label"
+default = true
+
+[[setting]]
+key = "microphone"
+type = "bool"
+label_key = "settings.microphone.label"
+default = false
+
+[[setting]]
+key = "allow_window"
+type = "bool"
+label_key = "settings.allow_window.label"
+description_key = "settings.allow_window.description"
+default = false
+
+[[setting]]
+key = "auto_zoom"
+type = "bool"
+label_key = "settings.auto_zoom.label"
+description_key = "settings.auto_zoom.description"
+default = true
+
+[[setting]]
+key = "typed_keys"
+type = "bool"
+label_key = "settings.typed_keys.label"
+description_key = "settings.typed_keys.description"
+default = false
+
+[[setting]]
+key = "quality"
+type = "int"
+label_key = "settings.quality.label"
+description_key = "settings.quality.description"
+default = 20
+min = 0
+max = 51
+
+[[setting]]
+key = "hide_inactive"
+type = "bool"
+label_key = "settings.hide_inactive.label"
+default = false
+
+[[service]]
+id = "service"
+entry = "service.luau"
+
+[[widget]]
+id = "recorder"
+entry = "widget.luau"
+
+[widget.actions]
+middle = "none"
+
+[[shortcut]]
+id = "toggle"
+entry = "shortcut.luau"

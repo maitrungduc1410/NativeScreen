@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=NativeScreen Recorder
+GenericName=Screen Recorder
+Comment=Start or stop a NativeScreen recording
+Exec=nativescreen toggle
+Icon=media-record
+Terminal=false
+Categories=AudioVideo;Video;Recorder;
+Keywords=screen;record;capture;demo;
+Actions=pick;
+
+[Desktop Action pick]
+Name=Record another screen or window
+Exec=nativescreen record --pick --window

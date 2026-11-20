@@ -1,0 +1,9 @@
+post_install() {
+  cat <<'MSG'
+NativeScreen recorder installed. For the Noctalia widget, as your user:
+  noctalia msg plugins source add nativescreen path /usr/share/nativescreen/noctalia-plugins
+  noctalia msg plugins enable nativescreen/recorder
+Clicks and keys (auto-zoom) need read access to /dev/input (the input group).
+MSG
+}
+post_upgrade() { :; }
