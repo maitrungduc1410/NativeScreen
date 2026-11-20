@@ -101,7 +101,46 @@ fn parse_record(args: &[String]) -> Result<RecordArgs> {
     Ok(out)
 }
 
+/// VA-API driver to pin on a hybrid machine: the first non-NVIDIA render node (ADR-98). Loading the
+/// GStreamer VA plugin initializes the driver of every render node; with `libva-nvidia-driver` installed
+/// that starts CUDA on the discrete GPU, waking it from runtime suspend (~3 s, and battery) although
+/// encoding runs on the integrated GPU.
+fn libva_driver_for(vendors: &[u16]) -> Option<&'static str> {
+    const NVIDIA: u16 = 0x10de;
+    if !vendors.contains(&NVIDIA) {
+        return None;
+    }
+    vendors.iter().find_map(|v| match *v {
+        0x1002 => Some("radeonsi"),
+        0x8086 => Some("iHD"),
+        _ => None,
+    })
+}
+
+/// Vendor ids of `/dev/dri/renderD*`, in node order.
+fn render_node_vendors() -> Vec<u16> {
+    let mut nodes: Vec<_> = std::fs::read_dir("/sys/class/drm")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("renderD"))
+        .map(|e| e.path())
+        .collect();
+    nodes.sort();
+    nodes
+        .iter()
+        .filter_map(|n| std::fs::read_to_string(n.join("device/vendor")).ok())
+        .filter_map(|v| u16::from_str_radix(v.trim().trim_start_matches("0x"), 16).ok())
+        .collect()
+}
+
 fn main() {
+    if std::env::var_os("LIBVA_DRIVER_NAME").is_none() {
+        if let Some(driver) = libva_driver_for(&render_node_vendors()) {
+            // SAFETY: no other thread exists yet.
+            unsafe { std::env::set_var("LIBVA_DRIVER_NAME", driver) };
+        }
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("record") => parse_record(&args[1..]).and_then(record),
@@ -151,8 +190,19 @@ fn token_path() -> PathBuf {
     state.join("nativescreen/portal-restore-token")
 }
 
+static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// With `NATIVESCREEN_DEBUG`, prints how long after start a step finished (startup latency).
+pub fn debug_mark(step: &str) {
+    if std::env::var_os("NATIVESCREEN_DEBUG").is_some() {
+        let start = PROCESS_START.get_or_init(std::time::Instant::now);
+        eprintln!("[{:>6.0} ms] {step}", start.elapsed().as_secs_f64() * 1000.0);
+    }
+}
+
 #[tokio::main]
 async fn record(args: RecordArgs) -> Result<()> {
+    debug_mark("start");
     if let Some(pid) = StatusFile::running_pid() {
         bail!("already recording (pid {pid})");
     }
@@ -162,6 +212,7 @@ async fn record(args: RecordArgs) -> Result<()> {
         return Err(e);
     }
     status.write(&Status::new("picking"));
+    debug_mark("preflight done");
 
     let mut sigint = signal(SignalKind::interrupt())?;
     let mut sigterm = signal(SignalKind::terminate())?;
@@ -186,6 +237,7 @@ async fn record(args: RecordArgs) -> Result<()> {
             return Err(e);
         }
     };
+    debug_mark("portal stream ready");
     if let Some(token) = &portal.restore_token {
         let path = token_path();
         let _ = std::fs::create_dir_all(path.parent().unwrap());
@@ -225,6 +277,7 @@ async fn record(args: RecordArgs) -> Result<()> {
         Ok(Some(capture::CaptureEvent::Failed(e))) => return fail(&status, &package, stop_tx, capture_thread, e),
         _ => return fail(&status, &package, stop_tx, capture_thread, "no frame from the screen within 10 s".into()),
     };
+    debug_mark("first frame encoded");
     let started_at = chrono::Utc::now();
     status.write(
         &Status::new("recording")
@@ -358,7 +411,15 @@ fn fail(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_output_refresh;
+    use super::{libva_driver_for, parse_output_refresh};
+
+    #[test]
+    fn pins_the_integrated_gpu_driver_only_on_hybrid_machines() {
+        assert_eq!(libva_driver_for(&[0x1002, 0x10de]), Some("radeonsi"));
+        assert_eq!(libva_driver_for(&[0x10de, 0x8086]), Some("iHD"));
+        assert_eq!(libva_driver_for(&[0x1002]), None);
+        assert_eq!(libva_driver_for(&[0x10de]), None);
+    }
 
     const OUTPUTS: &str = "eDP-2 \"Panel\"\n  Focused: no\n  Position: 0,0\n  Modes:\n    2880x1800 @ 120.000 Hz (preferred, current)\n    2880x1800 @ 60.001 Hz (preferred)\nHDMI-A-1 \"TV\"\n  Focused: yes\n  Position: 1440,0\n  Modes:\n    3840x2160 @ 60.000 Hz (current)\n";
 

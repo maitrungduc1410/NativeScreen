@@ -359,6 +359,7 @@ pub fn run(
                     microphone: options.microphone,
                     quality_qp: options.quality_qp,
                 };
+                crate::debug_mark("first frame received");
                 match Encoder::new(&cfg) {
                     Ok(encoder) => {
                         let _ = session_process.t0.set(std::time::Instant::now());

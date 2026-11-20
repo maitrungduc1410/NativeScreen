@@ -1726,3 +1726,9 @@ global input. It gets them like this:
   the negotiated maximum.
 - **Packaging: no LTO.** `makepkg` builds with `-flto`; libspa's C shims then become LTO objects that `rust-lld` cannot
   link (`undefined symbol: libspa_rs_meta_cursor_is_valid`...). The PKGBUILD sets `options=('!lto')`.
+- **Pin the integrated GPU's VA driver on hybrid machines.** Loading the GStreamer VA plugin initializes the libva
+  driver of every render node. With `libva-nvidia-driver` installed that starts CUDA on a runtime-suspended NVIDIA GPU:
+  2.9 s before the encoder exists (the first ~3 s of every recording were lost) and the dGPU stays awake. When
+  `LIBVA_DRIVER_NAME` is unset and an NVIDIA node sits next to an AMD or Intel one, `main` sets it to `radeonsi` / `iHD`
+  before anything else runs. Measured on Radeon 890M + RTX 5060: first frame encoded at 220 ms instead of 3066 ms,
+  dGPU stays suspended. `NATIVESCREEN_DEBUG=1` prints the startup steps with their time.

@@ -69,6 +69,7 @@ fn quote(path: &Path) -> String {
 impl Encoder {
     pub fn new(cfg: &EncoderConfig) -> Result<Self> {
         gst::init()?;
+        crate::debug_mark("encoder: gst ready");
         if !has("mp4mux") {
             bail!("GStreamer element mp4mux is missing: install gst-plugins-good");
         }
@@ -116,6 +117,7 @@ impl Encoder {
             ));
         }
 
+        crate::debug_mark("encoder: description built");
         let pipeline = gst::parse::launch(&desc)
             .with_context(|| format!("build pipeline: {desc}"))?
             .downcast::<gst::Pipeline>()
@@ -125,7 +127,9 @@ impl Encoder {
             .and_then(|e| e.downcast::<gst_app::AppSrc>().ok())
             .ok_or_else(|| anyhow!("appsrc missing"))?;
         let valves = ["sysvalve", "micvalve"].iter().filter_map(|n| pipeline.by_name(n)).collect();
+        crate::debug_mark("encoder: pipeline parsed");
         pipeline.set_state(gst::State::Playing).context("start pipeline")?;
+        crate::debug_mark("encoder: pipeline playing");
         Ok(Self { pipeline, appsrc, valves, started: false, encoder_name: encoder_name.split(' ').next().unwrap_or("").into() })
     }
 

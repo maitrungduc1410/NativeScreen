@@ -98,4 +98,6 @@ A compositor keybind can call the same command or `nativescreen toggle` directly
 - Keep the `appsrc` (`max-buffers`) and `queue` (`max-size-buffers`) depth at 2 frames: a 2880×1800 frame is ~20 MB,
   so depth 6 cost ~60 MB more resident memory (356 → 295 MB measured) with no dropped frames saved. Most of the
   remaining memory is mapped PipeWire buffers and the VA driver; DMA-BUF import (L2) removes the copies.
+- On NVIDIA hybrid laptops the recorder sets `LIBVA_DRIVER_NAME` to the integrated GPU's driver (ADR-98);
+  otherwise loading the VA plugin wakes the dGPU and delays the first frame by ~3 s.
 - Measured on Umbriel (Radeon 890M, 2880×1800 @ 120 Hz, desktop use): ~18% of one CPU core while recording.
