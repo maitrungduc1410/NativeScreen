@@ -27,6 +27,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-100: A new recording starts in Auto aspect ratio (Windows done, macOS to do)
+
+### Verifier (Windows)
+- **Owner's report:** after recording, Windows opened the project in `Wide 16:9`; the owner expected `Auto` as on the Mac. Both platforms actually default to `16:9` (`CanvasConfig()`); the Mac showed `Auto` through a preset or `Use last project settings`. The owner chose `Auto` for every new recording on both platforms.
+- **Changes made:** `RecordingPackage.Finish` sets `Canvas.AspectRatioMode = Auto`; the default preset is applied after it and still wins. `CanvasConfig`'s default is unchanged (it is the JSON default too). `RecordingPackageTests` checks it. Checked in the app: a display recording opens with `Auto`.
+
+### Writer (macOS), to do
+1. In `RecordingCoordinator` where the recording's `ProjectDocument` is made (screen and camera-only), set `doc.canvas.aspectRatioMode = .auto` right after creating it, before `presetForNewProject()` is applied, so a default preset or `Use last project settings` still wins.
+2. Do not change `CanvasConfig`'s defaults: a `project.json` without the field must keep reading as `preset` + `16:9` on both platforms.
+3. Leave the showcase project and `VideoProjectImporter` as they are, unless the owner asks.
+- **How to verify:** with no default preset and `Use last project settings` off, record a window: the editor opens with `Auto`. With a default preset set to `Wide 16:9`: it opens with `16:9`.
 ## 2026-11-21, ADR-99: Renaming a project renames its folder (Windows done, macOS to do)
 
 ### Verifier (Windows)

@@ -77,6 +77,7 @@ public sealed class RecordingPackageTests
             Assert.Null(loaded.Metadata.Tracks.SystemAudio);
             Assert.Single(loaded.Document.Timeline.Zooms);
             Assert.Equal(6000, loaded.Document.Timeline.Slices[0].SourceEndMs);
+            Assert.Equal(AspectRatioMode.Auto, loaded.Document.Canvas.AspectRatioMode);
         }
         finally
         {

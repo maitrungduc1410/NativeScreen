@@ -59,6 +59,8 @@ public static class RecordingPackage
         {
             Name = target.AppName ?? Path.GetFileNameWithoutExtension(package)
         };
+        // A recording starts at its own shape plus padding, not a preset; a default preset applied afterwards still wins (spec/06 ADR-100).
+        document.Canvas.AspectRatioMode = AspectRatioMode.Auto;
         document.Camera.Enabled = hasWebcam && !cameraOnly;
         // New camera-only projects keep the face centered when cropped or zoomed.
         document.Camera.EnableFaceTracking = cameraOnly;

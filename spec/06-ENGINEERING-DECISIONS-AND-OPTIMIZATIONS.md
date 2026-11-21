@@ -1723,3 +1723,10 @@ The editor's title renamed only `document.name` on Windows. The package kept its
   - MCP `rename_project` does the same and returns the new path.
 - **Windows:** a folder cannot be renamed while the editor reads files in it (video, audio, waveforms). The editor saves, closes, the folder moves (up to 20 tries 150 ms apart while readers let go), and the editor opens again with the same position and size. The recording bar does not appear in between (the open-editor count is held). Undo history, playhead and selection start fresh, as after reopening a project. While an export, transcription, sensitive-data or face scan, or voiceover recording runs, only the name changes and a toast says the folder keeps its old name. A folder still in use after the tries stays as it was, with a toast.
 - **macOS:** `ProjectSession.renameProject` already moved the folder, but kept it silently when the name was taken, left the old path in recent projects, replaced only `/` and `:`. See `windows/HANDOFF.md` (2026-11-21).
+
+## 100. ADR-100: A New Recording Starts in Auto Aspect Ratio
+
+A new recording's project opened in `Wide 16:9` on both platforms, so a window or a 16:10 display sat in bars until the user picked `Auto`. The owner's Mac showed `Auto` only because a preset or `Use last project settings` set it.
+
+- **Decision:** the project a recording makes has `canvas.aspectRatioMode = auto` (the recording's own shape plus padding, ADR-05). Set where the document is made: `RecordingPackage.Finish` on Windows, `RecordingCoordinator` on macOS (screen and camera-only recordings).
+- **Unchanged:** a default preset, and on macOS `Use last project settings`, are applied afterwards and still win. `CanvasConfig`'s own default stays `preset` + `16:9`: it is also what a `project.json` without the field reads as on both platforms, and changing it would change old projects. Showcase projects and imported videos keep their own canvas.
