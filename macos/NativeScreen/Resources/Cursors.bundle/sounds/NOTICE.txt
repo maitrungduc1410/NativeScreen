@@ -1,0 +1,9 @@
+Click sounds
+
+Each set is one recorded mouse click, cut into down.wav, up.wav and click.wav by tools/prepare_click_sounds.py
+(trimmed, high-passed at 60 Hz, faded at the edges, levelled). All sources are CC0 1.0 (public domain):
+https://creativecommons.org/publicdomain/zero/1.0/
+
+soft     BigSoundBank, sound ID 1742 (https://bigsoundbank.com), CC0
+crisp    Freesound, sound 383239 (https://freesound.org/s/383239/), CC0
+classic  Freesound, sound 256455 (https://freesound.org/s/256455/), CC0

@@ -759,8 +759,11 @@ public final class RecordingCoordinator {
     private func updateFloatingCameraPreviewWindow() {
         defer { syncSpeakerNotesDocking() }
         let isActiveContext = (isHUDVisible || isRecording || isCountingDown)
+        // Camera mode closed with Esc or a second click: the camera is off until the stage opens again, not shown as
+        // the small bubble that goes with a screen recording.
+        let isClosedCameraMode = selectedMode == .camera && !isCameraStageActive && !isRecording && !isCountingDown
 
-        guard isActiveContext, let camID = selectedCameraDeviceID else {
+        guard isActiveContext, !isClosedCameraMode, let camID = selectedCameraDeviceID else {
             WarmCameraCaptureController.shared.setPreviewSurfaceHandler(nil)
             WarmCameraCaptureController.shared.stopSession()
             floatingCameraPreviewView = nil
@@ -1428,7 +1431,7 @@ public final class RecordingCoordinator {
         alert.messageText = String(localized: "Not enough disk space")
         alert.informativeText = message
         NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
+        Self.runModalAboveRecordingPanels(alert)
         return false
     }
 
@@ -1586,6 +1589,17 @@ public final class RecordingCoordinator {
         requestStartRecording()
     }
 
+    /// Runs an alert above the recording bar and the camera stage, which sit at the screen saver level: at the normal
+    /// modal level the camera-only stage covered the discard dialog. `runModal` resets the window level, so the level
+    /// is raised once the modal loop runs.
+    @discardableResult
+    private static func runModalAboveRecordingPanels(_ alert: NSAlert) -> NSApplication.ModalResponse {
+        RunLoop.main.perform(inModes: [.modalPanel]) {
+            alert.window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        }
+        return alert.runModal()
+    }
+
     /// Shows the native macOS confirmation alert (`Discard this recording?`) when clicking the Trash button!
     public func promptDiscardCurrentRecording() {
         guard isRecording else { return }
@@ -1602,7 +1616,7 @@ public final class RecordingCoordinator {
         alert.addButton(withTitle: String(localized: "Continue Recording"))
 
         NSApp.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
+        let response = Self.runModalAboveRecordingPanels(alert)
         if response == .alertFirstButtonReturn {
             Task {
                 await stopAndDeleteCurrentRecordingFiles()
@@ -1749,7 +1763,7 @@ public final class RecordingCoordinator {
         }
         alert.informativeText = details.map { "\(reason) \(outcome)\n\n\($0)" } ?? "\(reason) \(outcome)"
         NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
+        Self.runModalAboveRecordingPanels(alert)
     }
 
     /// Returns the saved length in milliseconds, or nil when nothing was saved.

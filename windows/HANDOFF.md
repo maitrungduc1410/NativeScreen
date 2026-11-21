@@ -27,6 +27,23 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-107: Recorded click sounds, a circle color, focus and camera mode fixes
+
+### Writer
+- **Scope:** `spec/06` ADR-107. The click sounds are now CC0 recordings, there is a third set, the circle click effect takes a color, a click outside a text field ends editing, and camera mode has two recording bar fixes. Windows needs:
+  1. **Sound list.** `InspectorPanel` "Click sound": None, `soft` Soft, `crisp` Crisp, `classic` Classic (macOS: `CursorClickSoundPlayer.soundSets`). Picking one should play it, as the Mac does.
+  2. **Unknown ids.** `ClickSounds.Play` stays silent when the folder is missing. macOS plays `soft` for an id it does not know, so a project from a newer build still clicks. Worth doing the same.
+  3. **Circle color.** `FrameCompositor.DrawClick` draws the disc white. Use `ClickEffect.Color` (`#RRGGBB`, default `#FFFFFF`) with the same alpha, `placement.Alpha * 0.65`.
+  4. **Color row.** Under "Click effect", only while Circle is chosen: label "Circle color", then the same swatch + picker, hex box and wand as the solid background color. The wand picks randomly from `#FFFFFF #3B82F6 #0EA5E9 #EF4444 #F97316 #FACC15 #22C55E #8B5CF6 #EC4899 #14B8A6`, never the current color.
+  5. **Focus.** On macOS a hex box stayed focused after clicking the preview or a button, so Space typed into it instead of playing. Check whether WinUI does the same with the editor's text boxes; if so, a pointer press outside the focused box should move focus away from it.
+  6. **Esc in camera mode.** On macOS, Esc on the camera-only stage turned it into the small camera bubble. It now turns the camera off (the camera stays selected for screen modes). Check the Windows recording bar does the same.
+  7. **Discard dialog in camera mode.** On macOS the camera-only stage covered `Discard this recording?`. Check the Windows dialog shows above the stage.
+- **Shared files:** `soft` and `crisp` WAVs changed, `classic` is new, all under `macos/NativeScreen/Resources/Cursors.bundle/sounds/` and picked up by the `sounds/**/*.wav` link. `sounds/NOTICE.txt` lists the sources; ship it too if the Windows package keeps third-party notices.
+- **Shared string catalog:** new key `Circle color` in 14 languages. `Classic`, `Random color` and `Pick random color` already existed.
+- **Built on macOS:** the macOS app builds. No `dotnet` here, nothing for Windows was built.
+- **How to verify:** Cursor > Click sound: three options, each plays a different recorded click. Click effect Circle: the color row shows; `#EF4444` gives a red disc in the preview and the export; Ripple or None hides the row. A project saved before this opens with a white circle.
+- **Open VERIFY items:** none.
+
 ## 2026-11-21, ADR-106: Window recordings keep their menus, dropdowns and tooltips (Windows only)
 
 ### Verifier

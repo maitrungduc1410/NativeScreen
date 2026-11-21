@@ -1114,10 +1114,11 @@ public final class MetalFrameCompositor {
                 let clickY = screenFrameRect.minY + CGFloat(1 - anchor.y) * screenFrameRect.height
                 let radius = max(4.0, 46.0 * canvasScale * CGFloat(cursorConfig.scale) * CGFloat(progress))
                 let alpha = CGFloat(max(0.0, (1.0 - progress) * 0.72 * cursorState.opacity))
+                let tint = CIColor(hexString: cursorConfig.clickEffect.color)
                 if let circle = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
                     "inputExtent": CIVector(cgRect: CGRect(x: clickX - radius, y: clickY - radius, width: radius * 2, height: radius * 2)),
                     "inputRadius": radius,
-                    "inputColor": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha * 0.65)
+                    "inputColor": CIColor(red: tint.red, green: tint.green, blue: tint.blue, alpha: alpha * 0.65)
                 ])?.outputImage {
                     result = circle.composited(over: result)
                 }

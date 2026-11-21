@@ -937,6 +937,20 @@ public struct ProjectEditorWindowView: View {
 
     // MARK: - Keyboard Shortcuts (`Delete`/`Backspace`, `ESC`) & Outside Click Title Commit
 
+    /// AppKit keeps a text field focused after a click on something that takes no focus (a button, the preview, empty
+    /// space), so Space went on typing into a hex box instead of playing. A click outside the field being edited ends
+    /// the editing; a click on another text field or text view is left alone so it can take the focus itself.
+    private static func endTextEditingOnOutsideClick(_ event: NSEvent) {
+        guard let window = event.window,
+              let editor = window.firstResponder as? NSTextView,
+              let contentView = window.contentView,
+              let hit = contentView.hitTest(contentView.convert(event.locationInWindow, from: nil)) else { return }
+        // A single-line field edits through the window's field editor, whose delegate is the field itself.
+        let editingView = (editor.delegate as? NSView) ?? editor
+        if hit.isDescendant(of: editingView) || hit is NSTextField || hit is NSTextView { return }
+        window.makeFirstResponder(nil)
+    }
+
     private func installEditorKeyMonitor() {
         removeEditorKeyMonitor()
 
@@ -950,6 +964,7 @@ public struct ProjectEditorWindowView: View {
                     commitProjectRename()
                 }
             }
+            Self.endTextEditingOnOutsideClick(event)
             return event
         }
 

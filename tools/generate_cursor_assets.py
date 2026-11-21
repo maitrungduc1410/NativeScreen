@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Generates the bundled cursor themes (SVG) and click sounds (WAV) in Resources/Cursors.bundle.
+"""Generates the bundled cursor themes (SVG) in Resources/Cursors.bundle/sets.
 
-Everything is drawn or synthesized here from code, so the output is reproducible:
+Everything is drawn here from code, so the output is reproducible:
 
     python3 tools/generate_cursor_assets.py
 
 File naming: sets/<theme>/<kind>-<variant>__<hotspotX>-<hotspotY>.svg, with the hotspot in percent of the
-100x100 view box. Sounds: sounds/<set>/{down,up,click}.wav (16-bit mono, 44.1 kHz).
+100x100 view box. The click sounds in sounds/ are recordings, cut by
+tools/prepare_click_sounds.py.
 
 The same files are drawn by CoreSVG on macOS and Direct2D on Windows, so sprites stick to what both support: one shared
 drop shadow (Direct2D ignores SVG filters and adds this exact shadow itself), and outlines drawn as a separate layer
@@ -14,10 +15,7 @@ under the fill rather than with paint-order.
 """
 
 import math
-import random
 import shutil
-import struct
-import wave
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / "macos" / "NativeScreen" / "Resources" / "Cursors.bundle"
@@ -345,63 +343,9 @@ def generate_cursors():
     ])
 
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Click sounds
-# ---------------------------------------------------------------------------------------------------------------------
-
-RATE = 44100
-
-
-def click_sample(rng, length_ms, body_hz, body_decay_ms, noise_decay_ms, noise_gain, tone_gain, brightness):
-    """One mechanical tick: a filtered noise transient plus a short damped resonance of the switch body."""
-    n = int(RATE * length_ms / 1000)
-    out = []
-    lowpassed = 0.0
-    for i in range(n):
-        t = i / RATE
-        white = rng.uniform(-1.0, 1.0)
-        lowpassed += brightness * (white - lowpassed)  # one-pole low-pass: lower brightness = duller tick
-        noise = lowpassed * math.exp(-t * 1000 / noise_decay_ms) * noise_gain
-        tone = math.sin(2 * math.pi * body_hz * t) * math.exp(-t * 1000 / body_decay_ms) * tone_gain
-        attack = min(1.0, i / (RATE * 0.0004))  # 0.4 ms attack avoids a hard digital edge
-        out.append((noise + tone) * attack)
-    return out
-
-
-def write_wav(path, samples, peak=0.7):
-    top = max(abs(s) for s in samples) or 1.0
-    frames = b"".join(struct.pack("<h", int(max(-1.0, min(1.0, s / top * peak)) * 32767)) for s in samples)
-    with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(RATE)
-        w.writeframes(frames)
-
-
-def generate_sounds():
-    presets = {
-        # Muted, low tick, like a quiet trackpad-style mouse.
-        "soft": dict(body_hz=1450, body_decay_ms=7, noise_decay_ms=3.5, noise_gain=0.8, tone_gain=0.5, brightness=0.35),
-        # Brighter, snappier switch.
-        "crisp": dict(body_hz=2600, body_decay_ms=5, noise_decay_ms=2.2, noise_gain=1.0, tone_gain=0.35, brightness=0.7),
-    }
-    for name, p in presets.items():
-        folder = ROOT / "sounds" / name
-        folder.mkdir(parents=True, exist_ok=True)
-        rng = random.Random(name)  # fixed seed per preset so reruns produce identical files
-        down = click_sample(rng, 60, **p)
-        up_params = dict(p, body_hz=p["body_hz"] * 1.18, tone_gain=p["tone_gain"] * 0.7)
-        up = click_sample(rng, 50, **up_params)
-        up = [s * 0.6 for s in up]
-        gap = [0.0] * int(RATE * 0.07)
-        write_wav(folder / "down.wav", down)
-        write_wav(folder / "up.wav", up, peak=0.45)
-        write_wav(folder / "click.wav", down + gap + up)
-
-
 if __name__ == "__main__":
-    if ROOT.exists():
-        shutil.rmtree(ROOT)
+    # Only the themes are generated. The click sounds are recordings (tools/prepare_click_sounds.py) and stay.
+    if (ROOT / "sets").exists():
+        shutil.rmtree(ROOT / "sets")
     generate_cursors()
-    generate_sounds()
-    print(f"Wrote {sum(1 for _ in ROOT.rglob('*.*'))} files to {ROOT}")
+    print(f"Wrote {sum(1 for _ in (ROOT / 'sets').rglob('*.*'))} files to {ROOT / 'sets'}")

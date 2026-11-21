@@ -172,7 +172,7 @@ pixel of the recording. They join the positioned screen before the cursor, so mo
 ### Pass 4: Click effect and cursor (`renderCursorAndRipple`)
 Skipped when `cursor.jsonl` is empty (camera-only recordings, projects made from a video).
 Cursor and click waves are stored in recording space. Before drawing, remap with `((x - crop.x) / crop.width, (y - crop.y) / crop.height)`, then place in the drawn screen rect (top-left normalized). Do not clamp: a point outside the crop must not jump onto its edge. Slice cursor visibility is looked up by explicit timeline time, not by the first matching source range.
-- **Circle click effect** while `activeClickProgress = p` is set: filled white disc, radius `max(4, 46 * S * cursor.scale * p)`,
+- **Circle click effect** while `activeClickProgress = p` is set: filled disc in `cursor.clickEffect.color` (default `#FFFFFF`), radius `max(4, 46 * S * cursor.scale * p)`,
   alpha `(1 - p) * 0.72 * cursorOpacity * 0.65`, centered on the latest down anchor rather than the moving cursor.
 - **Ripple click effect:** draws nothing on top. It bends the positioned screen, shadow included, before the cursor is drawn,
   over the whole canvas (`clickRipple` in `EffectKernels.swift`). Up to 3 waves at once, each from the cursor position when the

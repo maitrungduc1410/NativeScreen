@@ -479,8 +479,9 @@ public final class CursorSpriteProvider {
 public final class CursorClickSoundPlayer {
     public static let shared = CursorClickSoundPlayer()
 
-    /// Bundled click sound sets, in inspector order.
-    public static let soundSets: [(id: String, title: String)] = [("soft", "Soft"), ("crisp", "Crisp")]
+    /// Bundled click sound sets, recorded clicks cut by `tools/prepare_click_sounds.py` (sources in
+    /// `sounds/NOTICE.txt`), in inspector order. Windows lists the same ids in `InspectorPanel`.
+    public static let soundSets: [(id: String, title: String)] = [("soft", "Soft"), ("crisp", "Crisp"), ("classic", "Classic")]
 
     private var activePlayers: [AVAudioPlayer] = []
 

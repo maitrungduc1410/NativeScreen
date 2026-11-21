@@ -101,8 +101,8 @@ To keep **NativeScreen** distributable under its open-source license (MIT) on Gi
    - `Resources/Stickers.bundle` is original Noto Emoji artwork (Apache 2.0), only cropped. Keep its `LICENSE` and `NOTICE.txt` next to it.
    - `Resources/CameraBackgrounds.bundle` holds photos from Pexels and Pixabay under their own licenses, not this project's MIT license (`NOTICE.txt`).
    - Windows has no system person segmentation or face landmarks, so it uses two models. **YuNet** (MIT, `windows/src/NativeScreen.Intelligence/Models`, 232 KB) ships with the app, with its `NOTICE.txt`. **MODNet** (Apache 2.0, the `Xenova/modnet` ONNX export, 26 MB) is downloaded once when someone presses Download, from a pinned revision and checked against its SHA-256.
-5. **Synthesized / Royalty-Free Click Sounds:**
-   - Generate crisp mechanical & capacitive mouse click audio (`down.wav`, `up.wav`) procedurally via DSP synthesis (or CC0 Public Domain recordings).
+5. **Click Sounds:**
+   - CC0 recordings of real mouse clicks, cut into `down.wav`, `up.wav` and `click.wav` by `tools/prepare_click_sounds.py`. Sources and licenses are in `Cursors.bundle/sounds/NOTICE.txt`; keep it next to them. Only CC0 or licenses that allow commercial use (credit in the notice for CC BY); never NC.
 
 ### Timeline snapping
 

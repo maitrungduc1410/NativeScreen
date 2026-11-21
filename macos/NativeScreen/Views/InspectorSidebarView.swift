@@ -181,6 +181,11 @@ public struct InspectorSidebarView: View {
         "#059669", "#0D9488", "#4F46E5", "#9333EA", "#E11D48", "#D97706", "#16A34A", "#0284C7"
     ]
 
+    /// Colors the wand picks from for the click circle: white plus clear, saturated colors that read on most screens.
+    private static let curatedClickColors: [String] = [
+        "#FFFFFF", "#3B82F6", "#0EA5E9", "#EF4444", "#F97316", "#FACC15", "#22C55E", "#8B5CF6", "#EC4899", "#14B8A6"
+    ]
+
     private static let curatedGradientPairs: [(String, String)] = [
         ("#E2E8F0", "#CBD5E1"), ("#BFDBFE", "#93C5FD"), ("#FED7AA", "#FDBA74"), ("#C7D2FE", "#A5B4FC"),
         ("#CCFBF1", "#99F6E4"), ("#D9F99D", "#BEF264"), ("#FDBA74", "#F472B6"), ("#FDE047", "#F97316"),
@@ -1313,7 +1318,7 @@ public struct InspectorSidebarView: View {
 
                 inspectorDivider
 
-                // 5. Click effect (`None` | `Circle` | `Ripple`) & Click sound (`None` | `Soft` | `Crisp`)
+                // 5. Click effect (`None` | `Circle` with its color | `Ripple`) & Click sound (`None` and the sets in `CursorClickSoundPlayer.soundSets`)
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Click effect")
@@ -1338,6 +1343,12 @@ public struct InspectorSidebarView: View {
                             inspectorPillOptionButton(title: "Ripple", isSelected: currentVisual == .ripple) {
                                 session.mutate { $0.cursor.clickEffect.visualStyle = .ripple }
                             }
+                        }
+
+                        // The ripple bends the screen and has no color of its own, so only the circle gets one.
+                        if cursor.clickEffect.visualStyle == .circle {
+                            clickCircleColorRow
+                                .padding(.top, 4)
                         }
                     }
 
@@ -6620,6 +6631,49 @@ public struct InspectorSidebarView: View {
     }
 
     @ViewBuilder
+    /// Click circle color: swatch with the picker popover, a hex box and a wand for a random color, as for the
+    /// solid background.
+    private var clickCircleColorRow: some View {
+        let color = Binding(
+            get: { session.document.cursor.clickEffect.color },
+            set: { hex in session.mutate { $0.cursor.clickEffect.color = hex } }
+        )
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Circle color")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.ink.opacity(0.92))
+
+            HStack(spacing: 8) {
+                ColorSwatchPickerButton(hexColor: color)
+                HexInputBox(hexColor: color, width: 112)
+
+                Button {
+                    let current = session.document.cursor.clickEffect.color.uppercased()
+                    if let randomHex = Self.curatedClickColors.filter({ $0 != current }).randomElement() {
+                        session.mutate { $0.cursor.clickEffect.color = randomHex }
+                    }
+                } label: {
+                    Image(systemName: "wand.and.stars")
+                        .accessibilityLabel(Text("Random color"))
+                        .font(.system(size: 13.5, weight: .regular))
+                        .foregroundStyle(.ink.opacity(0.90))
+                        .frame(width: 36, height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.ink.opacity(0.035))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.ink.opacity(0.09), lineWidth: 1)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Pick random color")
+            }
+        }
+    }
+
     private func inspectorPillOptionButton(
         title: String,
         isSelected: Bool,
