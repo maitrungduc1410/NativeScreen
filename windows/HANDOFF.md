@@ -27,6 +27,14 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-106: Window recordings keep their menus, dropdowns and tooltips (Windows only)
+
+### Verifier
+- **Owner's report:** a Unikey dropdown and a Chrome `<select>` were missing from window recordings (macOS has them).
+- **Changes made:** `PopupLayer` (new, `NativeScreen.Media/Capture`) finds the recorded process's tool-window popups over the window and copies them from a pointer-free capture of the monitor (first Desktop Duplication, which had the real pointer in the picture on the owner's machine); `ScreenRecorder` keeps the window's picture apart, composes before converting, and writes frames at 60 Hz while a popup is up. Spike results in `windows/tools/PopupCaptureSpike/README.md`. spec/06 ADR-106, spec/05.
+- **Checked in a sandbox:** Notepad's menus (arrow keys through Format, then View: each highlight in the video) and a Chrome `<select>` list. Media 32, the window capture test, Release build 0 warnings.
+- **Windows 10:** while a popup is open, the monitor capture draws the yellow border around the screen (not in the video).
+- **Not checked:** WPF and Unikey by recording, two monitors, a second GPU, the cost per frame while a popup is up.
 ## 2026-11-21, ADR-105: Whisper on macOS (two things to port to Windows)
 
 ### Writer

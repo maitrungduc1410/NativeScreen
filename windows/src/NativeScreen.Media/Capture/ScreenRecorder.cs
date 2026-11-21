@@ -43,6 +43,7 @@ public sealed class ScreenRecorder : IRecordingEngine
     private const int MaxFps = 60;
     private const int FramePoolSize = 3;
     private const int KeepAliveMs = 250;
+    private const int PopupFrameMs = 1000 / MaxFps;
     private const int FirstFrameTimeoutMs = 5000;
     private static readonly Guid DxgiInterfaceAccessIid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
 
@@ -59,6 +60,9 @@ public sealed class ScreenRecorder : IRecordingEngine
     private readonly Direct3D11CaptureFramePool framePool;
     private readonly GraphicsCaptureSession session;
     private readonly ID3D11Texture2D frameCopy;
+    // A window capture without its tool-window popups; they are put back from the screen (spec/06 ADR-106).
+    private readonly PopupLayer? popups;
+    private readonly ID3D11Texture2D? windowFrame;
     private readonly ID3D11ShaderResourceView frameView;
     private readonly GpuNv12Converter converter;
     private readonly VideoFileWriter writer;
@@ -132,6 +136,21 @@ public sealed class ScreenRecorder : IRecordingEngine
             BindFlags = BindFlags.ShaderResource
         });
         frameView = device.CreateShaderResourceView(frameCopy);
+        if (target.Mode == CaptureTargetMode.Window && !cropsMonitor)
+        {
+            popups = new PopupLayer(device, context, captureDevice, recordedWindow);
+            windowFrame = device.CreateTexture2D(new Texture2DDescription
+            {
+                Width = (uint)width,
+                Height = (uint)height,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Format.B8G8R8A8_UNorm,
+                SampleDescription = new SampleDescription(1, 0),
+                Usage = ResourceUsage.Default
+            });
+        }
+
         converter = new GpuNv12Converter(device, context, width, height);
 
         var audioFormat = options.SystemAudio ? new AudioFormat(48000, 2, 192_000) : (AudioFormat?)null;
@@ -243,6 +262,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         frameReady.Set();
         worker.Join();
         framePool.Dispose();
+        popups?.Dispose();
         if (!double.IsNaN(originMs))
         {
             var offset = PauseOffset(stopHostMs) ?? 0;
@@ -271,6 +291,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         converter.Dispose();
         frameView.Dispose();
         frameCopy.Dispose();
+        windowFrame?.Dispose();
         (captureDevice as IDisposable)?.Dispose();
         context.Dispose();
         device.Dispose();
@@ -302,7 +323,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         return Math.Max(0, hostMs - origin - offset);
     }
 
-    private static void TrySetBorderless(GraphicsCaptureSession session)
+    internal static void TrySetBorderless(GraphicsCaptureSession session)
     {
         // Windows 11 only, and the property throws on older builds.
         if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession", "IsBorderRequired"))
@@ -341,7 +362,9 @@ public sealed class ScreenRecorder : IRecordingEngine
         {
             while (!stopping)
             {
-                frameReady.WaitOne(KeepAliveMs);
+                // While a popup is over the window, frames follow the screen: the window sends none while only the popup changes.
+                frameReady.WaitOne(popups?.Active == true ? PopupFrameMs : KeepAliveMs);
+                var popupsChanged = popups?.Update() == true;
                 var captured = false;
                 while (framePool.TryGetNextFrame() is { } frame)
                 {
@@ -350,6 +373,11 @@ public sealed class ScreenRecorder : IRecordingEngine
                         captured = true;
                         HandleFrame(frame);
                     }
+                }
+
+                if (!captured && popupsChanged)
+                {
+                    captured = WritePopupFrame();
                 }
 
                 // Checked with frames arriving too: this app's own windows are captured through their monitor.
@@ -407,13 +435,46 @@ public sealed class ScreenRecorder : IRecordingEngine
         using (var texture = TextureOf(frame))
         {
             var box = new Box(sourceX, sourceY, 0, Math.Min(sourceX + width, size.Width), Math.Min(sourceY + height, size.Height), 1);
-            context.CopySubresourceRegion(frameCopy, 0, 0, 0, 0, texture, 0, box);
+            context.CopySubresourceRegion(windowFrame ?? frameCopy, 0, 0, 0, 0, texture, 0, box);
         }
 
-        converter.Convert(frameView, nv12);
+        Compose();
         convertTotalMs += (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
         WriteCurrent(pts, host);
         framesWritten++;
+    }
+
+    /// <summary>The window's picture with the popups over it, converted to <see cref="nv12"/>.</summary>
+    private void Compose()
+    {
+        if (popups is not null && windowFrame is not null)
+        {
+            context.CopyResource(frameCopy, windowFrame);
+            popups.Overlay(frameCopy, width, height);
+        }
+
+        converter.Convert(frameView, nv12);
+    }
+
+    /// <summary>A frame for a popup that changed while the window sent nothing (a hovered row, a scrolled list).</summary>
+    private bool WritePopupFrame()
+    {
+        var now = NowMs();
+        if (!hasFrame || PauseOffset(now) is not { } offset)
+        {
+            return false;
+        }
+
+        var pts = Math.Max(0, now - originMs - offset);
+        if (pts <= lastPtsMs || !pacer.Accept(pts) || writer.IsVideoBacklogged)
+        {
+            return false;
+        }
+
+        Compose();
+        WriteCurrent(pts, now);
+        framesWritten++;
+        return true;
     }
 
     private void WriteCurrent(double pts, double host)
@@ -444,7 +505,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         }
     }
 
-    private static unsafe ID3D11Texture2D TextureOf(Direct3D11CaptureFrame frame)
+    internal static unsafe ID3D11Texture2D TextureOf(Direct3D11CaptureFrame frame)
     {
         var abi = ((IWinRTObject)frame.Surface).NativeObject.ThisPtr;
         var iid = DxgiInterfaceAccessIid;
