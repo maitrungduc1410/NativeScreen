@@ -1465,6 +1465,11 @@ A `Camera` capture mode records the camera and microphone with no screen.
 - **Checked (bursts and packing):** a scripted `drawings.jsonl` recovered as an interrupted recording: two red strokes merged into one item with a pen-up gap in the replay, a highlighter and an undone arrow on their own tracks, a later burst back on the first track, kept strokes merged and ended by a clear (3 tracks in all), and an overlapping track split on open with its id kept.
 - **Checked:** an area recording over MCP with the panels on both screens (left out of capture), strokes written to `drawings.jsonl` (pen, highlighter, arrow, rectangle, clear) turned into the track with the right times, and frames with all four drawn and zoomed. Not tried by hand: drawing with the mouse, the bar's tools and keys, the fade on screen.
 
+- **Windows overlay pitfalls (2026-11-21).** Drawing did nothing on Windows: every press went to the window below.
+  - A layered window (`UpdateLayeredWindow` with per-pixel alpha) lets the mouse through every pixel whose alpha is 0, whatever `WS_EX_TRANSPARENT` says. While drawing, the overlay clears to alpha 1/255, which nobody sees, and back to 0 when drawing stops, so the apps below get their clicks again.
+  - A press activated the overlay and raised it over the recording bar, so the next press on the bar (`Stop drawing`, a tool, `Finish`) became a stroke. The overlay answers `WM_MOUSEACTIVATE` with `MA_NOACTIVATE`; the keys (Esc, 1-4, C, Ctrl+Z) still reach it through `TakeKeys`.
+  - The bar's draw button uses the pen-and-line glyph (`EE56`); the marker tip (`ED63`) did not read as drawing.
+
 ---
 
 ## 80. ADR-80: No Device Mode; iPhones Are Recorded as a Window

@@ -22,7 +22,8 @@ public sealed partial class RecordingHudWindow
         }
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        row.Children.Add(Item(Ui.Icon("", 16.5, Ui.Rgb(1, 1, 1, 0.9)), IsDrawing ? "Stop drawing (Esc)" : "Draw on screen", ToggleDrawing, 38, 38, IsDrawing));
+        // A pen drawing a line: the old marker tip did not read as drawing.
+        row.Children.Add(Item(Ui.Icon("", 16.5, Ui.Rgb(1, 1, 1, 0.9)), IsDrawing ? "Stop drawing (Esc)" : "Draw on screen", ToggleDrawing, 38, 38, IsDrawing));
         if (IsDrawing && drawingOverlay is { } overlay)
         {
             foreach (var (tool, glyph) in (ReadOnlySpan<(LiveDrawingTool, string)>)[(LiveDrawingTool.Pen, ""), (LiveDrawingTool.Highlighter, ""), (LiveDrawingTool.Arrow, ""), (LiveDrawingTool.Rectangle, "")])

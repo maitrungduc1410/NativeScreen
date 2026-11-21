@@ -34,6 +34,8 @@ internal sealed class LiveDrawingOverlay : IDisposable
     private const uint WmLButtonDown = 0x0201;
     private const uint WmLButtonUp = 0x0202;
     private const uint WmTimer = 0x0113;
+    private const uint WmMouseActivate = 0x0021;
+    private const nint MaNoActivate = 3;
     private const int SwShowNoActivate = 4;
     private const int IdcCross = 32515;
     private const uint UlwAlpha = 2;
@@ -139,6 +141,8 @@ internal sealed class LiveDrawingOverlay : IDisposable
         {
             FinishStroke();
         }
+
+        Present();
     }
 
     /// <summary>The drawing keys come here while drawing. This also raises the overlay, so the bar re-raises itself after.</summary>
@@ -243,6 +247,10 @@ internal sealed class LiveDrawingOverlay : IDisposable
     {
         switch (message)
         {
+            // A press must not activate the overlay: activation raised it over the recording bar, and the next press on
+            // the bar (Stop drawing, Finish) became a stroke. The keys still come here through TakeKeys.
+            case WmMouseActivate:
+                return MaNoActivate;
             case WmLButtonDown when drawing:
             {
                 if (TimelineNow() is not { } t)
@@ -328,7 +336,9 @@ internal sealed class LiveDrawingOverlay : IDisposable
     {
         target.BindDC(memoryDc, new Vortice.RawRect(0, 0, screen.Width, screen.Height));
         target.BeginDraw();
-        target.Clear(new Color4(0, 0, 0, 0));
+        // A layered window lets the mouse through every pixel whose alpha is 0, whatever its styles say. While drawing, the
+        // whole screen gets alpha 1/255, which nobody sees, or every press went to the window below (spec/06 ADR-79).
+        target.Clear(new Color4(0, 0, 0, drawing ? 1f / 255 : 0));
         var opacity = 1f;
         if (fadeAfterMs is { } fade && current is null && shown.Count > 0)
         {

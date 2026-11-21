@@ -27,6 +27,14 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, Drawing while recording did nothing on Windows (Windows only)
+
+### Verifier
+- **Owner's report:** with Draw on screen on, presses still selected things in the recorded window and nothing was drawn. The icon did not read as drawing.
+- **Cause:** the overlay is a layered window cleared to alpha 0, and Windows sends the mouse through fully transparent pixels of a layered window even without `WS_EX_TRANSPARENT`. Once that was fixed, a press activated the overlay and raised it over the bar, so the bar's buttons drew strokes instead.
+- **Changes made:** `LiveDrawingOverlay` clears to alpha 1/255 while drawing (presented when drawing turns on and off) and answers `WM_MOUSEACTIVATE` with `MA_NOACTIVATE`. The bar's button uses glyph `EE56` (pen drawing a line). spec/06 ADR-79.
+- **Checked in a sandbox (display recording):** the window under the pointer is the overlay while drawing and the app below after; a pen stroke, then the Arrow tool and an arrow, Stop drawing (the bar shrinks back), drawing again keeps the arrow, Finish while drawing opens the project with the `Live drawing` track. `drawings.jsonl` has pen, arrow, arrow.
+- **Not checked:** the keys (Esc, 1-4, C, Ctrl+Z) by hand, and a window recording on a second display.
 ## 2026-11-21, ADR-100: A new recording starts in Auto aspect ratio (Windows done, macOS to do)
 
 ### Verifier (Windows)
