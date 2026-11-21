@@ -503,7 +503,14 @@ The Media Foundation fragmented MP4 sink writes about 300 ms fragments with exac
 ### Status
 `FragmentedTimingTests` covers variable-rate reads and seeks on generated clips.
 
-**macOS cannot read these files (2026-11-21).** A Windows recording copied to a Mac loads in AVFoundation with one video track of zero length: no frames from `AVAssetReader` or `AVAssetImageGenerator` (`-11832`), no audio, so the editor showed the background and cursor over black. A stream copy into a plain MP4 reads fully (86.7 s, 5201 frames). The Mac editor now says so when it opens a project whose movie has no readable video (`ProjectWorkspaceStore.warnIfRecordingIsUnreadable`). The fix belongs on Windows: write a plain MP4 when a recording stops, as `finishWriting` does on macOS (`windows/HANDOFF.md`).
+**macOS cannot read these files (2026-11-21).** A Windows recording copied to a Mac loads in AVFoundation with one video track of zero length: no frames from `AVAssetReader` or `AVAssetImageGenerator` (`-11832`), no audio, so the editor showed the background and cursor over black. A stream copy into a plain MP4 reads fully (86.7 s, 5201 frames). The Mac editor now says so when it opens a project whose movie has no readable video (`ProjectWorkspaceStore.warnIfRecordingIsUnreadable`). The fix belongs on Windows: write a plain MP4 when a recording stops, as `finishWriting` does on macOS.
+
+**Windows writes a plain MP4 when a recording stops (2026-11-21).** After every writer has finished, `RecordedFiles.MakePlain` runs `Mp4Defragmenter` on `display.mp4`, `webcam.mp4` and `microphone.m4a` (from `ScreenRecorder.Stop` and `CameraOnlyRecorder.Stop`):
+- It reads `moov` and every complete `moof` (each `trun` becomes one chunk: offset from `tfhd` base or the moof, sizes, durations, sync flags, composition offsets) and writes `ftyp`, a new `moov` with full `stts`, `stss`, `stsz`, `stsc`, `stco` (`co64` past 4 GB), `ctts` and an edit list only when there are composition offsets, and one `mdat` with the samples copied in file order. `mvex` is dropped; `mvhd`, `tkhd` and `mdhd` become version 1 with real durations, because the 100 ns and 60000 timescales overflow version 0 within minutes. Nothing is decoded.
+- It writes `<name>.plain.tmp`, flushes it to disk and renames it over the original. Any failure (a file it does not understand, a full disk) leaves the fragmented file, which this app still reads.
+- The recording stays fragmented while it runs, so a crash still leaves a readable file. A file cut by a crash keeps its complete fragments.
+- Checked: on a real recording (H.264 and AAC in one file) every packet's time, size and keyframe flag is the same before and after (`ffprobe`), and ffmpeg decodes it. 40 MB took 115 ms; the copy needs as much free space as the file. `Mp4DefragmenterTests` covers times with gaps, a plain file left alone and a cut file.
+- Projects recorded before this stay fragmented. Windows has no recovery of interrupted recordings yet, so there is no second place to run it.
 
 ---
 

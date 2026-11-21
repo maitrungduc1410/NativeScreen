@@ -19,10 +19,12 @@ public sealed class CameraOnlyRecorder : IRecordingEngine
     private double originMs = double.NaN;
     private CaptureFailure? failure;
     private int stopped;
+    private readonly string recordingDirectory;
 
     public CameraOnlyRecorder(string packageDirectory, string cameraId, int cameraMaxHeight, string? microphoneId)
     {
         var recording = Path.Combine(packageDirectory, "recording");
+        recordingDirectory = recording;
         var telemetry = Path.Combine(recording, "telemetry");
         Directory.CreateDirectory(telemetry);
         foreach (var name in (ReadOnlySpan<string>)["cursor.jsonl", "clicks.jsonl", "keys.jsonl"])
@@ -90,6 +92,7 @@ public sealed class CameraOnlyRecorder : IRecordingEngine
         DurationMs = double.IsNaN(Volatile.Read(ref originMs)) ? 0 : webcam.LastFrameMs + webcam.Format.FrameMs;
         microphone?.Stop(DurationMs);
         webcam.Stop(DurationMs);
+        RecordedFiles.MakePlain(recordingDirectory);
     }
 
     public void Dispose()

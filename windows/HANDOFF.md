@@ -40,6 +40,14 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **macOS side (done):** `ProjectWorkspaceStore.warnIfRecordingIsUnreadable` checks the movie when an editor window opens. If it has no video track with a length, a sheet says the recording can't be played, and adds that Windows recordings can't be read on a Mac yet when `metadata.platform` is `windows`. Three new keys, all 15 languages. The Mac app does not convert old Windows projects (no user has needed it). `spec/06` ADR-22 updated.
 - **How to verify:** record a window on Windows, copy the `.nativescreen` package to a Mac. The Mac app opens it with the picture and sound and shows no warning. `ffprobe` shows one `moov` with a non-zero duration and no `moof`. A crashed recording still recovers on Windows.
 
+### Verifier
+- **Result:** PASS on Windows; the Mac check is left to the owner. Core, Rendering and Media tests pass (Media 32 with 3 new), and the real capture test (window, system audio).
+- **Changes made:** `Mp4Defragmenter` (new, `NativeScreen.Media`) rewrites a fragmented MP4 as `ftyp` + `moov` + one `mdat`, without re-encoding. `RecordedFiles.MakePlain` runs it on `display.mp4`, `webcam.mp4` and `microphone.m4a` at the end of `ScreenRecorder.Stop` and `CameraOnlyRecorder.Stop`. Temp file, flush, rename; on any failure the fragmented file stays (spec/06 ADR-22).
+- **Measured:** a 4.9 s 4K display recording with system audio: 288 video and 227 audio packets, identical times, sizes and keyframe flags before and after (`ffprobe`); ffmpeg decodes it; 115 ms for 40 MB. A recording made in the app opens in the editor with its preview; the file is one `moov` and one `mdat` (345 video, 273 audio frames).
+- **Steps from the port:** 1 to 3 done. 4: recordings stay fragmented while they run; Windows has no recovery of interrupted recordings, so nothing else calls it. 5: `VideoFileReader` still uses `Mp4FragmentIndex` for old projects.
+- **Known risks:** the copy needs free space equal to the file, and a long 4K recording (several GB) takes seconds after Stop with no progress shown; the editor opens when it is done. Old Windows projects stay unreadable on a Mac.
+- **Owner:** record a window on Windows, copy the package to a Mac and open it.
+
 ## 2026-11-20, ADR-98: Crash logs, and the editor preview no longer takes the app down (Windows only)
 
 ### Writer

@@ -47,6 +47,7 @@ public sealed class ScreenRecorder : IRecordingEngine
     private static readonly Guid DxgiInterfaceAccessIid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
 
     private readonly RecordingOptions options;
+    private readonly string recordingDirectory;
     private readonly PauseTimeline pause = new();
     private readonly object pauseGate = new();
     private readonly AutoResetEvent frameReady = new(false);
@@ -94,6 +95,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         height = target.OutputHeight;
         nv12 = new byte[width * height * 3 / 2];
         var recording = Path.Combine(options.PackageDirectory, "recording");
+        recordingDirectory = recording;
         Directory.CreateDirectory(recording);
 
         FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
@@ -257,6 +259,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         microphone?.Stop(DurationMs);
         webcam?.Stop(DurationMs);
         writer.Dispose();
+        RecordedFiles.MakePlain(recordingDirectory);
     }
 
     public void Dispose()
