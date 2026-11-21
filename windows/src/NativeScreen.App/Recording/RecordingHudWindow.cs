@@ -1044,16 +1044,16 @@ public sealed partial class RecordingHudWindow : Window
         button.Click += (_, _) =>
         {
             var menu = new MenuFlyout { ShouldConstrainToRootBounds = false };
-            menu.Items.Add(MenuItem("Open .nativescreen Project", () => _ = Projects.PromptOpen(this, root.XamlRoot)));
-            menu.Items.Add(MenuItem("Create Project from Video", () => _ = Projects.PromptImport(this, root.XamlRoot)));
-            menu.Items.Add(MenuItem("Create Interactive Showcase Project", () => _ = Projects.Open(ShowcaseProject.WritePackage(AppSettings.Shared.ProjectsDirectory), root.XamlRoot)));
+            menu.Items.Add(MenuItem("Open .nativescreen Project", () => _ = Projects.PromptOpen(this, null)));
+            menu.Items.Add(MenuItem("Create Project from Video", () => _ = Projects.PromptImport(this, null)));
+            menu.Items.Add(MenuItem("Create Interactive Showcase Project", () => _ = Projects.Open(ShowcaseProject.WritePackage(AppSettings.Shared.ProjectsDirectory), null)));
             if (AppSettings.Shared.RecentProjects.Count > 0)
             {
                 menu.Items.Add(new MenuFlyoutSeparator());
                 foreach (var path in AppSettings.Shared.RecentProjects.Take(8))
                 {
                     var recent = path;
-                    menu.Items.Add(MenuItem(Path.GetFileNameWithoutExtension(path), () => _ = Projects.Open(recent, root.XamlRoot)));
+                    menu.Items.Add(MenuItem(Path.GetFileNameWithoutExtension(path), () => _ = Projects.Open(recent, null)));
                 }
             }
 
@@ -1608,7 +1608,7 @@ public sealed partial class RecordingHudWindow : Window
         CrashLog.Note("recording package finished");
         busy = false;
         ShowIdle();
-        await Projects.Open(directory, root.XamlRoot, AppSettings.Shared.AfterRecording);
+        await Projects.Open(directory, null, AppSettings.Shared.AfterRecording);
         CrashLog.Note("recording opened");
         return stats.DurationMs;
     }
@@ -1659,17 +1659,30 @@ public sealed partial class RecordingHudWindow : Window
         await StartRecording();
     }
 
+    private bool askingToDelete;
+
     private async Task ConfirmDelete()
     {
-        var answer = await new ContentDialog
+        if (askingToDelete || recorder is null)
         {
-            XamlRoot = root.XamlRoot,
-            RequestedTheme = ElementTheme.Dark,
-            Title = Loc.T("Delete this recording?"),
-            PrimaryButtonText = Loc.T("Delete"),
-            CloseButtonText = Loc.T("Keep recording")
-        }.ShowAsync();
-        if (answer == ContentDialogResult.Primary)
+            return;
+        }
+
+        CrashLog.Note("delete asked");
+        askingToDelete = true;
+        var recording = recorder;
+        bool confirmed;
+        try
+        {
+            confirmed = await ConfirmWindow.Ask("Delete this recording?", "Delete", "Keep recording");
+        }
+        finally
+        {
+            askingToDelete = false;
+        }
+
+        // The recording may have been finished from the bar while the question was open; that one is kept.
+        if (confirmed && recorder == recording && !busy)
         {
             await AbortRecording();
         }

@@ -863,17 +863,7 @@ internal static class Projects
         catch (Exception exception) when (exception is IOException or System.Text.Json.JsonException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
             CrashLog.Note($"project did not open: {exception.GetType().Name}");
-            if (xamlRoot is not null)
-            {
-                await new ContentDialog
-                {
-                    XamlRoot = xamlRoot,
-                    RequestedTheme = AppTheme.Current,
-                    Title = Loc.T("Could not open this project"),
-                    Content = $"{path}\n\n{exception.Message}",
-                    CloseButtonText = Loc.T("OK")
-                }.ShowAsync();
-            }
+            await ShowError(xamlRoot, Loc.T("Could not open this project"), $"{path}\n\n{exception.Message}");
         }
     }
 
@@ -917,17 +907,34 @@ internal static class Projects
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or SharpGen.Runtime.SharpGenException or UnauthorizedAccessException)
         {
-            if (xamlRoot is not null)
-            {
-                await new ContentDialog
-                {
-                    XamlRoot = xamlRoot,
-                    RequestedTheme = AppTheme.Current,
-                    Title = Loc.F("Could not create a project from “%@”", Path.GetFileName(file)),
-                    Content = exception.Message,
-                    CloseButtonText = Loc.T("OK")
-                }.ShowAsync();
-            }
+            await ShowError(xamlRoot, Loc.F("Could not create a project from “%@”", Path.GetFileName(file)), exception.Message);
         }
     }
+
+    /// <summary>
+    /// In the editor that asked, or in a message box when there is none. The recording bar passes none: a dialog hosted by the
+    /// bar is cut to its height and blocks it (spec/06 ADR-98).
+    /// </summary>
+    private static async Task ShowError(XamlRoot? xamlRoot, string title, string message)
+    {
+        if (xamlRoot is null)
+        {
+            _ = Task.Run(() => MessageBoxW(0, message, title, MessageBoxWarningTopmost));
+            return;
+        }
+
+        await new ContentDialog
+        {
+            XamlRoot = xamlRoot,
+            RequestedTheme = AppTheme.Current,
+            Title = title,
+            Content = message,
+            CloseButtonText = Loc.T("OK")
+        }.ShowAsync();
+    }
+
+    private const uint MessageBoxWarningTopmost = 0x30 | 0x40000 | 0x10000;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int MessageBoxW(nint owner, string text, string caption, uint type);
 }
