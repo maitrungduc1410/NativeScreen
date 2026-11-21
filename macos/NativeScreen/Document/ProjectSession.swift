@@ -357,8 +357,11 @@ public final class ProjectSession: Identifiable {
         let rawKeys = JSONLinesCodec.load(KeyStrokeEvent.self, from: keysURL)
         let legacyOffsetMs = LegacyTelemetryEpoch.offsetMs(cursor: rawCursor, clicks: rawClicks, keys: rawKeys,
                                                            durationMs: metadata.durationMs)
-        let (cursorEvents, clickEvents, keyEvents) = LegacyTelemetryEpoch.corrected(
+        let (cursorEvents, recordedClicks, keyEvents) = LegacyTelemetryEpoch.corrected(
             cursor: rawCursor, clicks: rawClicks, keys: rawKeys, offsetMs: legacyOffsetMs)
+        // Live drawing strokes hold the cursor to the pen, as a drag does (`spec/06` ADR-102). They are on the recording's clock.
+        let drawings = JSONLinesCodec.load(LiveDrawingEvent.self, from: recordingDir.appendingPathComponent("telemetry/drawings.jsonl"))
+        let clickEvents = drawings.isEmpty ? recordedClicks : CursorTelemetry.withDrawingStrokes(recordedClicks, drawings: drawings)
 
         return ProjectSession(
             packageURL: packageURL,
@@ -1927,32 +1930,58 @@ public final class ProjectSession: Identifiable {
             .appendingPathComponent(metadata.tracks.displayVideo)
     }
 
-    /// Renames the project in-place (`document.name` + `.nativescreen` bundle folder on disk).
+    /// Renames the project and moves its package folder to match (`spec/06` ADR-99). The folder name follows
+    /// `ProjectPackageName` (the same rules as Windows); another package with the name gives "Name 2". The rename is
+    /// not an undo step: the name follows the folder, so undo and redo keep the new name.
     public func renameProject(to rawName: String) {
-        let trimmed = rawName
-            .replacingOccurrences(of: ".nativescreen", with: "")
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
 
-        mutate { doc in
-            doc.name = trimmed
-        }
+        document.name = name
+        interactiveEditSnapshot?.name = name
+        undoStack.indices.forEach { undoStack[$0].name = name }
+        redoStack.indices.forEach { redoStack[$0].name = name }
 
-        let parentDir = packageURL.deletingLastPathComponent()
-        let newPackageURL = parentDir.appendingPathComponent("\(trimmed).nativescreen", isDirectory: true)
-        if newPackageURL.standardizedFileURL != packageURL.standardizedFileURL,
-           !FileManager.default.fileExists(atPath: newPackageURL.path) {
-            do {
-                try FileManager.default.moveItem(at: packageURL, to: newPackageURL)
-                packageURL = newPackageURL
-                ProjectWorkspaceStore.shared.addRecentProject(newPackageURL)
-            } catch {
-                // Keep existing packageURL if file move is blocked, but save updated document name
+        if let target = ProjectPackageName.renamedPackageURL(for: packageURL, name: name),
+           target.path != packageURL.standardizedFileURL.path {
+            // Files the exporter, transcription, scans or a voiceover recording open later would be looked up by the old path.
+            let isBusy = isExportRunning || isGeneratingTranscript || isScanningSensitiveData || isScanningFaces
+                || faceScanProgress != nil || isRecordingVoiceover
+            if isBusy {
+                showToast("Renamed. The folder keeps its old name while work on the project is running.", durationMs: 3500)
+            } else if movePackage(to: target) {
+                ProjectWorkspaceStore.shared.packageDidMove(self, from: packageURL, to: target)
+                packageURL = target
+            } else {
+                showToast("Renamed. The folder could not be renamed.", durationMs: 3500)
             }
         }
         try? saveNow()
+    }
+
+    /// A rename that only changes case goes through a temporary name: on a case-insensitive volume the target is
+    /// the same folder. APFS handles a direct move, but exFAT and network volumes may not.
+    private func movePackage(to target: URL) -> Bool {
+        let fm = FileManager.default
+        let source = packageURL.standardizedFileURL
+        do {
+            if source.path.lowercased() == target.path.lowercased() {
+                let temporary = source.deletingLastPathComponent()
+                    .appendingPathComponent(".\(UUID().uuidString)\(ProjectPackageName.packageExtension)", isDirectory: true)
+                try fm.moveItem(at: source, to: temporary)
+                do {
+                    try fm.moveItem(at: temporary, to: target)
+                } catch {
+                    try? fm.moveItem(at: temporary, to: source)
+                    throw error
+                }
+            } else {
+                try fm.moveItem(at: source, to: target)
+            }
+            return true
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Playback Toggle & Current Frame Extraction
@@ -3751,6 +3780,7 @@ public final class ProjectSession: Identifiable {
 
         isGeneratingTranscript = true
         transcriptErrorMessage = nil
+        CrashLog.note("transcript: start")
 
         let audioSourceURL = microphoneAudioFileURL ?? videoFileURL
         let localeId = document.captions.transcriptLocale
@@ -3777,6 +3807,7 @@ public final class ProjectSession: Identifiable {
                 }
             } catch {
                 self.transcriptErrorMessage = error.localizedDescription
+                CrashLog.writeError("The transcript could not be made.", error: error)
             }
             self.isGeneratingTranscript = false
         }

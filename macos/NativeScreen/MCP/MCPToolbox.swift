@@ -337,7 +337,7 @@ final class MCPToolbox {
                 "microphone": session.microphoneAudioFileURL != nil,
                 "systemAudio": session.metadata.tracks.systemAudio != nil,
                 "cursor": session.hasRecordedCursor,
-                "clicks": session.clickEvents.count,
+                "clicks": CursorTelemetry.withoutDrawing(session.clickEvents).count,
                 "keystrokes": session.keyEvents.count,
             ],
             "slices": slices,
@@ -811,7 +811,7 @@ final class MCPToolbox {
         session.startNewUndoStep()
         switch action {
         case "regenerate_auto_zooms":
-            guard !session.clickEvents.isEmpty || !session.keyEvents.isEmpty else {
+            guard !CursorTelemetry.withoutDrawing(session.clickEvents).isEmpty || !session.keyEvents.isEmpty else {
                 throw MCPToolError("This project has no recorded clicks or typing to make zooms from.")
             }
             session.regenerateAutoZooms()
@@ -1300,6 +1300,7 @@ final class MCPToolbox {
         DockProgressIndicatingController.shared.setProgress(0)
         let started = Date()
         var lastReported = -1.0
+        CrashLog.note("export (AI agent): start, \(config.format) \(config.resolutionHeight)p")
         // A separate task, so the Stop button in the editor can end it as well as the client's cancel request.
         let work = Task { @MainActor [weak self] in
             try await HardwareVideoExporter.exportProject(session: session, outputURL: outURL, config: config) { fraction in

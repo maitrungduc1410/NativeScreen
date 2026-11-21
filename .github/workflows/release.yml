@@ -198,6 +198,19 @@ jobs:
             dist/appcast.xml
           if-no-files-found: error
 
+      # Crash logs from a release build show addresses only; these symbols turn them into names (spec/06 ADR-103).
+      # Kept as a workflow artifact, not on the release page. Symbolicate with:
+      #   atos -arch arm64 -o "Native Screen.app.dSYM/Contents/Resources/DWARF/Native Screen" -l <load address> <address>
+      - name: Zip the debug symbols
+        run: ditto -c -k --keepParent "$RUNNER_TEMP/NativeScreen.xcarchive/dSYMs" "dist/NativeScreen-$VERSION-dSYMs.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-dsyms
+          path: dist/NativeScreen-${{ inputs.version }}-dSYMs.zip
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Clean up keychain
         if: always()
         run: |

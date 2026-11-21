@@ -77,7 +77,12 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
             presentEditorWindow(for: existing)
             return existing
         }
-        guard let loaded = try? ProjectSession.load(from: standardized) else {
+        CrashLog.note("project: open")
+        let loaded: ProjectSession
+        do {
+            loaded = try ProjectSession.load(from: standardized)
+        } catch {
+            CrashLog.writeError("A project could not be opened.", error: error)
             return nil
         }
         registerSession(loaded)
@@ -698,6 +703,14 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         session.markDeletedFromDisk()
         recentProjectURLs.removeAll { $0.standardizedFileURL == url }
         UserDefaults.standard.set(recentProjectURLs.map(\.path), forKey: recentsDefaultsKey)
+    }
+
+    /// A renamed project's package moved: recent projects drop the old path, and the window title follows.
+    public func packageDidMove(_ session: ProjectSession, from oldURL: URL, to newURL: URL) {
+        let old = oldURL.standardizedFileURL
+        recentProjectURLs.removeAll { $0.standardizedFileURL == old }
+        addRecentProject(newURL)
+        editorWindowsBySessionID[session.id]?.title = "\(session.document.name).nativescreen"
     }
 
     public func addRecentProject(_ url: URL) {

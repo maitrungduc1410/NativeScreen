@@ -27,6 +27,32 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-102 on macOS: the cursor stays on the pen (macOS done)
+
+### Writer (macOS)
+- **Changes:** `CursorTelemetry.withDrawingStrokes` / `withoutDrawing` and `heldIntervals` (`Engine/MotionGeometry.swift`), `ProjectSession.load` merges the strokes, `CursorPathPlanner` anchors, `PlaybackTrajectorySolver` held carry-over, `SpringTrajectorySolver.buttonPresses` skips button `draw`, MCP `clicks` count and the `regenerate_auto_zooms` guard leave them out. Steps 1 to 7 of the Windows entry.
+- **Checked:** every other reader of `clickEvents` filters `type == "down"` (ripples, click sounds, auto zoom, annotation snapping, the preview's click marker). `--verify-motion` passes 71 checks, 5 new from `LiveDrawingCursorTests`: lag on a fast stroke 0.148 of the width without the span, 0.0012 with it.
+- **Not checked:** a real recording with live drawings (none on this Mac). Owner: open one, the cursor should sit on the line while it is drawn, with no press or ripple at the stroke's start.
+
+## 2026-11-21, ADR-103: macOS crash logs (macOS done, nothing to port)
+
+### Writer (macOS)
+- **Scope:** `Document/CrashLog.swift` (crash and error files, signal and exception handlers, MetricKit, the notice, `CrashReports`), the Troubleshooting row in `SettingsView`, breadcrumbs and error files in `RecordingCoordinator`, `ProjectWorkspaceStore`, `ProjectEditorWindowView`, `MCPToolbox`, `ProjectSession`. The release workflow keeps the dSYMs (`macos-dsyms` artifact). Same file names, folder name (`Logs`), notice and Settings strings as ADR-98, so no new catalog keys.
+- **For Windows:** nothing to port. Two things that may be worth copying later: breadcrumbs at export and transcript start (macOS notes them; check Windows has the same steps), and an error file for a failed export or transcript.
+- **Built and checked on macOS:** see ADR-103 "Testing". The test files, the system's `.ips` reports from the tests and the `LastSeenCrashLog` key were removed afterwards.
+
+## 2026-11-21, ADR-99 and ADR-100 on macOS (done)
+
+### Writer (macOS)
+- **ADR-100:** `RecordingCoordinator.writeProjectFiles` sets `canvas.aspectRatioMode = .auto` before the default preset is applied, for screen, camera-only and recovered recordings. `CanvasConfig` defaults, the showcase and `VideoProjectImporter` are unchanged.
+- **ADR-99:**
+  - `Document/ProjectPackageName.swift`: `folderName(for:)` and `renamedPackageURL(for:name:)`, the same rules as `ProjectStore.PackageName` / `RenamedPackagePath`. All the `ProjectStoreTests` cases pass in a standalone run, plus a tab and a 130-character name.
+  - `ProjectSession.renameProject`: name trimmed; folder moved to `Name`, or `Name 2` when taken; a case-only change goes through a temporary name. While an export, transcription, scan or voiceover recording runs, only the name changes (the Windows toast). A failed move keeps the folder with `Renamed. The folder could not be renamed.` (new key, all languages). The editor stays open: macOS lets a folder move while its files are open, and the preview reopens its players when the URL changes.
+  - Undo: the rename is not an undo step, and the new name is written into the undo and redo history so it never comes back on undo.
+  - `ProjectWorkspaceStore.packageDidMove`: recent projects drop the old path and add the new one; the window title follows. MCP `rename_project` returns the new path through `summary`.
+- **Built on macOS:** the app builds. Not checked in the running app: the rename itself, playing and exporting after it, and the toasts. The test build and the installed app share one sandbox container and MCP socket, so the check was left to the owner.
+- **How to verify (owner):** rename a recording in the editor: Finder shows the new folder, the editor still plays and exports, recent projects list it once. Rename to a name another package has: `Name 2`. Rename `Name 2` back to `Name`: nothing moves. Rename `demo` to `Demo`. Make an edit, rename, press Undo: the edit goes, the name stays. Record with no default preset: the editor opens in `Auto`.
+
 ## 2026-11-21, ADR-102: The cursor stays on the pen while a live drawing is drawn (Windows done, macOS to do)
 
 ### Verifier (Windows)

@@ -49,8 +49,8 @@ public struct PlaybackTrajectorySolver: Sendable {
             var heldButtons: [String: ClickEvent] = [:]
             for click in clickEvents where click.t < group[0].slice.sourceStartMs {
                 let button = click.button ?? "left"
-                if click.type == "down" { heldButtons[button] = click }
-                else if click.type == "up" { heldButtons.removeValue(forKey: button) }
+                if click.type == "down" || click.type == CursorTelemetry.drawStart { heldButtons[button] = click }
+                else if click.type == "up" || click.type == CursorTelemetry.drawEnd { heldButtons.removeValue(forKey: button) }
             }
             for click in heldButtons.values {
                 let position = CursorTelemetry.sample(cursorEvents, at: group[0].slice.sourceStartMs, holdPauses: false)

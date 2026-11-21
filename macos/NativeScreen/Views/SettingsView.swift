@@ -207,6 +207,14 @@ private struct GeneralSettingsTab: View {
                 }
             }
 
+            SettingsRow(title: "Troubleshooting", description: CrashReports.lastCrashText, titleLabelsControl: false) {
+                HStack(spacing: 8) {
+                    Button("Open log folder") { CrashReports.openLogFolder() }
+                    Button("Copy crash report") { CrashReports.copyNewest() }
+                        .disabled(CrashLog.newestCrash() == nil)
+                }
+            }
+
             Divider().padding(.vertical, 8)
 
             Button(role: .destructive) {

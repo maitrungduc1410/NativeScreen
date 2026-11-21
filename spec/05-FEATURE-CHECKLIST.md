@@ -31,13 +31,15 @@
 
 ### 1.3. Multi-Channel Capture & Telemetry Writer
 - [x] Crash-safe video recording via `AVAssetWriter` with fragmented `.mp4` (`movieFragmentInterval = 2s` on screen, webcam and microphone writers).
+- [x] **Crash logs on macOS** (`spec/06` ADR-103, 2026-11-21): a file per crash or caught error in `Logs`, the system's crash and hang reports through MetricKit, a notice at the next launch and `Settings > General > Troubleshooting`, as on Windows (ADR-98).
 - [ ] Segmented `.m3u8` + `.m4s` fMP4 recording output.
 - [x] High-frequency mouse telemetry logger (`telemetry/cursor.jsonl` at 60–120Hz with normalized `0..1` coordinates and cursor type, synchronized `t = 0.0ms` to the first captured `SCStream` video frame).
 - [x] Mouse clicks & scroll logger (`telemetry/clicks.jsonl`).
 - [x] Keystroke timestamp logger (`telemetry/keys.jsonl`) for typing-aware auto-zoom hold, typing speed-up suggestions, and 3D shortcut keycaps.
 - [x] System/App Audio capture (via `ScreenCaptureKit` audio stream) & Microphone capture (`AVCaptureSession`) to separate `.m4a` tracks.
 - [ ] Window capture: drop frames whose window content is briefly shrunk or shifted (known issue, deferred; see `spec/06` ADR-94).
-- [ ] **Renaming a project renames its folder** (`spec/06` ADR-99): Windows done (2026-11-21); macOS: unique folder names, the shared name rules, recent projects (`windows/HANDOFF.md`).
+- [x] **Renaming a project renames its folder** (`spec/06` ADR-99): Windows and macOS (2026-11-21), with the shared name rules, `Name 2` for a taken name, and recent projects updated.
+- [x] **A new recording starts in Auto aspect ratio** (`spec/06` ADR-100): Windows and macOS (2026-11-21); a default preset still wins.
 - [ ] **Windows:** window capture leaves out the recorded app's own menus and dropdowns (a ComboBox list, a menu bar menu), which are separate popup windows; reported 2026-11-21 with a dropdown in another app. Planned: while a popup of the recorded process covers the window, copy its rectangle from a Desktop Duplication frame (no capture border) into the frame. Mind computers with two GPUs. Cropping a display capture instead would also show other windows on top. macOS keeps popups only when recording its own app (`RecordingCoordinator`).
 
 ### 1.4. GPU Metal Compositor & Preview Canvas (0% Idle CPU)

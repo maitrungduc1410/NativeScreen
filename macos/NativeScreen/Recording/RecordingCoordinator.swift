@@ -1130,6 +1130,7 @@ public final class RecordingCoordinator {
         isStartingRecording = true
         defer { isStartingRecording = false }
         lastErrorMessage = nil
+        CrashLog.note("recording: start, mode \(selectedMode)")
         isPickingTarget = false
         stopPickerOverlay()
         // Hide the active recording HUD (`[⏹ 0:04 | ⏸ ↺ 🗑]`) from both ScreenCaptureKit recordings and system screenshots!
@@ -1347,6 +1348,7 @@ public final class RecordingCoordinator {
             }
             restorePostRecordingSystemState()
             lastErrorMessage = error.localizedDescription
+            CrashLog.writeError("The recording could not start (mode \(selectedMode)).", error: error)
             updateHUDPanelFrameForCurrentState(animated: true)
         }
     }
@@ -1452,6 +1454,7 @@ public final class RecordingCoordinator {
 
     private func endRecordingForLowDiskSpace() async {
         guard isRecording else { return }
+        CrashLog.note("recording: stopping, the disk is almost full")
         let savedMs = await stopRecordingAndOpenEditor()
         showRecordingStoppedAlert(
             reason: String(localized: "The disk is almost full."),
@@ -1538,6 +1541,7 @@ public final class RecordingCoordinator {
             }
             restorePostRecordingSystemState()
             lastErrorMessage = error.localizedDescription
+            CrashLog.writeError("The recording could not start (mode \(selectedMode)).", error: error)
             updateHUDPanelFrameForCurrentState(animated: true)
         }
     }
@@ -1708,6 +1712,7 @@ public final class RecordingCoordinator {
     /// open it, and say why the recording stopped.
     private func endRecordingAfterCaptureFailure(_ failure: ScreenCaptureEngine.CaptureFailure, engine: ScreenCaptureEngine) async {
         guard isRecording, captureEngine === engine else { return }
+        CrashLog.writeError("The recording ended by itself: \(failure)")
         let savedMs = await stopRecordingAndOpenEditor()
         let reason: String
         let details: String
@@ -1751,6 +1756,7 @@ public final class RecordingCoordinator {
     @discardableResult
     public func stopRecordingAndOpenEditor(opensEditor: Bool = true) async -> Double? {
         guard isRecording else { return nil }
+        CrashLog.note("recording: stop")
         recordingTimer?.invalidate()
         recordingTimer = nil
         isRecording = false
@@ -1892,6 +1898,9 @@ public final class RecordingCoordinator {
                 maskTracks: []
             )
         )
+        // A new recording starts in its own shape plus padding (ADR-100). A default preset or
+        // `Use last project settings` is applied next and still wins.
+        doc.canvas.aspectRatioMode = .auto
         if let defPreset = AppSettings.shared.presetForNewProject() {
             defPreset.apply(to: &doc)
         }

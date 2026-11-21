@@ -1419,6 +1419,7 @@ public struct ProjectEditorWindowView: View {
         DockProgressIndicatingController.shared.setProgress(0.0)
 
         let capturedConfig = exportConfig
+        CrashLog.note("export: start, \(capturedConfig.format) \(capturedConfig.resolutionHeight)p \(capturedConfig.fps) fps, \(capturedConfig.target)")
         activeExportTask?.cancel()
         activeExportTask = Task { @MainActor in
             do {
@@ -1433,6 +1434,7 @@ public struct ProjectEditorWindowView: View {
 
                 guard !Task.isCancelled else { return }
 
+                CrashLog.note("export: finished")
                 DockProgressIndicatingController.shared.setProgress(nil)
                 isExporting = false
                 isShowingExportSheet = false
@@ -1461,6 +1463,7 @@ public struct ProjectEditorWindowView: View {
                 isExporting = false
                 activeExportTask = nil
                 exportError = error.localizedDescription
+                CrashLog.writeError("Export failed (\(capturedConfig.format) \(capturedConfig.resolutionHeight)p \(capturedConfig.fps) fps).", error: error)
             }
         }
     }

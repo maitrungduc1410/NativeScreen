@@ -25,6 +25,10 @@ Both updaters and the download links only look at the **latest** release. A rele
 one's installer and feed until the next release that has both, so publish single-platform releases as pre-releases
 (or build both).
 
+The macOS debug symbols are not on the release page: they are the run's `macos-dsyms` artifact
+(`NativeScreen-<version>-dSYMs.zip`), kept 90 days. Download it from the run when a crash log from that version needs
+symbolicating (`spec/06` ADR-103). Keep a copy longer for versions people still use.
+
 If a run fails half way, nothing is published: delete the draft if one was made and run again with the same version.
 
 ## Microsoft Store (Windows)

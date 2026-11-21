@@ -35,6 +35,31 @@ public struct MotionPointSize: Equatable, Sendable {
 
 /// Recorded cursor telemetry helpers.
 enum CursorTelemetry {
+    /// Made in memory from `drawings.jsonl`, never written: a stroke drawn on the screen while recording.
+    static let drawStart = "drawStart"
+    static let drawEnd = "drawEnd"
+    /// The button name of `drawStart` and `drawEnd`.
+    static let drawButton = "draw"
+
+    /// The clicks with each live drawing stroke added as a held span (`spec/06` ADR-102). Strokes are logged without
+    /// clicks, so the cursor's spring had nothing holding it to the pen and the drawing ran ahead of the cursor.
+    static func withDrawingStrokes(_ clicks: [ClickEvent], drawings: [LiveDrawingEvent]) -> [ClickEvent] {
+        var merged = clicks
+        for stroke in drawings where stroke.type == "stroke" {
+            guard let points = stroke.points, let first = points.first, let last = points.last,
+                  first.count >= 2, last.count >= 2 else { continue }
+            let end = stroke.t + (last.count >= 3 ? max(0, last[2]) : 0)
+            merged.append(ClickEvent(t: stroke.t, type: drawStart, button: drawButton, x: first[0], y: first[1]))
+            merged.append(ClickEvent(t: end, type: drawEnd, button: drawButton, x: last[0], y: last[1]))
+        }
+        return merged.sorted { $0.t < $1.t }
+    }
+
+    /// Clicks a person made, without the drawing spans.
+    static func withoutDrawing(_ clicks: [ClickEvent]) -> [ClickEvent] {
+        clicks.filter { $0.button != drawButton }
+    }
+
     /// Linear position at `time`. With `holdPauses`, a gap over 48 ms holds until 16 ms before the next sample.
     static func sample(_ events: [CursorSampleEvent], at time: Double, holdPauses: Bool = true) -> CursorSampleEvent {
         guard let first = events.first else { return CursorSampleEvent(t: time, x: 0.5, y: 0.5, c: "arrow") }
@@ -76,15 +101,16 @@ enum CursorTelemetry {
         return result
     }
 
-    /// Button-held intervals. `held` marks a button already down when a trimmed run starts.
+    /// Button-held intervals. `held` marks a button already down when a trimmed run starts. A live drawing stroke
+    /// (`drawStart` to `drawEnd`) counts too: the pen is the cursor, so it stays on the line being drawn.
     static func heldIntervals(_ clicks: [ClickEvent], endMs: Double) -> [(start: Double, end: Double)] {
         var down: [String: Double] = [:]
         var intervals: [(start: Double, end: Double)] = []
         for click in clicks.sorted(by: { $0.t < $1.t }) {
             let button = click.button ?? "left"
-            if click.type == "down" || click.type == "held" {
+            if click.type == "down" || click.type == "held" || click.type == drawStart {
                 down[button] = down[button] ?? click.t
-            } else if click.type == "up", let start = down.removeValue(forKey: button) {
+            } else if click.type == "up" || click.type == drawEnd, let start = down.removeValue(forKey: button) {
                 intervals.append((start, click.t))
             }
         }

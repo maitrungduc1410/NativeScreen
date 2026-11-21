@@ -7,6 +7,7 @@ import AppKit
 @MainActor
 final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CrashLog.didFinishLaunching()
         MainMenuOrder.install()
         AppSettings.shared.applyAppearance()
         if let appMenuItem = NSApp.mainMenu?.items.first {
@@ -16,9 +17,13 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
         if !ProjectWorkspaceStore.shared.hasOpenEditorWindows {
             RecordingCoordinator.shared.showRecordingHUD()
         }
-        MCPServer.shared.applySetting()
+        if !CrashLog.isCrashTestRun {
+            MCPServer.shared.applySetting()
+            Task { await RecordingCoordinator.shared.recoverInterruptedRecordings() }
+        }
         _ = AppUpdater.shared // starts Sparkle's scheduled checks
-        Task { await RecordingCoordinator.shared.recoverInterruptedRecordings() }
+        // After the HUD is up, so the notice sits on top of what the user sees first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { CrashReports.showNoticeIfNew() }
     }
 
     /// Windows are not closed one by one on quit, so saving and the save prompt have to happen here.
@@ -34,7 +39,7 @@ final class NativeScreenAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         // Removes the socket file so the bridge knows the app is gone.
-        MCPServer.shared.shutdown()
+        if !CrashLog.isCrashTestRun { MCPServer.shared.shutdown() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -67,6 +72,7 @@ enum NativeScreenMain {
             MCPStdioBridge.run()
         }
         #endif
+        CrashLog.start()
         NativeScreenApp.main()
     }
 }

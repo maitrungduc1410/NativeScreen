@@ -309,6 +309,38 @@ enum MotionRegressionChecks {
             CGImageDestinationAddImage(destination, captionImage, nil)
             CGImageDestinationFinalize(destination)
         }
+        // Live drawing strokes hold the cursor to the pen (ADR-102), the cases of Windows' LiveDrawingCursorTests.
+        var penCursor: [CursorSampleEvent] = []
+        var penPoints: [[Double]] = []
+        var penT = 0.0
+        while penT <= 12000 {
+            let progress = min(1, max(0, (penT - 1000) / 600))
+            let x = 0.2 + 0.6 * progress
+            penCursor.append(CursorSampleEvent(t: penT, x: x, y: 0.5, c: "arrow"))
+            if penT >= 1000 && penT <= 1600 { penPoints.append([x, 0.5, penT - 1000]) }
+            penT += 16
+        }
+        let strokeClicks = CursorTelemetry.withDrawingStrokes([], drawings: [
+            .stroke(t: 1000, tool: .pen, color: "#FF3B30", points: penPoints, fadeAfterMs: 3000),
+        ])
+        try check("a live drawing stroke becomes drawStart and drawEnd",
+                  strokeClicks.map(\.type) == [CursorTelemetry.drawStart, CursorTelemetry.drawEnd])
+        func penLag(_ trajectory: PlaybackTrajectorySolver) -> Double {
+            penPoints.map { abs(trajectory.evaluate(atSourceMs: 1000 + $0[2]).cursor.position01.x - $0[0]) }.max() ?? 0
+        }
+        let freePenLag = penLag(solver(document(), penCursor))
+        let heldPenLag = penLag(solver(document(), penCursor, strokeClicks))
+        fputs("live drawing pen lag: free \(freePenLag), held \(heldPenLag)\n", stderr)
+        try check("without the stroke the cursor trails the pen", freePenLag > 0.02)
+        try check("the cursor stays on the line being drawn", heldPenLag < 0.005)
+        let shortStroke = CursorTelemetry.withDrawingStrokes([], drawings: [
+            .stroke(t: 500, tool: .pen, color: "#FF3B30", points: [[0.3, 0.3, 0], [0.4, 0.4, 300]], fadeAfterMs: nil),
+        ])
+        try check("drawing does not press the cursor in", SpringTrajectorySolver.buttonPresses(from: shortStroke).isEmpty
+                  && !shortStroke.contains { $0.type == "down" })
+        let strokeSpans = CursorTelemetry.heldIntervals(shortStroke, endMs: 4000)
+        try check("a stroke is a held span", strokeSpans.count == 1 && strokeSpans[0].start == 500 && strokeSpans[0].end == 800)
+
         let report: [String: Any] = ["passed": passed.count, "checks": passed, "worstDragErrorPt": worstDragError,
                                    "lensStripeContrast255": contrast, "prewarmCenterError01": prewarmError]
         let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

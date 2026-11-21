@@ -556,7 +556,9 @@ extension SpringTrajectorySolver {
     ) -> PlannedCursorPath {
         typealias Planner = CursorPathPlanner
         let held = CursorTelemetry.heldIntervals(clicks, endMs: durationMs)
-        let anchors = clicks.filter { $0.type == "down" || $0.type == "up" }
+        let anchors = clicks.filter {
+            $0.type == "down" || $0.type == "up" || $0.type == CursorTelemetry.drawStart || $0.type == CursorTelemetry.drawEnd
+        }
         let anchorTimes = Set(anchors.map(\.t))
 
         // Recorded samples, with recording-time pauses held until shortly before the next sample.

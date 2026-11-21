@@ -51,7 +51,9 @@ public struct SpringTrajectorySolver: Sendable {
     public static func buttonPresses(from clicks: [ClickEvent]) -> [ButtonPress] {
         let sorted = clicks.sorted { $0.t < $1.t }
         var presses: [ButtonPress] = []
-        for (index, click) in sorted.enumerated() where (click.type == "down" || click.type == "held") && click.button != "other" {
+        // Live drawing does not press the cursor in: the stroke is the feedback.
+        for (index, click) in sorted.enumerated()
+        where (click.type == "down" || click.type == "held") && click.button != "other" && click.button != CursorTelemetry.drawButton {
             let up = sorted[(index + 1)...].first { $0.type == "up" && $0.button == click.button }
             let downMs = click.type == "held" ? click.t - pressLeadMs - pressInMs : click.t
             presses.append(ButtonPress(downMs: downMs, upMs: up?.t ?? click.t))
