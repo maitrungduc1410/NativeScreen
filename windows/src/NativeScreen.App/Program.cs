@@ -28,6 +28,8 @@ public static class Program
             .Run();
 #endif
 
+        // Before anything else that can fail: a crash after this leaves a file with its stack (spec/06 ADR-98).
+        CrashLog.Start();
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(callback =>
         {

@@ -12,6 +12,9 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // Not handled: after an unknown exception the app's state can't be trusted, so XAML may still end it; the file keeps the stack.
+        UnhandledException += (_, args) => CrashLog.WriteUiException(args.Exception);
+        CrashTest.Schedule();
     }
 
     public static void EditorOpened()
@@ -73,6 +76,7 @@ public partial class App : Application
         SingleInstance.Listen(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(), OpenRequested);
         _ = Task.Run(ExplorerContextMenu.Register);
         OpenRequested(folder);
+        CrashNoticeWindow.ShowIfNew();
         McpServer.Shared.ApplySetting();
         _ = AppUpdater.Shared.StartBackgroundChecks();
     }

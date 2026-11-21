@@ -789,28 +789,83 @@ public sealed partial class EditorWindow : Window
 
     // MARK: Preview
 
+    // The top of an async void on Loaded: anything thrown here would end the app, so every failure is caught, logged, and
+    // the editor stays open without a preview (spec/06 ADR-98).
     private async void AttachPreview(object sender, RoutedEventArgs e)
     {
-        var built = await Task.Run(() => new FrameCompositor());
-        if (closed)
+        try
         {
-            built.Dispose();
-            return;
+            var built = await Task.Run(() => new FrameCompositor());
+            if (closed)
+            {
+                built.Dispose();
+                return;
+            }
+
+            compositor = built;
+            CrashLog.Note("preview: compositor built");
+            CrashTest.PreviewStep();
+            var (width, height) = PreviewPixels();
+            swapChain = compositor.CreateSwapChain(width, height);
+            SwapChainPanelInterop.SetSwapChain(Preview, swapChain.SwapChain.NativePointer);
+            CrashLog.Note($"preview: swap chain {width}x{height}");
+            renderer = new PreviewRenderer(compositor, swapChain, width, height);
+            renderer.Failed += PreviewFailed;
+            CrashLog.Note("preview: renderer made");
+            MemoryStats.Track(compositor, swapChain, renderer);
+            overlay.ShortcutHits = () => built.ShortcutHitRects01;
+            overlay.CaptionHits = () => built.CaptionHitRects01;
+            screenPlayback = OpenPlayback(source.Project?.Metadata.Tracks.DisplayVideo);
+            webcamPlayback = OpenPlayback(source.Project?.Metadata.Tracks.WebcamVideo);
+            CrashLog.Note($"preview: playback opened (screen {screenPlayback is not null}, camera {webcamPlayback is not null})");
+            FitPreview();
+            DrawPreview();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Note("preview failed");
+            CrashLog.Write(exception, "editor preview", ending: false);
+            DropPreview();
+            ShowPreviewMessage(Loc.F("Preview could not start: %@", exception.Message));
+        }
+    }
+
+    /// <summary>Lets go of whatever the preview made, so drawing and closing still work without it.</summary>
+    private void DropPreview()
+    {
+        renderer?.Dispose();
+        renderer = null;
+        screenPlayback?.Dispose();
+        screenPlayback = null;
+        webcamPlayback?.Dispose();
+        webcamPlayback = null;
+        if (swapChain is not null)
+        {
+            SwapChainPanelInterop.SetSwapChain(Preview, 0);
+            swapChain.Dispose();
+            swapChain = null;
         }
 
-        compositor = built;
-        var (width, height) = PreviewPixels();
-        swapChain = compositor.CreateSwapChain(width, height);
-        SwapChainPanelInterop.SetSwapChain(Preview, swapChain.SwapChain.NativePointer);
-        renderer = new PreviewRenderer(compositor, swapChain, width, height);
-        renderer.Failed += PreviewFailed;
-        MemoryStats.Track(compositor, swapChain, renderer);
-        overlay.ShortcutHits = () => compositor.ShortcutHitRects01;
-        overlay.CaptionHits = () => compositor.CaptionHitRects01;
-        screenPlayback = OpenPlayback(source.Project?.Metadata.Tracks.DisplayVideo);
-        webcamPlayback = OpenPlayback(source.Project?.Metadata.Tracks.WebcamVideo);
-        FitPreview();
-        DrawPreview();
+        compositor?.Dispose();
+        compositor = null;
+    }
+
+    private void ShowPreviewMessage(string message)
+    {
+        if (Preview.Parent is Grid frame)
+        {
+            frame.Children.Add(new TextBlock
+            {
+                Text = message,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(24),
+                FontSize = 13,
+                Foreground = Ui.Pal("Ink60")
+            });
+        }
     }
 
     private VideoPlaybackSource? OpenPlayback(string? track)
@@ -944,6 +999,7 @@ public sealed partial class EditorWindow : Window
         tools.Dispose();
         clickSounds.Dispose();
         ReleasePreview();
+        CrashLog.Note("editor closed");
         App.EditorClosed();
         MemoryStats.AfterClose("closed");
     }

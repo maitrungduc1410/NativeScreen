@@ -115,6 +115,22 @@ public sealed partial class SettingsWindow : Window
         // Here and not in Updates(), which stops early in a build with no updater.
         var fileVersion = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyFileVersionAttribute>(typeof(SettingsWindow).Assembly)?.Version;
         Body.Children.Add(Ui.Text(NativeScreen.Core.AppVersionText.Format(Loc.T("Version"), AppUpdater.Shared.InstalledVersion ?? McpServer.AppVersion, fileVersion), 12, "Ink60"));
+        Troubleshooting();
+    }
+
+    /// <summary>The newest crash file, for a bug report (spec/06 ADR-98).</summary>
+    private void Troubleshooting()
+    {
+        Heading("Troubleshooting");
+        var crash = CrashLog.NewestCrash();
+        Body.Children.Add(Ui.Text(
+            crash is null ? Loc.T("No crashes recorded") : Loc.F("Last crash: %@", CrashLog.TimeOf(crash).ToString("g", System.Globalization.CultureInfo.CurrentCulture)),
+            12,
+            "Ink60"));
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        row.Children.Add(Ui.Option("Open log folder", false, CrashReports.OpenLogFolder));
+        row.Children.Add(Ui.Option("Copy crash report", false, crash is null ? null : CrashReports.CopyNewest));
+        Body.Children.Add(row);
     }
 
     private void Updates()

@@ -102,6 +102,22 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - If you have a Windows 10 machine, or an older NVIDIA GPU, try the user's steps there: record the display for a few seconds, Stop.
 - Native crashes (access violation, stack overflow) can't be logged this way. Windows Event Viewer still has them.
 
+### Verifier
+- **Result:** PASS for the port. Core 366, Rendering 40, Media 29, Release build 0 warnings.
+- **Same crash on the owner's machine:** Event Viewer had the user's signature from the Store 1.0.7 build (`Microsoft.UI.Xaml.dll` 3.1.8, `0xc000027b`, offset `0x3a7515`), and two more:
+  - Quit from the tray during a recording: `COMException 0x8001010E` (`RPC_E_WRONG_THREAD`) from `GraphicsCaptureSession.Dispose` in `ScreenRecorder.Stop`, called by `RecordingHudWindow.Shutdown` on the UI thread. The recorder is made on a worker thread. Fixed: `Shutdown` disposes it on a worker thread (5 s at most).
+  - The owner's "Stop does nothing, the bar is frozen, the yellow border stays": the telemetry of both stuck recordings has the click on the bar, yet the recorder was never stopped. Not reproduced in a sandbox (window, display, an open menu, the owner's bar position). What is certain: any exception in `StopAndOpen` (or Start, Restart, Delete) was lost in a fire-and-forget task and left `busy` set, which matches. Fixed: `Guard` and the catch in `StopAndOpen` log, stop the capture and return the bar to idle; `StopRecorder` closes the windows around a recording one by one (`Tidy`). The next freeze writes an `error-` file whose breadcrumbs say what Stop saw.
+- **Handlers, checked with `NS_CRASH_TEST`:**
+  - `xaml` (throw in `Loaded`, the user's path): XAML raises `UnhandledException` with the full stack, then ends the app. `crash-` file.
+  - `ui` (throw after an `await` in an `async void`): reported, and the app keeps running. The file is written as `crash-` and renamed `error-` 3 s later.
+  - `uisync` (throw in a `DispatcherQueueTimer.Tick`): fail-fast in `CoreMessagingXP.dll` with no .NET handler at all. Added `RegisterApplicationRecoveryCallback`, which writes the last first-chance exception; it gave the right stack. Windows calls it only after 60 s of running, so the test waits 65 s.
+  - `background`: `crash-`. `task`: `error-`, the app keeps running. `preview`: the editor opens with "Preview could not start: ...", the app stays up, `error-` with the preview breadcrumbs.
+  - Next launch: the notice shows once (Open log folder, Copy crash report, Close; resizing and maximize off). Copy puts the whole file on the clipboard. `LastSeenCrashLog` stops it from showing again.
+- **Store path:** on this machine `%LOCALAPPDATA%\NativeScreen Data` existed before the Store build was installed (made by GitHub and Debug builds), so the Store build uses it unredirected; its LocalCache holds only the old `NativeScreen\settings.json`. `ForExplorer` uses the LocalCache path only when the file is there. Not checked on a machine with only the Store build.
+- **Strings:** the 8 new keys are in the catalog with all 14 translations and `extractionState: manual` ("Recording stopped" and "Close" existed). Build once on a Mac.
+- **Not verified by hand:** Quit from the tray during a recording (the fix follows the stack), the Settings > General > Troubleshooting row in the app, and the notice on the installed MSIX.
+- **Writer:** use `CrashLog.Note` for new long steps; start bar actions with `Guard`, never `_ = Task()`.
+
 ### After
 Ship it in the next Store and GitHub release. The owner will ask the user to repeat Record, then Stop, and send the `crash-` or `error-` file. That stack decides the real fix.
 

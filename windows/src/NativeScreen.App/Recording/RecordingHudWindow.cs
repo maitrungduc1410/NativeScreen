@@ -172,7 +172,25 @@ public sealed partial class RecordingHudWindow : Window
     public static void Shutdown()
     {
         shared?.overlay?.Dispose();
-        shared?.recorder?.Dispose();
+        if (shared?.recorder is { } running)
+        {
+            // The recorder was made on a worker thread, and its capture session refuses a Dispose from the UI thread
+            // (RPC_E_WRONG_THREAD), which ended the app on Quit during a recording. What it wrote is finished on the way out.
+            CrashLog.Note("quit while recording");
+            try
+            {
+                if (!Task.Run(running.Dispose).Wait(TimeSpan.FromSeconds(5)))
+                {
+                    CrashLog.Note("recorder did not stop within 5 s at quit");
+                }
+            }
+            catch (AggregateException exception)
+            {
+                CrashLog.Write(exception, "stopping the recorder at quit", ending: false);
+            }
+        }
+
+
         shared?.monitor?.Dispose();
         shared?.cameraPreview?.Dispose();
     }
@@ -1129,7 +1147,7 @@ public sealed partial class RecordingHudWindow : Window
         countdownTotal = seconds ?? AppSettings.Shared.CountdownSeconds;
         if (countdownTotal <= 0)
         {
-            _ = StartRecording();
+            Guard(StartRecording, "starting a recording");
             return;
         }
 
@@ -1151,7 +1169,7 @@ public sealed partial class RecordingHudWindow : Window
         var skip = Item(row, null, () =>
         {
             countdownTimer.Stop();
-            _ = StartRecording();
+            Guard(StartRecording, "starting a recording");
         }, null, 42);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(skip, "Continue");
         bar.Children.Add(skip);
@@ -1168,7 +1186,7 @@ public sealed partial class RecordingHudWindow : Window
         if (remaining <= 0.01 && countdownTimer.IsEnabled)
         {
             countdownTimer.Stop();
-            _ = StartRecording();
+            Guard(StartRecording, "starting a recording");
         }
     }
 
@@ -1291,6 +1309,7 @@ public sealed partial class RecordingHudWindow : Window
             }
 
             startedAt = DateTime.UtcNow;
+            CrashLog.Note($"recording started ({chosen.Mode}, microphone {microphoneId is not null}, camera {cameraId is not null}, system audio {options.SystemAudio})");
             WatchDiskSpace(directory, created);
             drawingsStay = AppSettings.Shared.DrawingsStayUntilCleared;
             notes?.RecordingStarted();
@@ -1346,8 +1365,8 @@ public sealed partial class RecordingHudWindow : Window
         bar.Children.Add(new Border { Width = 1, Height = 26, Background = Ui.Rgb(1, 1, 1, 0.20) });
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         actions.Children.Add(Item(Ui.Icon(isPaused ? "" : "", 17, Ui.Rgb(1, 1, 1, 0.9)), isPaused ? "Resume recording" : "Pause recording", TogglePause, 38, 38, isPaused));
-        actions.Children.Add(Item(Ui.Icon("", 16.5, Ui.Rgb(1, 1, 1, 0.9)), "Restart recording", () => _ = Restart(), 38, 38));
-        actions.Children.Add(Item(Ui.Icon("", 16, Ui.Rgb(1, 1, 1, 0.9)), "Cancel & delete recording", () => _ = ConfirmDelete(), 38, 38));
+        actions.Children.Add(Item(Ui.Icon("", 16.5, Ui.Rgb(1, 1, 1, 0.9)), "Restart recording", () => Guard(Restart, "restarting a recording"), 38, 38));
+        actions.Children.Add(Item(Ui.Icon("", 16, Ui.Rgb(1, 1, 1, 0.9)), "Cancel & delete recording", () => Guard(ConfirmDelete, "deleting a recording"), 38, 38));
         bar.Children.Add(actions);
         AddDrawingControls();
         if (recorder?.IsMissingAppAudio == true)
@@ -1377,6 +1396,7 @@ public sealed partial class RecordingHudWindow : Window
         }
 
         recorder.SetPaused(isPaused);
+        CrashLog.Note(isPaused ? "recording paused" : "recording resumed");
         notes?.RecordingPaused(isPaused);
         if (isPaused)
         {
@@ -1393,17 +1413,50 @@ public sealed partial class RecordingHudWindow : Window
 
     private RecordedAreaHighlight? recordedArea;
 
+    /// <summary>
+    /// Runs a bar action whose task nobody awaits. A failure is logged and the bar goes back to idle with the capture off,
+    /// instead of vanishing with the task and leaving `busy` set (spec/06 ADR-98).
+    /// </summary>
+    private async void Guard(Func<Task> action, string what)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write(exception, what, ending: false);
+            await StopRecorderAfterFailure();
+            pending = null;
+            busy = false;
+            ShowIdle();
+        }
+    }
+
+    private static void Tidy(string what, Action step)
+    {
+        try
+        {
+            step();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write(exception, $"closing the {what} after a recording", ending: false);
+        }
+    }
+
     private async Task StopRecorder()
     {
-        tick.Stop();
-        diskWatch?.Cancel();
+        // The windows around the recording go first, each on its own: one that fails must not keep the capture running.
+        Tidy("timer", tick.Stop);
+        Tidy("disk watch", () => diskWatch?.Cancel());
         diskWatch = null;
-        recordedArea?.Dispose();
+        Tidy("recorded area", () => recordedArea?.Dispose());
         recordedArea = null;
-        DisposeDrawing();
-        notes?.RecordingEnded();
+        Tidy("drawing", DisposeDrawing);
+        Tidy("speaker notes", () => notes?.RecordingEnded());
         // After a cancel or a start that failed, the stage stays up, ready to record again.
-        stage?.SetRecording(false);
+        Tidy("camera stage", () => stage?.SetRecording(false));
         var running = recorder;
         recorder = null;
         if (running is not null)
@@ -1416,6 +1469,7 @@ public sealed partial class RecordingHudWindow : Window
                 running.Dispose();
                 return result;
             });
+            CrashLog.Note($"recorder stopped ({lastDuration.DurationMs:F0} ms, failed {lastRecordingFailed})");
         }
 
         capturing = false;
@@ -1480,15 +1534,55 @@ public sealed partial class RecordingHudWindow : Window
     /// <summary>Returns the saved length in milliseconds, or null when nothing was saved.</summary>
     private async Task<double?> StopAndOpen()
     {
-        if (busy || package is null || target is null)
+        CrashLog.Note($"Stop pressed (busy {busy}, package {package is not null}, target {target is not null}, recorder {recorder is not null})");
+        if (busy || package is not { } directory || target is not { } chosen)
         {
             return null;
         }
 
         busy = true;
+        try
+        {
+            return await FinishAndOpen(directory, chosen);
+        }
+        catch (Exception exception)
+        {
+            // Before this guard a failure here was dropped with the task, `busy` stayed set and every later Stop was ignored:
+            // the bar froze and the capture kept running until Quit (spec/06 ADR-98).
+            CrashLog.Note("finishing the recording failed");
+            var log = CrashLog.Write(exception, "finishing a recording", ending: false);
+            await StopRecorderAfterFailure();
+            busy = false;
+            ShowIdle();
+            var title = Loc.T("Recording stopped");
+            var text = Loc.F("The recording could not be finished: %@", exception.Message);
+            _ = Task.Run(() => MessageBoxW(0, log is null ? text : $"{text}\n\n{log}", title, MessageBoxWarningTopmost));
+            return null;
+        }
+    }
+
+    /// <summary>Makes sure the capture is off after a failed finish, whatever state the failure left.</summary>
+    private async Task StopRecorderAfterFailure()
+    {
+        try
+        {
+            await StopRecorder();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write(exception, "stopping the recorder after a failure", ending: false);
+        }
+
+        AppExclusion(false);
+        package = null;
+        target = null;
+    }
+
+    private async Task<double?> FinishAndOpen(string directory, CaptureTarget chosen)
+    {
         await StopRecorder();
         AppExclusion(false);
-        var (directory, chosen, stats) = (package, target, lastDuration);
+        var stats = lastDuration;
         package = null;
         target = null;
         if (lastRecordingFailed)
@@ -1511,9 +1605,11 @@ public sealed partial class RecordingHudWindow : Window
         CloseCameraStage();
         await Task.Run(() => RecordingPackage.Finish(directory, metadata, stats.DurationMs, stats.HasWebcam, stats.HasMicrophone, stats.HasSystemAudio, autoCreateZooms: AppSettings.Shared.AutoCreateZooms && !cameraOnly, DateTimeOffset.UtcNow, cameraOnly));
         await Task.Run(() => ApplyDefaultPreset(directory, cameraOnly));
+        CrashLog.Note("recording package finished");
         busy = false;
         ShowIdle();
         await Projects.Open(directory, root.XamlRoot, AppSettings.Shared.AfterRecording);
+        CrashLog.Note("recording opened");
         return stats.DurationMs;
     }
 
@@ -1588,6 +1684,7 @@ public sealed partial class RecordingHudWindow : Window
 
     private async Task DiscardCurrent()
     {
+        CrashLog.Note("recording discarded");
         await StopRecorder();
         var directory = package;
         package = null;

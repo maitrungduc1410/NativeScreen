@@ -361,6 +361,7 @@ public sealed partial class EditorWindow
         var pass = 0;
         var progress = new Progress<ExportProgress>(update => showShare((pass + update.Encoded / (double)Math.Max(1, update.Total)) / passes));
         var exporter = new ProjectExporter(CurrentExportSource());
+        CrashLog.Note($"export started ({exportSettings.Format}, {exportSettings.ResolutionHeight}p, {exportSettings.Fps} fps)");
         try
         {
             if (both)
@@ -375,6 +376,7 @@ public sealed partial class EditorWindow
                 await exporter.RunAsync(filePath, exportSettings, progress, cancel.Token);
             }
 
+            CrashLog.Note("export finished");
             if (toClipboard)
             {
                 var package = new DataPackage();
@@ -389,10 +391,12 @@ public sealed partial class EditorWindow
         }
         catch (OperationCanceledException)
         {
+            CrashLog.Note("export stopped");
             ShowToast("Export stopped");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
+            CrashLog.Note($"export failed: {exception.GetType().Name} 0x{exception.HResult:X8}");
             ShowToast(Loc.F("Export failed: %@", exception.Message));
         }
         finally

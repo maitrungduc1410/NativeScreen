@@ -57,6 +57,9 @@ public sealed class AppSettings
 
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
 
+    /// <summary>The newest crash file the user was told about at launch (spec/06 ADR-98).</summary>
+    public string? LastSeenCrashLog { get; set; }
+
     /// <summary>What Quick export uses, and what agents start from with useQuickExportSettings.</summary>
     public NativeScreen.Core.ExportSettings QuickExport { get; set; } = new();
 

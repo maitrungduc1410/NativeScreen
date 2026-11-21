@@ -844,6 +844,7 @@ internal static class Projects
 
         try
         {
+            CrashLog.Note("opening a project");
             var project = await Task.Run(() => new LoadedProject(path));
             if (OpenEditors.TryGetValue(key, out existing))
             {
@@ -852,6 +853,7 @@ internal static class Projects
             }
 
             var editor = new EditorWindow(EditorSource.Package(path, project));
+            CrashLog.Note("editor created");
             OpenEditors[key] = editor;
             editor.Closed += (_, _) => OpenEditors.Remove(key);
             editor.Activate();
@@ -860,6 +862,7 @@ internal static class Projects
         }
         catch (Exception exception) when (exception is IOException or System.Text.Json.JsonException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
+            CrashLog.Note($"project did not open: {exception.GetType().Name}");
             if (xamlRoot is not null)
             {
                 await new ContentDialog
