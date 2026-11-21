@@ -18,7 +18,7 @@ export default {
     "导出的视频、GIF、图像和字幕文件；",
     "你的设置。",
   ],
-  onDevice: "字幕、文字稿、敏感数据检测（电子邮件、密钥、人脸）、面部追踪和摄像头背景移除都在你的电脑上运行。在 macOS 上，这些功能使用 Apple 的内置框架，并且语音识别被设置为仅在设备上运行，因此不会向 Apple 发送任何音频。在 Windows 上，字幕使用 Whisper 模型，背景移除使用 MODNet 模型。每个模型只下载一次，之后在本机运行。",
+  onDevice: "字幕、文字稿、敏感数据检测（电子邮件、密钥、人脸）、面部追踪和摄像头背景移除都在你的电脑上运行。在 macOS 上，这些功能使用 Apple 的内置框架，并且语音识别被设置为仅在设备上运行，因此不会向 Apple 发送任何音频。首次在其中使用某种语言时，macOS 可能会从 Apple 下载该语言的语音文件。字幕也可以使用 Whisper 模型：在 macOS 上由你选择，在 Windows 上始终使用。Windows 上的背景移除使用 MODNet 模型。每个模型只下载一次，之后在本机运行。",
   keys: "只有在录制进行时才会记录按键。按键只保存在该项目中，不会存放在其他地方；删除项目即可删除这些按键。",
 
   permH: "应用请求的权限",
@@ -40,10 +40,10 @@ export default {
   leaveP: "应用只在以下情况下连接互联网。这些情况都不包含你的录制内容、项目或你输入的任何内容。",
   leaveCols: ["时间", "目的地", "发送的内容"],
   leave: [
-    ["在 Windows 上首次使用字幕或摄像头背景移除时", "Hugging Face（huggingface.co）", "一个下载模型文件的请求。与任何下载一样，Hugging Face 能看到你的 IP 地址。macOS 应用不下载任何模型。"],
+    ["首次为字幕使用 Whisper 模型（macOS 和 Windows），或在 Windows 上首次使用摄像头背景移除时", "Hugging Face（huggingface.co）", "一个下载模型文件的请求。与任何下载一样，Hugging Face 能看到你的 IP 地址。"],
     ["检查和下载更新（Mac App Store 之外的 macOS，以及 Microsoft Store 之外的 Windows 版本）", "GitHub", "一个获取最新版本信息的请求，有新版本时还会下载更新文件。GitHub 能看到你的 IP 地址和标准的请求标头。其中不包含任何关于你或你录制内容的信息。你可以在设置中关闭自动检查。"],
     ["Microsoft Store 版本", "Microsoft", "由 Store 安装和更新应用，应用本身没有更新程序。Microsoft 可能会依据其<a href=\"https://privacy.microsoft.com/privacystatement\">隐私声明</a>收集诊断数据。"],
-    ["Mac App Store 版本", "Apple", "由 App Store 安装和更新应用，应用本身没有更新程序，也不会连接互联网。Apple 可能会依据其<a href=\"https://www.apple.com/legal/privacy/\">隐私政策</a>收集诊断数据。"],
+    ["Mac App Store 版本", "Apple", "由 App Store 安装和更新应用，应用本身没有更新程序。它唯一的联网操作是上面列出的 Whisper 模型下载。Apple 可能会依据其<a href=\"https://www.apple.com/legal/privacy/\">隐私政策</a>收集诊断数据。"],
   ],
 
   agentsH: "AI 代理",

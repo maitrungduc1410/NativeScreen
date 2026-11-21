@@ -201,6 +201,7 @@
 - [x] **Caption tracks:** multiple tracks on the timeline; move, trim, split and add captions, drag them between tracks, per-caption style with `Apply to all captions in this track`, 2D `Caption position` pad.
 - [x] **AI Auto-Captions & Edit by Transcript (100% Local On-Device Speech-to-Text):**
   - [x] On-device transcription using Apple `Speech` framework (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`) with language selector, custom `Keyterms` prompt, and `.srt` export.
+  - [ ] Whisper on macOS (whisper.cpp, Metal) for languages the system recognizer cannot do on the Mac, with `Apple | Whisper` chosen by the person, model download with progress, Cancel and Delete, and Stop (`spec/06` ADR-105). Engine verified; inspector and real Vietnamese speech not yet checked.
   - [x] Animated `Line by line` / `Word by word` caption overlay renderer with `Font style` (`Sans-serif`, `Serif`, `Mono`), `Line growth` (`Full line`, `Expanding`, `Centered`), `Word animation` (`Appear`, `Fade in`, `Slide in`), and `Color` (`Dark`, `Light`).
   - [x] Interactive `Edit by transcript` inspector: one-click `Remove N filler words` (`"um"`, `"uh"`, ...), one-click `Tighten N pauses` (`··· 1.3s`), and per-word `Cut video`, `Cut transcript`, and `Restore`.
 - [ ] **Window Bounds Tracking:**

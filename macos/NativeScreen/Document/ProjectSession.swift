@@ -61,6 +61,10 @@ public final class ProjectSession: Identifiable {
     public var isShowingStillFrameExportModal: Bool = false
     public var isShowingCameraCropModal: Bool = false
     public var isGeneratingTranscript: Bool = false
+    /// What the running transcript is doing ("Downloading the speech model", "Transcribing"), and its share done when known.
+    public private(set) var transcriptStatus: String?
+    public private(set) var transcriptProgress01: Double?
+    @ObservationIgnored private var transcriptTask: Task<Void, Never>?
     /// Face positions for stickers and face tracking; `nil` until scanned or loaded.
     private(set) var faceTrack: FaceTrack?
     /// 0...1 while the webcam is being scanned for faces, `nil` otherwise.
@@ -251,6 +255,11 @@ public final class ProjectSession: Identifiable {
     ) {
         var cleanedDoc = document
         cleanedDoc.timeline.maskTracks.removeAll { $0.items.isEmpty }
+        // A project without a transcript starts on the Whisper model that is on this Mac (the most recently used of
+        // several), not on the default Small that may not be downloaded. One with a transcript keeps the model it used.
+        if cleanedDoc.captions.segments.isEmpty, let tier = WhisperModelStore.shared.preferredTier() {
+            cleanedDoc.captions.whisperModelTier = tier.rawValue
+        }
         // Items on an annotation track must not overlap, or dragging one pushes it away. Older live drawings could.
         cleanedDoc.timeline.annotationTracks = cleanedDoc.timeline.annotationTracks.flatMap { track in
             track.hasOverlaps
@@ -3774,43 +3783,126 @@ public final class ProjectSession: Identifiable {
         }
     }
 
-    /// Generates a word-level transcript on-device, and shows why if it cannot.
-    public func generateLocalOnDeviceTranscript() {
+    /// Generates a word-level transcript on this Mac, and shows why if it cannot. With `askToDownload`, a missing Whisper
+    /// model is offered for download first (the inspector); without it (an agent), the missing model is reported instead.
+    public func generateLocalOnDeviceTranscript(askToDownload: Bool = false) {
         guard !isGeneratingTranscript else { return }
 
         isGeneratingTranscript = true
         transcriptErrorMessage = nil
-        CrashLog.note("transcript: start")
+        transcriptStatus = nil
+        transcriptProgress01 = nil
 
         let audioSourceURL = microphoneAudioFileURL ?? videoFileURL
-        let localeId = document.captions.transcriptLocale
-        let promptWords = document.captions.customPrompt
+        let captions = document.captions
+        let localeId = LocalOnDeviceMediaIntelligence.normalizedLocaleId(captions.transcriptLocale)
+        let engine = TranscriptEngine(storedValue: captions.localModelVariant)
+        let tier = WhisperModelTier(storedValue: captions.whisperModelTier)
+        let promptWords = captions.customPrompt
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         let fallbackDur = metadata.durationMs
 
-        Task { @MainActor [weak self] in
+        transcriptTask = Task { @MainActor [weak self] in
             guard let self = self else { return }
+            defer {
+                self.isGeneratingTranscript = false
+                self.transcriptStatus = nil
+                self.transcriptProgress01 = nil
+                self.transcriptTask = nil
+            }
             do {
-                let generated = try await LocalOnDeviceMediaIntelligence.transcribeAudioFileOnDevice(
-                    audioURL: audioSourceURL,
-                    localeIdentifier: localeId,
-                    customPromptWords: promptWords,
-                    maxDurationMs: fallbackDur
-                )
+                CrashLog.note("transcript: start (\(engine == .whisper ? "whisper \(tier.rawValue)" : "apple"), \(Int(fallbackDur / 1000)) s)")
+                let generated: [CaptionSegment]
+                if engine == .whisper {
+                    generated = try await self.transcribeWithWhisper(
+                        audioURL: audioSourceURL,
+                        tier: tier,
+                        localeId: localeId,
+                        prompt: promptWords.joined(separator: ", "),
+                        maxDurationMs: fallbackDur,
+                        askToDownload: askToDownload
+                    )
+                } else {
+                    self.transcriptStatus = String(localized: "Transcribing")
+                    generated = try await LocalOnDeviceMediaIntelligence.transcribeWithApple(
+                        audioURL: audioSourceURL,
+                        localeIdentifier: localeId,
+                        customPromptWords: promptWords,
+                        maxDurationMs: fallbackDur
+                    )
+                }
+                try Task.checkCancellation()
+                guard !generated.isEmpty else { throw LocalOnDeviceMediaIntelligence.TranscriptionError.noSpeechFound }
                 self.selectedCaptionId = nil
                 self.mutate { doc in
                     doc.captions.segments = generated
                     doc.captions.rebuildTranscriptCaptionBlocks()
                     doc.captions.enabled = true
                 }
+                CrashLog.note("transcript: finished (\(generated.count) words)")
+            } catch is CancellationError {
+                CrashLog.note("transcript: stopped")
             } catch {
                 self.transcriptErrorMessage = error.localizedDescription
                 CrashLog.writeError("The transcript could not be made.", error: error)
             }
-            self.isGeneratingTranscript = false
         }
+    }
+
+    /// Stops a running transcript, and the speech model download it started.
+    public func stopTranscript() {
+        transcriptTask?.cancel()
+        WhisperModelStore.shared.cancelDownload(WhisperModelTier(storedValue: document.captions.whisperModelTier))
+    }
+
+    private func transcribeWithWhisper(
+        audioURL: URL,
+        tier: WhisperModelTier,
+        localeId: String,
+        prompt: String,
+        maxDurationMs: Double,
+        askToDownload: Bool
+    ) async throws -> [CaptionSegment] {
+        let store = WhisperModelStore.shared
+        if !store.isInstalled(tier) {
+            guard askToDownload else { throw WhisperError.modelMissing(tier) }
+            guard store.isDownloading(tier) || Self.confirmWhisperDownload(tier) else { throw CancellationError() }
+            transcriptStatus = String(localized: "Downloading the speech model")
+            let installed = await store.download(tier)
+            try Task.checkCancellation()
+            guard installed else {
+                if let reason = store.failure[tier] { throw WhisperError.downloadFailed(String(localized: "Download failed: \(reason)")) }
+                throw CancellationError()
+            }
+        }
+
+        transcriptStatus = String(localized: "Transcribing")
+        transcriptProgress01 = 0
+        store.noteUsed(tier)
+        store.beginUse(tier)
+        defer { store.endUse(tier) }
+        return try await WhisperTranscriber.transcribe(
+            audioURL: audioURL,
+            tier: tier,
+            locale: localeId,
+            prompt: prompt,
+            maxDurationMs: maxDurationMs
+        ) { share in
+            Task { @MainActor [weak self] in self?.transcriptProgress01 = share }
+        }
+    }
+
+    /// The person agrees before anything is downloaded.
+    static func confirmWhisperDownload(_ tier: WhisperModelTier) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = String(localized: "Download the speech model?")
+        alert.informativeText = String(localized: "Transcripts run on this device with the Whisper \(tier.label) model. It downloads \(tier.sizeText) from huggingface.co once. Your audio is never uploaded.")
+        alert.addButton(withTitle: String(localized: "Download (\(tier.sizeText))"))
+        alert.addButton(withTitle: String(localized: "Not now"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Checks whether a given `[sourceStartMs, sourceEndMs]` word span is present in at least one active `ClipSlice`.

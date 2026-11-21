@@ -18,7 +18,7 @@ export default {
     "dışa aktarılan videolar, GIF'ler, resimler ve altyazı dosyaları;",
     "ayarlarınız.",
   ],
-  onDevice: "Altyazılar, metin dökümleri, hassas veri algılama (e-postalar, anahtarlar, yüzler), yüz takibi ve kamera arka planını kaldırma işlemlerinin tümü bilgisayarınızda çalışır. macOS'ta bunlar Apple'ın yerleşik çerçevelerini kullanır ve konuşma tanıma yalnızca cihazda çalışacak şekilde ayarlıdır; bu nedenle Apple'a hiçbir ses gönderilmez. Windows'ta altyazılar bir Whisper modeli, arka plan kaldırma ise bir MODNet modeli kullanır. Her biri bir kez indirilir, ardından yerel olarak çalışır.",
+  onDevice: "Altyazılar, metin dökümleri, hassas veri algılama (e-postalar, anahtarlar, yüzler), yüz takibi ve kamera arka planını kaldırma işlemlerinin tümü bilgisayarınızda çalışır. macOS'ta bunlar Apple'ın yerleşik çerçevelerini kullanır ve konuşma tanıma yalnızca cihazda çalışacak şekilde ayarlıdır; bu nedenle Apple'a hiçbir ses gönderilmez. Orada bir dili ilk kez kullandığınızda macOS o dilin konuşma dosyalarını Apple'dan indirebilir. Altyazılar bir Whisper modeli de kullanabilir: macOS'ta siz seçtiğinizde, Windows'ta her zaman. Windows'ta arka plan kaldırma bir MODNet modeli kullanır. Her model bir kez indirilir, ardından yerel olarak çalışır.",
   keys: "Tuş basışları yalnızca kayıt sürerken kaydedilir. Yalnızca o projenin içinde saklanır, başka hiçbir yerde tutulmaz; projeyi silerek bunları da silebilirsiniz.",
 
   permH: "Uygulamanın istediği izinler",
@@ -40,10 +40,10 @@ export default {
   leaveP: "Uygulama yalnızca bu durumlarda internete bağlanır. Bunların hiçbiri kayıtlarınızı, projelerinizi veya yazdığınız herhangi bir şeyi içermez.",
   leaveCols: ["Ne zaman", "Nereye", "Ne gönderilir"],
   leave: [
-    ["Windows'ta altyazıları veya kamera arka planını kaldırmayı ilk kez kullandığınızda", "Hugging Face (huggingface.co)", "Model dosyasını indirmek için bir istek. Her indirmede olduğu gibi Hugging Face IP adresinizi görür. macOS uygulaması hiçbir model indirmez."],
+    ["Altyazılar için bir Whisper modelini (macOS ve Windows) veya Windows'ta kamera arka planını kaldırmayı ilk kez kullandığınızda", "Hugging Face (huggingface.co)", "Model dosyasını indirmek için bir istek. Her indirmede olduğu gibi Hugging Face IP adresinizi görür."],
     ["Güncellemeleri denetleme ve indirme (Mac App Store dışındaki macOS ve Microsoft Store dışındaki Windows)", "GitHub", "En son sürüm için bir istek ve varsa güncelleme dosyası. GitHub IP adresinizi ve standart istek başlıklarını görür. Siz veya kayıtlarınız hakkında hiçbir bilgi içermez. Otomatik denetimleri Ayarlar'dan kapatabilirsiniz."],
     ["Microsoft Store sürümü", "Microsoft", "Uygulamayı Store yükler ve günceller; uygulamanın kendi güncelleyicisi yoktur. Microsoft kendi <a href=\"https://privacy.microsoft.com/privacystatement\">gizlilik bildirimi</a> kapsamında tanılama verileri toplayabilir."],
-    ["Mac App Store sürümü", "Apple", "Uygulamayı App Store yükler ve günceller; uygulamanın kendi güncelleyicisi yoktur ve internete bağlanmaz. Apple kendi <a href=\"https://www.apple.com/legal/privacy/\">gizlilik politikası</a> kapsamında tanılama verileri toplayabilir."],
+    ["Mac App Store sürümü", "Apple", "Uygulamayı App Store yükler ve günceller; uygulamanın kendi güncelleyicisi yoktur. Tek internet bağlantısı, yukarıda belirtilen Whisper modeli indirmesidir. Apple kendi <a href=\"https://www.apple.com/legal/privacy/\">gizlilik politikası</a> kapsamında tanılama verileri toplayabilir."],
   ],
 
   agentsH: "YZ ajanları",

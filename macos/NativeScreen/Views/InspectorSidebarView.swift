@@ -17,6 +17,8 @@ public struct InspectorSidebarView: View {
     @State private var isCameraSizeDuringZoomExpanded: Bool = false
     @State private var isAdvancedCameraStyleExpanded: Bool = false
     @State private var isRegenerateTranscriptExpanded: Bool = false
+    /// The Language menu for the chosen engine.
+    @State private var transcriptLocales: [LocalOnDeviceMediaIntelligence.SupportedSpeechLocale] = []
     @State private var captionInspectorTrackId: String?
     @State private var captionApplyToTrack: Bool = false
     @State private var captionDraftText: String = ""
@@ -3834,7 +3836,9 @@ public struct InspectorSidebarView: View {
     @ViewBuilder
     private func localTranscriptGeneratorControls(isRegenerating: Bool) -> some View {
         let cap = session.document.captions
-        let locales = LocalOnDeviceMediaIntelligence.supportedLocales()
+        let engine = TranscriptEngine(storedValue: cap.localModelVariant)
+        let localeId = LocalOnDeviceMediaIntelligence.normalizedLocaleId(cap.transcriptLocale)
+        let locales = transcriptLocales
 
         VStack(alignment: .leading, spacing: 14) {
             if isRegenerating {
@@ -3854,22 +3858,28 @@ public struct InspectorSidebarView: View {
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.ink.opacity(0.92))
 
-                inspectorPillOptionButton(title: "Local", isSelected: true) {}
+                HStack(spacing: 6) {
+                    ForEach(TranscriptEngine.allCases) { option in
+                        inspectorPillOptionButton(title: option.label, isSelected: engine == option) {
+                            session.mutate { $0.captions.localModelVariant = option.rawValue }
+                        }
+                    }
+                }
+                .disabled(session.isGeneratingTranscript)
 
-                Text("Transcript will be generated locally using Apple's native speech recognition engine. No data will be sent to any server.")
+                Text(transcriptEngineNote(engine).localizedUI)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(.ink.opacity(0.42))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // Language Picker (Export-FPS-style compact pill with smooth width interpolation when selecting short/long language names!)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Language")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.ink.opacity(0.92))
 
                 Menu {
-                    ForEach(locales.prefix(35)) { loc in
+                    ForEach(locales) { loc in
                         Button(loc.displayName) {
                             withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
                                 session.mutate { $0.captions.transcriptLocale = loc.id }
@@ -3877,7 +3887,8 @@ public struct InspectorSidebarView: View {
                         }
                     }
                 } label: {
-                    let currentName = locales.first(where: { $0.id == cap.transcriptLocale })?.displayName ?? cap.transcriptLocale
+                    let currentName = locales.first(where: { $0.id == localeId })?.displayName
+                        ?? LocalOnDeviceMediaIntelligence.displayName(forLocale: localeId)
                     HStack(spacing: 6) {
                         Text(currentName)
                             .font(.system(size: 13.5, weight: .regular))
@@ -3904,7 +3915,22 @@ public struct InspectorSidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .fixedSize()
+                .disabled(session.isGeneratingTranscript)
                 .animation(.spring(response: 0.24, dampingFraction: 0.84), value: cap.transcriptLocale)
+
+                if engine == .apple, !locales.isEmpty, !locales.contains(where: { $0.id == localeId }) {
+                    Text("Apple's speech recognition can't do this language on this Mac. Choose another language, or Whisper.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color(red: 0.92, green: 0.64, blue: 0.28))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .task(id: engine) {
+                transcriptLocales = await LocalOnDeviceMediaIntelligence.transcriptLocales(for: engine)
+            }
+
+            if engine == .whisper {
+                whisperModelControls(tier: WhisperModelTier(storedValue: cap.whisperModelTier))
             }
 
             if let message = session.transcriptErrorMessage {
@@ -3914,31 +3940,133 @@ public struct InspectorSidebarView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button {
-                session.generateLocalOnDeviceTranscript()
-            } label: {
-                HStack(spacing: 8) {
-                    if session.isGeneratingTranscript {
+            if session.isGeneratingTranscript {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
                         ProgressView()
                             .controlSize(.small)
-                    } else {
+                        Text((session.transcriptStatus ?? "Transcribing").localizedUI)
+                            .font(.system(size: 12.5, weight: .regular))
+                            .foregroundStyle(.ink.opacity(0.75))
+                        if let share = session.transcriptProgress01 {
+                            Text(share.formatted(.percent.precision(.fractionLength(0))))
+                                .font(.system(size: 12.5, weight: .regular).monospacedDigit())
+                                .foregroundStyle(.ink.opacity(0.5))
+                        }
+                        Spacer(minLength: 0)
+                        Button("Stop") { session.stopTranscript() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.8))
+                    }
+                }
+            } else {
+                Button {
+                    session.generateLocalOnDeviceTranscript(askToDownload: true)
+                } label: {
+                    HStack(spacing: 8) {
                         Image(systemName: "waveform.badge.magnifyingglass")
                             .font(.system(size: 13, weight: .semibold))
+                        Text(isRegenerating ? "Re-Generate transcript" : "Generate transcript")
+                            .font(.system(size: 13, weight: .semibold))
                     }
-                    Text(session.isGeneratingTranscript ? "Generating on device..." : "Generate transcript")
-                        .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color(red: 0.36, green: 0.24, blue: 0.96))
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color(red: 0.36, green: 0.24, blue: 0.96))
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+        }
+    }
+
+    /// What the chosen engine does. The Language menu lists only what it can do on this Mac.
+    private func transcriptEngineNote(_ engine: TranscriptEngine) -> String {
+        switch engine {
+        case .apple:
+            return "Apple's speech recognition, built into macOS. Your audio stays on this Mac. The first time you use a language, Apple may download its files. It knows fewer languages."
+        case .whisper:
+            return "Whisper, an open model that runs on this Mac. It knows many more languages, Vietnamese among them. Your audio is never uploaded."
+        }
+    }
+
+    /// The Whisper model choice and its download: Download with the size; while downloading, progress and Cancel; once on
+    /// this Mac, a check mark and Delete (off while a transcript reads the model). Same states as Windows.
+    @ViewBuilder
+    private func whisperModelControls(tier: WhisperModelTier) -> some View {
+        let store = WhisperModelStore.shared
+
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Model")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.ink.opacity(0.92))
+
+            HStack(spacing: 6) {
+                ForEach(WhisperModelTier.allCases) { option in
+                    inspectorPillOptionButton(title: option.label, isSelected: tier == option) {
+                        session.mutate { $0.captions.whisperModelTier = option.rawValue }
+                        store.noteUsed(option)
+                    }
+                }
+            }
             .disabled(session.isGeneratingTranscript)
+
+            Text(tier.descriptionText)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.ink.opacity(0.42))
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let share = store.progress[tier] {
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: share)
+                        .progressViewStyle(.linear)
+                    HStack {
+                        Text("Downloading \(Int64(share * Double(tier.byteCount)).formatted(.byteCount(style: .file))) of \(tier.sizeText)")
+                            .font(.system(size: 12, weight: .regular).monospacedDigit())
+                            .foregroundStyle(.ink.opacity(0.55))
+                        Spacer(minLength: 0)
+                        Button("Cancel") { store.cancelDownload(tier) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.ink.opacity(0.8))
+                    }
+                }
+            } else if store.isInstalled(tier) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("On this Mac, \(tier.sizeText)")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.ink.opacity(0.75))
+                    Spacer(minLength: 0)
+                    Button("Delete") { store.delete(tier) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.ink.opacity(0.8))
+                        .disabled((store.inUse[tier] ?? 0) > 0)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Downloaded once from huggingface.co. Your audio is never uploaded.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.ink.opacity(0.42))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Download (\(tier.sizeText))") {
+                        Task { await store.download(tier) }
+                    }
+                    .controlSize(.small)
+                    if let reason = store.failure[tier] {
+                        Text("Download failed: \(reason)")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(Color(red: 1.0, green: 0.48, blue: 0.42))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
         }
     }
 

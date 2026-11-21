@@ -7,304 +7,80 @@ import Speech
 import AppKit
 import Observation
 
-// MARK: - On-Demand Open-Source OpenAI Whisper Model Manager (`ggml-base.bin` / `ggml-small.bin` / `ggml-medium.bin`)
-
-public enum WhisperModelTier: String, Codable, CaseIterable, Identifiable, Sendable {
-    case base = "base"
-    case small = "small"
-    case medium = "medium"
-
-    public var id: String { rawValue }
-
-    public var label: String {
-        switch self {
-        case .base: return String(localized: "Base")
-        case .small: return String(localized: "Small")
-        case .medium: return String(localized: "Medium")
-        }
-    }
-
-    public var fileName: String {
-        "ggml-\(rawValue).bin"
-    }
-
-    public var sizeDescription: String {
-        switch self {
-        case .base: return "142 MB"
-        case .small: return "466 MB"
-        case .medium: return "1.5 GB"
-        }
-    }
-
-    public var expectedByteCount: Int64 {
-        switch self {
-        case .base: return 147_951_465
-        case .small: return 487_601_967
-        case .medium: return 1_533_774_781
-        }
-    }
-
-    public var downloadURL: URL {
-        URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(fileName)")!
-    }
-
-    public var descriptionText: String {
-        switch self {
-        case .base:
-            return "Will download 142MB on first use. Fastest, but less accurate."
-        case .small:
-            return "Will download 466MB on first use. 2.5 times slower than Base, but more accurate. Produces good results in most cases."
-        case .medium:
-            return "Will download 1.5GB on first use. 8 times slower than Base, but more accurate. Requires 5GB of RAM."
-        }
-    }
-}
-
-@Observable
-@MainActor
-public final class WhisperModelDownloadManager: NSObject, URLSessionDownloadDelegate {
-    public static let shared = WhisperModelDownloadManager()
-
-    public var activeDownloadTier: WhisperModelTier? = nil
-    public var downloadProgress01: Double = 0.0
-    public var downloadedBytes: Int64 = 0
-    public var totalBytesExpected: Int64 = 0
-    public var downloadErrorMessage: String? = nil
-    public var installedRevision: Int = 0
-
-    private var urlSession: URLSession?
-    private var activeTask: URLSessionDownloadTask?
-    private var simulatedTimer: Timer?
-
-    private override init() {
-        super.init()
-    }
-
-    public nonisolated static var modelsDirectoryURL: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let dir = appSupport.appendingPathComponent("NativeScreen/WhisperModels", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
-    public func modelFileURL(for tier: WhisperModelTier) -> URL {
-        Self.modelsDirectoryURL.appendingPathComponent(tier.fileName)
-    }
-
-    public func isModelInstalled(_ tier: WhisperModelTier) -> Bool {
-        _ = installedRevision
-        let url = modelFileURL(for: tier)
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let size = attrs[.size] as? Int64 else {
-            return false
-        }
-        return size >= 1024
-    }
-
-    public var anyInstalledTier: WhisperModelTier? {
-        _ = installedRevision
-        for tier in [WhisperModelTier.small, .base, .medium] {
-            if isModelInstalled(tier) {
-                return tier
-            }
-        }
-        return nil
-    }
-
-    public var installedTooltipSummary: String? {
-        _ = installedRevision
-        let installed = WhisperModelTier.allCases.filter { isModelInstalled($0) }
-        guard !installed.isEmpty else { return nil }
-        let names = installed.map { "Whisper \($0.label) (\($0.fileName))" }.joined(separator: ", ")
-        return "Model \(names) is downloaded and ready locally on this Mac"
-    }
-
-    /// Prompts the user with a native confirmation dialog before downloading an open-source OpenAI Whisper model.
-    /// Returns `true` if the user agreed to start the download.
-    public func promptUserAndStartDownload(for tier: WhisperModelTier, onConfirmed: @escaping () -> Void = {}) {
-        guard activeDownloadTier == nil else { return }
-
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.icon = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download Whisper Model")
-        alert.messageText = String(localized: "Download OpenAI Whisper (\(tier.label)) Model?")
-        let intro = String(localized: "Native Screen will download the open-source OpenAI Whisper \"\(tier.label)\" (\(tier.fileName), ~\(tier.sizeDescription)) speech recognition model to your Mac:")
-        let path = "~/Library/Application Support/NativeScreen/WhisperModels/\(tier.fileName)"
-        let outro = String(localized: "Once downloaded, all transcription runs locally on your Mac and nothing is uploaded. You can cancel the download at any time.")
-        alert.informativeText = "\(intro)\n\n\(path)\n\n\(outro)"
-        alert.addButton(withTitle: String(localized: "Download (\(tier.sizeDescription))"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-
-        NSApp.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        onConfirmed()
-        startDownload(for: tier)
-    }
-
-    public func startDownload(for tier: WhisperModelTier) {
-        cancelActiveDownload()
-
-        downloadErrorMessage = nil
-        activeDownloadTier = tier
-        downloadProgress01 = 0.0
-        downloadedBytes = 0
-        totalBytesExpected = tier.expectedByteCount
-
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        let session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
-        self.urlSession = session
-
-        let task = session.downloadTask(with: tier.downloadURL)
-        self.activeTask = task
-        task.resume()
-    }
-
-    public func cancelActiveDownload() {
-        simulatedTimer?.invalidate()
-        simulatedTimer = nil
-        activeTask?.cancel()
-        activeTask = nil
-        urlSession?.invalidateAndCancel()
-        urlSession = nil
-        activeDownloadTier = nil
-        downloadProgress01 = 0.0
-        downloadedBytes = 0
-        totalBytesExpected = 0
-    }
-
-    // MARK: - URLSessionDownloadDelegate
-
-    nonisolated public func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didWriteData bytesWritten: Int64,
-        totalBytesWritten: Int64,
-        totalBytesExpectedToWrite: Int64
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self = self, self.activeDownloadTier != nil else { return }
-            let expected = totalBytesExpectedToWrite > 0
-                ? totalBytesExpectedToWrite
-                : (self.activeDownloadTier?.expectedByteCount ?? 147_951_465)
-            self.downloadedBytes = totalBytesWritten
-            self.totalBytesExpected = expected
-            self.downloadProgress01 = min(0.99, max(0.01, Double(totalBytesWritten) / Double(max(1, expected))))
-        }
-    }
-
-    nonisolated public func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didFinishDownloadingTo location: URL
-    ) {
-        // Copy temporary file immediately before URLSession deletes `location`
-        let tempCopyURL = FileManager.default.temporaryDirectory.appendingPathComponent("whisper_dl_\(UUID().uuidString).bin")
-        try? FileManager.default.removeItem(at: tempCopyURL)
-        try? FileManager.default.copyItem(at: location, to: tempCopyURL)
-
-        Task { @MainActor [weak self] in
-            guard let self = self, let tier = self.activeDownloadTier else {
-                try? FileManager.default.removeItem(at: tempCopyURL)
-                return
-            }
-            let destURL = self.modelFileURL(for: tier)
-            do {
-                try? FileManager.default.removeItem(at: destURL)
-                try FileManager.default.moveItem(at: tempCopyURL, to: destURL)
-                self.downloadProgress01 = 1.0
-                self.activeDownloadTier = nil
-                self.activeTask = nil
-                self.installedRevision &+= 1
-            } catch {
-                try? FileManager.default.removeItem(at: tempCopyURL)
-                self.downloadErrorMessage = error.localizedDescription
-                self.activeDownloadTier = nil
-            }
-        }
-    }
-
-    nonisolated public func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didCompleteWithError error: Error?
-    ) {
-        guard let error = error as NSError?, error.code != NSURLErrorCancelled else { return }
-        Task { @MainActor [weak self] in
-            guard let self = self, let tier = self.activeDownloadTier else { return }
-            // If offline or blocked by firewall, complete a progressive local model provisioning fallback
-            // so the user can still test the full progress bar, cancellation, and local checkmark flow!
-            self.runOfflineFallbackProvisioning(for: tier)
-        }
-    }
-
-    private func runOfflineFallbackProvisioning(for tier: WhisperModelTier) {
-        simulatedTimer?.invalidate()
-        let total = tier.expectedByteCount
-        self.totalBytesExpected = total
-
-        simulatedTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] timer in
-            Task { @MainActor [weak self] in
-                guard let self = self, self.activeDownloadTier == tier else {
-                    timer.invalidate()
-                    return
-                }
-                let nextProgress = min(1.0, self.downloadProgress01 + 0.045)
-                self.downloadProgress01 = nextProgress
-                self.downloadedBytes = Int64(Double(total) * nextProgress)
-
-                if nextProgress >= 1.0 {
-                    timer.invalidate()
-                    self.simulatedTimer = nil
-                    let destURL = self.modelFileURL(for: tier)
-                    let headerData = Data("GGML_WHISPER_MODEL_\(tier.rawValue.uppercased())_LOCAL_ON_DEVICE".utf8)
-                        + Data(repeating: 0, count: 4096)
-                    try? headerData.write(to: destURL, options: .atomic)
-                    self.activeDownloadTier = nil
-                    self.installedRevision &+= 1
-                }
-            }
-        }
-    }
-}
-
 /// 100% Local On-Device Media Intelligence Engine for NativeScreen:
-/// 1. **On-Device Speech-to-Text (`SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`)**:
-///    Generates word-level timestamped captions (`CaptionSegment`) directly from the recorded microphone or system audio track with zero network/cloud calls.
+/// 1. **On-Device Speech-to-Text**: the system recognizer (`SpeechTranscriber`, or `SFSpeechRecognizer` with
+///    `requiresOnDeviceRecognition = true` before macOS 26), or Whisper (`WhisperSpeech.swift`) for languages the system
+///    cannot do on this Mac. Word-level `CaptionSegment`s; the audio never leaves the Mac. The only network use is the
+///    one-time model download the person asks for (Whisper models, the system's own speech assets).
 /// 2. **On-Device Vision Face Tracking (`VNDetectFaceRectanglesRequest`) & Person Cutout (`VNGeneratePersonSegmentationRequest`)**:
 ///    Centers the webcam frame on the speaker's face and segments the speaker silhouette for `Camera cutout` layout 100% locally on Apple Silicon.
 /// 3. **Built-In Filmic Camera Color Grading Looks (`Studio`, `Cinema`, `Film`, `Golden`, `Cream`, `Terra`, `Moody`, `Arctic`, `Neon`, `Punch`, `Fade`, `Mono`) & `.cube` 3D LUT Parser**:
 ///    Applies real-time GPU color grading to the webcam feed in both preview and export.
 public enum LocalOnDeviceMediaIntelligence {
 
-    // MARK: - 1. On-Device Speech Transcription (`SFSpeechRecognizer`)
+    // MARK: - 1. Speech to text (system recognizer on this Mac, or Whisper)
 
     public struct SupportedSpeechLocale: Identifiable, Equatable, Sendable {
-        public let id: String // e.g. "en-US", "vi-VN"
+        /// Stored form, as Windows writes it: `"vi_VN"`, or `"auto"` to let Whisper detect the language.
+        public let id: String
         public let displayName: String
     }
 
-    public static func supportedLocales() -> [SupportedSpeechLocale] {
-        let rawLocales = SFSpeechRecognizer.supportedLocales()
-        let currentLocale = Locale.current
-        var items: [SupportedSpeechLocale] = rawLocales.map { loc in
-            let id = loc.identifier
-            let name = currentLocale.localizedString(forIdentifier: id)
-                ?? Locale(identifier: "en").localizedString(forIdentifier: id)
-                ?? id
-            return SupportedSpeechLocale(id: id, displayName: name.capitalized)
+    /// Transcript locales are stored with an underscore (`"vi_VN"`); older projects may have `"vi-VN"`.
+    public static func normalizedLocaleId(_ id: String) -> String {
+        id.replacingOccurrences(of: "-", with: "_")
+    }
+
+    public static func displayName(forLocale id: String) -> String {
+        if id == "auto" { return String(localized: "Detect") }
+        let name = Locale.current.localizedString(forIdentifier: id)
+            ?? Locale(identifier: "en").localizedString(forIdentifier: id)
+            ?? id
+        return name.prefix(1).uppercased() + name.dropFirst()
+    }
+
+    /// Languages offered for Whisper: Detect, then the app's interface languages. Same list as `TranscriptLanguages.Codes`
+    /// on Windows (spec/06 ADR-104).
+    static let whisperLocaleIds = [
+        "auto", "en_US", "vi_VN", "es_ES", "fr_FR", "de_DE", "it_IT", "pt_BR", "ru_RU", "tr_TR", "cs_CZ", "ar_SA",
+        "ja_JP", "ko_KR", "zh_CN", "zh_TW"
+    ]
+
+    /// Languages the system recognizer transcribes on this Mac without sending the audio anywhere.
+    /// `SpeechTranscriber` (macOS 26) is not on every Mac, so `isAvailable` decides, not only the OS version. Where it is
+    /// missing, the list, the check and the transcript all use `SFSpeechRecognizer` on device, so they always agree.
+    public static func appleOnDeviceLocaleIds() async -> [String] {
+        let locales: [Locale]
+        if #available(macOS 26.0, *), SpeechTranscriber.isAvailable {
+            locales = await SpeechTranscriber.supportedLocales
+        } else {
+            locales = SFSpeechRecognizer.supportedLocales().filter { SFSpeechRecognizer(locale: $0)?.supportsOnDeviceRecognition == true }
         }
-        items.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-        if items.isEmpty {
-            items = [
-                SupportedSpeechLocale(id: "en-US", displayName: "English (United States)"),
-                SupportedSpeechLocale(id: "vi-VN", displayName: "Vietnamese (Vietnam)")
-            ]
+        return locales.map { normalizedLocaleId($0.identifier) }
+    }
+
+    public static func appleTranscribesOnDevice(_ localeId: String) async -> Bool {
+        guard localeId != "auto" else { return false }
+        let locale = Locale(identifier: normalizedLocaleId(localeId))
+        if #available(macOS 26.0, *), SpeechTranscriber.isAvailable {
+            return await SpeechTranscriber.supportedLocale(equivalentTo: locale) != nil
         }
-        return items
+        return SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true
+    }
+
+    /// The languages the Language menu offers for an engine, `"auto"` first and the rest by name.
+    public static func transcriptLocales(for engine: TranscriptEngine) async -> [SupportedSpeechLocale] {
+        var ids: [String]
+        switch engine {
+        case .apple: ids = await appleOnDeviceLocaleIds()
+        case .whisper: ids = whisperLocaleIds
+        }
+        var seen = Set<String>()
+        ids = ids.filter { seen.insert($0).inserted }
+        let items = ids.filter { $0 != "auto" }
+            .map { SupportedSpeechLocale(id: $0, displayName: displayName(forLocale: $0)) }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        return ids.contains("auto") ? [SupportedSpeechLocale(id: "auto", displayName: displayName(forLocale: "auto"))] + items : items
     }
 
     public enum TranscriptionError: LocalizedError {
@@ -317,24 +93,26 @@ public enum LocalOnDeviceMediaIntelligence {
             case .permissionDenied:
                 return String(localized: "Speech recognition is not allowed. Enable it for Native Screen in System Settings > Privacy & Security > Speech Recognition.")
             case .unsupportedLanguage:
-                return String(localized: "On-device speech recognition does not support this language.")
+                return String(localized: "Apple's speech recognition can't transcribe this language on this Mac. Choose Whisper to transcribe it.")
             case .noSpeechFound:
                 return String(localized: "No speech was found in this recording.")
             }
         }
     }
 
-    /// Transcribes an audio/video file on-device. Failures are thrown so the user sees them; a caption is never invented.
-    public static func transcribeAudioFileOnDevice(
+    /// Transcribes with the system recognizer, on this Mac only. Failures are thrown so the user sees them; a caption is
+    /// never invented, and audio is never sent to a server: a language the Mac cannot do locally is refused.
+    public static func transcribeWithApple(
         audioURL: URL,
         localeIdentifier: String,
         customPromptWords: [String] = [],
         maxDurationMs: Double
     ) async throws -> [CaptionSegment] {
+        guard localeIdentifier != "auto" else { throw TranscriptionError.unsupportedLanguage }
         let normalizedId = localeIdentifier.replacingOccurrences(of: "_", with: "-")
         let segments: [CaptionSegment]
         // `SpeechTranscriber` works with Siri and Dictation turned off, unlike `SFSpeechRecognizer`.
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, *), SpeechTranscriber.isAvailable {
             segments = try await transcribeWithSpeechAnalyzer(audioURL: audioURL, localeIdentifier: normalizedId)
         } else {
             segments = try await transcribeWithSpeechRecognizer(
@@ -405,14 +183,15 @@ public enum LocalOnDeviceMediaIntelligence {
         }
         guard authStatus == .authorized else { throw TranscriptionError.permissionDenied }
 
-        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)), recognizer.isAvailable else {
+        // Without on-device support the request would go to Apple's servers, so such a language is refused.
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)),
+              recognizer.isAvailable,
+              recognizer.supportsOnDeviceRecognition else {
             throw TranscriptionError.unsupportedLanguage
         }
 
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+        request.requiresOnDeviceRecognition = true
         request.shouldReportPartialResults = false
         request.addsPunctuation = true
         if !customPromptWords.isEmpty {

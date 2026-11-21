@@ -18,7 +18,7 @@ export default {
     "video, GIF, hình ảnh và tệp phụ đề đã xuất;",
     "cài đặt của bạn.",
   ],
-  onDevice: "Phụ đề, bản chép lời, phát hiện dữ liệu nhạy cảm (email, khóa, khuôn mặt), theo dõi khuôn mặt và tách nền camera đều chạy trên máy bạn. Trên macOS, các tính năng này dùng framework có sẵn của Apple, và nhận dạng giọng nói được đặt chỉ chạy trên thiết bị, nên không có âm thanh nào được gửi tới Apple. Trên Windows, phụ đề dùng mô hình Whisper và tách nền dùng mô hình MODNet. Mỗi mô hình được tải về một lần rồi chạy cục bộ.",
+  onDevice: "Phụ đề, bản chép lời, phát hiện dữ liệu nhạy cảm (email, khóa, khuôn mặt), theo dõi khuôn mặt và tách nền camera đều chạy trên máy bạn. Trên macOS, các tính năng này dùng framework có sẵn của Apple, và nhận dạng giọng nói được đặt chỉ chạy trên thiết bị, nên không có âm thanh nào được gửi tới Apple. Lần đầu bạn dùng một ngôn ngữ trên đó, macOS có thể tải các tệp giọng nói của ngôn ngữ ấy từ Apple. Phụ đề cũng có thể dùng mô hình Whisper: trên macOS khi bạn chọn nó, và luôn luôn trên Windows. Tách nền trên Windows dùng mô hình MODNet. Mỗi mô hình được tải về một lần rồi chạy cục bộ.",
   keys: "Phím bấm chỉ được ghi khi đang quay. Chúng được lưu trong chính dự án đó và không ở nơi nào khác, và bạn có thể xóa chúng bằng cách xóa dự án.",
 
   permH: "Các quyền ứng dụng yêu cầu",
@@ -40,10 +40,10 @@ export default {
   leaveP: "Ứng dụng chỉ kết nối internet trong các trường hợp sau. Không trường hợp nào gửi kèm bản ghi, dự án hay bất cứ điều gì bạn đã gõ.",
   leaveCols: ["Khi nào", "Đến đâu", "Gửi những gì"],
   leave: [
-    ["Lần đầu bạn dùng phụ đề hoặc tách nền camera trên Windows", "Hugging Face (huggingface.co)", "Một yêu cầu tải tệp mô hình. Hugging Face thấy địa chỉ IP của bạn, như với mọi lượt tải xuống. Ứng dụng macOS không tải mô hình nào."],
+    ["Lần đầu bạn dùng mô hình Whisper cho phụ đề (macOS và Windows) hoặc tách nền camera trên Windows", "Hugging Face (huggingface.co)", "Một yêu cầu tải tệp mô hình. Hugging Face thấy địa chỉ IP của bạn, như với mọi lượt tải xuống."],
     ["Kiểm tra và tải bản cập nhật (macOS ngoài Mac App Store, và Windows ngoài Microsoft Store)", "GitHub", "Một yêu cầu lấy bản phát hành mới nhất và, khi có, tệp cập nhật. GitHub thấy địa chỉ IP của bạn và các header thông thường của yêu cầu. Không có thông tin nào về bạn hay bản ghi của bạn. Bạn có thể tắt tự động kiểm tra trong Cài đặt."],
     ["Bản trên Microsoft Store", "Microsoft", "Store cài đặt và cập nhật ứng dụng, ứng dụng không có trình cập nhật riêng. Microsoft có thể thu thập dữ liệu chẩn đoán theo <a href=\"https://privacy.microsoft.com/privacystatement\">tuyên bố quyền riêng tư</a> của họ."],
-    ["Bản trên Mac App Store", "Apple", "App Store cài đặt và cập nhật ứng dụng, ứng dụng không có trình cập nhật riêng và không kết nối internet. Apple có thể thu thập dữ liệu chẩn đoán theo <a href=\"https://www.apple.com/legal/privacy/\">chính sách quyền riêng tư</a> của họ."],
+    ["Bản trên Mac App Store", "Apple", "App Store cài đặt và cập nhật ứng dụng, ứng dụng không có trình cập nhật riêng. Kết nối internet duy nhất của nó là việc tải mô hình Whisper nêu ở trên. Apple có thể thu thập dữ liệu chẩn đoán theo <a href=\"https://www.apple.com/legal/privacy/\">chính sách quyền riêng tư</a> của họ."],
   ],
 
   agentsH: "AI agent",

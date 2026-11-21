@@ -18,7 +18,7 @@ export default {
     "vídeos, GIF, imágenes y archivos de subtítulos exportados;",
     "tus ajustes.",
   ],
-  onDevice: "Los subtítulos, las transcripciones, la detección de datos sensibles (correos, claves, caras), el seguimiento facial y la eliminación del fondo de la cámara se ejecutan en tu ordenador. En macOS usan los frameworks integrados de Apple, y el reconocimiento de voz está configurado para ejecutarse solo en el dispositivo, así que no se envía audio a Apple. En Windows, los subtítulos usan un modelo Whisper y la eliminación del fondo un modelo MODNet. Cada uno se descarga una vez y después se ejecuta en local.",
+  onDevice: "Los subtítulos, las transcripciones, la detección de datos sensibles (correos, claves, caras), el seguimiento facial y la eliminación del fondo de la cámara se ejecutan en tu ordenador. En macOS usan los frameworks integrados de Apple, y el reconocimiento de voz está configurado para ejecutarse solo en el dispositivo, así que no se envía audio a Apple. La primera vez que usas un idioma allí, macOS puede descargar de Apple los archivos de voz de ese idioma. Los subtítulos también pueden usar un modelo Whisper: en macOS cuando lo eliges, y siempre en Windows. En Windows, la eliminación del fondo usa un modelo MODNet. Cada modelo se descarga una vez y después se ejecuta en local.",
   keys: "Las pulsaciones de teclas solo se registran mientras hay una grabación en curso. Se guardan dentro de ese proyecto y en ningún otro sitio, y puedes borrarlas borrando el proyecto.",
 
   permH: "Permisos que pide la app",
@@ -40,10 +40,10 @@ export default {
   leaveP: "La app solo se conecta a internet en estos casos. Ninguno incluye tus grabaciones, tus proyectos ni nada de lo que hayas escrito.",
   leaveCols: ["Cuándo", "Adónde", "Qué se envía"],
   leave: [
-    ["La primera vez que usas los subtítulos o la eliminación del fondo de la cámara en Windows", "Hugging Face (huggingface.co)", "Una solicitud para descargar el archivo del modelo. Hugging Face ve tu dirección IP, como en cualquier descarga. La app de macOS no descarga ningún modelo."],
+    ["La primera vez que usas un modelo Whisper para los subtítulos (macOS y Windows) o la eliminación del fondo de la cámara en Windows", "Hugging Face (huggingface.co)", "Una solicitud para descargar el archivo del modelo. Hugging Face ve tu dirección IP, como en cualquier descarga."],
     ["Al buscar y descargar actualizaciones (macOS fuera de Mac App Store, y Windows fuera de Microsoft Store)", "GitHub", "Una solicitud de la última versión y, si la hay, el archivo de actualización. GitHub ve tu dirección IP y las cabeceras habituales de la solicitud. No incluye nada sobre ti ni sobre tus grabaciones. Puedes desactivar la comprobación automática en Ajustes."],
     ["Versión de Microsoft Store", "Microsoft", "La Store instala y actualiza la app, que no tiene actualizador propio. Microsoft puede recopilar datos de diagnóstico según su propia <a href=\"https://privacy.microsoft.com/privacystatement\">declaración de privacidad</a>."],
-    ["Versión de Mac App Store", "Apple", "La App Store instala y actualiza la app, que no tiene actualizador propio ni se conecta a internet. Apple puede recopilar datos de diagnóstico según su propia <a href=\"https://www.apple.com/legal/privacy/\">política de privacidad</a>."],
+    ["Versión de Mac App Store", "Apple", "La App Store instala y actualiza la app, que no tiene actualizador propio. Su única conexión a internet es la descarga de un modelo Whisper indicada arriba. Apple puede recopilar datos de diagnóstico según su propia <a href=\"https://www.apple.com/legal/privacy/\">política de privacidad</a>."],
   ],
 
   agentsH: "Agentes de IA",

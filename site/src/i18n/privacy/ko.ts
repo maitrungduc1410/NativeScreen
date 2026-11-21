@@ -18,7 +18,7 @@ export default {
     "내보낸 동영상, GIF, 이미지, 자막 파일",
     "설정",
   ],
-  onDevice: "자막, 대본, 민감한 정보 감지(이메일, 키, 얼굴), 얼굴 추적, 카메라 배경 제거는 모두 사용자의 컴퓨터에서 실행됩니다. macOS에서는 Apple의 기본 프레임워크를 사용하며, 음성 인식은 기기에서만 실행되도록 설정되어 있어 어떤 오디오도 Apple로 전송되지 않습니다. Windows에서는 자막에 Whisper 모델을, 배경 제거에 MODNet 모델을 사용합니다. 각 모델은 한 번만 다운로드된 뒤 로컬에서 실행됩니다.",
+  onDevice: "자막, 대본, 민감한 정보 감지(이메일, 키, 얼굴), 얼굴 추적, 카메라 배경 제거는 모두 사용자의 컴퓨터에서 실행됩니다. macOS에서는 Apple의 기본 프레임워크를 사용하며, 음성 인식은 기기에서만 실행되도록 설정되어 있어 어떤 오디오도 Apple로 전송되지 않습니다. macOS에서 어떤 언어를 처음 사용할 때 macOS가 Apple에서 그 언어의 음성 파일을 다운로드할 수 있습니다. 자막에는 Whisper 모델도 사용할 수 있습니다. macOS에서는 선택했을 때, Windows에서는 항상 사용합니다. Windows의 배경 제거에는 MODNet 모델을 사용합니다. 각 모델은 한 번만 다운로드된 뒤 로컬에서 실행됩니다.",
   keys: "키 입력은 녹화가 진행되는 동안에만 기록됩니다. 해당 프로젝트 안에만 저장되고 다른 곳에는 저장되지 않으며, 프로젝트를 삭제하면 함께 삭제됩니다.",
 
   permH: "앱이 요청하는 권한",
@@ -40,10 +40,10 @@ export default {
   leaveP: "앱은 다음 경우에만 인터넷에 연결합니다. 어느 경우에도 녹화, 프로젝트, 입력한 내용은 포함되지 않습니다.",
   leaveCols: ["시점", "대상", "전송되는 내용"],
   leave: [
-    ["Windows에서 자막이나 카메라 배경 제거를 처음 사용할 때", "Hugging Face(huggingface.co)", "모델 파일을 다운로드하는 요청. 여느 다운로드와 마찬가지로 Hugging Face는 사용자의 IP 주소를 볼 수 있습니다. macOS 앱은 모델을 다운로드하지 않습니다."],
+    ["자막에 Whisper 모델을 처음 사용할 때(macOS 및 Windows) 또는 Windows에서 카메라 배경 제거를 처음 사용할 때", "Hugging Face(huggingface.co)", "모델 파일을 다운로드하는 요청. 여느 다운로드와 마찬가지로 Hugging Face는 사용자의 IP 주소를 볼 수 있습니다."],
     ["업데이트 확인 및 다운로드(Mac App Store 외의 macOS, 그리고 Microsoft Store 외의 Windows)", "GitHub", "최신 릴리스를 가져오는 요청과, 새 릴리스가 있으면 업데이트 파일 다운로드. GitHub는 IP 주소와 표준 요청 헤더를 볼 수 있습니다. 사용자나 녹화에 관한 정보는 포함되지 않습니다. 자동 확인은 설정에서 끌 수 있습니다."],
     ["Microsoft Store 버전", "Microsoft", "Store가 앱을 설치하고 업데이트하며, 앱 자체에는 업데이트 기능이 없습니다. Microsoft는 자체 <a href=\"https://privacy.microsoft.com/privacystatement\">개인정보처리방침</a>에 따라 진단 데이터를 수집할 수 있습니다."],
-    ["Mac App Store 버전", "Apple", "App Store가 앱을 설치하고 업데이트하며, 앱 자체에는 업데이트 기능이 없고 인터넷에 연결하지 않습니다. Apple은 자체 <a href=\"https://www.apple.com/legal/privacy/\">개인정보 처리방침</a>에 따라 진단 데이터를 수집할 수 있습니다."],
+    ["Mac App Store 버전", "Apple", "App Store가 앱을 설치하고 업데이트하며, 앱 자체에는 업데이트 기능이 없습니다. 인터넷 연결은 위에 적힌 Whisper 모델 다운로드뿐입니다. Apple은 자체 <a href=\"https://www.apple.com/legal/privacy/\">개인정보 처리방침</a>에 따라 진단 데이터를 수집할 수 있습니다."],
   ],
 
   agentsH: "AI 에이전트",

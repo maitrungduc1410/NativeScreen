@@ -18,7 +18,7 @@ export default {
     "les vidéos, GIF, images et fichiers de sous-titres exportés ;",
     "vos réglages.",
   ],
-  onDevice: "Les sous-titres, les transcriptions, la détection des données sensibles (e-mails, clés, visages), le suivi du visage et la suppression de l’arrière-plan de la caméra fonctionnent tous sur votre ordinateur. Sur macOS, ils utilisent les frameworks intégrés d’Apple, et la reconnaissance vocale est réglée pour fonctionner uniquement sur l’appareil : aucun son n’est donc envoyé à Apple. Sur Windows, les sous-titres utilisent un modèle Whisper et la suppression de l’arrière-plan un modèle MODNet. Chacun est téléchargé une fois, puis fonctionne en local.",
+  onDevice: "Les sous-titres, les transcriptions, la détection des données sensibles (e-mails, clés, visages), le suivi du visage et la suppression de l’arrière-plan de la caméra fonctionnent tous sur votre ordinateur. Sur macOS, ils utilisent les frameworks intégrés d’Apple, et la reconnaissance vocale est réglée pour fonctionner uniquement sur l’appareil : aucun son n’est donc envoyé à Apple. La première fois que vous y utilisez une langue, macOS peut télécharger auprès d’Apple les fichiers vocaux de cette langue. Les sous-titres peuvent aussi utiliser un modèle Whisper : sur macOS si vous le choisissez, et toujours sur Windows. Sur Windows, la suppression de l’arrière-plan utilise un modèle MODNet. Chaque modèle est téléchargé une fois, puis fonctionne en local.",
   keys: "Les touches ne sont enregistrées que pendant un enregistrement. Elles sont sauvegardées dans ce projet et nulle part ailleurs, et vous pouvez les supprimer en supprimant le projet.",
 
   permH: "Autorisations demandées par l’app",
@@ -40,10 +40,10 @@ export default {
   leaveP: "L’app ne se connecte à Internet que dans ces cas. Aucun d’eux n’inclut vos enregistrements, vos projets ni ce que vous avez tapé.",
   leaveCols: ["Quand", "Où", "Ce qui est envoyé"],
   leave: [
-    ["La première fois que vous utilisez les sous-titres ou la suppression de l’arrière-plan de la caméra sur Windows", "Hugging Face (huggingface.co)", "Une requête de téléchargement du fichier du modèle. Hugging Face voit votre adresse IP, comme pour tout téléchargement. L’app macOS ne télécharge aucun modèle."],
+    ["La première fois que vous utilisez un modèle Whisper pour les sous-titres (macOS et Windows) ou la suppression de l’arrière-plan de la caméra sur Windows", "Hugging Face (huggingface.co)", "Une requête de téléchargement du fichier du modèle. Hugging Face voit votre adresse IP, comme pour tout téléchargement."],
     ["Recherche et téléchargement des mises à jour (macOS hors Mac App Store, et Windows hors Microsoft Store)", "GitHub", "Une requête pour la dernière version et, s’il y en a une, le fichier de mise à jour. GitHub voit votre adresse IP et les en-têtes de requête habituels. Rien sur vous ni sur vos enregistrements n’y figure. Vous pouvez désactiver la vérification automatique dans les Réglages."],
     ["Version du Microsoft Store", "Microsoft", "Le Store installe et met à jour l’app, qui n’a pas de système de mise à jour propre. Microsoft peut collecter des données de diagnostic selon sa propre <a href=\"https://privacy.microsoft.com/privacystatement\">déclaration de confidentialité</a>."],
-    ["Version du Mac App Store", "Apple", "L’App Store installe et met à jour l’app, qui n’a pas de système de mise à jour propre et ne se connecte pas à Internet. Apple peut collecter des données de diagnostic selon sa propre <a href=\"https://www.apple.com/legal/privacy/\">politique de confidentialité</a>."],
+    ["Version du Mac App Store", "Apple", "L’App Store installe et met à jour l’app, qui n’a pas de système de mise à jour propre. Sa seule connexion à Internet est le téléchargement d’un modèle Whisper indiqué plus haut. Apple peut collecter des données de diagnostic selon sa propre <a href=\"https://www.apple.com/legal/privacy/\">politique de confidentialité</a>."],
   ],
 
   agentsH: "Agents IA",

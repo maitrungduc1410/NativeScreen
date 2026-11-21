@@ -27,6 +27,19 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-105: Whisper on macOS (two things to port to Windows)
+
+### Writer
+- **Scope:** macOS now transcribes with Whisper too (whisper.cpp xcframework, Metal), next to Apple's recognizer, chosen by the person (`Apple | Whisper`). Same model files, URL, sizes, tiers, `.part` download and exact byte check as Windows; same speech regions (ADR-25), one segment per word, language list and Chinese prompt (ADR-104). Details in `spec/06` ADR-105. Two fixes made on macOS are missing on Windows:
+  1. **Transcript words overlap.** Whisper stretches a sentence's last word into the pause, past the next region's first word, so the caption blocks built from them overlap on the timeline (owner's Vietnamese recording: "3..." 2260 to 4460 ms, next word "3," from 4390). Edit by transcript also cuts by these times, so deleting the first word would cut the start of the next. Port to `TranscriptSegments.Normalize` (`NativeScreen.Core/Editing/TranscriptEditing.cs`), from `WhisperTranscriber.normalize` in `macos/NativeScreen/Engine/WhisperSpeech.swift`: walk the sorted, non-empty words keeping `previousEnd` (starts at 0). `start = clamp(max(previousEnd, word.start), 0, max)`, `nextStart = next word's start or max`, `end = min(max(word.end, start + 40), max(nextStart, start + 1), max)`; keep the word when `end > start`; `previousEnd = end`.
+  2. **The model a project opens with.** `WhisperModelTier` defaults to `"small"`, so a project opens on Small even when only Base is downloaded. macOS: a project without a transcript (`Segments` empty) opens on the only downloaded tier, or the most recently used of several; with none downloaded, or with a transcript, it keeps its own. "Most recently used" is app-wide (macOS user defaults `NativeScreen.LastWhisperModelTier`), set when a tier is chosen, finishes downloading, or transcribes. It is applied when the project loads, without an undo step or unsaved changes. A Windows setting next to `settings.json` would do.
+- **Shared data:** macOS now writes `captions.localModelVariant` as `"apple"` or `"whisper"`. Windows ignores the field and must keep it as it reads it. Anything else, including Windows' `"system"`, opens on macOS as Apple.
+- **Shared string catalog:** new macOS keys for the engine notes, model descriptions, download and Whisper errors. Windows does not show them. Nothing to do.
+- **Built on macOS:** no `dotnet` on this machine, so nothing for Windows was built. Both macOS schemes build. Fix 1 was checked on the owner's recording (2260 to 4460 became 2260 to 4390) and on same-start, past-the-end and blank words.
+- **How to verify:** (1) a Core test with words `("3...", 2260, 4460), ("3,", 4390, 5190)`: no word ends after the next word starts; then transcribe a recording with a pause between sentences and check no two caption blocks overlap. (2) Download only Base, open a new recording: Captions > Model shows Base. Download Small, choose it, open another new recording: Small. Open a project that has a transcript made with Medium: Medium.
+- **Open VERIFY items:** none.
+- **Risks / unsure:** transcripts made before fix 1 keep their times until generated again.
+
 ## 2026-11-21, ADR-104: Transcripts in every interface language (Windows only)
 
 ### Verifier

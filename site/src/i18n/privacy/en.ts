@@ -20,7 +20,7 @@ export default {
     "exported videos, GIFs, images and caption files;",
     "your settings.",
   ],
-  onDevice: "Captions, transcripts, sensitive data detection (emails, keys, faces), face tracking and camera background removal all run on your computer. On macOS they use Apple's built-in frameworks, and speech recognition is set to run on the device only, so no audio is sent to Apple. On Windows, captions use a Whisper model and background removal uses a MODNet model. Each is downloaded once and then runs locally.",
+  onDevice: "Captions, transcripts, sensitive data detection (emails, keys, faces), face tracking and camera background removal all run on your computer. On macOS they use Apple's built-in frameworks, and speech recognition is set to run on the device only, so no audio is sent to Apple. The first time you use a language there, macOS may download that language's speech files from Apple. Captions can also use a Whisper model: on macOS when you choose it, and always on Windows. Background removal on Windows uses a MODNet model. Each model is downloaded once and then runs locally.",
   keys: "Key presses are only recorded while a recording is running. They are saved inside that project and nowhere else, and you can delete them by deleting the project.",
 
   permH: "Permissions the app asks for",
@@ -42,10 +42,10 @@ export default {
   leaveP: "The app connects to the internet only in these cases. None of them include your recordings, your projects or anything you typed.",
   leaveCols: ["When", "Where", "What is sent"],
   leave: [
-    ["The first time you use captions or camera background removal on Windows", "Hugging Face (huggingface.co)", "A request to download the model file. Hugging Face sees your IP address, as with any download. The macOS app downloads no models."],
+    ["The first time you use a Whisper model for captions (macOS and Windows) or camera background removal on Windows", "Hugging Face (huggingface.co)", "A request to download the model file. Hugging Face sees your IP address, as with any download."],
     ["Checking for and downloading updates (macOS outside the Mac App Store, and Windows outside the Microsoft Store)", "GitHub", "A request for the latest release and, when there is one, the update file. GitHub sees your IP address and standard request headers. Nothing about you or your recordings is included. You can turn automatic checks off in Settings."],
     ["Microsoft Store version", "Microsoft", "The Store installs and updates the app, which has no updater of its own. Microsoft may collect diagnostic data under its own <a href=\"https://privacy.microsoft.com/privacystatement\">privacy statement</a>."],
-    ["Mac App Store version", "Apple", "The App Store installs and updates the app, which has no updater of its own and makes no internet connections. Apple may collect diagnostic data under its own <a href=\"https://www.apple.com/legal/privacy/\">privacy policy</a>."],
+    ["Mac App Store version", "Apple", "The App Store installs and updates the app, which has no updater of its own. Its only internet connection is the Whisper model download listed above. Apple may collect diagnostic data under its own <a href=\"https://www.apple.com/legal/privacy/\">privacy policy</a>."],
   ],
 
   agentsH: "AI agents",

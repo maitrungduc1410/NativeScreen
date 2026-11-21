@@ -18,7 +18,7 @@ export default {
     "vídeos, GIFs, imagens e arquivos de legenda exportados;",
     "seus ajustes.",
   ],
-  onDevice: "Legendas, transcrições, detecção de dados sensíveis (e-mails, chaves, rostos), rastreamento facial e remoção do fundo da câmera rodam no seu computador. No macOS, eles usam os frameworks integrados da Apple, e o reconhecimento de fala é configurado para rodar só no dispositivo, então nenhum áudio é enviado à Apple. No Windows, as legendas usam um modelo Whisper e a remoção do fundo usa um modelo MODNet. Cada um é baixado uma vez e depois roda localmente.",
+  onDevice: "Legendas, transcrições, detecção de dados sensíveis (e-mails, chaves, rostos), rastreamento facial e remoção do fundo da câmera rodam no seu computador. No macOS, eles usam os frameworks integrados da Apple, e o reconhecimento de fala é configurado para rodar só no dispositivo, então nenhum áudio é enviado à Apple. Na primeira vez que você usa um idioma ali, o macOS pode baixar da Apple os arquivos de fala desse idioma. As legendas também podem usar um modelo Whisper: no macOS quando você o escolhe, e sempre no Windows. No Windows, a remoção do fundo usa um modelo MODNet. Cada modelo é baixado uma vez e depois roda localmente.",
   keys: "As teclas só são registradas enquanto uma gravação está em andamento. Elas são salvas dentro daquele projeto e em nenhum outro lugar, e você pode apagá-las apagando o projeto.",
 
   permH: "Permissões que o app pede",
@@ -40,10 +40,10 @@ export default {
   leaveP: "O app só se conecta à internet nestes casos. Nenhum deles inclui suas gravações, seus projetos ou qualquer coisa que você digitou.",
   leaveCols: ["Quando", "Para onde", "O que é enviado"],
   leave: [
-    ["Na primeira vez que você usa legendas ou a remoção do fundo da câmera no Windows", "Hugging Face (huggingface.co)", "Uma solicitação para baixar o arquivo do modelo. O Hugging Face vê seu endereço IP, como em qualquer download. O app para macOS não baixa nenhum modelo."],
+    ["Na primeira vez que você usa um modelo Whisper para legendas (macOS e Windows) ou a remoção do fundo da câmera no Windows", "Hugging Face (huggingface.co)", "Uma solicitação para baixar o arquivo do modelo. O Hugging Face vê seu endereço IP, como em qualquer download."],
     ["Ao verificar e baixar atualizações (macOS fora da Mac App Store, e Windows fora da Microsoft Store)", "GitHub", "Uma solicitação da versão mais recente e, quando houver, do arquivo de atualização. O GitHub vê seu endereço IP e os cabeçalhos comuns da solicitação. Nada sobre você ou suas gravações é incluído. Você pode desligar a verificação automática nos Ajustes."],
     ["Versão da Microsoft Store", "Microsoft", "A Store instala e atualiza o app, que não tem atualizador próprio. A Microsoft pode coletar dados de diagnóstico de acordo com a sua própria <a href=\"https://privacy.microsoft.com/privacystatement\">declaração de privacidade</a>."],
-    ["Versão da Mac App Store", "Apple", "A App Store instala e atualiza o app, que não tem atualizador próprio e não se conecta à internet. A Apple pode coletar dados de diagnóstico de acordo com a sua própria <a href=\"https://www.apple.com/legal/privacy/\">política de privacidade</a>."],
+    ["Versão da Mac App Store", "Apple", "A App Store instala e atualiza o app, que não tem atualizador próprio. Sua única conexão com a internet é o download de um modelo Whisper listado acima. A Apple pode coletar dados de diagnóstico de acordo com a sua própria <a href=\"https://www.apple.com/legal/privacy/\">política de privacidade</a>."],
   ],
 
   agentsH: "Agentes de IA",

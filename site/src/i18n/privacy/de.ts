@@ -18,7 +18,7 @@ export default {
     "exportierte Videos, GIFs, Bilder und Untertiteldateien;",
     "deine Einstellungen.",
   ],
-  onDevice: "Untertitel, Transkripte, die Erkennung sensibler Daten (E-Mail-Adressen, Schlüssel, Gesichter), Gesichtsverfolgung und das Entfernen des Kamerahintergrunds laufen alle auf deinem Computer. Unter macOS nutzen sie die integrierten Frameworks von Apple, und die Spracherkennung ist so eingestellt, dass sie nur auf dem Gerät läuft. Es wird also kein Ton an Apple gesendet. Unter Windows nutzen Untertitel ein Whisper-Modell und das Entfernen des Hintergrunds ein MODNet-Modell. Jedes wird einmal heruntergeladen und läuft danach lokal.",
+  onDevice: "Untertitel, Transkripte, die Erkennung sensibler Daten (E-Mail-Adressen, Schlüssel, Gesichter), Gesichtsverfolgung und das Entfernen des Kamerahintergrunds laufen alle auf deinem Computer. Unter macOS nutzen sie die integrierten Frameworks von Apple, und die Spracherkennung ist so eingestellt, dass sie nur auf dem Gerät läuft. Es wird also kein Ton an Apple gesendet. Wenn du dort eine Sprache zum ersten Mal nutzt, kann macOS die Sprachdateien dieser Sprache von Apple herunterladen. Untertitel können auch ein Whisper-Modell nutzen: unter macOS, wenn du es auswählst, und unter Windows immer. Das Entfernen des Hintergrunds nutzt unter Windows ein MODNet-Modell. Jedes Modell wird einmal heruntergeladen und läuft danach lokal.",
   keys: "Tastendrücke werden nur während einer laufenden Aufnahme erfasst. Sie werden nur in diesem Projekt gespeichert und nirgendwo sonst, und du kannst sie löschen, indem du das Projekt löschst.",
 
   permH: "Berechtigungen, die die App anfragt",
@@ -40,10 +40,10 @@ export default {
   leaveP: "Die App verbindet sich nur in diesen Fällen mit dem Internet. Keiner davon enthält deine Aufnahmen, deine Projekte oder etwas, das du getippt hast.",
   leaveCols: ["Wann", "Wohin", "Was gesendet wird"],
   leave: [
-    ["Wenn du unter Windows zum ersten Mal Untertitel oder das Entfernen des Kamerahintergrunds nutzt", "Hugging Face (huggingface.co)", "Eine Anfrage zum Herunterladen der Modelldatei. Hugging Face sieht deine IP-Adresse, wie bei jedem Download. Die macOS-App lädt keine Modelle herunter."],
+    ["Wenn du zum ersten Mal ein Whisper-Modell für Untertitel (macOS und Windows) oder unter Windows das Entfernen des Kamerahintergrunds nutzt", "Hugging Face (huggingface.co)", "Eine Anfrage zum Herunterladen der Modelldatei. Hugging Face sieht deine IP-Adresse, wie bei jedem Download."],
     ["Nach Updates suchen und sie herunterladen (macOS außerhalb des Mac App Store und Windows außerhalb des Microsoft Store)", "GitHub", "Eine Anfrage nach der neuesten Version und, falls es eine gibt, der Update-Datei. GitHub sieht deine IP-Adresse und die üblichen Anfrage-Header. Nichts über dich oder deine Aufnahmen ist enthalten. Die automatische Prüfung lässt sich in den Einstellungen ausschalten."],
     ["Version aus dem Microsoft Store", "Microsoft", "Der Store installiert und aktualisiert die App, die keinen eigenen Updater hat. Microsoft kann nach seiner eigenen <a href=\"https://privacy.microsoft.com/privacystatement\">Datenschutzerklärung</a> Diagnosedaten erheben."],
-    ["Version aus dem Mac App Store", "Apple", "Der App Store installiert und aktualisiert die App, die keinen eigenen Updater hat und keine Internetverbindungen aufbaut. Apple kann nach seiner eigenen <a href=\"https://www.apple.com/legal/privacy/\">Datenschutzrichtlinie</a> Diagnosedaten erheben."],
+    ["Version aus dem Mac App Store", "Apple", "Der App Store installiert und aktualisiert die App, die keinen eigenen Updater hat. Ihre einzige Internetverbindung ist der oben genannte Download eines Whisper-Modells. Apple kann nach seiner eigenen <a href=\"https://www.apple.com/legal/privacy/\">Datenschutzrichtlinie</a> Diagnosedaten erheben."],
   ],
 
   agentsH: "KI-Agenten",

@@ -18,7 +18,7 @@ export default {
     "exportovaná videa, GIFy, obrázky a soubory titulků;",
     "vaše nastavení.",
   ],
-  onDevice: "Titulky, přepisy, hledání citlivých údajů (e-maily, klíče, obličeje), sledování obličeje a odstranění pozadí kamery běží na vašem počítači. V macOS používají vestavěné frameworky Applu a rozpoznávání řeči je nastavené tak, aby běželo jen na zařízení, takže se do Applu neposílá žádný zvuk. Ve Windows používají titulky model Whisper a odstranění pozadí model MODNet. Každý se stáhne jednou a pak běží místně.",
+  onDevice: "Titulky, přepisy, hledání citlivých údajů (e-maily, klíče, obličeje), sledování obličeje a odstranění pozadí kamery běží na vašem počítači. V macOS používají vestavěné frameworky Applu a rozpoznávání řeči je nastavené tak, aby běželo jen na zařízení, takže se do Applu neposílá žádný zvuk. Při prvním použití jazyka tam může macOS stáhnout od Applu soubory řeči pro tento jazyk. Titulky mohou používat také model Whisper: v macOS, když si ho vyberete, a ve Windows vždy. Odstranění pozadí ve Windows používá model MODNet. Každý model se stáhne jednou a pak běží místně.",
   keys: "Stisky kláves se zaznamenávají jen během nahrávání. Ukládají se do daného projektu a nikam jinam a smažete je smazáním projektu.",
 
   permH: "Oprávnění, o která aplikace žádá",
@@ -40,10 +40,10 @@ export default {
   leaveP: "Aplikace se připojuje k internetu jen v těchto případech. Žádný z nich nezahrnuje vaše záznamy, projekty ani nic, co jste napsali.",
   leaveCols: ["Kdy", "Kam", "Co se posílá"],
   leave: [
-    ["Při prvním použití titulků nebo odstranění pozadí kamery ve Windows", "Hugging Face (huggingface.co)", "Požadavek na stažení souboru modelu. Hugging Face vidí vaši IP adresu jako u každého stahování. Aplikace pro macOS žádné modely nestahuje."],
+    ["Při prvním použití modelu Whisper pro titulky (macOS i Windows) nebo odstranění pozadí kamery ve Windows", "Hugging Face (huggingface.co)", "Požadavek na stažení souboru modelu. Hugging Face vidí vaši IP adresu jako u každého stahování."],
     ["Kontrola a stahování aktualizací (macOS mimo Mac App Store a Windows mimo Microsoft Store)", "GitHub", "Požadavek na nejnovější verzi a, pokud existuje, soubor aktualizace. GitHub vidí vaši IP adresu a běžné hlavičky požadavku. Nic o vás ani o vašich záznamech se neposílá. Automatické kontroly můžete vypnout v Nastavení."],
     ["Verze z Microsoft Store", "Microsoft", "Store aplikaci instaluje a aktualizuje, aplikace nemá vlastní aktualizační mechanismus. Microsoft může shromažďovat diagnostická data podle svého <a href=\"https://privacy.microsoft.com/privacystatement\">prohlášení o zásadách ochrany osobních údajů</a>."],
-    ["Verze z Mac App Store", "Apple", "App Store aplikaci instaluje a aktualizuje, aplikace nemá vlastní aktualizační mechanismus a nepřipojuje se k internetu. Apple může shromažďovat diagnostická data podle svých <a href=\"https://www.apple.com/legal/privacy/\">zásad ochrany osobních údajů</a>."],
+    ["Verze z Mac App Store", "Apple", "App Store aplikaci instaluje a aktualizuje, aplikace nemá vlastní aktualizační mechanismus. K internetu se připojuje jen při stažení modelu Whisper uvedeném výše. Apple může shromažďovat diagnostická data podle svých <a href=\"https://www.apple.com/legal/privacy/\">zásad ochrany osobních údajů</a>."],
   ],
 
   agentsH: "AI agenti",

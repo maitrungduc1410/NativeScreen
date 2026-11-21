@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		2BB19C70308CE110008F49EA /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 2BB19C71308CE110008F49EA /* Sparkle */; };
+		2BB19CA0308CF000008F49EA /* whisper in Frameworks */ = {isa = PBXBuildFile; productRef = 2BB19CA2308CF000008F49EA /* whisper */; };
+		2BB19CA1308CF000008F49EA /* whisper in Frameworks */ = {isa = PBXBuildFile; productRef = 2BB19CA3308CF000008F49EA /* whisper */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,11 +30,13 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				2BB19C70308CE110008F49EA /* Sparkle in Frameworks */,
+				2BB19CA0308CF000008F49EA /* whisper in Frameworks */,
 			);
 		};
 		2BB19C82308CE200008F49EA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				2BB19CA1308CF000008F49EA /* whisper in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -74,6 +78,7 @@
 			name = NativeScreen;
 			packageProductDependencies = (
 				2BB19C71308CE110008F49EA /* Sparkle */,
+				2BB19CA2308CF000008F49EA /* whisper */,
 			);
 			productName = NativeScreen;
 			productReference = 2BB19C5E308CE10F008F49EA /* NativeScreen.app */;
@@ -93,6 +98,9 @@
 				2BB19C60308CE10F008F49EA /* NativeScreen */,
 			);
 			name = "NativeScreen AppStore";
+			packageProductDependencies = (
+				2BB19CA3308CF000008F49EA /* whisper */,
+			);
 			productName = NativeScreen;
 			productReference = 2BB19C84308CE200008F49EA /* Native Screen.app */;
 			productType = "com.apple.product-type.application";
@@ -140,6 +148,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				2BB19C72308CE110008F49EA /* XCRemoteSwiftPackageReference "Sparkle" */,
+				2BB19CA4308CF000008F49EA /* XCLocalSwiftPackageReference "Packages/WhisperCpp" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2BB19C5F308CE10F008F49EA /* Products */;
@@ -490,6 +499,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		2BB19CA4308CF000008F49EA /* XCLocalSwiftPackageReference "Packages/WhisperCpp" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/WhisperCpp;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		2BB19C72308CE110008F49EA /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -506,6 +522,14 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 2BB19C72308CE110008F49EA /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		2BB19CA2308CF000008F49EA /* whisper */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = whisper;
+		};
+		2BB19CA3308CF000008F49EA /* whisper */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = whisper;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
