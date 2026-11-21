@@ -1696,12 +1696,11 @@ internal sealed class TimelineView
 
             args.Handled = true;
             Hide();
-            if (seekToMiddle)
-            {
-                session.Scrub((chosen.Start + chosen.End) * 0.5);
-                UpdatePlayhead();
-                PlayheadScrubbed?.Invoke();
-            }
+            // The playhead moves too, as on macOS: to the new block's middle where that is the rule, else to the press.
+            EndSkim();
+            session.Scrub(seekToMiddle ? (chosen.Start + chosen.End) * 0.5 : TimeAt(args.GetCurrentPoint(canvas).Position.X));
+            UpdatePlayhead();
+            PlayheadScrubbed?.Invoke();
 
             add(chosen.SourceStart, chosen.SourceEnd);
         };
@@ -2227,9 +2226,18 @@ internal sealed class TimelineView
 
     private void CanvasReleased(object sender, PointerRoutedEventArgs args)
     {
-        var y = args.GetCurrentPoint(canvas).Position.Y;
+        var point = args.GetCurrentPoint(canvas).Position;
+        // A click on a block (no drag) also moves the playhead there, as on macOS: a press anywhere in the timeline seeks.
+        if (drag is { } clicked && Math.Abs(point.X - clicked.PressX) < 3 && Math.Abs(point.Y - clicked.PressY) < 3)
+        {
+            EndSkim();
+            session.Scrub(TimeAt(point.X));
+            UpdatePlayhead();
+            PlayheadScrubbed?.Invoke();
+        }
+
         // Releasing raises PointerCaptureLost at once, which would end the drag without a drop row.
-        EndDrag(y);
+        EndDrag(point.Y);
         ((UIElement)sender).ReleasePointerCapture(args.Pointer);
     }
 
