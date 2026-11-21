@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Observation
 import AppKit
+import AVFoundation
 import UniformTypeIdentifiers
 
 /// Global registry that manages multiple simultaneously open `.nativescreen` project `NSWindow`s
@@ -151,6 +152,37 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         activeSessionID = session.id
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        warnIfRecordingIsUnreadable(session, in: window)
+    }
+
+    /// A movie AVFoundation cannot read leaves the editor with a background and a cursor over nothing.
+    /// Say so instead of showing an empty frame. Recordings from the Windows app stay fragmented with no
+    /// `tfdt`, which AVFoundation reads as having no samples (`windows/HANDOFF.md`, 2026-11-21).
+    private func warnIfRecordingIsUnreadable(_ session: ProjectSession, in window: NSWindow) {
+        let url = session.videoFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let recordedOnWindows = session.metadata.platform == "windows"
+        Task { [weak window] in
+            guard !(await Self.hasReadableVideo(at: url)), let window, window.isVisible else { return }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "The screen recording can't be played")
+            var details = String(localized: "\(url.lastPathComponent) in this project could not be read on this Mac, so the preview and the export have no picture or sound from it.")
+            if recordedOnWindows {
+                details += "\n\n" + String(localized: "It was recorded with the Windows app, which saves recordings this Mac cannot read yet. Edit it on Windows.")
+            }
+            alert.informativeText = details
+            _ = await alert.beginSheetModal(for: window)
+        }
+    }
+
+    /// True when the movie has a video track with a length. A fragmented MP4 without `tfdt` loads with one
+    /// video track of zero length, so checking for a track alone is not enough.
+    private nonisolated static func hasReadableVideo(at url: URL) async -> Bool {
+        let asset = AVURLAsset(url: url)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let range = try? await track.load(.timeRange) else { return false }
+        return range.duration.isNumeric && range.duration.seconds > 0
     }
 
     public func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {

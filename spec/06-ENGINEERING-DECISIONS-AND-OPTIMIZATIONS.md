@@ -501,7 +501,9 @@ The Media Foundation fragmented MP4 sink writes about 300 ms fragments with exac
 `Mp4FragmentIndex` parses `moov` and `moof` into a table of true times and keyframes, and `VideoFileReader` numbers frames against it instead of using `SampleTime`. A seek targets the keyframe's true time and then re-synchronizes on the nearest keyframe. Plain MP4 files keep the reported times. Recordings use H.264 baseline, so decode order is presentation order.
 
 ### Status
-`FragmentedTimingTests` covers variable-rate reads and seeks on generated clips. Not checked: how the macOS app reads these files.
+`FragmentedTimingTests` covers variable-rate reads and seeks on generated clips.
+
+**macOS cannot read these files (2026-11-21).** A Windows recording copied to a Mac loads in AVFoundation with one video track of zero length: no frames from `AVAssetReader` or `AVAssetImageGenerator` (`-11832`), no audio, so the editor showed the background and cursor over black. A stream copy into a plain MP4 reads fully (86.7 s, 5201 frames). The Mac editor now says so when it opens a project whose movie has no readable video (`ProjectWorkspaceStore.warnIfRecordingIsUnreadable`). The fix belongs on Windows: write a plain MP4 when a recording stops, as `finishWriting` does on macOS (`windows/HANDOFF.md`).
 
 ---
 

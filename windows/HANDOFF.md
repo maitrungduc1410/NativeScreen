@@ -27,6 +27,19 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, Windows recordings are unreadable on macOS (Windows fix needed)
+
+### Writer
+- **Problem:** a Windows recording opened in the Mac app shows the background and cursor over black. `display.mp4` stays a Media Foundation fragmented MP4 after the recording stops: an empty `moov` (`stts` with no entries, `mvhd` duration 0, no `mehd`), then `moof`/`mdat` pairs with no `tfdt` (ADR-22). AVFoundation loads it as one video track of zero length: `AVAssetReader` gives 0 frames, `AVAssetImageGenerator` fails with `-11832`, and the audio in the same file is lost too. Checked on a real 86.7 s window recording (1082x2026, H.264 baseline, 60 fps, AAC). A stream copy into a plain MP4 (`ffmpeg -c copy`) reads fully on macOS: 86.689 s, 5201 frames, correct pictures. QuickTime and other players will have the same problem.
+- **Port:** when a recording stops, after the sink writer finalizes, rewrite each fragmented movie the app wrote (`display.mp4`, and `webcam.mp4` / microphone files if they use the same sink) as a plain MP4, the way `finishWriting` does on macOS:
+  1. Build the sample table from `Mp4FragmentIndex` (true times, sizes, file offsets, keyframes for each track).
+  2. Write a new `moov` with full `stts`, `stsz`, `stco`/`co64`, `stss`, `stsc`, correct `mvhd`/`tkhd`/`mdhd` durations, and drop `mvex`. Point the chunk offsets at the existing `mdat` data (or copy the samples into one new `mdat`). No re-encode and no ffmpeg.
+  3. Write to a temp file next to the original, flush, then replace the original atomically. If anything fails, keep the fragmented file: the Windows reader still handles it.
+  4. Recording stays fragmented while it runs, so a crash still leaves a recoverable file. A recovered (interrupted) recording should go through the same rewrite when the project is made.
+  5. `VideoFileReader` keeps `Mp4FragmentIndex` for old projects; plain files use the reported times as before (ADR-22).
+- **macOS side (done):** `ProjectWorkspaceStore.warnIfRecordingIsUnreadable` checks the movie when an editor window opens. If it has no video track with a length, a sheet says the recording can't be played, and adds that Windows recordings can't be read on a Mac yet when `metadata.platform` is `windows`. Three new keys, all 15 languages. The Mac app does not convert old Windows projects (no user has needed it). `spec/06` ADR-22 updated.
+- **How to verify:** record a window on Windows, copy the `.nativescreen` package to a Mac. The Mac app opens it with the picture and sound and shows no warning. `ffprobe` shows one `moov` with a non-zero duration and no `moof`. A crashed recording still recovers on Windows.
+
 ## 2026-11-20, ADR-98: Crash logs, and the editor preview no longer takes the app down (Windows only)
 
 ### Writer

@@ -109545,6 +109545,270 @@
           }
         }
       }
+    },
+    "The screen recording can't be played" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تعذر تشغيل تسجيل الشاشة"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Záznam obrazovky nelze přehrát"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Bildschirmaufnahme kann nicht abgespielt werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede reproducir la grabación de pantalla"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire l’enregistrement de l’écran"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile riprodurre la registrazione dello schermo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面収録を再生できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 녹화를 재생할 수 없습니다"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não é possível reproduzir a gravação de tela"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удаётся воспроизвести запись экрана"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ekran kaydı oynatılamıyor"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không phát được bản quay màn hình"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法播放屏幕录制"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法播放螢幕錄製"
+          }
+        }
+      }
+    },
+    "%@ in this project could not be read on this Mac, so the preview and the export have no picture or sound from it." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تعذرت قراءة %@ في هذا المشروع على جهاز Mac هذا، لذا لا تحتوي المعاينة ولا الملف المُصدَّر على صورة أو صوت منه."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soubor %@ v tomto projektu nelze na tomto Macu přečíst, takže náhled ani export z něj nemají obraz ani zvuk."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ in diesem Projekt kann auf diesem Mac nicht gelesen werden. Vorschau und Export enthalten daher kein Bild und keinen Ton daraus."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer %@ de este proyecto en este Mac, así que la vista previa y la exportación no tienen imagen ni sonido de él."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire %@ de ce projet sur ce Mac : l’aperçu et l’export n’en contiennent ni image ni son."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile leggere %@ di questo progetto su questo Mac, quindi l’anteprima e l’esportazione non ne contengono immagine né audio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このプロジェクトの %@ をこの Mac で読み込めなかったため、プレビューと書き出しにその映像と音声は含まれません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에서 이 프로젝트의 %@을(를) 읽을 수 없어 미리보기와 내보내기에 해당 화면과 소리가 없습니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível ler %@ deste projeto neste Mac, então a pré-visualização e a exportação ficam sem imagem e som dele."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось прочитать %@ из этого проекта на этом Mac, поэтому в превью и экспорте нет его изображения и звука."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu projedeki %@ bu Mac'te okunamadı, bu nedenle önizleme ve dışa aktarma ondan görüntü ya da ses içermiyor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không đọc được %@ trong dự án này trên máy Mac này, nên bản xem trước và bản xuất không có hình và tiếng từ tệp đó."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法在这台 Mac 上读取此项目中的 %@，因此预览和导出中没有它的画面和声音。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法在這台 Mac 上讀取此專案中的 %@，因此預覽和輸出中沒有它的畫面和聲音。"
+          }
+        }
+      }
+    },
+    "It was recorded with the Windows app, which saves recordings this Mac cannot read yet. Edit it on Windows." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تم تسجيله باستخدام تطبيق Windows، الذي يحفظ التسجيلات بصيغة لا يستطيع Mac هذا قراءتها بعد. حرّره على Windows."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Byl nahrán aplikací pro Windows, která ukládá záznamy tak, že je tento Mac zatím neumí přečíst. Upravte ho ve Windows."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie wurde mit der Windows-App aufgenommen, deren Aufnahmen dieser Mac noch nicht lesen kann. Bearbeite sie unter Windows."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se grabó con la app de Windows, que guarda las grabaciones de una forma que este Mac todavía no puede leer. Edítala en Windows."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il a été enregistré avec l’app Windows, dont ce Mac ne sait pas encore lire les enregistrements. Modifiez-le sous Windows."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "È stata registrata con l’app per Windows, che salva le registrazioni in un modo che questo Mac non sa ancora leggere. Modificala su Windows."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版アプリで収録されたもので、その保存形式はこの Mac ではまだ読み込めません。Windows で編集してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 앱으로 녹화되었으며, 이 Mac은 아직 해당 저장 형식을 읽을 수 없습니다. Windows에서 편집하세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foi gravado com o app para Windows, que salva as gravações de um jeito que este Mac ainda não consegue ler. Edite no Windows."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Запись сделана в приложении для Windows, а такие записи этот Mac пока прочитать не может. Редактируйте её в Windows."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows uygulamasıyla kaydedildi ve bu Mac o kayıtları henüz okuyamıyor. Windows'ta düzenleyin."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bản quay này được tạo bằng ứng dụng Windows, định dạng lưu của nó máy Mac này chưa đọc được. Hãy chỉnh sửa trên Windows."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它是用 Windows 版 App 录制的，这台 Mac 目前还无法读取其保存的录制文件。请在 Windows 上编辑。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它是用 Windows 版 App 錄製的，這台 Mac 目前還無法讀取其儲存的錄製檔案。請在 Windows 上編輯。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
