@@ -180,7 +180,7 @@ internal static class CrashLog
         var text = new StringBuilder();
         text.AppendLine($"Native Screen {(ending ? "crash" : "error")}: {kind}{(ending ? ", the app closed" : ", the app kept running")}");
         text.AppendLine($"Time: {now:yyyy-MM-dd HH:mm:ss} local, {now.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC");
-        text.AppendLine($"App: {McpServer.AppVersion} ({(AppPackage.IsPackaged ? "Microsoft Store" : "GitHub")} build), uptime {Clock.Elapsed:hh\\:mm\\:ss}");
+        text.AppendLine($"App: {McpServer.AppVersion} ({AppPackage.Channel} build), uptime {Clock.Elapsed:hh\\:mm\\:ss}");
         text.AppendLine(machine.Length > 0 ? machine : MachineInfo.Windows());
         text.AppendLine();
         text.AppendLine(exception is null ? "No exception object." : Describe(exception));

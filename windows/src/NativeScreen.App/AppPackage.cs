@@ -30,6 +30,16 @@ internal static partial class AppPackage
     /// <summary>The command MCP clients should run: the alias when packaged, otherwise this executable.</summary>
     public static string ClientCommand => IsPackaged ? ExecutionAlias : Environment.ProcessPath ?? "NativeScreen.App.exe";
 
+    /// <summary>
+    /// Where this copy came from, shown after the version in Settings and in crash files: the Store's MSIX, a release from
+    /// GitHub, or a Debug build run from the source. Names, so never translated.
+    /// </summary>
+#if DEBUG
+    public static string Channel => IsPackaged ? "Microsoft Store" : "Debug";
+#else
+    public static string Channel => IsPackaged ? "Microsoft Store" : "GitHub";
+#endif
+
     /// <summary>"1.2.0" from the package version, or null when not packaged. Needs WinRT, so the UI process only.</summary>
     public static string? Version
     {

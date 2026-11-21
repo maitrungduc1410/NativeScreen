@@ -114,7 +114,7 @@ public sealed partial class SettingsWindow : Window
         Updates();
         // Here and not in Updates(), which stops early in a build with no updater.
         var fileVersion = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyFileVersionAttribute>(typeof(SettingsWindow).Assembly)?.Version;
-        Body.Children.Add(Ui.Text(NativeScreen.Core.AppVersionText.Format(Loc.T("Version"), AppUpdater.Shared.InstalledVersion ?? McpServer.AppVersion, fileVersion), 12, "Ink60"));
+        Body.Children.Add(Ui.Text(NativeScreen.Core.AppVersionText.Format(Loc.T("Version"), AppUpdater.Shared.InstalledVersion ?? McpServer.AppVersion, fileVersion, AppPackage.Channel), 12, "Ink60"));
         Troubleshooting();
     }
 
