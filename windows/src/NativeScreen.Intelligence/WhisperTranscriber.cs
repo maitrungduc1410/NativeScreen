@@ -94,11 +94,11 @@ public static class WhisperTranscriber
                     .SplitOnWord()
                     .WithMaxSegmentLength(1)
                     .WithProbabilities();
-                var language = locale.Split('_', '-')[0];
-                builder = language.Length == 2 ? builder.WithLanguage(language) : builder.WithLanguageDetection();
-                if (!string.IsNullOrWhiteSpace(prompt))
+                var (language, modelPrompt) = TranscriptLanguages.ForModel(locale, prompt);
+                builder = language is not null ? builder.WithLanguage(language) : builder.WithLanguageDetection();
+                if (modelPrompt.Length > 0)
                 {
-                    builder = builder.WithPrompt(prompt);
+                    builder = builder.WithPrompt(modelPrompt);
                 }
 
                 using var processor = builder.Build();

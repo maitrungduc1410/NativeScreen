@@ -27,6 +27,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-104: Transcripts in every interface language (Windows only)
+
+### Verifier
+- **Owner's request:** the transcript language picker must have at least the app's 15 languages.
+- **Changes made:** `TranscriptLanguages` (Core): the picker's list (Detect plus 15), the code Whisper gets, a Traditional Chinese prompt for `zh_TW`, and the culture each entry is named with. `InspectorPanel` and `WhisperTranscriber` use it. 10 tests in `TranscriptLanguagesTests`; Core 388.
+- **Not checked:** a real transcript in the new languages, and how reliably the prompt gives Traditional characters (the speech model was not on this machine).
 ## 2026-11-21, Every Quit crashed, so every launch showed the crash notice (Windows only)
 
 ### Verifier

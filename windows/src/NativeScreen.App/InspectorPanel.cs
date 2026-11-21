@@ -1200,7 +1200,7 @@ internal sealed partial class InspectorPanel
     /// <summary>A transcript language ("vi_VN") named in the UI language, as macOS names it with `Locale` ("Tiếng Việt", "vietnamien").</summary>
     private static string SpokenLanguageName(string code)
     {
-        var name = CultureInfo.GetCultureInfo(code.Split('_')[0]).DisplayName;
+        var name = CultureInfo.GetCultureInfo(TranscriptLanguages.CultureFor(code)).DisplayName;
         return name.Length > 0 ? char.ToUpper(name[0], CultureInfo.CurrentUICulture) + name[1..] : code;
     }
 
@@ -1208,9 +1208,9 @@ internal sealed partial class InspectorPanel
     {
         var captions = Doc.Captions;
         var language = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        foreach (var code in new[] { "auto", "en_US", "vi_VN", "es_ES", "fr_FR", "de_DE", "ja_JP", "ko_KR", "zh_CN" })
+        foreach (var code in TranscriptLanguages.Codes)
         {
-            language.Items.Add(new ComboBoxItem { Content = code == "auto" ? Loc.T("Detect") : SpokenLanguageName(code), Tag = code });
+            language.Items.Add(new ComboBoxItem { Content = code == TranscriptLanguages.Detect ? Loc.T("Detect") : SpokenLanguageName(code), Tag = code });
             if (code == captions.TranscriptLocale)
             {
                 language.SelectedIndex = language.Items.Count - 1;
