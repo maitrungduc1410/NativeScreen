@@ -83,11 +83,11 @@ public sealed class PlaybackTrajectorySolver
                 }
 
                 var button = click.Button ?? "left";
-                if (click.Type == "down")
+                if (click.Type is "down" or CursorTelemetry.DrawStart)
                 {
                     heldButtons[button] = click;
                 }
-                else if (click.Type == "up")
+                else if (click.Type is "up" or CursorTelemetry.DrawEnd)
                 {
                     heldButtons.Remove(button);
                 }

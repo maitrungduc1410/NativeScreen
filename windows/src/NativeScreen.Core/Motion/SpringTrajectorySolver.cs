@@ -38,7 +38,8 @@ public sealed class SpringTrajectorySolver
         for (var index = 0; index < sorted.Count; index++)
         {
             var click = sorted[index];
-            if (click.Type is not ("down" or "held") || click.Button == "other")
+            // Live drawing does not press the cursor in: the stroke is the feedback.
+            if (click.Type is not ("down" or "held") || click.Button is "other" or CursorTelemetry.DrawButton)
             {
                 continue;
             }
@@ -584,7 +585,7 @@ public sealed class SpringTrajectorySolver
         Func<(double X, double Y), double, (double X, double Y)> endingAdjusted)
     {
         var held = CursorTelemetry.HeldIntervals(clicks, durationMs);
-        var anchors = clicks.Where(click => click.Type is "down" or "up").ToList();
+        var anchors = clicks.Where(click => click.Type is "down" or "up" or CursorTelemetry.DrawStart or CursorTelemetry.DrawEnd).ToList();
         var anchorTimes = anchors.Select(anchor => anchor.T).ToHashSet();
 
         // Recorded samples, with recording-time pauses held until shortly before the next sample.

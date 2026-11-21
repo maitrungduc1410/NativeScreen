@@ -36,7 +36,10 @@ public sealed class LoadedProject
         var rawClicks = JsonLines.Load<ClickEvent>(Path.Combine(recording, Metadata.Tracks.ClicksTelemetry));
         var rawKeys = JsonLines.Load<KeyStrokeEvent>(Path.Combine(recording, Metadata.Tracks.KeysTelemetry));
         var legacyOffsetMs = LegacyTelemetryEpoch.OffsetMs(rawCursor, rawClicks, rawKeys, Metadata.DurationMs);
-        (CursorEvents, ClickEvents, KeyEvents) = LegacyTelemetryEpoch.Corrected(rawCursor, rawClicks, rawKeys, legacyOffsetMs);
+        (CursorEvents, var clicks, KeyEvents) = LegacyTelemetryEpoch.Corrected(rawCursor, rawClicks, rawKeys, legacyOffsetMs);
+        // Live drawing strokes hold the cursor to the pen, as a drag does (spec/06 ADR-102). They are on the recording's clock.
+        var drawings = Path.Combine(recording, "telemetry", "drawings.jsonl");
+        ClickEvents = File.Exists(drawings) ? CursorTelemetry.WithDrawingStrokes(clicks, JsonLines.Load<LiveDrawingEvent>(drawings)) : clicks;
         TimeMapper = new NLETimeMapper(Document.Timeline.Slices);
         Trajectory = new PlaybackTrajectorySolver(Metadata.DurationMs, CursorEvents, ClickEvents, Document, PointSize);
         var webcam = Metadata.Tracks.WebcamVideo;

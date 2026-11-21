@@ -27,6 +27,23 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-102: The cursor stays on the pen while a live drawing is drawn (Windows done, macOS to do)
+
+### Verifier (Windows)
+- **Owner's report:** after drawing while recording, the editor shows the line drawn ahead of the cursor. Also on macOS.
+- **Cause:** the cursor's spring trails a fast hand; a drag is held to the recorded path, but drawing logs no clicks, so nothing held it.
+- **Changes made:** `CursorTelemetry.WithDrawingStrokes` adds in-memory `drawStart` / `drawEnd` events (button `draw`) for each stroke; `LoadedProject` merges them into `ClickEvents`; `HeldIntervals`, the planner's anchors and `PlaybackTrajectorySolver`'s held carry over accept them; `ButtonPresses` skips button `draw`; MCP's click count leaves them out. spec/06 ADR-102.
+- **Measured on the owner's project (5 strokes, 136 points):** pen to cursor median 43 px before, 2.5 px after; max 77 px before, 13 px after. Core 378 (2 new in `LiveDrawingCursorTests`), Rendering 40.
+
+### Writer (macOS), to do
+1. Where `ProjectSession` loads `clicks.jsonl` (`Document/ProjectSession.swift`, around `clicksURL`), also load `telemetry/drawings.jsonl` and add, for each `stroke` with points: `ClickEvent(t: stroke.t, type: "drawStart", button: "draw", x/y: first point)` and `ClickEvent(t: stroke.t + lastPoint[2], type: "drawEnd", button: "draw", x/y: last point)`, sorted by time. In memory only.
+2. `CursorTelemetry.heldIntervals` (`Engine/MotionGeometry.swift`): `drawStart` opens like `down`, `drawEnd` closes like `up`.
+3. `CursorPathPlanner.swift` (anchors, line ~559): include `drawStart` and `drawEnd`.
+4. `PlaybackTrajectorySolver.swift` (held carry over, line ~52): `drawStart` like `down`, `drawEnd` like `up`, so a cut in the middle of a stroke starts held.
+5. `SpringTrajectorySolver.buttonPresses`: skip button `draw` (no press-in while drawing).
+6. Check that nothing else counts these events: ripples, click sounds, auto zoom and the MCP click count must read only `down` / `up` (or leave out button `draw`).
+7. Port `LiveDrawingCursorTests` (`windows/tests/NativeScreen.Core.Tests`).
+- **How to verify:** open a recording with live drawings: the cursor sits on the line while it is drawn, and there is no ripple or press at the stroke's start.
 ## 2026-11-21, ADR-101: The window picker's highlight glides like on macOS (Windows only)
 
 ### Verifier

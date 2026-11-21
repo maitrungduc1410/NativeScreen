@@ -343,7 +343,7 @@ internal sealed class McpToolbox
                 ["microphone"] = tracks?.MicrophoneAudio is not null,
                 ["systemAudio"] = tracks?.SystemAudio is not null,
                 ["cursor"] = session.CursorEvents.Count > 0,
-                ["clicks"] = session.ClickEvents.Count,
+                ["clicks"] = session.ClickEvents.Count(click => click.Button != CursorTelemetry.DrawButton),
                 ["keystrokes"] = session.KeyEvents.Count
             },
             ["slices"] = slices,

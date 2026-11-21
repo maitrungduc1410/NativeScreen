@@ -89,7 +89,43 @@ public static class CursorTelemetry
         return result;
     }
 
-    /// <summary>Button-held intervals, merged. A `held` click marks a button already down when a trimmed run starts.</summary>
+    /// <summary>
+    /// Button-held intervals, merged. A `held` click marks a button already down when a trimmed run starts. A live drawing
+    /// stroke (`drawStart` to `drawEnd`) counts too: the pen is the cursor, so it must stay on the line being drawn.
+    /// </summary>
+    /// <summary>Made in memory from `drawings.jsonl`, never written: a stroke drawn on the screen while recording.</summary>
+    public const string DrawStart = "drawStart";
+
+    public const string DrawEnd = "drawEnd";
+
+    /// <summary>The button name of <see cref="DrawStart"/> and <see cref="DrawEnd"/>.</summary>
+    public const string DrawButton = "draw";
+
+    /// <summary>
+    /// The clicks with each live drawing stroke added as a held span (spec/06 ADR-102). Strokes are logged without clicks, so
+    /// the cursor's spring had nothing holding it to the pen and the drawing ran ahead of the cursor in the video.
+    /// </summary>
+    public static List<ClickEvent> WithDrawingStrokes(IReadOnlyList<ClickEvent> clicks, IReadOnlyList<LiveDrawingEvent> drawings)
+    {
+        var merged = new List<ClickEvent>(clicks);
+        foreach (var stroke in drawings)
+        {
+            if (stroke.Type != "stroke" || stroke.Points is not { Count: > 0 } points)
+            {
+                continue;
+            }
+
+            var first = points[0];
+            var last = points[^1];
+            var end = stroke.T + (last.Length >= 3 ? Math.Max(0, last[2]) : 0);
+            merged.Add(new ClickEvent { T = stroke.T, Type = DrawStart, Button = DrawButton, X = first[0], Y = first[1] });
+            merged.Add(new ClickEvent { T = end, Type = DrawEnd, Button = DrawButton, X = last[0], Y = last[1] });
+        }
+
+        merged.Sort((a, b) => a.T.CompareTo(b.T));
+        return merged;
+    }
+
     public static List<(double Start, double End)> HeldIntervals(IReadOnlyList<ClickEvent> clicks, double endMs)
     {
         var down = new Dictionary<string, double>();
@@ -97,11 +133,11 @@ public static class CursorTelemetry
         foreach (var click in clicks.OrderBy(click => click.T))
         {
             var button = click.Button ?? "left";
-            if (click.Type is "down" or "held")
+            if (click.Type is "down" or "held" or DrawStart)
             {
                 down.TryAdd(button, click.T);
             }
-            else if (click.Type == "up" && down.Remove(button, out var start))
+            else if (click.Type is "up" or DrawEnd && down.Remove(button, out var start))
             {
                 intervals.Add((start, click.T));
             }
