@@ -51,7 +51,7 @@ internal sealed class McpToolbox
                 "create_project_from_video" => Ok(await CreateFromVideo(args)),
                 "close_project" => Ok(CloseProject(args)),
                 "delete_project" => Ok(await DeleteProject(args)),
-                "rename_project" => Ok(RenameProject(args)),
+                "rename_project" => Ok(await RenameProject(args)),
                 "save_project" => Ok(SaveProject(args)),
                 "get_project" => Ok(GetProject(args)),
                 "update_project" => Ok(UpdateProject(args)),
@@ -266,12 +266,12 @@ internal sealed class McpToolbox
         return new JsonObject { ["movedToRecycleBin"] = path };
     }
 
-    private static JsonObject RenameProject(McpArgs args)
+    private static async Task<JsonObject> RenameProject(McpArgs args)
     {
         var editor = Editor(args);
         editor.McpSession.StartNewUndoStep();
-        editor.McpSession.Rename(args.Required("name"));
-        return Summary(editor);
+        // The folder is renamed too, and the editor opens again on it: the summary is the new one (spec/06 ADR-99).
+        return Summary(await editor.RenameProject(args.Required("name")));
     }
 
     private static JsonObject SaveProject(McpArgs args)

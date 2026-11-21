@@ -36,4 +36,35 @@ public sealed class ProjectStoreTests : IDisposable
         Directory.CreateDirectory(first);
         Assert.EndsWith("Demo 2.nativescreen", ProjectStore.UniquePackagePath(directory, "Demo"));
     }
+
+    [Theory]
+    [InlineData("Launch demo", "Launch demo")]
+    [InlineData("  Q3: plan / review?  ", "Q3- plan - review-")]
+    [InlineData("Release.nativescreen", "Release")]
+    [InlineData("Ends with dots...", "Ends with dots")]
+    [InlineData("con", "con-")]
+    [InlineData("COM1.notes", "COM1.notes-")]
+    [InlineData("Tiếng Việt 日本語", "Tiếng Việt 日本語")]
+    [InlineData("   ", null)]
+    [InlineData("...", null)]
+    public void ProjectNamesBecomeFolderNamesEverySystemAccepts(string name, string? expected) =>
+        Assert.Equal(expected, ProjectStore.PackageName(name));
+
+    [Fact]
+    public void RenamingMovesNextToTheOldFolderAndNeverOntoAnother()
+    {
+        var current = Path.Combine(directory, "Recording 2026-11-21 06.31.20.nativescreen");
+        Directory.CreateDirectory(current);
+        Assert.Equal(Path.Combine(directory, "Launch demo.nativescreen"), ProjectStore.RenamedPackagePath(current, "Launch demo"));
+        Assert.Equal(current, ProjectStore.RenamedPackagePath(current, "Recording 2026-11-21 06.31.20"));
+        Assert.Equal(Path.Combine(directory, "recording 2026-11-21 06.31.20.nativescreen"), ProjectStore.RenamedPackagePath(current, "recording 2026-11-21 06.31.20"));
+
+        Directory.CreateDirectory(Path.Combine(directory, "Taken.nativescreen"));
+        Assert.Equal(Path.Combine(directory, "Taken 2.nativescreen"), ProjectStore.RenamedPackagePath(current + Path.DirectorySeparatorChar, "Taken"));
+        Assert.Null(ProjectStore.RenamedPackagePath(current, " .. "));
+
+        var second = Path.Combine(directory, "Taken 2.nativescreen");
+        Directory.CreateDirectory(second);
+        Assert.Equal(second, ProjectStore.RenamedPackagePath(second, "Taken"));
+    }
 }

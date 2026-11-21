@@ -37,6 +37,7 @@
 - [x] Keystroke timestamp logger (`telemetry/keys.jsonl`) for typing-aware auto-zoom hold, typing speed-up suggestions, and 3D shortcut keycaps.
 - [x] System/App Audio capture (via `ScreenCaptureKit` audio stream) & Microphone capture (`AVCaptureSession`) to separate `.m4a` tracks.
 - [ ] Window capture: drop frames whose window content is briefly shrunk or shifted (known issue, deferred; see `spec/06` ADR-94).
+- [ ] **Renaming a project renames its folder** (`spec/06` ADR-99): Windows done (2026-11-21); macOS: unique folder names, the shared name rules, recent projects (`windows/HANDOFF.md`).
 - [ ] **Windows:** window capture leaves out the recorded app's own menus and dropdowns (a ComboBox list, a menu bar menu), which are separate popup windows; reported 2026-11-21 with a dropdown in another app. Planned: while a popup of the recorded process covers the window, copy its rectangle from a Desktop Duplication frame (no capture border) into the frame. Mind computers with two GPUs. Cropping a display capture instead would also show other windows on top. macOS keeps popups only when recording its own app (`RecordingCoordinator`).
 
 ### 1.4. GPU Metal Compositor & Preview Canvas (0% Idle CPU)

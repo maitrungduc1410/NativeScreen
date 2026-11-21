@@ -626,6 +626,184 @@
         }
       }
     },
+    "Renamed. The folder could not be renamed because a file in it is in use." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تمت إعادة التسمية. تعذرت إعادة تسمية المجلد لأن ملفًا فيه قيد الاستخدام."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přejmenováno. Složku nelze přejmenovat, protože se používá soubor v ní."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umbenannt. Der Ordner konnte nicht umbenannt werden, weil eine Datei darin verwendet wird."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiado el nombre. No se pudo cambiar el nombre de la carpeta porque un archivo está en uso."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renommé. Le dossier n’a pas pu être renommé, car un fichier qu’il contient est utilisé."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rinominato. Impossibile rinominare la cartella perché un file al suo interno è in uso."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前を変更しました。フォルダ内のファイルが使用中のため、フォルダ名は変更できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름을 변경했습니다. 폴더 안의 파일이 사용 중이라 폴더 이름은 바꿀 수 없습니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renomeado. Não foi possível renomear a pasta porque um arquivo nela está em uso."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переименовано. Папку не удалось переименовать: файл в ней используется."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeniden adlandırıldı. İçindeki bir dosya kullanımda olduğu için klasör yeniden adlandırılamadı."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã đổi tên. Không đổi được tên thư mục vì một tệp trong đó đang được dùng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已重命名。文件夹中的文件正在使用，因此无法重命名文件夹。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已重新命名。資料夾中的檔案正在使用，因此無法重新命名資料夾。"
+          }
+        }
+      }
+    },
+    "Renamed. The folder keeps its old name while work on the project is running." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تمت إعادة التسمية. يحتفظ المجلد باسمه القديم أثناء تنفيذ عمل على المشروع."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přejmenováno. Složka si ponechá starý název, dokud na projektu probíhá práce."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umbenannt. Der Ordner behält seinen alten Namen, solange am Projekt gearbeitet wird."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiado el nombre. La carpeta conserva su nombre anterior mientras se trabaja en el proyecto."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renommé. Le dossier garde son ancien nom tant qu’un traitement est en cours sur le projet."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rinominato. La cartella mantiene il vecchio nome finché è in corso un’operazione sul progetto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前を変更しました。プロジェクトの処理中は、フォルダは元の名前のままです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름을 변경했습니다. 프로젝트 작업이 진행되는 동안 폴더는 이전 이름을 유지합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renomeado. A pasta mantém o nome antigo enquanto houver trabalho em andamento no projeto."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переименовано. Пока с проектом выполняется работа, папка сохраняет прежнее имя."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeniden adlandırıldı. Proje üzerinde işlem sürerken klasör eski adını korur."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã đổi tên. Thư mục giữ tên cũ trong lúc dự án đang có tác vụ chạy."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已重命名。项目有任务在运行时，文件夹保留原名称。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已重新命名。專案有工作在執行時，資料夾保留原名稱。"
+          }
+        }
+      }
+    },
     "The recording could not be finished: %@" : {
       "extractionState" : "manual",
       "localizations" : {

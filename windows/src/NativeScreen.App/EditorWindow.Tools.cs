@@ -81,6 +81,124 @@ public sealed partial class EditorWindow
         await Projects.Open(target, Root.XamlRoot);
     }
 
+    /// <summary>
+    /// Renames the project and its folder, so the projects folder shows the new name (spec/06 ADR-99). Windows cannot rename a
+    /// folder while the editor reads the recording inside it, so the editor saves, closes, the folder moves, and the editor
+    /// opens again where it was. Returns the editor that shows the project afterwards.
+    /// </summary>
+    internal async Task<EditorWindow> RenameProject(string name)
+    {
+        var current = source.PackagePath;
+        session.Rename(name);
+        if (current is null || ProjectStore.RenamedPackagePath(current, name) is not { } target || string.Equals(target, current, StringComparison.Ordinal))
+        {
+            return this;
+        }
+
+        // Closing would cancel these; the folder keeps its name until the next rename.
+        if (session.IsExportRunning || session.IsRecordingVoiceover || tools.IsTranscribing || tools.IsScanningSensitive || tools.IsScanningFaces)
+        {
+            ShowToast("Renamed. The folder keeps its old name while work on the project is running.");
+            return this;
+        }
+
+        CrashLog.Note("renaming the project folder");
+        hasUnsavedChanges = true;
+        SaveNow();
+        await pendingWrite;
+        var position = AppWindow.Position;
+        var size = AppWindow.Size;
+        var maximized = AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Maximized };
+        // The same folder can be listed by a short (8.3) or a long path; matched while it still exists.
+        var key = FolderKey(current);
+        var stale = AppSettings.Shared.RecentProjects.Where(item => FolderKey(item) == key).ToList();
+        // Counted as open meanwhile, so the recording bar does not appear between the two editors.
+        App.EditorOpened();
+        try
+        {
+            Close();
+            var moved = await Task.Run(() => MovePackage(current, target));
+            var opened = moved ? target : current;
+            if (moved)
+            {
+                AppSettings.Shared.RecentProjects.RemoveAll(stale.Contains);
+            }
+
+            await Projects.Open(opened, null);
+            if (!Projects.Editors.TryGetValue(Path.GetFullPath(opened), out var editor))
+            {
+                return this;
+            }
+
+            editor.AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(position.X, position.Y, size.Width, size.Height));
+            if (maximized && editor.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+            {
+                presenter.Maximize();
+            }
+
+            if (!moved)
+            {
+                editor.ShowToast("Renamed. The folder could not be renamed because a file in it is in use.");
+            }
+
+            return editor;
+        }
+        finally
+        {
+            App.EditorClosed();
+        }
+    }
+
+    private static string FolderKey(string path)
+    {
+        var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var buffer = new char[1024];
+        var length = GetLongPathNameW(full, buffer, (uint)buffer.Length);
+        return (length > 0 && length < buffer.Length ? new string(buffer, 0, (int)length) : full).ToUpperInvariant();
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern uint GetLongPathNameW(string shortPath, char[] longPath, uint bufferLength);
+
+    /// <summary>Moves the package folder, waiting a little for readers that are still letting go of its files.</summary>
+    private static bool MovePackage(string from, string to)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            try
+            {
+                if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Only the case changes: Windows sees the same folder, so it goes through a free name first.
+                    var step = from + ".renaming";
+                    Directory.Move(from, step);
+                    try
+                    {
+                        Directory.Move(step, to);
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                    {
+                        Directory.Move(step, from);
+                        throw;
+                    }
+                }
+                else
+                {
+                    Directory.Move(from, to);
+                }
+
+                return true;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                CrashLog.Note($"project folder in use ({exception.GetType().Name}), attempt {attempt + 1}");
+                Thread.Sleep(150);
+            }
+        }
+
+        return false;
+    }
+
     private static void CopyDirectory(string from, string to)
     {
         Directory.CreateDirectory(to);

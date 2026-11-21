@@ -27,6 +27,28 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-99: Renaming a project renames its folder (Windows done, macOS to do)
+
+### Verifier (Windows)
+- **Owner's report:** renaming in the editor changed only the name; the folder kept `Recording <date>.nativescreen`, so the projects folder gave no hint which one was renamed.
+- **Changes made:**
+  - `ProjectStore.PackageName` and `ProjectStore.RenamedPackagePath` (Core, with tests): the folder name rules and where the package moves (spec/06 ADR-99).
+  - `EditorWindow.RenameProject`: save, close, move the folder (retries while readers let go, case-only renames through a temporary name), reopen in the same place, recent projects updated. Busy editors (export, transcription, scans, voiceover recording) change only the name. The editor title and MCP `rename_project` both use it.
+  - Two strings in the catalog with all languages.
+- **Checked in a sandbox:** a recording renamed to "Launch demo" (folder renamed, editor reopened, no recording bar in between); a name another package has (`... 2`); a case-only change; a project opened by its long path while recent projects had the short one (old entry removed). Core 376.
+- **Not checked:** a rename during an export or transcription (toast path), and with the package on another drive.
+
+### Writer (macOS), to do
+`ProjectSession.renameProject` (`Document/ProjectSession.swift`) already moves the folder. Bring it to the same rules as Windows:
+1. **Folder name rules** like `ProjectStore.PackageName` (`windows/src/NativeScreen.Core/Session/ProjectStore.cs`): `< > : " / \ | ? *` and control characters become `-`; drop a trailing `.nativescreen`, trailing dots and spaces; append `-` to a reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, also before a dot: `con.notes`); at most 120 characters; nothing left means no rename. The document name stays what the user typed (trimmed).
+2. **Taken name:** today the move is skipped silently when `<name>.nativescreen` exists. Use `Name 2`, `Name 3` instead, and treat the package's own folder as free (renaming `Name 2` back to `Name` while `Name` exists keeps `Name 2`). Port the cases of `ProjectStoreTests.RenamingMovesNextToTheOldFolderAndNeverOntoAnother`.
+3. **Case-only rename** (`demo` to `Demo`) on a case-insensitive volume: move through a temporary name, or the move fails as the same file.
+4. **Recent projects:** remove the old URL when adding the new one (`ProjectWorkspaceStore.addRecentProject`).
+5. **Everything that cached the old URL:** after the move, check play, scrub, export, still export, adding an image or a background file, transcription, face tracking, voiceover recording and Show in Finder. macOS keeps open files readable after a rename, but anything that opens a file later by a URL made before the rename fails. If more than a couple of places need fixing, do what Windows does instead: save, close the window, move, reopen at the same frame.
+6. **Undo:** the rename is inside `mutate`, so Undo brings the old name back while the folder keeps the new one. Either leave the rename out of undo (Windows: the reopened editor starts a new history) or move the folder back on undo; pick one and say so in ADR-99.
+7. **A failed move** (permissions, another app holds the folder): keep the new name, keep the folder, and say so (Windows strings: "Renamed. The folder could not be renamed because a file in it is in use.").
+8. MCP `rename_project` returns the new path (it already calls `renameProject`).
+- **How to verify:** rename a recording in the editor: Finder shows the new folder name, the editor still plays and exports, recent projects list it once. Rename to a name another package has: `Name 2`. Rename `Name 2` to `Name`: nothing moves. Rename `demo` to `Demo`. Build both schemes.
 ## 2026-11-21, Windows recordings are unreadable on macOS (Windows fix needed)
 
 ### Writer

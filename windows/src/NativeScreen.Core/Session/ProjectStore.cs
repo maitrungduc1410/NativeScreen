@@ -52,6 +52,77 @@ public static class ProjectStore
         return path;
     }
 
+    private const int MaximumNameLength = 120;
+    private const string ForbiddenCharacters = "<>:\"/\\|?*";
+    private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
+
+    /// <summary>
+    /// A project name as a folder name that works on Windows and macOS: characters a file name cannot hold become "-", a
+    /// trailing ".nativescreen" and trailing dots and spaces go. Null when nothing is left.
+    /// </summary>
+    public static string? PackageName(string name)
+    {
+        var text = name.Trim();
+        if (text.EndsWith(PackageExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[..^PackageExtension.Length];
+        }
+
+        var characters = text.Select(character => character < 32 || ForbiddenCharacters.Contains(character) ? '-' : character).ToArray();
+        text = new string(characters).TrimEnd('.', ' ').Trim();
+        if (text.Length > MaximumNameLength)
+        {
+            text = text[..MaximumNameLength].TrimEnd('.', ' ');
+        }
+
+        if (ReservedNames.Contains(text.Split('.')[0]))
+        {
+            text += "-";
+        }
+
+        return text.Length == 0 ? null : text;
+    }
+
+    /// <summary>
+    /// Where a package moves when its project is renamed (spec/06 ADR-99): the same folder for the same name, the new name
+    /// next to it, or "Name 2" when another package already has the name. Null when the name gives no folder name.
+    /// </summary>
+    public static string? RenamedPackagePath(string packagePath, string name)
+    {
+        if (PackageName(name) is not { } folder)
+        {
+            return null;
+        }
+
+        var trimmed = packagePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var directory = Path.GetDirectoryName(trimmed) ?? "";
+        var current = Path.GetFileName(trimmed);
+        var wanted = folder + PackageExtension;
+        if (string.Equals(current, wanted, StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        // Only the case changes: the same folder on Windows, so it is not "taken".
+        if (string.Equals(current, wanted, StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.Combine(directory, wanted);
+        }
+
+        // "Name 2" when another package has the name; the package's own folder counts as free, so it never moves to "Name 3".
+        var path = Path.Combine(directory, wanted);
+        for (var index = 2; Directory.Exists(path) && !string.Equals(path, trimmed, StringComparison.OrdinalIgnoreCase); index++)
+        {
+            path = Path.Combine(directory, $"{folder} {index}{PackageExtension}");
+        }
+
+        return path;
+    }
+
     public static void WriteLines<T>(string path, IEnumerable<T> items)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

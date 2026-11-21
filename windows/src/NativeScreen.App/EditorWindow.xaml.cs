@@ -227,7 +227,7 @@ public sealed partial class EditorWindow : Window
         var name = TitleEditor.Text.Trim();
         if (name.Length > 0 && name != session.Document.Name)
         {
-            session.Rename(name);
+            _ = RenameProject(name);
         }
     }
 
