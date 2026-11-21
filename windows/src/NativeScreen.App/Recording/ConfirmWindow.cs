@@ -11,12 +11,14 @@ namespace NativeScreen.App;
 /// </summary>
 internal sealed class ConfirmWindow : Window
 {
+    private const double Edge = 24;
+
     private readonly TaskCompletionSource<bool> answer = new();
 
     private ConfirmWindow(string title, string confirm, string cancel)
     {
         Title = "Native Screen";
-        var body = new StackPanel { Spacing = 18, Padding = new Thickness(24, 20, 24, 20) };
+        var body = new StackPanel { Spacing = 18, Padding = new Thickness(Edge) };
         var heading = Ui.Text(title, 15, "Ink95", true);
         heading.TextWrapping = TextWrapping.Wrap;
         body.Children.Add(heading);
@@ -47,7 +49,28 @@ internal sealed class ConfirmWindow : Window
 
         CaptureTargets.SetExcludedFromCapture(WinRT.Interop.WindowNative.GetWindowHandle(this), true);
         // The safe answer has the focus, so Enter or Space does not delete by accident.
-        content.Loaded += (_, _) => keep.Focus(FocusState.Programmatic);
+        content.Loaded += (_, _) =>
+        {
+            FitHeight(body);
+            keep.Focus(FocusState.Programmatic);
+        };
+    }
+
+    /// <summary>
+    /// Sizes the client area to the text and buttons, so the buttons sit <see cref="Edge"/> from the bottom as from the right.
+    /// A fixed window height counted the title bar, which left the buttons on the bottom edge.
+    /// </summary>
+    private void FitHeight(FrameworkElement body)
+    {
+        if (body.XamlRoot is not { } root)
+        {
+            return;
+        }
+
+        var scale = root.RasterizationScale;
+        var width = AppWindow.ClientSize.Width;
+        body.Measure(new Windows.Foundation.Size(width / scale, double.PositiveInfinity));
+        AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(width, (int)Math.Ceiling(body.DesiredSize.Height * scale)));
     }
 
     /// <summary>True when the user picked <paramref name="confirm"/>; closing the window or Esc is the other answer.</summary>
