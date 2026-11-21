@@ -234,7 +234,30 @@ private struct GeneralSettingsTab: View {
             } message: {
                 Text("Settings return to their defaults. Your projects and presets are not deleted.")
             }
+
+            Text(verbatim: Self.versionText)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 4)
         }
+    }
+
+    /// "Version 1.0.9 (57, GitHub)": the build number, then where this copy came from, so a report names the build.
+    /// Same text as Windows (`AppVersionText`). The channel names are not translated.
+    private static var versionText: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        #if DEBUG
+        let channel = "Debug"
+        #elseif APPSTORE
+        let channel = "App Store"
+        #else
+        let channel = "GitHub"
+        #endif
+        let build = (info["CFBundleVersion"] as? String).flatMap { Int($0) }.flatMap { $0 > 0 ? "\($0), " : nil } ?? ""
+        return "\(String(localized: "Version")) \(version) (\(build)\(channel))"
     }
 }
 

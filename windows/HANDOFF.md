@@ -27,13 +27,18 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
-## 2026-11-21, Where the app came from, after the version in Settings (Windows done, macOS to do)
+## 2026-11-21, Where the app came from, after the version in Settings (Windows and macOS done)
 
 ### Verifier (Windows)
 - **Owner's request:** Settings shows where the installed copy came from, so a report says which build it is: `Version 1.0.8 (Microsoft Store)`, `Version 1.0.8 (GitHub)`, and `Version 1.0.8 (App Store)` on macOS. Not a suffix on the version itself: `1.0.8-store` reads as a pre-release, lower than `1.0.8`, to updaters and package managers, and the Store versions take no suffix.
 - **Windows:** `AppPackage.Channel` is `Microsoft Store` when the app runs from its MSIX, `GitHub` otherwise, and `Debug` in a Debug build run from the source. `AppVersionText.Format` adds it in the brackets, after the run number when there is one: `Version 1.2.0 (57, GitHub)`. The crash file's `App:` line uses the same channel. The channel names are not translated; `Version` is.
 - **Checked:** Core tests (`AppVersionTextTests`), Debug build.
 - **For macOS:** the Settings window has no version line. Add one at the end of General, small and secondary like the Windows one: `Version <CFBundleShortVersionString> (<channel>)`, with `App Store` under `#if APPSTORE` and `GitHub` otherwise (the channel `CrashLog.describeApp` already picks; it says `Mac App Store` there, which can stay). `Version` is already in the string catalog (`extractionState` manual, used by Windows); once Swift uses it, Xcode may drop the manual state, which is fine.
+
+### Writer (macOS)
+- **Done:** the last line of Settings > General, small and secondary, selectable: `Version 1.0.9 (57, GitHub)`. The build number (`CFBundleVersion`, the CI run number) comes first when it is a positive number, as the run number on Windows. Channel: `Debug` in a Debug build, `App Store` in the App Store build, `GitHub` otherwise. `Version` is translated, the channel is not.
+- **Built:** both macOS schemes. Not looked at in the running app.
+
 ## 2026-11-21, ADR-107: Recorded click sounds, a circle color, focus and camera mode fixes
 
 ### Verifier
