@@ -57,6 +57,19 @@ public sealed class AppSettings
 
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
 
+    /// <summary>The speech model chosen, downloaded or transcribed with last; new projects open on it (spec/06 ADR-105).</summary>
+    public string? LastWhisperModelTier { get; set; }
+
+    /// <summary>Notes the speech model just chosen, downloaded or used.</summary>
+    public void UseWhisperModel(string tier)
+    {
+        if (LastWhisperModelTier != tier)
+        {
+            LastWhisperModelTier = tier;
+            Save();
+        }
+    }
+
     /// <summary>The newest crash file the user was told about at launch (spec/06 ADR-98).</summary>
     public string? LastSeenCrashLog { get; set; }
 

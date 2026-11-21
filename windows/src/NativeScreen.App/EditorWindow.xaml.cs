@@ -99,6 +99,14 @@ public sealed partial class EditorWindow : Window
         AppTheme.Register(this);
         Ui.SizeWindow(this, 1600, 1000, 1180, 720);
 
+        if (source.Document is { } opening)
+        {
+            // Before the session exists, so it is not an edit: no undo step, nothing unsaved (spec/06 ADR-105).
+            var captions = opening.Captions;
+            var installed = NativeScreen.Intelligence.WhisperModel.All.Where(model => model.IsInstalled).Select(model => model.Tier).ToList();
+            captions.WhisperModelTier = WhisperModelChoice.ForOpening(captions.WhisperModelTier, captions.Segments.Count > 0, installed, AppSettings.Shared.LastWhisperModelTier);
+        }
+
         session = new EditorSession(source.Document, source.DurationMs) { HasRecordedCamera = source.HasCamera, IsCameraOnly = source.Project?.IsCameraOnly == true, SourceWidth = source.SourceWidth, SourceHeight = source.SourceHeight, HasMicrophoneTrack = source.Project?.Metadata.Tracks.MicrophoneAudio is not null, CursorEvents = source.Project?.CursorEvents ?? [], ClickEvents = source.Project?.ClickEvents ?? [], KeyEvents = source.Project?.KeyEvents ?? [], PointSize = source.Project?.PointSize ?? MotionPointSize.Reference, KeycapStyle = source.Project is { } opened ? WindowsKeycaps.StyleFor(opened.Metadata.Platform) : KeycapStyle.Windows };
         tools = new EditorTools(this, session, source, ShowToast);
         tools.StartPlayback = () => session.IsPlaying ? Task.CompletedTask : TogglePlaybackAsync();

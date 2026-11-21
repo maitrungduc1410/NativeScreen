@@ -397,23 +397,33 @@ public static class AutoMaskBuilder
 /// <summary>Word timings from a speech engine, cleaned for the transcript. Same rules as normalizeWordSegments on macOS.</summary>
 public static class TranscriptSegments
 {
+    /// <summary>
+    /// Trimmed, sorted words that never overlap (spec/06 ADR-105). Whisper stretches a sentence's last word into the pause,
+    /// past the next word's start: caption blocks overlapped on the timeline, and editing by transcript cut into the next
+    /// word. Each word now ends where the next one starts (at least 1 ms long), and starts no earlier than the previous end.
+    /// </summary>
     public static List<CaptionSegment> Normalize(IEnumerable<(string Text, double StartMs, double EndMs)> words, double maxDurationMs)
     {
+        var kept = words
+            .Select(word => (Text: word.Text.Trim(), word.StartMs, word.EndMs))
+            .Where(word => word.Text.Length > 0)
+            .OrderBy(word => word.StartMs)
+            .ToList();
         var results = new List<CaptionSegment>();
-        foreach (var (text, start, end) in words.OrderBy(word => word.StartMs))
+        var previousEnd = 0.0;
+        for (var index = 0; index < kept.Count; index++)
         {
-            var cleaned = text.Trim();
-            if (cleaned.Length == 0)
+            var word = kept[index];
+            var start = Math.Min(Math.Max(previousEnd, word.StartMs), maxDurationMs);
+            var nextStart = index + 1 < kept.Count ? kept[index + 1].StartMs : maxDurationMs;
+            var end = Math.Min(Math.Min(Math.Max(word.EndMs, start + 40), Math.Max(nextStart, start + 1)), maxDurationMs);
+            if (end <= start)
             {
                 continue;
             }
 
-            var from = Math.Clamp(start, 0, maxDurationMs);
-            var to = Math.Clamp(Math.Max(end, from + 40), 0, maxDurationMs);
-            if (to > from)
-            {
-                results.Add(new CaptionSegment { Id = EditorSession.NewId(), SourceStartMs = from, SourceEndMs = to, Text = cleaned });
-            }
+            results.Add(new CaptionSegment { Id = EditorSession.NewId(), SourceStartMs = start, SourceEndMs = end, Text = word.Text });
+            previousEnd = end;
         }
 
         return results;

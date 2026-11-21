@@ -7,7 +7,9 @@ internal sealed record DownloadableModel(string Key, string SizeText, string Loc
 {
     public static DownloadableModel Person { get; } = new("person", PersonSegmentationModel.SizeText, PersonSegmentationModel.LocalPath, () => PersonSegmentationModel.IsInstalled, PersonSegmentationModel.DownloadAsync);
 
-    public static DownloadableModel Speech(WhisperModel model) => new("whisper-" + model.Tier, model.SizeText, model.LocalPath, () => model.IsInstalled, model.DownloadAsync);
+    public const string SpeechKeyPrefix = "whisper-";
+
+    public static DownloadableModel Speech(WhisperModel model) => new(SpeechKeyPrefix + model.Tier, model.SizeText, model.LocalPath, () => model.IsInstalled, model.DownloadAsync);
 }
 
 /// <summary>
@@ -64,6 +66,12 @@ internal static class ModelDownloads
         try
         {
             await model.Download(progress, download.Cancel.Token);
+            if (model.Key.StartsWith(DownloadableModel.SpeechKeyPrefix, StringComparison.Ordinal))
+            {
+                // A model just downloaded is the one new projects should open on (spec/06 ADR-105).
+                AppSettings.Shared.UseWhisperModel(model.Key[DownloadableModel.SpeechKeyPrefix.Length..]);
+            }
+
             return (true, null);
         }
         catch (OperationCanceledException)

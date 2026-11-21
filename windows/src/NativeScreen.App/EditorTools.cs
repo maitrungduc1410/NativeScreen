@@ -1010,6 +1010,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
             }
 
             Report("Transcribing...");
+            AppSettings.Shared.UseWhisperModel(model.Tier);
             CrashLog.Note($"transcript started ({model.Tier}, {session.SourceDurationMs / 1000:F0} s of audio)");
             var document = session.Document;
             var segments = await WhisperTranscriber.TranscribeAsync(

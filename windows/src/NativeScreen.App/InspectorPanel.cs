@@ -1204,6 +1204,12 @@ internal sealed partial class InspectorPanel
         return name.Length > 0 ? char.ToUpper(name[0], CultureInfo.CurrentUICulture) + name[1..] : code;
     }
 
+    private void ChooseWhisperModel(string tier)
+    {
+        AppSettings.Shared.UseWhisperModel(tier);
+        Edit(d => d.Captions.WhisperModelTier = tier);
+    }
+
     private void TranscriptControls()
     {
         var captions = Doc.Captions;
@@ -1226,9 +1232,9 @@ internal sealed partial class InspectorPanel
         };
         Add(Labeled("Language", 8, language));
         Add(Labeled("Model", 10, Options(
-            ("Base", captions.WhisperModelTier == "base", () => Edit(d => d.Captions.WhisperModelTier = "base")),
-            ("Small", captions.WhisperModelTier == "small", () => Edit(d => d.Captions.WhisperModelTier = "small")),
-            ("Medium", captions.WhisperModelTier == "medium", () => Edit(d => d.Captions.WhisperModelTier = "medium")))));
+            ("Base", captions.WhisperModelTier == "base", () => ChooseWhisperModel("base")),
+            ("Small", captions.WhisperModelTier == "small", () => ChooseWhisperModel("small")),
+            ("Medium", captions.WhisperModelTier == "medium", () => ChooseWhisperModel("medium")))));
         ModelRow(
             DownloadableModel.Speech(WhisperModel.ForTier(captions.WhisperModelTier)),
             "Transcripts run on this device. The model is downloaded once from huggingface.co; your audio is never uploaded.",

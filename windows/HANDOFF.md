@@ -40,6 +40,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Open VERIFY items:** none.
 - **Risks / unsure:** transcripts made before fix 1 keep their times until generated again.
 
+### Verifier (Windows)
+- **Fix 1:** `TranscriptSegments.Normalize` follows the macOS rules (previous end, next start, at least 1 ms, clamped to the length).
+- **Fix 2:** `WhisperModelChoice.ForOpening` (Core) picks the tier when an editor opens, before its session exists, so there is no undo step and nothing unsaved. `AppSettings.LastWhisperModelTier` (`settings.json`) is set when a model is chosen in Captions, finishes downloading, or is used for a transcript. `captions.localModelVariant` is read and written back unchanged, as before.
+- **Tests:** `WhisperTranscriptRulesTests`: the owner's `3...` / `3,` case (2260 to 4390), trimming, sorting, same start, past the end; six model choice cases. Core 396. Release build, 0 warnings.
+- **Not checked in the app:** a real transcript, and Captions > Model after downloading only Base (no speech model on this machine).
+
 ## 2026-11-21, ADR-104: Transcripts in every interface language (Windows only)
 
 ### Verifier
