@@ -41,6 +41,10 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **For Windows:** nothing to port. Two things that may be worth copying later: breadcrumbs at export and transcript start (macOS notes them; check Windows has the same steps), and an error file for a failed export or transcript.
 - **Built and checked on macOS:** see ADR-103 "Testing". The test files, the system's `.ips` reports from the tests and the `LastSeenCrashLog` key were removed afterwards.
 
+### Verifier (Windows)
+- **Done:** the transcript notes its start (model, length), finish (words) and stop as breadcrumbs, like the export already did. A failed transcript, video export or still frame export writes an `error-` file with the stack; the toast still shows only the message.
+- **Built:** Release, 0 warnings. A failure was not forced by hand.
+
 ## 2026-11-21, ADR-99 and ADR-100 on macOS (done)
 
 ### Writer (macOS)

@@ -397,6 +397,8 @@ public sealed partial class EditorWindow
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
             CrashLog.Note($"export failed: {exception.GetType().Name} 0x{exception.HResult:X8}");
+            // The toast has only the message; the file keeps the stack for a bug report (spec/06 ADR-98).
+            CrashLog.Write(exception, "export", ending: false);
             ShowToast(Loc.F("Export failed: %@", exception.Message));
         }
         finally
@@ -641,6 +643,7 @@ public sealed partial class EditorWindow
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException)
         {
             ExportOverlay.Visibility = Visibility.Collapsed;
+            CrashLog.Write(exception, "still frame export", ending: false);
             ShowToast(Loc.F("Export failed: %@", exception.Message));
         }
         finally

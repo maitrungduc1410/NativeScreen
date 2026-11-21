@@ -1010,6 +1010,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
             }
 
             Report("Transcribing...");
+            CrashLog.Note($"transcript started ({model.Tier}, {session.SourceDurationMs / 1000:F0} s of audio)");
             var document = session.Document;
             var segments = await WhisperTranscriber.TranscribeAsync(
                 audioPath,
@@ -1028,14 +1029,18 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
                 next.Captions.RebuildTranscriptCaptionBlocks();
                 next.Captions.Enabled = true;
             });
+            CrashLog.Note($"transcript finished ({segments.Count} words)");
             toast(segments.Count switch { 0 => "No speech was found in this recording.", 1 => "Transcribed 1 word", _ => Loc.F("Transcribed %lld words", segments.Count) });
         }
         catch (OperationCanceledException)
         {
+            CrashLog.Note("transcript stopped");
             toast("Transcript stopped");
         }
         catch (Exception exception) when (exception is IOException or HttpRequestException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException or InvalidOperationException or Whisper.net.Wave.CorruptedWaveException)
         {
+            // The toast has only the message; the file keeps the stack for a bug report (spec/06 ADR-98).
+            CrashLog.Write(exception, "transcript", ending: false);
             toast(Loc.F("Transcript failed: %@", exception.Message));
         }
         finally
