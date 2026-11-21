@@ -30,6 +30,7 @@ internal sealed class CameraStageWindow : Window
     private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcher;
     private readonly Grid root = new() { Background = Ui.Rgb(0.08, 0.08, 0.1) };
     private readonly StackPanel footer = new() { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 16) };
+    private readonly TextBlock noMicrophone = Ui.Text("No microphone selected. The recording will have no sound.", 12.5);
     private long lastFrameMs;
     private int pending;
 
@@ -46,13 +47,10 @@ internal sealed class CameraStageWindow : Window
         name.HorizontalAlignment = HorizontalAlignment.Left;
         name.VerticalAlignment = VerticalAlignment.Top;
         root.Children.Add(name);
-        if (!hasMicrophone)
-        {
-            var warning = Ui.Text("No microphone selected. The recording will have no sound.", 12.5);
-            warning.Foreground = Ui.Rgb(1, 0.62, 0.25, 1);
-            warning.VerticalAlignment = VerticalAlignment.Center;
-            footer.Children.Add(warning);
-        }
+        noMicrophone.Foreground = Ui.Rgb(1, 0.62, 0.25, 1);
+        noMicrophone.VerticalAlignment = VerticalAlignment.Center;
+        footer.Children.Add(noMicrophone);
+        SetHasMicrophone(hasMicrophone);
 
         var record = new Button
         {
@@ -84,6 +82,9 @@ internal sealed class CameraStageWindow : Window
         var height = (int)(HeightDip * scale);
         AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(area.X + (area.Width - width) / 2, area.Y + (int)(TopMargin * scale), width, height));
     }
+
+    /// <summary>Shows the warning while no microphone is chosen; the bar calls it whenever the choice changes.</summary>
+    public void SetHasMicrophone(bool hasMicrophone) => noMicrophone.Visibility = hasMicrophone ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>Hides the record button once recording starts; the preview stays.</summary>
     public void SetRecording(bool recording) => footer.Visibility = recording ? Visibility.Collapsed : Visibility.Visible;

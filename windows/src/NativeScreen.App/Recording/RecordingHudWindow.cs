@@ -41,7 +41,18 @@ public sealed partial class RecordingHudWindow : Window
     private CaptureTargetMode? pickingMode;
     private TargetOverlay? overlay;
     private bool systemAudio = true;
-    private CaptureDeviceInfo? microphone;
+    private CaptureDeviceInfo? chosenMicrophone;
+
+    /// <summary>The microphone to record. The camera stage's "no microphone" warning follows it, from the menu, a profile or an agent.</summary>
+    private CaptureDeviceInfo? microphone
+    {
+        get => chosenMicrophone;
+        set
+        {
+            chosenMicrophone = value;
+            stage?.SetHasMicrophone(value is not null);
+        }
+    }
     private CaptureDeviceInfo? camera;
     private CaptureTarget? pending;
     private DateTime countdownStarted;
