@@ -72,6 +72,7 @@ Work is split between two agents on two machines. Know which one you are.
 | Preview frame statistics (Windows) | Run the app with `NS_PREVIEW_STATS=<file>`. Present intervals are written when the editor closes. |
 | Leaks after closing an editor (Windows) | Run the app with `NS_MEMORY_STATS=<file>`. 2, 6 and 15 s after each close it collects garbage and appends memory and the editor objects still alive (`none` is the goal). |
 | MCP tool errors (Windows) | Run the app with `NS_MCP_TRACE=<file>`. Every tool failure other than a plain refusal is appended with its stack. Clients reach the app with `NativeScreen.App.exe --mcp` once `Settings > AI Agents` is on. |
+| Window picker motion (Windows) | Run the app with `NS_PICKER_STATS=<file>`. Each move of the picker's highlight appends the drawing path, duration, frames, fps and draw time per frame (`spec/06` ADR-101). |
 | Timeline zoom cost (Windows) | Run the app with `NS_TIMELINE_ZOOM_STATS=<file>`. Each zoom step appends the zoom, the relayout ms and the total ms. |
 | UI in another language (Windows) | Run the app with `NS_LANGUAGE=<id>` (`en`, `cs`, `de`, `es`, `fr`, `it`, `pt-BR`, `tr`, `vi`, `ru`, `ar`, `ja`, `ko`, `zh-Hans`, `zh-Hant`) for one run. |
 | Crash files (Windows) | Crashes and caught errors write `crash-*.txt` / `error-*.txt` to `Logs` in the user data folder (`spec/06` ADR-98). In a Debug build, `NS_CRASH_TEST=ui\|uisync\|xaml\|background\|task\|preview` makes one on purpose (`uisync` waits 65 s: Windows runs the recovery callback only after a minute). |

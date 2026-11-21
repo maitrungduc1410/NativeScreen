@@ -38,7 +38,6 @@ internal sealed class LiveDrawingOverlay : IDisposable
     private const nint MaNoActivate = 3;
     private const int SwShowNoActivate = 4;
     private const int IdcCross = 32515;
-    private const uint UlwAlpha = 2;
     private const double FadeMs = 300;
 
     private static readonly nint ClassAtom;
@@ -51,10 +50,7 @@ internal sealed class LiveDrawingOverlay : IDisposable
     private readonly StreamWriter log;
     private readonly double? fadeAfterMs;
     private readonly nint hwnd;
-    private readonly nint memoryDc;
-    private readonly nint bitmap;
-    private readonly ID2D1Factory factory;
-    private readonly ID2D1DCRenderTarget target;
+    private readonly LayeredSurface surface;
     private readonly List<Stroke> shown = [];
     private Stroke? current;
     private double lastPenUpMs = double.NegativeInfinity;
@@ -97,14 +93,8 @@ internal sealed class LiveDrawingOverlay : IDisposable
         hwnd = CreateWindowExW(WsExLayered | WsExTopmost | WsExToolWindow | WsExTransparent | WsExNoActivate, ClassAtom, null, WsPopup, screen.X, screen.Y, screen.Width, screen.Height, 0, 0, GetModuleHandleW(null), 0);
         Instances[hwnd] = this;
         CaptureTargets.SetExcludedFromCapture(hwnd, true);
-        var header = new BitmapInfoHeader { Size = 40, Width = screen.Width, Height = -screen.Height, Planes = 1, BitCount = 32 };
-        var screenDc = GetDC(0);
-        memoryDc = CreateCompatibleDC(screenDc);
-        bitmap = CreateDIBSection(screenDc, ref header, 0, out _, 0, 0);
-        ReleaseDC(0, screenDc);
-        SelectObject(memoryDc, bitmap);
-        factory = D2D1.D2D1CreateFactory<ID2D1Factory>();
-        target = factory.CreateDCRenderTarget(new RenderTargetProperties(new D2DPixelFormat(Format.B8G8R8A8_UNorm, AlphaMode.Premultiplied)));
+        // Layered, because the mouse must pass through while not drawing; drawn on the GPU when it can (spec/06 ADR-101).
+        surface = new LayeredSurface(screen.Width, screen.Height);
         Present();
         ShowWindow(hwnd, SwShowNoActivate);
         // Redraws while strokes fade.
@@ -193,10 +183,7 @@ internal sealed class LiveDrawingOverlay : IDisposable
         KillTimer(hwnd, 1);
         Instances.Remove(hwnd);
         DestroyWindow(hwnd);
-        target.Dispose();
-        factory.Dispose();
-        DeleteObject(bitmap);
-        DeleteDC(memoryDc);
+        surface.Dispose();
         log.Dispose();
     }
 
@@ -334,8 +321,7 @@ internal sealed class LiveDrawingOverlay : IDisposable
 
     private void Present()
     {
-        target.BindDC(memoryDc, new Vortice.RawRect(0, 0, screen.Width, screen.Height));
-        target.BeginDraw();
+        surface.Begin();
         // A layered window lets the mouse through every pixel whose alpha is 0, whatever its styles say. While drawing, the
         // whole screen gets alpha 1/255, which nobody sees, or every press went to the window below (spec/06 ADR-79).
         target.Clear(new Color4(0, 0, 0, drawing ? 1f / 255 : 0));
@@ -356,13 +342,12 @@ internal sealed class LiveDrawingOverlay : IDisposable
             Draw(live, 1);
         }
 
-        target.EndDraw();
-        var position = new Point32 { X = screen.X, Y = screen.Y };
-        var size = new Size32 { Cx = screen.Width, Cy = screen.Height };
-        var source = default(Point32);
-        var blend = new BlendFunction { SourceConstantAlpha = 255, AlphaFormat = 1 };
-        UpdateLayeredWindow(hwnd, 0, ref position, ref size, memoryDc, ref source, 0, ref blend, UlwAlpha);
+        surface.Show(hwnd, screen.X, screen.Y);
     }
+
+    private ID2D1RenderTarget target => surface.Target;
+
+    private ID2D1Factory factory => surface.Target.Factory;
 
     /// <summary>The same shapes as the pen annotation and the arrow and rectangle passes, at the recorded area's scale.</summary>
     private void Draw(Stroke stroke, float opacity)
@@ -458,42 +443,10 @@ internal sealed class LiveDrawingOverlay : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct BitmapInfoHeader
-    {
-        public uint Size;
-        public int Width;
-        public int Height;
-        public ushort Planes;
-        public ushort BitCount;
-        public uint Compression;
-        public uint SizeImage;
-        public int XPelsPerMeter;
-        public int YPelsPerMeter;
-        public uint ClrUsed;
-        public uint ClrImportant;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     private struct Point32
     {
         public int X;
         public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Size32
-    {
-        public int Cx;
-        public int Cy;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BlendFunction
-    {
-        public byte BlendOp;
-        public byte BlendFlags;
-        public byte SourceConstantAlpha;
-        public byte AlphaFormat;
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
@@ -533,15 +486,6 @@ internal sealed class LiveDrawingOverlay : IDisposable
     private static extern nint LoadCursorW(nint instance, nint name);
 
     [DllImport("user32.dll")]
-    private static extern nint GetDC(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern int ReleaseDC(nint window, nint dc);
-
-    [DllImport("user32.dll")]
-    private static extern bool UpdateLayeredWindow(nint window, nint target, ref Point32 position, ref Size32 size, nint source, ref Point32 sourcePosition, uint key, ref BlendFunction blend, uint flags);
-
-    [DllImport("user32.dll")]
     private static extern nint GetWindowLongPtrW(nint window, int index);
 
     [DllImport("user32.dll")]
@@ -552,19 +496,4 @@ internal sealed class LiveDrawingOverlay : IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool KillTimer(nint window, nuint id);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateCompatibleDC(nint dc);
-
-    [DllImport("gdi32.dll")]
-    private static extern bool DeleteDC(nint dc);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateDIBSection(nint dc, ref BitmapInfoHeader header, uint usage, out nint bits, nint section, uint offset);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint SelectObject(nint dc, nint item);
-
-    [DllImport("gdi32.dll")]
-    private static extern bool DeleteObject(nint item);
 }

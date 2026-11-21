@@ -27,6 +27,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, ADR-101: The window picker's highlight glides like on macOS (Windows only)
+
+### Verifier
+- **Owner's request:** the picker's highlight moves smoothly between windows on macOS; on Windows it jumped.
+- **Changes made:**
+  - `TargetOverlay`: the highlight rectangle follows the macOS spring (response 0.20, damping 0.86) on an 8 ms timer that runs only while it moves; the card follows it.
+  - `CompositionSurface` (new): the picker draws into a DirectComposition swap chain on a `WS_EX_NOREDIRECTIONBITMAP` window, through a minimal COM vtable interop. `LayeredSurface` (new): the layered path, on a GDI-compatible GPU texture when it can, software otherwise; the picker falls back to it, and `LiveDrawingOverlay` uses it.
+  - `NS_PICKER_STATS=<file>` for the numbers.
+- **Measured (4K, 60 Hz, a move between two windows, 8 moves each):** software layered 16 to 21 fps (33 to 50 ms to draw a frame); GPU layered 35 to 49 fps; DirectComposition 51 to 59 fps. Live drawing: pen points about 34 ms apart instead of 64.
+- **Checked in a sandbox:** the highlight moves between Notepad and a full-screen window; with the capture exclusion turned off in a scratch build, Desktop Duplication frames show the dim (background pixels 31 to 24, the 22 % dim), the highlight and the card mid-move. Area drag and Esc, Display's Record button, Finish, and live drawing (pen, arrow, Stop drawing, Finish) all work. Release build, 0 warnings.
+- **Not checked:** two displays with different scales, and a machine where DirectComposition fails (the layered fallback was only checked as the drawing overlay's path).
 ## 2026-11-21, Drawing while recording did nothing on Windows (Windows only)
 
 ### Verifier

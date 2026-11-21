@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -29,10 +30,12 @@ internal sealed class TargetOverlay : IDisposable
     private const uint WmMouseMove = 0x0200;
     private const uint WmLButtonDown = 0x0201;
     private const uint WmLButtonUp = 0x0202;
+    private const uint WmTimer = 0x0113;
+    private const nuint AnimationTimer = 1;
+    private const uint AnimationIntervalMs = 8;
     private const int VkEscape = 0x1B;
     private const int SwShowNoActivate = 4;
     private const int IdcArrow = 32512;
-    private const uint UlwAlpha = 2;
     private const uint TpmReturnCommand = 0x0100;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
@@ -55,6 +58,10 @@ internal sealed class TargetOverlay : IDisposable
     private static readonly Color4 CardFill = new(0.12f, 0.12f, 0.15f, 0.94f);
     private static readonly Color4 CardBorder = new(1, 1, 1, 0.18f);
 
+    // The highlight moves to the next window on the spring the macOS picker uses (response 0.20 s, damping 0.86, mass 1).
+    private static readonly float SpringStiffness = (float)Math.Pow(2 * Math.PI / 0.20, 2);
+    private static readonly float SpringDamping = (float)(4 * Math.PI * 0.86 / 0.20);
+
     private static readonly nint ClassAtom;
     private static readonly WndProc ClassProc = StaticProc;
     private static readonly Dictionary<nint, TargetOverlay> Instances = [];
@@ -63,16 +70,20 @@ internal sealed class TargetOverlay : IDisposable
     private readonly Action<CaptureTarget> start;
     private readonly Action cancelled;
     private readonly PixelRect screen;
-    private readonly nint hwnd;
-    private readonly nint memoryDc;
-    private readonly nint bitmap;
-    private readonly ID2D1Factory factory;
-    private readonly ID2D1DCRenderTarget target;
+    private nint hwnd;
+    private readonly IOverlaySurface surface;
     private readonly IDWriteFactory write;
     private readonly IWICImagingFactory imaging = new();
     private readonly List<(RectangleF Rect, Action Click)> buttons = [];
     private IReadOnlyList<CaptureWindow> windows;
     private CaptureWindow? hovered;
+    private System.Numerics.Vector4? shown;
+    private System.Numerics.Vector4 velocity;
+    private long lastStep;
+    private bool animating;
+    private static readonly string? StatsFile = Environment.GetEnvironmentVariable("NS_PICKER_STATS");
+    private readonly List<double> frameMs = [];
+    private long animationStart;
     private CaptureDisplay display;
     private PixelRect area;
     private (int X, int Y)? pressed;
@@ -111,23 +122,37 @@ internal sealed class TargetOverlay : IDisposable
         var height = Math.Min((int)(720 * display.Scale), (int)(display.Bounds.Height * 0.7));
         area = new PixelRect(display.Bounds.X + (display.Bounds.Width - width) / 2, display.Bounds.Y + (display.Bounds.Height - height) / 2, width, height);
 
-        hwnd = CreateWindowExW(WsExLayered | WsExTopmost | WsExToolWindow, ClassAtom, null, WsPopup, screen.X, screen.Y, screen.Width, screen.Height, 0, 0, GetModuleHandleW(null), 0);
+        // DirectComposition when it works, so the highlight can animate; a layered window otherwise (spec/06 ADR-101).
+        IOverlaySurface? chosen = null;
+        if (CompositionSurface.TryCreate(screen.Width, screen.Height) is { } composition)
+        {
+            hwnd = CreateWindowExW(CompositionSurface.WindowExStyle | WsExTopmost | WsExToolWindow, ClassAtom, null, WsPopup, screen.X, screen.Y, screen.Width, screen.Height, 0, 0, GetModuleHandleW(null), 0);
+            if (composition.Attach(hwnd))
+            {
+                chosen = composition;
+            }
+            else
+            {
+                composition.Dispose();
+                DestroyWindow(hwnd);
+            }
+        }
+
+        if (chosen is null)
+        {
+            hwnd = CreateWindowExW(WsExLayered | WsExTopmost | WsExToolWindow, ClassAtom, null, WsPopup, screen.X, screen.Y, screen.Width, screen.Height, 0, 0, GetModuleHandleW(null), 0);
+            chosen = new LayeredSurface(screen.Width, screen.Height);
+        }
+
+        surface = chosen;
         Instances[hwnd] = this;
         CaptureTargets.SetExcludedFromCapture(hwnd, true);
-
-        var header = new BitmapInfoHeader { Size = 40, Width = screen.Width, Height = -screen.Height, Planes = 1, BitCount = 32 };
-        var screenDc = GetDC(0);
-        memoryDc = CreateCompatibleDC(screenDc);
-        bitmap = CreateDIBSection(screenDc, ref header, 0, out _, 0, 0);
-        ReleaseDC(0, screenDc);
-        SelectObject(memoryDc, bitmap);
-        factory = D2D1.D2D1CreateFactory<ID2D1Factory>();
         write = DWrite.DWriteCreateFactory<IDWriteFactory>();
-        target = factory.CreateDCRenderTarget(new RenderTargetProperties(new D2DPixelFormat(Format.B8G8R8A8_UNorm, AlphaMode.Premultiplied)));
         target.TextAntialiasMode = Vortice.Direct2D1.TextAntialiasMode.Grayscale;
 
         GetCursorPos(out var cursor);
         UpdateHover(cursor.X, cursor.Y);
+        Retarget(animate: false);
         Present();
         ShowWindow(hwnd, SwShowNoActivate);
         SetForegroundWindow(hwnd);
@@ -142,16 +167,16 @@ internal sealed class TargetOverlay : IDisposable
         }
 
         disposed = true;
+        KillTimer(hwnd, AnimationTimer);
         Instances.Remove(hwnd);
         DestroyWindow(hwnd);
         icon?.Dispose();
-        target.Dispose();
-        factory.Dispose();
+        surface.Dispose();
         write.Dispose();
         imaging.Dispose();
-        DeleteObject(bitmap);
-        DeleteDC(memoryDc);
     }
+
+    private ID2D1RenderTarget target => surface.Target;
 
     /// <summary>Clicking the mode again, or anything else that ends picking without a choice.</summary>
     public void Cancel() => Dispose();
@@ -179,6 +204,14 @@ internal sealed class TargetOverlay : IDisposable
             case WmMouseMove:
                 Moved(x, y);
                 return true;
+            case WmTimer when wParam == (nint)AnimationTimer:
+            {
+                StepAnimation();
+                var started = Stopwatch.GetTimestamp();
+                Present();
+                frameMs.Add((Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency);
+                return true;
+            }
             case WmLButtonDown:
                 Pressed(x, y);
                 return true;
@@ -214,8 +247,92 @@ internal sealed class TargetOverlay : IDisposable
 
         if (UpdateHover(x, y))
         {
+            Retarget(animate: true);
             Present();
         }
+    }
+
+    private System.Numerics.Vector4? Wanted => hovered is { } window ? new(window.Bounds.X - screen.X, window.Bounds.Y - screen.Y, window.Bounds.Width, window.Bounds.Height) : null;
+
+    /// <summary>Starts the highlight moving to the hovered window. From nothing, or to nothing, it appears or goes at once.</summary>
+    private void Retarget(bool animate)
+    {
+        if (mode != CaptureTargetMode.Window)
+        {
+            return;
+        }
+
+        if (!animate || shown is null || Wanted is null)
+        {
+            shown = Wanted;
+            velocity = default;
+            StopAnimation();
+            return;
+        }
+
+        if (!animating)
+        {
+            animating = true;
+            lastStep = Stopwatch.GetTimestamp();
+            animationStart = lastStep;
+            frameMs.Clear();
+            SetTimer(hwnd, AnimationTimer, AnimationIntervalMs, 0);
+        }
+    }
+
+    private void StopAnimation()
+    {
+        if (animating)
+        {
+            animating = false;
+            KillTimer(hwnd, AnimationTimer);
+            WriteStats();
+        }
+    }
+
+    /// <summary>NS_PICKER_STATS=<file>: one line per move of the highlight, with its frames and the time each took to draw.</summary>
+    private void WriteStats()
+    {
+        if (StatsFile is null || frameMs.Count == 0)
+        {
+            return;
+        }
+
+        var kind = surface is CompositionSurface ? "composition" : "layered";
+
+        var total = (Stopwatch.GetTimestamp() - animationStart) * 1000.0 / Stopwatch.Frequency;
+        File.AppendAllText(StatsFile, $"{kind}: move {total:F0} ms, {frameMs.Count} frames ({frameMs.Count * 1000 / Math.Max(1, total):F0} fps), draw avg {frameMs.Average():F1} ms max {frameMs.Max():F1} ms{Environment.NewLine}");
+    }
+
+    /// <summary>Advances the spring by the time since the last frame, in 1 ms steps so a late frame stays stable.</summary>
+    private void StepAnimation()
+    {
+        if (shown is not { } position || Wanted is not { } goal)
+        {
+            StopAnimation();
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        var elapsed = Math.Min(0.1, (now - lastStep) / (double)Stopwatch.Frequency);
+        lastStep = now;
+        for (var left = elapsed; left > 0; left -= 0.001)
+        {
+            var dt = (float)Math.Min(0.001, left);
+            var acceleration = SpringStiffness * (goal - position) - SpringDamping * velocity;
+            velocity += acceleration * dt;
+            position += velocity * dt;
+        }
+
+        var distance = goal - position;
+        if (Math.Max(Math.Max(Math.Abs(distance.X), Math.Abs(distance.Y)), Math.Max(Math.Abs(distance.Z), Math.Abs(distance.W))) < 0.5f && velocity.Length() < 5)
+        {
+            position = goal;
+            velocity = default;
+            StopAnimation();
+        }
+
+        shown = position;
     }
 
     private bool UpdateHover(int x, int y)
@@ -280,9 +397,7 @@ internal sealed class TargetOverlay : IDisposable
     private void Present()
     {
         buttons.Clear();
-        var whole = new Vortice.RawRect(0, 0, screen.Width, screen.Height);
-        target.BindDC(memoryDc, whole);
-        target.BeginDraw();
+        surface.Begin();
         target.Clear(Dim);
         switch (mode)
         {
@@ -297,12 +412,7 @@ internal sealed class TargetOverlay : IDisposable
                 break;
         }
 
-        target.EndDraw();
-        var position = new Point32 { X = screen.X, Y = screen.Y };
-        var size = new Size32 { Cx = screen.Width, Cy = screen.Height };
-        var source = default(Point32);
-        var blend = new BlendFunction { SourceConstantAlpha = 255, AlphaFormat = 1 };
-        UpdateLayeredWindow(hwnd, 0, ref position, ref size, memoryDc, ref source, 0, ref blend, UlwAlpha);
+        surface.Show(hwnd, screen.X, screen.Y);
     }
 
     private float S => (float)display.Scale;
@@ -318,7 +428,7 @@ internal sealed class TargetOverlay : IDisposable
         }
 
         var radius = (Environment.OSVersion.Version.Build >= 22000 && !window.IsMaximized ? 8 : 0) * S;
-        var rect = Local(window.Bounds);
+        var rect = shown is { } moving ? new RectangleF(moving.X, moving.Y, moving.Z, moving.W) : Local(window.Bounds);
         Fill(rect, radius, new Color4(0.36f, 0.22f, 0.98f, 0.24f));
         Stroke(rect, radius, AccentBorder, 2.5f * S);
 
@@ -393,7 +503,7 @@ internal sealed class TargetOverlay : IDisposable
         var rect = Local(area);
         Fill(rect, 10 * S, new Color4(0.36f, 0.22f, 0.98f, 0.12f));
         using var white = target.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
-        using var style = factory.CreateStrokeStyle(new StrokeStyleProperties { DashStyle = DashStyle.Custom }, [4f, 2f]);
+        using var style = target.Factory.CreateStrokeStyle(new StrokeStyleProperties { DashStyle = DashStyle.Custom }, [4f, 2f]);
         target.DrawRoundedRectangle(new RoundedRectangle(rect, 10 * S, 10 * S), white, 2 * S, style);
         foreach (var (x, y) in new[] { (rect.Left, rect.Top), (rect.Right, rect.Top), (rect.Left, rect.Bottom), (rect.Right, rect.Bottom) })
         {
@@ -475,6 +585,7 @@ internal sealed class TargetOverlay : IDisposable
         SetWindowPos(window.Handle, 0, 0, 0, (int)(width * display.Scale), (int)(height * display.Scale), SwpNoMove | SwpNoZOrder);
         windows = CaptureTargets.WindowsFrontToBack();
         hovered = CaptureTargets.WindowInfo(window.Handle) ?? window;
+        Retarget(animate: true);
         Present();
     }
 
@@ -585,42 +696,10 @@ internal sealed class TargetOverlay : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct BitmapInfoHeader
-    {
-        public uint Size;
-        public int Width;
-        public int Height;
-        public ushort Planes;
-        public ushort BitCount;
-        public uint Compression;
-        public uint SizeImage;
-        public int XPelsPerMeter;
-        public int YPelsPerMeter;
-        public uint ClrUsed;
-        public uint ClrImportant;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     private struct Point32
     {
         public int X;
         public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Size32
-    {
-        public int Cx;
-        public int Cy;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BlendFunction
-    {
-        public byte BlendOp;
-        public byte BlendFlags;
-        public byte SourceConstantAlpha;
-        public byte AlphaFormat;
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
@@ -657,16 +736,14 @@ internal sealed class TargetOverlay : IDisposable
     private static extern bool GetCursorPos(out Point32 point);
 
     [DllImport("user32.dll")]
+    private static extern nuint SetTimer(nint window, nuint id, uint elapse, nint callback);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool KillTimer(nint window, nuint id);
+
+    [DllImport("user32.dll")]
     private static extern nint LoadCursorW(nint instance, nint name);
-
-    [DllImport("user32.dll")]
-    private static extern nint GetDC(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern int ReleaseDC(nint window, nint dc);
-
-    [DllImport("user32.dll")]
-    private static extern bool UpdateLayeredWindow(nint window, nint target, ref Point32 position, ref Size32 size, nint source, ref Point32 sourcePosition, uint key, ref BlendFunction blend, uint flags);
 
     [DllImport("user32.dll")]
     private static extern nint CreatePopupMenu();
@@ -688,19 +765,4 @@ internal sealed class TargetOverlay : IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool DestroyIcon(nint icon);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateCompatibleDC(nint dc);
-
-    [DllImport("gdi32.dll")]
-    private static extern bool DeleteDC(nint dc);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateDIBSection(nint dc, ref BitmapInfoHeader header, uint usage, out nint bits, nint section, uint offset);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint SelectObject(nint dc, nint item);
-
-    [DllImport("gdi32.dll")]
-    private static extern bool DeleteObject(nint item);
 }
