@@ -27,6 +27,14 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-21, Every Quit crashed, so every launch showed the crash notice (Windows only)
+
+### Verifier
+- **Owner's report:** each launch from Visual Studio showed "Native Screen closed unexpectedly", without doing anything.
+- **Cause:** the notice was about the previous run. All seven crash files on the owner's machine: `NullReferenceException` in `SystemDrag`'s `LayoutUpdated` handler (`window.AppWindow.Id`), after the window closed. XAML runs one more layout after `Closed`, when `AppWindow` is null; the exception in a XAML event ends the app. It happened on every Quit and can happen when the camera bubble closes. Same signature as the Store user's report (`0xc000027b` in `Microsoft.UI.Xaml.dll`, `0x80004003`), so it is probably that crash too.
+- **Changes made:** `SystemDrag.Attach` returns when the window has closed or `AppWindow` is null, and removes its handler on `Closed`. `NS_CRASH_TEST=quit` (Debug) quits after 4 s. spec/06 ADR-98, the platform pitfalls.
+- **Checked:** `NS_CRASH_TEST=quit` with the old code: exit code 255 and a crash file with this stack; with the fix: exit code 0, no file.
+- **Owner:** the newest old crash file (09:40) will show once more on the next launch; after that, nothing.
 ## 2026-11-21, ADR-102 on macOS: the cursor stays on the pen (macOS done)
 
 ### Writer (macOS)

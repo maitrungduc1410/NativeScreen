@@ -19,9 +19,14 @@ internal static class SystemDrag
     public static void Attach(Window window, FrameworkElement root)
     {
         RectInt32[]? sent = null;
-        root.LayoutUpdated += (_, _) =>
+        var closed = false;
+        EventHandler<object>? updated = null;
+        updated = (_, _) =>
         {
-            if (root.XamlRoot is not { } xamlRoot)
+            // XAML can run one more layout after the window closed, when AppWindow is already null. That threw inside a
+            // XAML event, which ends the app: on every Quit, and when the camera bubble closed at the end of a recording
+            // (spec/06 ADR-98).
+            if (closed || window.AppWindow is null || root.XamlRoot is not { } xamlRoot)
             {
                 return;
             }
@@ -40,6 +45,12 @@ internal static class SystemDrag
             var source = InputNonClientPointerSource.GetForWindowId(window.AppWindow.Id);
             source.SetRegionRects(NonClientRegionKind.Caption, [caption]);
             source.SetRegionRects(NonClientRegionKind.Passthrough, controls.ToArray());
+        };
+        root.LayoutUpdated += updated;
+        window.Closed += (_, _) =>
+        {
+            closed = true;
+            root.LayoutUpdated -= updated;
         };
     }
 

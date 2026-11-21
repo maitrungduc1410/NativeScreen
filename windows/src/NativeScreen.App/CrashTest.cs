@@ -24,6 +24,10 @@ internal static class CrashTest
                 // the recovery callback only after a minute of running, hence the wait.
                 After(TimeSpan.FromSeconds(65), () => throw new NullReferenceException("NS_CRASH_TEST uisync"));
                 break;
+            case "quit":
+                // Quit from the tray icon after a few seconds; a clean exit leaves no crash file.
+                After(TimeSpan.FromSeconds(4), App.Quit);
+                break;
             case "xaml":
                 // Thrown inside a XAML event handler: XAML raises UnhandledException, then ends the app.
                 After(TimeSpan.FromSeconds(3), () =>
