@@ -493,7 +493,7 @@ public sealed partial class RecordingHudWindow : Window
             return;
         }
 
-        stage = new CameraStageWindow(chosen.Name, microphone is not null, () => BeginCountdown(CameraTarget()));
+        stage = new CameraStageWindow(chosen.Name, microphone is not null, () => BeginCountdown(CameraTarget()), EscapePressed);
         stage.AppWindow.Show(false);
         DockNotes();
         ShowIdle();
