@@ -1469,7 +1469,7 @@ internal sealed class McpToolbox
         if (target == "clipboard")
         {
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
-            package.SetStorageItems([await Windows.Storage.StorageFile.GetFileFromPathAsync(path)]);
+            package.SetStorageItems((Windows.Storage.IStorageItem[])[await Windows.Storage.StorageFile.GetFileFromPathAsync(path)]);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
         }
 

@@ -185,7 +185,7 @@ internal sealed partial class InspectorPanel
             };
             IReadOnlyList<WallpaperItem> wallpapers = wallpaperCategory switch
             {
-                FavoritesCategory => BackgroundFavorites.Wallpapers(favorites, [.. BundledWallpaperCatalog.AllItems, .. systemWallpapers]),
+                FavoritesCategory => BackgroundFavorites.Wallpapers(favorites, (WallpaperItem[])[.. BundledWallpaperCatalog.AllItems, .. systemWallpapers]),
                 WindowsWallpapers => systemWallpapers,
                 _ => BundledWallpaperCatalog.Items(wallpaperCategory)
             };
