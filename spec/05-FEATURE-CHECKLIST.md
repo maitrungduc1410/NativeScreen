@@ -90,8 +90,8 @@
   - [x] Micro-shake removal filter (`removeShakeThresholdPx`), `Optimize cursor changes`, `Keep cursor in sync with hovers`, and `Stop cursor movement at the end of the video`.
   - [x] Auto-hide cursor when idle (`hideWhenIdleAfterMs`).
   - [x] Loop cursor position back to start (`loopBackToStartMs`) for seamless looping videos/GIFs.
-  - [x] Circle click effect color (swatch with picker, hex box, wand for a random color; `spec/06` ADR-107). macOS; Windows in the handoff.
-  - [x] Click effect styles (`None`, `Circle`, `Ripple` as a screen-bending wave) & recorded click sounds (`Soft`, `Crisp`, `Classic`: CC0 recordings cut by `tools/prepare_click_sounds.py`, ADR-107; Windows lists `Classic` after the handoff) with volume & live preview.
+  - [x] Circle click effect color (swatch with picker, hex box, wand for a random color; `spec/06` ADR-107). macOS and Windows.
+  - [x] Click effect styles (`None`, `Circle`, `Ripple` as a screen-bending wave) & recorded click sounds (`Soft`, `Crisp`, `Classic`: CC0 recordings cut by `tools/prepare_click_sounds.py`, ADR-107; Windows too) with volume & live preview.
   - [x] Cursor presses in on clicks (from button down to up) and theme hands fold the index finger (`spec/06` ADR-95). Windows too.
   - [x] Capture and render actual macOS cursor shapes (`arrow`, `pointer`, `ibeam`, `crosshair`, `openhand`, `closedhand`).
 - [x] **Audio Enhancements:**

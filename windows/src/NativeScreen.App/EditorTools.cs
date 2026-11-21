@@ -769,6 +769,7 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
     }
 
 
+    /// <summary>Plays the project's click sound once, after picking a set or from the preview button.</summary>
     public void PreviewClickSound() => previewSounds.Play(session.Document.Cursor.ClickEffect.SoundSet, session.Document.Cursor.ClickEffect.SoundVolume);
 
     public async void LoadLutFile()

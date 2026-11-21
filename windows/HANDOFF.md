@@ -29,6 +29,17 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 ## 2026-11-21, ADR-107: Recorded click sounds, a circle color, focus and camera mode fixes
 
+### Verifier
+- **Done:** all seven items.
+  1. `ClickSounds.Sets` (Soft, Crisp, Classic) drives the inspector; picking one plays it.
+  2. `ClickSounds.Normalized`: an unknown id plays Crisp when it contains `master`, otherwise Soft, as `normalizedSoundSet`. The inspector highlights the normalized set.
+  3. `FrameCompositor.DrawClick` uses `ClickEffect.Color` with the same alpha (`ClickTint`, white for anything not `#RRGGBB`).
+  4. `Circle color` row under Click effect while Circle is chosen: `ColorField` (swatch, picker, hex box) and a shuffle-glyph button (`Random color`, tooltip `Pick random color`) picking from the ten colors, never the current one.
+  5. WinUI kept a `TextBox` focused after a press on the preview, so Space did nothing (the editor skips shortcuts while typing). A root `PointerPressed` handler (handled events too) moves focus to `FocusSink` unless the press is inside a text field; the box commits on losing focus.
+  6. Already right: Esc closes the stage and leaves camera mode; a camera the stage picked is cleared, so no bubble. A camera chosen before for screen recordings keeps its bubble, as at idle.
+  7. Already right: the delete dialog (`ConfirmWindow`, topmost, opened later) is above the stage.
+- **Checked in a sandbox:** Circle shows the row, the wand gave `#EF4444` then `#14B8A6`, Ripple hides it. Focus in the hex box, a click on the preview, Space: the box lost focus and playback started. Camera recording, trash: the window under the dialog's center is the dialog. Classic WAVs are in the build output. Rendering tests 40/40.
+- **Not checked:** the colored circle in an export (the same compositor draws it), hearing the three sounds.
 ### Writer
 - **Scope:** `spec/06` ADR-107. The click sounds are now CC0 recordings, there is a third set, the circle click effect takes a color, a click outside a text field ends editing, and camera mode has two recording bar fixes. Windows needs:
   1. **Sound list.** `InspectorPanel` "Click sound": None, `soft` Soft, `crisp` Crisp, `classic` Classic (macOS: `CursorClickSoundPlayer.soundSets`). Picking one should play it, as the Mac does.

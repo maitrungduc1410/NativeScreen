@@ -11,8 +11,34 @@ internal sealed class ClickSounds : IDisposable
     private readonly Dictionary<string, MediaPlayer> players = [];
     private double lastSourceMs = -1;
 
+    /// <summary>The bundled sets, in the order of the inspector (macOS `CursorClickSoundPlayer.soundSets`, spec/06 ADR-107).</summary>
+    public static readonly (string Id, string Title)[] Sets = [("soft", "Soft"), ("crisp", "Crisp"), ("classic", "Classic")];
+
+    /// <summary>
+    /// A saved set as one this build has, or null for no sound. An id from a newer or older build still clicks, as on macOS:
+    /// one with "master" in it plays Crisp, anything else Soft.
+    /// </summary>
+    public static string? Normalized(string? soundSet)
+    {
+        if (string.IsNullOrEmpty(soundSet))
+        {
+            return null;
+        }
+
+        foreach (var (id, _) in Sets)
+        {
+            if (id == soundSet)
+            {
+                return id;
+            }
+        }
+
+        return soundSet.Contains("master", StringComparison.Ordinal) ? "crisp" : "soft";
+    }
+
     public void Play(string? soundSet, double volume)
     {
+        soundSet = Normalized(soundSet);
         if (soundSet is null)
         {
             return;

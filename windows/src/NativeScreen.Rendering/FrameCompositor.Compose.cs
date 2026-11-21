@@ -704,7 +704,17 @@ public sealed partial class FrameCompositor
         var x = screen.X + anchor.X * screen.Width;
         var y = screen.Y + anchor.Y * screen.Height;
         var rect = new Vector4((float)(x - placement.Radius), (float)(y - placement.Radius), (float)(placement.Radius * 2), (float)(placement.Radius * 2));
-        DrawBox(rect, (float)placement.Radius, 0, new Vector4(1, 1, 1, (float)(placement.Alpha * 0.65)));
+        var tint = ClickTint(document.Cursor.ClickEffect.Color);
+        DrawBox(rect, (float)placement.Radius, 0, new Vector4(tint.X, tint.Y, tint.Z, (float)(placement.Alpha * 0.65)));
+    }
+
+    /// <summary>`cursor.clickEffect.color` (`#RRGGBB`); anything else is white, the color before it was used (spec/06 ADR-107).</summary>
+    private static Vector3 ClickTint(string? value)
+    {
+        var text = value.AsSpan().Trim().TrimStart('#');
+        return text.Length == 6 && uint.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rgb)
+            ? new Vector3(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f)
+            : Vector3.One;
     }
 
     // The ripple draws nothing on top: it bends the positioned screen, shadow included, before the cursor and the camera (spec/07 Pass 4).

@@ -146,6 +146,9 @@ public sealed partial class EditorWindow : Window
             // Keeps the first button from opening with a focus ring.
             FocusSink.Focus(FocusState.Programmatic);
         };
+        // A press on something that takes no focus (the preview, the timeline, empty space) left a text box focused, so Space
+        // typed into a hex box instead of playing. Such a press ends the editing, which also commits the box (spec/06 ADR-107).
+        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, args) => EndTextEditingOnOutsidePress(args.OriginalSource)), true);
         TitleName.SizeChanged += (_, _) => UpdateTitleBarRegions();
         FolderButton.IsEnabled = source.PackagePath is not null;
         RemoveButton.IsEnabled = source.PackagePath is not null;
@@ -776,6 +779,25 @@ public sealed partial class EditorWindow : Window
     /// The preview's outline and hover dim, as on macOS: ink at 8 % (28 % and 1.5 px on hover) and a 3.5 % ink wash. The
     /// outline keeps a white recording apart from the light editor around it, where the flat style has no shadow.
     /// </summary>
+    private void EndTextEditingOnOutsidePress(object source)
+    {
+        if (FocusManager.GetFocusedElement(Root.XamlRoot) is not TextBox)
+        {
+            return;
+        }
+
+        for (var element = source as DependencyObject; element is not null; element = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element))
+        {
+            // Another text field takes the focus itself.
+            if (element is TextBox or RichEditBox)
+            {
+                return;
+            }
+        }
+
+        FocusSink.Focus(FocusState.Programmatic);
+    }
+
     private void StylePreviewHover(bool hovered)
     {
         previewHovered = hovered;

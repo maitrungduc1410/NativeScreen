@@ -12,6 +12,13 @@ namespace NativeScreen.App;
 /// <summary>Builds the inspector for the selected tab or timeline block. Every control writes to the session document.</summary>
 internal sealed partial class InspectorPanel
 {
+    // macOS `curatedClickColors`: white and nine saturated colors that read over most screens.
+    private static readonly string[] CuratedClickColors =
+        ["#FFFFFF", "#3B82F6", "#0EA5E9", "#EF4444", "#F97316", "#FACC15", "#22C55E", "#8B5CF6", "#EC4899", "#14B8A6"];
+
+    // Segoe "Shuffle": a random pick.
+    private const string RandomColorGlyph = "";
+
     private static readonly string[] CuratedSolidColors =
     [
         "#4776E6", "#8E54E9", "#1E1E2E", "#0F172A", "#2563EB", "#7C3AED", "#DB2777", "#EA580C",
@@ -479,11 +486,24 @@ internal sealed partial class InspectorPanel
             ("None", effect == ClickEffectStyle.None, () => Edit(d => d.Cursor.ClickEffect.VisualStyle = ClickEffectStyle.None)),
             ("Circle", effect == ClickEffectStyle.Circle, () => Edit(d => d.Cursor.ClickEffect.VisualStyle = ClickEffectStyle.Circle)),
             ("Ripple", effect == ClickEffectStyle.Ripple, () => Edit(d => d.Cursor.ClickEffect.VisualStyle = ClickEffectStyle.Ripple)))));
-        var sound = Doc.Cursor.ClickEffect.SoundSet;
-        Add(Labeled("Click sound", 10, Options(
-            ("None", sound is null, () => Edit(d => d.Cursor.ClickEffect.SoundSet = null)),
-            ("Soft", sound == "soft", () => Edit(d => d.Cursor.ClickEffect.SoundSet = "soft")),
-            ("Crisp", sound == "crisp", () => Edit(d => d.Cursor.ClickEffect.SoundSet = "crisp")))));
+        // The ripple bends the screen and has no color of its own, so only the circle gets one (spec/06 ADR-107).
+        if (effect == ClickEffectStyle.Circle)
+        {
+            Add(Labeled("Circle color", 10, ClickColorRow()));
+        }
+
+        var sound = ClickSounds.Normalized(Doc.Cursor.ClickEffect.SoundSet);
+        var soundOptions = new List<(string, bool, Action?)> { ("None", sound is null, () => Edit(d => d.Cursor.ClickEffect.SoundSet = null)) };
+        foreach (var (id, title) in ClickSounds.Sets)
+        {
+            soundOptions.Add((title, sound == id, () =>
+            {
+                Edit(d => d.Cursor.ClickEffect.SoundSet = id);
+                tools.PreviewClickSound();
+            }));
+        }
+
+        Add(Labeled("Click sound", 10, Options([.. soundOptions])));
         if (sound is not null)
         {
             Add(Action("Play click sound preview", () => tools.PreviewClickSound()));
@@ -1952,6 +1972,41 @@ internal sealed partial class InspectorPanel
         A11y.Status(button, selected);
         button.Click += (_, _) => click();
         return button;
+    }
+
+    /// <summary>The circle click effect's color: swatch and picker, hex box, and a wand for a random color, as on macOS.</summary>
+    private Grid ClickColorRow()
+    {
+        var row = new Grid { ColumnSpacing = 6 };
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(ColorField.Create(
+            "Circle color",
+            Doc.Cursor.ClickEffect.Color,
+            hex => session.Mutate(d => d.Cursor.ClickEffect.Color = hex, "click-color", structural: false),
+            hex => Edit(d => d.Cursor.ClickEffect.Color = hex)));
+        var wand = new Button
+        {
+            Style = Ui.StyleOf("NsIconButton"),
+            Content = Ui.Icon(RandomColorGlyph, 14),
+            Width = 32,
+            Height = 32,
+            CornerRadius = new CornerRadius(8),
+            BorderBrush = Ui.Pal("Ink10"),
+            BorderThickness = new Thickness(1)
+        };
+        Ui.Tip(wand, Loc.T("Pick random color"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(wand, Loc.T("Random color"));
+        wand.Click += (_, _) =>
+        {
+            var current = Doc.Cursor.ClickEffect.Color.ToUpperInvariant();
+            var choices = CuratedClickColors.Where(color => color != current).ToArray();
+            var picked = choices[Random.Shared.Next(choices.Length)];
+            Edit(d => d.Cursor.ClickEffect.Color = picked);
+        };
+        Grid.SetColumn(wand, 1);
+        row.Children.Add(wand);
+        return row;
     }
 
     private static Button Action(string title, Action? click)
