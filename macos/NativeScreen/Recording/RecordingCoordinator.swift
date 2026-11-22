@@ -1069,6 +1069,11 @@ public final class RecordingCoordinator {
     public func requestStartRecording(showsAlerts: Bool = true) -> Bool {
         guard !isRecording && !isCountingDown && !isStartingRecording else { return false }
         // Checked once, here: every way to start a recording comes through this function.
+        guard ProjectWorkspaceStore.hasProjectsDirectory || (showsAlerts && ProjectWorkspaceStore.ensureProjectsDirectory()) else {
+            lastErrorMessage = String(localized: "Choose a folder for your projects to start recording.")
+            updateHUDPanelFrameForCurrentState(animated: true)
+            return false
+        }
         guard hasDiskSpaceToStartRecording(showsAlert: showsAlerts) else { return false }
         if selectedMode == .camera {
             guard selectedCameraDeviceID != nil else {
@@ -1939,6 +1944,7 @@ public final class RecordingCoordinator {
     /// Opens recordings a crash or power loss cut off. The writers finish a fragment every 2 s, so the file plays up
     /// to the last one. A package still owned by another running copy of the app is left alone.
     public func recoverInterruptedRecordings() async {
+        guard ProjectWorkspaceStore.hasProjectsDirectory else { return }
         let packages = (try? FileManager.default.contentsOfDirectory(
             at: ProjectWorkspaceStore.defaultProjectsDirectory,
             includingPropertiesForKeys: nil
@@ -2006,6 +2012,7 @@ public final class RecordingCoordinator {
     // MARK: - Create Instant Interactive Demo Project
 
     public func createInteractiveSampleProject() -> ProjectSession? {
+        guard ProjectWorkspaceStore.ensureProjectsDirectory() else { return nil }
         let formatter = DateFormatter()
         formatter.dateFormat = "HH-mm-ss"
         let name = "Demo Showcase \(formatter.string(from: Date()))"
@@ -2478,6 +2485,7 @@ public final class HUDNativeMenuPresenter: NSObject {
 
         menu.addItem(.separator())
         menu.addItem(makeCommandItem(title: "Show Projects Folder in Finder", symbol: "arrow.up.forward.app") {
+            guard ProjectWorkspaceStore.ensureProjectsDirectory() else { return }
             NSWorkspace.shared.open(ProjectWorkspaceStore.defaultProjectsDirectory)
         })
 

@@ -676,14 +676,21 @@ public struct ExportStillFrameModalView: View {
     let onDismiss: () -> Void
 
     @State private var frameName: String = ""
-    @State private var exportDirectoryURL: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+    /// Nil in the App Store build until the user picks a folder: App Review does not allow a preset one (guideline 2.4.5).
+    @State private var exportDirectoryURL: URL? = Self.initialExportDirectory
     @State private var selectedResolution: StillFrameResolution = .k2
     @State private var selectedFormat: StillFrameFormat = .png
     @State private var previewImage: NSImage?
     @State private var isExporting: Bool = false
 
     private let savedExportDirKey = "NativeScreen.StillFrame.ExportDir"
+
+    #if APPSTORE
+    private static let initialExportDirectory: URL? = nil
+    #else
+    private static let initialExportDirectory: URL? = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+    #endif
 
     public init(session: ProjectSession, onDismiss: @escaping () -> Void) {
         self.session = session
@@ -751,9 +758,9 @@ public struct ExportStillFrameModalView: View {
                             .frame(width: 96, alignment: .leading)
 
                         HStack(spacing: 6) {
-                            Text(exportDirectoryURL.path)
+                            Text(exportDirectoryURL?.path ?? String(localized: "Choose a folder"))
                                 .font(.system(size: 12.5, weight: .regular))
-                                .foregroundStyle(.ink.opacity(0.85))
+                                .foregroundStyle(.ink.opacity(exportDirectoryURL == nil ? 0.5 : 0.85))
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -933,7 +940,8 @@ public struct ExportStillFrameModalView: View {
         }
     }
 
-    private func chooseExportDirectory() {
+    @discardableResult
+    private func chooseExportDirectory() -> Bool {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -942,14 +950,17 @@ public struct ExportStillFrameModalView: View {
         panel.directoryURL = exportDirectoryURL
         panel.prompt = String(localized: "Select Folder")
 
-        if panel.runModal() == .OK, let url = panel.url {
-            exportDirectoryURL = url
-            UserDefaults.standard.set(url.path, forKey: savedExportDirKey)
-            SandboxAccess.remember(url)
-        }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        exportDirectoryURL = url
+        UserDefaults.standard.set(url.path, forKey: savedExportDirKey)
+        SandboxAccess.remember(url)
+        return true
     }
 
     private func performExportStillFrame() {
+        // No folder yet (App Store build, first export): ask for one, and stop if the user cancels.
+        if exportDirectoryURL == nil, !chooseExportDirectory() { return }
+        guard let exportDirectoryURL else { return }
         let cleanName = frameName
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")

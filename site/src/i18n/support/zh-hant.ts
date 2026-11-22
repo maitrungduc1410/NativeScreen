@@ -21,7 +21,7 @@ export default {
   faq: [
     ["錄影畫面是黑的，或 App 看不到我的螢幕。", "Native Screen 需要螢幕錄影權限。在 macOS 上，打開「系統設定 &gt; 隱私權與安全性 &gt; 螢幕與系統錄音」（macOS 14 為「螢幕錄影」），開啟 Native Screen，然後結束並重新打開 App。Windows 不需要授權。如果某個視窗仍錄成黑色，可能是該 App 阻擋了螢幕擷取。"],
     ["相機或麥克風無法使用。", "在 macOS 上，到「系統設定 &gt; 隱私權與安全性 &gt; 相機」或「麥克風」允許 Native Screen。在 Windows 上，檢查「設定 &gt; 隱私權與安全性 &gt; 相機」或「麥克風」。然後在開始錄影前，於錄影列選擇裝置。"],
-    ["錄影檔存在哪裡？", "每次錄影都會以專案的形式存在專案資料夾中。在「設定」中可以看到位置並變更。Mac App Store 版本預設為「影片 &gt; Native Screen Projects」。匯出的影片與圖片會存到你匯出時選擇的資料夾。"],
+    ["錄影檔存在哪裡？", "每次錄影都會以專案的形式存在專案資料夾中。在「設定」中可以看到位置並變更。Mac App Store 版本會在你第一次錄影時請你選擇這個資料夾。匯出的影片與圖片會存到你匯出時選擇的資料夾。"],
     ["如何更新 App？", "Mac App Store 與 Microsoft Store 會自動幫你更新。如果是從官網下載，App 會自行檢查更新，在 macOS 上也可以選擇 Native Screen &gt; Check for Updates。"],
     ["執行需要什麼配備？", "macOS 14 或更新版本（Apple 晶片或 Intel），或 Windows 10、11（x64）。"],
     ["真的免費嗎？", "是的。Native Screen 以 MIT 授權免費開源。不需要帳號，沒有訂閱，也沒有浮水印。"],

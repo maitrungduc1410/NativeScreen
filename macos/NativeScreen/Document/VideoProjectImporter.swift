@@ -21,6 +21,7 @@ enum VideoProjectImporter {
     }
 
     static func createProject(from videoURL: URL) async {
+        guard ProjectWorkspaceStore.ensureProjectsDirectory() else { return }
         do {
             let packageURL = try await buildPackage(from: videoURL)
             ProjectWorkspaceStore.shared.openOrFocusProject(at: packageURL)

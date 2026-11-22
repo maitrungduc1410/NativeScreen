@@ -104,6 +104,7 @@ struct ContentView: View {
                 Spacer()
 
                 Button {
+                    guard ProjectWorkspaceStore.ensureProjectsDirectory() else { return }
                     NSWorkspace.shared.open(ProjectWorkspaceStore.defaultProjectsDirectory)
                 } label: {
                     Label("Open Projects Folder in Finder", systemImage: "folder.badge.gearshape")

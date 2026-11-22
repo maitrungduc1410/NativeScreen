@@ -121,17 +121,21 @@ private struct DirectoryRow: View {
     let onChoose: (URL) -> Void
 
     var body: some View {
-        SettingsRow(title: title, description: (path as NSString).abbreviatingWithTildeInPath, titleLabelsControl: false) {
+        // An empty path is the App Store build before the user has picked a folder.
+        SettingsRow(title: title, description: path.isEmpty ? "Not chosen yet" : (path as NSString).abbreviatingWithTildeInPath, titleLabelsControl: false) {
             HStack(spacing: 8) {
                 Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                 }
+                .disabled(path.isEmpty)
                 Button("Change directory...") {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
                     panel.canChooseFiles = false
                     panel.canCreateDirectories = true
-                    panel.directoryURL = URL(fileURLWithPath: path)
+                    panel.directoryURL = path.isEmpty
+                        ? SandboxAccess.realHomeDirectory.appendingPathComponent("Movies", isDirectory: true)
+                        : URL(fileURLWithPath: path)
                     panel.prompt = String(localized: "Choose")
                     if panel.runModal() == .OK, let url = panel.url {
                         onChoose(url)

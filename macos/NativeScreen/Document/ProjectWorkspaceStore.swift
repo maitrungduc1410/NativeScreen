@@ -44,12 +44,51 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
         !editorWindowsBySessionID.isEmpty
     }
 
-    /// `Settings > Recording > Save new projects to` (defaults to `~/Native Screen Projects`).
-    public static var defaultProjectsDirectory: URL {
+    /// The folder from `Settings > Recording > Save new projects to`, or nil while the App Store build has none yet.
+    private static var chosenProjectsDirectoryPath: String? {
         let path = UserDefaults.standard.string(forKey: AppSettings.Keys.projectsDirectory) ?? AppSettings.defaultProjectsDirectoryPath
-        let dir = URL(fileURLWithPath: path, isDirectory: true)
+        return path.isEmpty ? nil : path
+    }
+
+    /// False only in the App Store build before the user has picked a projects folder.
+    public static var hasProjectsDirectory: Bool { chosenProjectsDirectoryPath != nil }
+
+    /// `Settings > Recording > Save new projects to` (defaults to `~/Native Screen Projects`). Callers that create a
+    /// project run `ensureProjectsDirectory()` first; the container folder below is only a fallback that is never shown.
+    public static var defaultProjectsDirectory: URL {
+        let dir: URL
+        if let path = chosenProjectsDirectoryPath {
+            dir = URL(fileURLWithPath: path, isDirectory: true)
+        } else {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+            dir = appSupport.appendingPathComponent("NativeScreen/Projects", isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    /// True when new projects have a folder. The App Store build may not pick one for the user (App Review guideline
+    /// 2.4.5), so the first time it asks with an open panel that starts in ~/Movies. False when the user cancels.
+    @discardableResult
+    public static func ensureProjectsDirectory() -> Bool {
+        if hasProjectsDirectory { return true }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = String(localized: "Choose a folder for your recordings and projects. You can change it later in Settings.")
+        panel.prompt = String(localized: "Choose")
+        panel.directoryURL = SandboxAccess.realHomeDirectory.appendingPathComponent("Movies", isDirectory: true)
+        NSApp.activate(ignoringOtherApps: true)
+        // Above the recording bar and picker overlays, which float over normal windows.
+        RunLoop.main.perform(inModes: [.modalPanel]) {
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        AppSettings.shared.projectsDirectoryPath = url.path
+        return true
     }
 
     /// The active project's editor window as a capture target, or `nil` if it is not on screen (minimized, for example).
@@ -578,6 +617,7 @@ public final class ProjectWorkspaceStore: NSObject, NSWindowDelegate {
 
     /// `File > Show previous projects`: reveals the folder new recordings are saved to.
     public func revealProjectsFolder() {
+        guard Self.ensureProjectsDirectory() else { return }
         NSWorkspace.shared.activateFileViewerSelecting([Self.defaultProjectsDirectory])
     }
 

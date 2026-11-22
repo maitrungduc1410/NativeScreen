@@ -33,10 +33,11 @@ public final class AppSettings {
         }
     }
 
-    /// Where new recordings and imported videos are saved.
+    /// Where new recordings and imported videos are saved. Empty in the App Store build until the user picks a folder.
     public var projectsDirectoryPath: String {
         didSet {
             UserDefaults.standard.set(projectsDirectoryPath, forKey: Keys.projectsDirectory)
+            guard !projectsDirectoryPath.isEmpty else { return }
             SandboxAccess.remember(URL(fileURLWithPath: projectsDirectoryPath, isDirectory: true))
         }
     }
@@ -108,10 +109,9 @@ public final class AppSettings {
     }
 
     #if APPSTORE
-    /// The sandbox lets the App Store build use ~/Movies without asking (`assets.movies.read-write`), so new
-    /// projects go there instead of the home folder (ADR-85).
-    static let defaultProjectsDirectoryPath = SandboxAccess.realHomeDirectory
-        .appendingPathComponent("Movies/Native Screen Projects", isDirectory: true).path
+    /// No preset folder: App Review requires the user to pick it in an open panel (guideline 2.4.5), so the App Store
+    /// build asks the first time a project is created (`ProjectWorkspaceStore.ensureProjectsDirectory`, ADR-85).
+    static let defaultProjectsDirectoryPath = ""
     #else
     static let defaultProjectsDirectoryPath = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Native Screen Projects", isDirectory: true).path
