@@ -549,8 +549,8 @@ enum CursorPathPlanner {
 extension SpringTrajectorySolver {
     /// Builds the planner's path (points, shake-filtered, with the ending options) and its anchors, then plans it.
     static func planCursor(
-        events: [CursorSampleEvent], clicks: [ClickEvent], document: ProjectDocument, spring: SpringConfig,
-        durationMs: Double, pointSize: MotionPointSize, expandPauses: Bool, shakeThresholdPt: Double,
+        events: [CursorSampleEvent], clicks: [ClickEvent], hoverChangeTimesMs: [Double], document: ProjectDocument,
+        spring: SpringConfig, durationMs: Double, pointSize: MotionPointSize, expandPauses: Bool, shakeThresholdPt: Double,
         stopMoveCutoffMs: Double?, loopStartMs: Double?, stepMs: Double,
         endingAdjusted: ((x: Double, y: Double), Double) -> (x: Double, y: Double)
     ) -> PlannedCursorPath {
@@ -629,10 +629,16 @@ extension SpringTrajectorySolver {
             if heldIndex < held.count && e.t > held[heldIndex].start { sync.append(.init(t: e.t, tolerance: Planner.Tolerance.drag)) }
         }
         if !document.cursor.alwaysUsePointer {
-            // No hover telemetry is recorded; cursor-shape changes mark where hovered UI reacts.
+            // A cursor-shape change is where hovered UI reacts too (a link, a text field).
             let tolerance = document.cursor.keepInSyncWithHovers ? Planner.Tolerance.hover : Planner.Tolerance.cursorImage
             for i in events.indices.dropFirst() where events[i].c != events[i - 1].c && events[i].t <= syncEndMs {
                 sync.append(.init(t: events[i].t, tolerance: tolerance))
+            }
+        }
+        if document.cursor.keepInSyncWithHovers {
+            // Highlights read from the video (ADR-108): a menu item lit before the cursor reaches it looks wrong.
+            for t in hoverChangeTimesMs where t <= syncEndMs && t >= 0 {
+                sync.append(.init(t: t, tolerance: Planner.Tolerance.hover))
             }
         }
         return Planner.plan(points: points, syncPoints: sync, spring: spring, durationMs: durationMs)

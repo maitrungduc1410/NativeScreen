@@ -217,6 +217,7 @@ public struct SpringTrajectorySolver: Sendable {
         durationMs: Double,
         cursorEvents: [CursorSampleEvent],
         clickEvents: [ClickEvent],
+        hoverChangeTimesMs: [Double] = [],
         document: ProjectDocument,
         pointSize: MotionPointSize = .reference,
         reusingCursorStates: [CursorFrameState]? = nil,
@@ -294,7 +295,8 @@ public struct SpringTrajectorySolver: Sendable {
 
             if smooth {
                 planned = Self.planCursor(
-                    events: cursorEvents, clicks: clickEvents, document: document, spring: cursorSpring,
+                    events: cursorEvents, clicks: clickEvents, hoverChangeTimesMs: hoverChangeTimesMs,
+                    document: document, spring: cursorSpring,
                     durationMs: totalDuration, pointSize: pointSize, expandPauses: !telemetryUsesPlaybackTime,
                     shakeThresholdPt: shakeThresholdPt, stopMoveCutoffMs: stopMoveCutoffMs, loopStartMs: loopStartMs,
                     stepMs: stepMs, endingAdjusted: endingAdjusted)

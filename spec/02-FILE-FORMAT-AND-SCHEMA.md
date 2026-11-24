@@ -449,6 +449,7 @@ Below is the canonical structure of `project.json` at the root of `MyDemo.native
 ### Key Architectural Advantages:
 1. **`timeline.maskTracks` (Multi-Track Masks with Keyframes):** Instead of a flat single-track array where masks cannot overlap comfortably, `maskTracks` allows **unlimited parallel tracks of Blur / Pixelate / Spotlight regions**, and each mask item supports `keyframes` so a blur box can smoothly move when the user scrolls the page!
 2. **Face track:** `assets/face-track.json` holds where the largest face is in `webcam.mp4`, written once when a sticker or face tracking is first used and safe to delete (it is scanned again). `{"version": 1, "webcamDurationMs": n, "samples": [[timeMs, faceX, faceY, faceW, faceH, eyeAx, eyeAy, eyeBx, eyeBy, noseX, noseY, mouthX, mouthY], ...]}`, normalized to the raw webcam frame, top-left origin, every other frame; moments with no face have no sample.
+2. **Hover changes:** `assets/hover-changes.json` holds the moments a highlight appeared under the moving cursor in the screen video (`spec/03` §2.5), written once when the cursor planner first needs them and safe to delete (it is scanned again). `{"version": 2, "videoDurationMs": n, "changeTimesMs": [t, ...]}`, source ms, ascending. Other versions are scanned again.
 2. **Self-Contained `assets/` Directory:** Copying the active wallpaper (`assets/background.jpg`) into the `.nativescreen` bundle ensures 100% cross-platform visual parity when opening a Mac project on Windows.
 
 ### Custom cursors

@@ -1035,6 +1035,7 @@ public final class HardwareVideoExporter {
     ) async throws {
         try Task.checkCancellation()
         await session.waitForFaceTrack()
+        await session.waitForHoverChanges()
 
         let sourceW = Double(session.metadata.captureTarget.pixelSize.width)
         let sourceH = Double(session.metadata.captureTarget.pixelSize.height)

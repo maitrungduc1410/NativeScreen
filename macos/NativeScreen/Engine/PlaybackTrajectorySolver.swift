@@ -11,7 +11,7 @@ public struct PlaybackTrajectorySolver: Sendable {
     private let runs: [Run]
 
     public init(durationMs: Double, cursorEvents: [CursorSampleEvent], clickEvents: [ClickEvent],
-                document: ProjectDocument, pointSize: MotionPointSize,
+                hoverChangeTimesMs: [Double] = [], document: ProjectDocument, pointSize: MotionPointSize,
                 reusingCursorFrom previous: PlaybackTrajectorySolver? = nil) {
         let validSlices = document.timeline.slices.filter { $0.timelineDurationMs > 0 && $0.timelineDurationMs.isFinite }
         let slices = validSlices.isEmpty
@@ -44,6 +44,7 @@ public struct PlaybackTrajectorySolver: Sendable {
             let end = group[group.count - 1].timelineEndMs
             var projectedCursor: [CursorSampleEvent] = []
             var projectedClicks: [ClickEvent] = []
+            var projectedHovers: [Double] = []
             var projectedZooms: [ZoomBlock] = []
             // A retained run may begin while a button is held. Do not inherit its old spring state or ripple.
             var heldButtons: [String: ClickEvent] = [:]
@@ -85,6 +86,9 @@ public struct PlaybackTrajectorySolver: Sendable {
                     projected.t = time(click.t)
                     projectedClicks.append(projected)
                 }
+                for hover in hoverChangeTimesMs where hover >= slice.sourceStartMs && hover < slice.sourceEndMs {
+                    projectedHovers.append(time(hover))
+                }
                 for zoom in document.timeline.zooms {
                     let a = max(zoom.sourceStartMs, slice.sourceStartMs)
                     let b = min(zoom.sourceEndMs, slice.sourceEndMs)
@@ -113,7 +117,7 @@ public struct PlaybackTrajectorySolver: Sendable {
             }
             built.append(Run(start: start, end: end, solver: SpringTrajectorySolver(
                 durationMs: end - start, cursorEvents: projectedCursor, clickEvents: projectedClicks,
-                document: projectedDoc, pointSize: pointSize, reusingCursorStates: reusable?.cursorStates,
+                hoverChangeTimesMs: projectedHovers.sorted(), document: projectedDoc, pointSize: pointSize, reusingCursorStates: reusable?.cursorStates,
                 reusingPlannedCursor: reusable?.plannedCursor,
                 startsAtCut: index > 0 || group[0].slice.sourceStartMs > 0,
                 loopTarget01: Point01(x: firstRetainedCursor.x, y: firstRetainedCursor.y),

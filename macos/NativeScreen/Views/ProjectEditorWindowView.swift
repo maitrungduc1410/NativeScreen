@@ -864,6 +864,9 @@ public struct ProjectEditorWindowView: View {
         .onChange(of: session.needsFaceTrack, initial: true) { _, _ in
             session.ensureFaceTrack()
         }
+        .onChange(of: session.needsHoverChanges, initial: true) { _, _ in
+            session.ensureHoverChanges()
+        }
         .onChange(of: session.pendingEditorCommand) { _, _ in
             performPendingEditorCommand()
         }

@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import CoreImage
+import CoreVideo
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -340,6 +341,89 @@ enum MotionRegressionChecks {
                   && !shortStroke.contains { $0.type == "down" })
         let strokeSpans = CursorTelemetry.heldIntervals(shortStroke, endMs: 4000)
         try check("a stroke is a held span", strokeSpans.count == 1 && strokeSpans[0].start == 500 && strokeSpans[0].end == 800)
+
+        // Hover highlights read from the video (ADR-108): a menu item lighting up under the cursor is found on the
+        // frame it shows, content scrolling under the cursor and a click's own effect are not.
+        let hoverPoints = MotionPointSize(width: 400, height: 300)
+        func hoverFrame(_ t: Double, luma: (Int, Int) -> UInt8, cb: (Int, Int) -> UInt8 = { _, _ in 128 }) -> HoverChangeDetector.Frame? {
+            var buffer: CVPixelBuffer?
+            CVPixelBufferCreate(nil, 800, 600, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, nil, &buffer)
+            guard let buffer else { return nil }
+            CVPixelBufferLockBaseAddress(buffer, [])
+            let yRow = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0), cRow = CVPixelBufferGetBytesPerRowOfPlane(buffer, 1)
+            let yBase = CVPixelBufferGetBaseAddressOfPlane(buffer, 0)!.assumingMemoryBound(to: UInt8.self)
+            let cBase = CVPixelBufferGetBaseAddressOfPlane(buffer, 1)!.assumingMemoryBound(to: UInt8.self)
+            for py in 0..<600 { for px in 0..<800 { yBase[py * yRow + px] = luma(px / 2, py / 2) } }
+            for cy in 0..<300 { for cx in 0..<400 { cBase[cy * cRow + cx * 2] = cb(cx, cy); cBase[cy * cRow + cx * 2 + 1] = 128 } }
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            return HoverChangeDetector.Frame(pixels: buffer, timeMs: t, pointSize: hoverPoints)
+        }
+        let sweep = stride(from: 0.0, through: 1200, by: 8).map { CursorSampleEvent(t: $0, x: (100 + 0.2 * $0) / 400, y: 0.5) }
+        func band(_ t: Double) -> (Int, Int) -> UInt8 {
+            { x, y in t >= 400 && x >= 170 && x <= 330 && y >= 138 && y <= 162 ? 120 : 60 }
+        }
+        func detect(clicks: [ClickEvent], luma: @escaping (Double) -> (Int, Int) -> UInt8) -> [Double] {
+            var detector = HoverChangeDetector.Detector(
+                path: .init(cursor: sweep, clicks: clicks, pointSize: hoverPoints), settings: .standard)
+            var found: [Double] = []
+            for i in 0...60 {
+                let t = Double(i) * 1000 / 60
+                if let frame = hoverFrame(t, luma: luma(t)), let change = detector.add(frame) { found.append(change) }
+            }
+            return found
+        }
+        let highlight = detect(clicks: [], luma: band)
+        // Frames until the reference catches up (120 ms) still show the change, so it is found again 50 ms apart.
+        try check("a highlight under the cursor is found on the frame it shows",
+                  (400...417).contains(highlight.first ?? 0) && highlight.allSatisfy { $0 <= 400 + 120 })
+        try check("a highlight from a click is not a hover", detect(clicks: [ClickEvent(t: 450, type: "down", x: 0.45, y: 0.5)], luma: band).isEmpty)
+        let scrolling: (Double) -> (Int, Int) -> UInt8 = { t in { _, y in ((y + Int(t * 0.12)) / 6) % 2 == 0 ? 40 : 160 } }
+        let wheel = stride(from: 0.0, through: 1000, by: 16).map { ClickEvent(t: $0, type: "scroll", x: 0.5, y: 0.5) }
+        try check("content scrolling under the cursor is not a hover", detect(clicks: wheel, luma: scrolling).isEmpty)
+        // Sweeping down a menu: the highlight steps one 22 pt row at a time. Each step is a change, though the old
+        // row is just above the cursor and a one-row shift of the picture would line the highlight up.
+        let menuSweep = stride(from: 0.0, through: 1200, by: 8).map { CursorSampleEvent(t: $0, x: 0.5, y: (60 + 0.25 * max(0, min($0 - 300, 900))) / 300) }
+        func menuRow(_ t: Double) -> Int { Int((60 + 0.25 * max(0, min(t - 300, 900)) - 50) / 22) }
+        var menuDetector = HoverChangeDetector.Detector(
+            path: .init(cursor: menuSweep, clicks: [], pointSize: hoverPoints), settings: .standard)
+        var menuFound: [Double] = []
+        var rowEntries: [Double] = []
+        for i in 0...90 {
+            let t = Double(i) * 1000 / 60
+            if i > 0 && menuRow(t) != menuRow(Double(i - 1) * 1000 / 60) { rowEntries.append(t) }
+            let lit = menuRow(t)
+            let frame = hoverFrame(t, luma: { x, y in
+                let row = (y - 50) / 22
+                let text = x > 150 && x < 150 + 20 + row * 9 && (y - 50) % 22 > 7 && (y - 50) % 22 < 15 && x % 3 == 0
+                return y >= 50 && row == lit && x > 100 && x < 300 ? (text ? 230 : 120) : (text ? 200 : 60)
+            })
+            if let frame, let change = menuDetector.add(frame) { menuFound.append(change) }
+        }
+        let caught = rowEntries.filter { entry in menuFound.contains { $0 >= entry && $0 <= entry + 17 } }
+        fputs("menu sweep: \(caught.count) of \(rowEntries.count) row changes found\n", stderr)
+        try check("every row a menu sweep lights is found", rowEntries.count >= 8 && caught.count == rowEntries.count)
+        let probe = HoverChangeDetector.Detector(path: .init(cursor: sweep, clicks: [], pointSize: hoverPoints), settings: .standard)
+        if let a = hoverFrame(0, luma: scrolling(0)), let b = hoverFrame(120, luma: scrolling(120)),
+           let c = hoverFrame(300, luma: band(300)), let d = hoverFrame(420, luma: band(420)) {
+            try check("scrolling explains a shifted picture", probe.isExplainedByScrolling(from: a, to: b, 200, 150))
+            try check("scrolling does not explain a highlight", !probe.isExplainedByScrolling(from: c, to: d, 184, 150))
+        } else {
+            try check("hover test frames are made", false)
+        }
+        var hoverDoc = document()
+        hoverDoc.cursor.removeShakeThresholdPx = 0
+        hoverDoc.cursor.keepInSyncWithHovers = true
+        func hoverError(_ hovers: [Double]) -> Double {
+            let trajectory = PlaybackTrajectorySolver(durationMs: 12000, cursorEvents: sweep, clickEvents: [],
+                                                      hoverChangeTimesMs: hovers, document: hoverDoc, pointSize: hoverPoints)
+            return hoverPoints.distance(trajectory.evaluate(atTimelineMs: highlight.first ?? 400).cursor.position01,
+                                        Point01(x: 180 / 400.0, y: 0.5))
+        }
+        let syncedHover = hoverError(highlight), unsyncedHover = hoverError([])
+        fputs("hover tip error: synced \(syncedHover) pt, unsynced \(unsyncedHover) pt\n", stderr)
+        try check("the tip is on the highlight when it shows",
+                  syncedHover <= CursorPathPlanner.Tolerance.hover * CursorPathPlanner.Settings.standard.acceptedErrorRatio + 0.5
+                  && unsyncedHover > CursorPathPlanner.Tolerance.hover)
 
         let report: [String: Any] = ["passed": passed.count, "checks": passed, "worstDragErrorPt": worstDragError,
                                    "lensStripeContrast255": contrast, "prewarmCenterError01": prewarmError]

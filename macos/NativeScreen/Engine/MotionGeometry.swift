@@ -36,8 +36,8 @@ public struct MotionPointSize: Equatable, Sendable {
 /// Recorded cursor telemetry helpers.
 enum CursorTelemetry {
     /// Made in memory from `drawings.jsonl`, never written: a stroke drawn on the screen while recording.
-    static let drawStart = "drawStart"
-    static let drawEnd = "drawEnd"
+    nonisolated static let drawStart = "drawStart"
+    nonisolated static let drawEnd = "drawEnd"
     /// The button name of `drawStart` and `drawEnd`.
     static let drawButton = "draw"
 
@@ -103,7 +103,7 @@ enum CursorTelemetry {
 
     /// Button-held intervals. `held` marks a button already down when a trimmed run starts. A live drawing stroke
     /// (`drawStart` to `drawEnd`) counts too: the pen is the cursor, so it stays on the line being drawn.
-    static func heldIntervals(_ clicks: [ClickEvent], endMs: Double) -> [(start: Double, end: Double)] {
+    nonisolated static func heldIntervals(_ clicks: [ClickEvent], endMs: Double) -> [(start: Double, end: Double)] {
         var down: [String: Double] = [:]
         var intervals: [(start: Double, end: Double)] = []
         for click in clicks.sorted(by: { $0.t < $1.t }) {

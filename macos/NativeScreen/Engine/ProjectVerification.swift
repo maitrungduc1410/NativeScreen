@@ -32,6 +32,9 @@ enum ProjectVerification {
 
     private static func verify(_ package: URL, out: URL) async throws -> [String: Any] {
         let session = try ProjectSession.load(from: package)
+        let scanStart = Date()
+        await session.waitForHoverChanges()
+        let scanSeconds = Date().timeIntervalSince(scanStart)
         var report: [String: Any] = ["project": package.deletingPathExtension().lastPathComponent,
                                      "timelineMs": session.timeMapper.totalTimelineDurationMs]
 
@@ -71,6 +74,37 @@ enum ProjectVerification {
             }
             previous = p; t += frameMs
         }
+        // Hover highlights read from the video (ADR-108): where the tip is when each one shows.
+        let unsynced = PlaybackTrajectorySolver(
+            durationMs: session.metadata.durationMs, cursorEvents: session.cursorEvents, clickEvents: session.clickEvents,
+            document: session.document, pointSize: points)
+        var hoverErrors: [Double] = [], unsyncedErrors: [Double] = []
+        for hover in session.hoverChangeTimesMs {
+            guard let t = session.timeMapper.timelineTime(forSourceMs: hover) else { continue }
+            let raw = CursorTelemetry.sample(session.cursorEvents, at: hover)
+            let recorded = Point01(x: raw.x, y: raw.y)
+            hoverErrors.append(points.distance(session.trajectorySolver.evaluate(atTimelineMs: t).cursor.position01, recorded))
+            unsyncedErrors.append(points.distance(unsynced.evaluate(atTimelineMs: t).cursor.position01, recorded))
+        }
+        func rounded(_ v: [Double]) -> [Double] { v.map { ($0 * 100).rounded() / 100 } }
+        report["hoverTimesMs"] = session.hoverChangeTimesMs
+        report["hoverErrorsPt"] = rounded(hoverErrors)
+        report["hoverErrorsWithoutSyncPt"] = rounded(unsyncedErrors)
+        report["hoverErrorWorstPt"] = hoverErrors.max() ?? 0
+        report["hoverScanSeconds"] = scanSeconds
+        var unsyncedPrevious = unsynced.evaluate(atTimelineMs: 0).cursor.position01
+        var unsyncedSpeed: Double? = nil, unsyncedJump = 0.0
+        var u = frameMs
+        while u < total {
+            let p = unsynced.evaluate(atTimelineMs: u).cursor.position01
+            if unsynced.isSameRun(u, u - frameMs) {
+                let speed = points.distance(p, unsyncedPrevious) / frameMs
+                if let unsyncedSpeed { unsyncedJump = max(unsyncedJump, abs(speed - unsyncedSpeed)) }
+                unsyncedSpeed = speed
+            } else { unsyncedSpeed = nil }
+            unsyncedPrevious = p; u += frameMs
+        }
+        report["worstFrameSpeedChangeWithoutHoverSyncPtPerMs"] = unsyncedJump
         report["clickCount"] = errors.count
         report["clickErrorWorstPt"] = errors.max() ?? 0
         report["clickErrorMeanPt"] = errors.isEmpty ? 0 : errors.reduce(0, +) / Double(errors.count)
@@ -83,6 +117,14 @@ enum ProjectVerification {
             session.seek(toTimelineMs: time)
             if let image = await session.renderCurrentCompositedCGImage(targetHeight: 1080) {
                 try writePNG(image, to: out.appendingPathComponent("click-\(index + 1)-\(Int(time))ms.png"))
+            }
+        }
+
+        for hover in session.hoverChangeTimesMs.prefix(12) {
+            guard let time = session.timeMapper.timelineTime(forSourceMs: hover) else { continue }
+            session.seek(toTimelineMs: time)
+            if let image = await session.renderCurrentCompositedCGImage(targetHeight: 1080) {
+                try writePNG(image, to: out.appendingPathComponent("hover-\(Int(hover))ms.png"))
             }
         }
 

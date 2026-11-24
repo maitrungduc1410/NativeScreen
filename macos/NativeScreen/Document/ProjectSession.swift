@@ -72,6 +72,10 @@ public final class ProjectSession: Identifiable {
     @ObservationIgnored private var faceScanTask: Task<Void, Never>?
     /// Set by the preview to redraw when the face track arrives.
     @ObservationIgnored public var onFaceTrackChanged: (() -> Void)?
+    /// Hover highlights read from the screen video (ADR-108), in source ms; empty until scanned or loaded.
+    public private(set) var hoverChangeTimesMs: [Double] = []
+    @ObservationIgnored private var hoverScanTask: Task<Void, Never>?
+    @ObservationIgnored private var hasHoverChanges = false
     public var transcriptErrorMessage: String?
     public var isScanningSensitiveData: Bool = false
     public var isScanningFaces: Bool = false
@@ -610,6 +614,7 @@ public final class ProjectSession: Identifiable {
                 durationMs: metadata.durationMs,
                 cursorEvents: cursorEvents,
                 clickEvents: clickEvents,
+                hoverChangeTimesMs: hoverChangeTimesMs,
                 document: document,
                 pointSize: MotionPointSize(metadata.captureTarget),
                 reusingCursorFrom: reusableCursor
@@ -1924,6 +1929,61 @@ public final class ProjectSession: Identifiable {
     public func waitForFaceTrack() async {
         ensureFaceTrack()
         await faceScanTask?.value
+    }
+
+    /// Whether the cursor planner would use hover highlights: smoothed cursor kept in sync with hovers, on a screen
+    /// recording with a recorded cursor.
+    public var needsHoverChanges: Bool {
+        document.cursor.smoothMovementEnabled && document.cursor.keepInSyncWithHovers && hasRecordedCursor
+            && !isCameraOnlyRecording
+    }
+
+    private var hoverChangesFileURL: URL {
+        packageURL.appendingPathComponent("assets", isDirectory: true).appendingPathComponent("hover-changes.json")
+    }
+
+    /// Loads the saved hover highlights, or scans the screen video once. Does nothing until the planner needs them.
+    public func ensureHoverChanges() {
+        guard needsHoverChanges, !hasHoverChanges, hoverScanTask == nil,
+              FileManager.default.fileExists(atPath: videoFileURL.path) else { return }
+        let fileURL = hoverChangesFileURL, videoURL = videoFileURL
+        let cursor = cursorEvents, clicks = CursorTelemetry.withoutDrawing(clickEvents)
+        let points = MotionPointSize(metadata.captureTarget)
+        hoverScanTask = Task { [weak self] in
+            let loaded = Self.loadHoverChanges(at: fileURL)
+            var stored = loaded
+            if stored == nil {
+                stored = await Task.detached(priority: .utility) {
+                    await HoverChangeDetector.scan(videoURL: videoURL, cursor: cursor, clicks: clicks, pointSize: points) { _ in
+                        !Task.isCancelled
+                    }
+                }.value
+            }
+            guard let self else { return }
+            self.hoverScanTask = nil
+            guard let stored else { return }
+            if loaded == nil, let data = try? JSONEncoder().encode(stored) {
+                try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? data.write(to: fileURL, options: .atomic)
+            }
+            self.hasHoverChanges = true
+            guard stored.changeTimesMs != self.hoverChangeTimesMs else { return }
+            self.hoverChangeTimesMs = stored.changeTimesMs
+            self.rebuildDerivedState(forceSpringRebuild: true)
+        }
+    }
+
+    /// Exports wait for this so the cursor is planned around the highlights.
+    public func waitForHoverChanges() async {
+        ensureHoverChanges()
+        await hoverScanTask?.value
+    }
+
+    private nonisolated static func loadHoverChanges(at url: URL) -> HoverChangeDetector.Stored? {
+        guard let data = try? Data(contentsOf: url),
+              let stored = try? JSONDecoder().decode(HoverChangeDetector.Stored.self, from: data),
+              stored.version == HoverChangeDetector.Stored.currentVersion else { return nil }
+        return stored
     }
 
     private nonisolated static func loadFaceTrack(at url: URL) async -> FaceTrack.Stored? {

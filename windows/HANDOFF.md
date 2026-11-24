@@ -27,6 +27,36 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-24, ADR-109: macOS window recordings keep their popups (macOS done, nothing to port)
+
+### Writer (macOS)
+- **Bug:** a Chrome window recorded on an external display had no right-click menu. Window mode used a single-window filter for other apps, which keeps only child windows; menus and tooltips are separate windows.
+- **Fix:** every window recording now captures the window's display without other processes' windows and crops to the window (what our own windows already did). Windows has this since ADR-106, so nothing to port. Worth checking the hover detector (ADR-108) on a Windows recording with a menu, since it needs the highlight in `display.mp4`.
+- **Built:** both macOS schemes. Not yet recorded end to end on the external display.
+
+
+## 2026-11-24, ADR-108: The cursor reaches hover highlights in time (macOS done, Windows to do)
+
+### Writer (macOS)
+- **Bug:** hovering down a right-click menu, each item lit up before the drawn cursor reached it. No click and no cursor-shape change there, so the planner had no anchor and the spring trailed by its whole lag (up to 69 pt). The owner sees the same on Windows.
+- **Fix:** read the highlights from the screen video and anchor them at `4 pt` when *Keep in sync with hovers* is on. Algorithm and constants: `spec/03` §2.5 (follow it exactly, including the four second-round rules in `spec/06` ADR-108). File: `assets/hover-changes.json`, version 2 (`spec/02`). Cursor-shape anchors are unchanged, so the motion fixtures are the same.
+- **Swift → C#:**
+  1. `Engine/HoverChangeDetector.swift` → a new detector next to `NativeScreen.Intelligence/FaceTrackScanner.cs`. One Media Foundation pass over `display.mp4` as NV12 (video range); whole frames resampled to one pixel per point; keep the frame on screen at the settled time (Windows recordings are variable frame rate too, so never prune history by time alone). `CursorPath` uses `CursorTelemetry.HeldIntervals` for "no button held" and reads `scroll` events from the clicks for the scroll gate. `Stored` is `{version: 2, videoDurationMs, changeTimesMs}`; anything else is scanned again.
+  2. `PlaybackTrajectorySolver` gets `hoverChangeTimesMs` and projects each one into a run like a click (`sourceStart <= t < sourceEnd`), then passes them to `SpringTrajectorySolver` and the planner. In `SpringTrajectorySolver.cs` around line 717, add a `Tolerance.Hover` sync point per projected time when `KeepInSyncWithHovers`, after the cursor-shape ones.
+  3. `EditorTools`: `EnsureHoverChanges` and `WaitForHoverChanges` like the face track. Needed when smoothing and *Keep in sync with hovers* are on, there is a recorded cursor and it is not a camera-only recording. Load the file or scan in the background, write the file, then rebuild the trajectory. Export waits for it (`EditorWindow.Tools.cs:475`, beside `WaitForFaceTrack`).
+- **Constants** (`HoverChangeDetector.Settings`): probe radius 8 pt, reference lag 120 ms, settled 150 ms, pixel change 10 (`|dY| + |dCb| + |dCr|`), coherence `max(6, round(0.35 x |median|))`, changed 0.4, coherent 0.3, 3 quarters at 0.15, settled changed 0.08 (in quarters at least 0.5 coherent), scroll probe 24 pt, max shift 32 pt, residual 0.5, scroll event window 300 ms before the reference, movement 3 pt in 150 ms, clicks excluded 300 ms before to 80 ms after, spans joined under 1000 ms plus 150 ms tail.
+- **Pitfalls found on macOS** (each one cost detections on a real recording):
+  - Frames only arrive when the picture changes. The reference is "the frame on screen 120 ms ago", which can be seconds old. Keep the last frame before each span's history window, and after each frame drop only frames older than the newest one at or before `reference.t - 150`.
+  - Do not crop frames to the cursor's path: an old frame is still compared at today's cursor position.
+  - Without the scroll-event gate, a highlight stepping down one menu row reads as a one-row scroll and is thrown away.
+  - No fixed gap between changes: within 120 ms of the last change, accept a new one only if the square changed (0.4) since the last change's frame. A fixed gap skips rows lit 60 to 100 ms apart.
+  - Median is the element at `count / 2` after sorting each component on its own. Quarter is `(y < cy ? 0 : 2) + (x >= cx ? 1 : 0)`.
+  - The resampling filter does not need to match vImage exactly; a box average per point works (the first macOS version used one).
+- **Built on macOS:** the main scheme. `--verify-motion` 78/78 with seven hover cases: found on the frame it shows, not after a click, not for scrolling stripes with wheel events, the shift test both ways, a menu sweep with every row found, tip within 0.6 pt with sync and 29 pt without. Motion fixtures regenerated: JSON identical.
+- **Measured** on the owner's recordings (Chrome right-click menus, Retina and 4K): every highlight frame anchored, tip error median 1.7 pt, worst 4.8 pt (no sync: up to 71 pt). Nine projects: click errors and frame-to-frame speed no worse. Scan 0.2 to 1.2 s in Release.
+- **How to verify on Windows:** port the seven hover cases into `MotionRegressionTests` (synthetic NV12 frames 800x600 for 400x300 pt; the inputs are in `MotionRegressionChecks.swift` after "Hover highlights read from the video"). Then record a right-click menu in any app and sweep down it slowly and fast: after the scan, the tip is on each item as it lights up, in preview and export. A Mac project's `assets/hover-changes.json` should load as is.
+- **Risks:** check that menu highlights are in `display.mp4` where the cursor is (ADR-106 popup layer), and that frame times are on the telemetry clock (PTS from the first frame).
+
 ## 2026-11-21, Where the app came from, after the version in Settings (Windows and macOS done)
 
 ### Verifier (Windows)

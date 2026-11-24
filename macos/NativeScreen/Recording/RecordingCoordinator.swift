@@ -1169,7 +1169,6 @@ public final class RecordingCoordinator {
                 return
             }
 
-            let myPID = ProcessInfo.processInfo.processIdentifier
             // Only the recording UI stays off camera (it all has `sharingType = .none`). Editor windows are recordable.
             let recordingUIWindowIDs = Set(NSApp.windows.filter { $0.sharingType == .none }.map { UInt32($0.windowNumber) })
             let recordingUIWindows = shareable.windows.filter { recordingUIWindowIDs.contains($0.windowID) }
@@ -1204,14 +1203,16 @@ public final class RecordingCoordinator {
                         }
                     }
 
-                    if chosen.pid == myPID,
-                       let matchingScreen {
-                        // A single-window filter would drop the popovers, menus and tooltips a demo of the editor needs.
-                        // Those are separate windows of this app, so capture the display without other windows and crop to the window.
-                        // It stays a display filter because the system swaps the window controls for a sharing badge on app filters.
+                    if let matchingScreen {
+                        // A single-window filter drops context menus, popovers and tooltips: they are separate windows
+                        // of the app, kept only by chance on some displays. Capture the display without the other
+                        // apps' windows and crop to the window. It stays a display filter because the system swaps the
+                        // window controls for a sharing badge on app filters.
                         filter = SCContentFilter(
                             display: targetDisplay,
-                            excludingWindows: recordingUIWindows + shareable.windows.filter { $0.owningApplication?.processID != myPID }
+                            excludingWindows: recordingUIWindows + shareable.windows.filter {
+                                $0.owningApplication?.processID != chosen.pid && !recordingUIWindowIDs.contains($0.windowID)
+                            }
                         )
                         sourceRect = WindowDiscoveryService.localTopLeftRect(fromQuartzRect: chosen.bounds, on: matchingScreen)
                     } else {
