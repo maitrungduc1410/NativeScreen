@@ -109,6 +109,8 @@ No account, no ads, no analytics.
 
 ## Let an AI agent drive it
 
+[![maitrungduc1410/NativeScreen MCP server](https://glama.ai/mcp/servers/maitrungduc1410/NativeScreen/badges/score.svg)](https://glama.ai/mcp/servers/maitrungduc1410/NativeScreen)
+
 Turn on `Settings > AI Agents` in Native Screen. The page shows the exact command for your machine, for example:
 
 ```bash
