@@ -23,8 +23,10 @@ public sealed class PlaybackTrajectorySolver
         IReadOnlyList<ClickEvent> clickEvents,
         ProjectDocument document,
         MotionPointSize? pointSize = null,
-        PlaybackTrajectorySolver? reusingCursorFrom = null)
+        PlaybackTrajectorySolver? reusingCursorFrom = null,
+        IReadOnlyList<double>? hoverChangeTimesMs = null)
     {
+        var hovers = hoverChangeTimesMs ?? [];
         HasRecordedCursor = cursorEvents.Count > 0;
         var size = pointSize ?? MotionPointSize.Reference;
         var valid = document.Timeline.Slices.Where(slice => slice.TimelineDurationMs > 0 && double.IsFinite(slice.TimelineDurationMs)).ToList();
@@ -71,6 +73,7 @@ public sealed class PlaybackTrajectorySolver
             var end = group[^1].TimelineEndMs;
             var projectedCursor = new List<CursorSampleEvent>();
             var projectedClicks = new List<ClickEvent>();
+            var projectedHovers = new List<double>();
             var projectedZooms = new List<ZoomBlock>();
 
             // A retained run may begin while a button is held. Do not inherit its old spring state or ripple.
@@ -141,6 +144,15 @@ public sealed class PlaybackTrajectorySolver
                     }
                 }
 
+                // Hover highlights go through the slices like clicks (ADR-108).
+                foreach (var hover in hovers)
+                {
+                    if (hover >= slice.SourceStartMs && hover < slice.SourceEndMs)
+                    {
+                        projectedHovers.Add(Time(hover));
+                    }
+                }
+
                 foreach (var zoom in zooms)
                 {
                     var a = Math.Max(zoom.SourceStartMs, slice.SourceStartMs);
@@ -166,6 +178,7 @@ public sealed class PlaybackTrajectorySolver
 
             projectedCursor.Sort((x, y) => x.T.CompareTo(y.T));
             projectedClicks.Sort((x, y) => x.T.CompareTo(y.T));
+            projectedHovers.Sort();
             var projectedDocument = ProjectJson.Clone(document);
             projectedDocument.Timeline.Zooms = [.. projectedZooms.OrderBy(zoom => zoom.SourceStartMs)];
             // Ending options belong to the edited movie, not to each cut.
@@ -185,7 +198,8 @@ public sealed class PlaybackTrajectorySolver
                 end - start, projectedCursor, projectedClicks, projectedDocument, size, reusable,
                 startsAtCut: index > 0 || group[0].Slice.SourceStartMs > 0,
                 loopTarget01: new Point01(firstRetained.X, firstRetained.Y),
-                telemetryUsesPlaybackTime: true)));
+                telemetryUsesPlaybackTime: true,
+                hoverChangeTimesMs: projectedHovers)));
         }
     }
 

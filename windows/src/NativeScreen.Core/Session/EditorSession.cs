@@ -170,6 +170,21 @@ public sealed partial class EditorSession
     /// <summary>A camera-only recording (spec/06 ADR-77): the camera is the main picture.</summary>
     public bool IsCameraOnly { get; init; }
 
+    /// <summary>Hover highlights read from the screen video (spec/06 ADR-108), in source ms; empty until scanned or loaded.</summary>
+    public IReadOnlyList<double> HoverChangeTimesMs { get; private set; } = [];
+
+    /// <summary>Takes the scanned highlights and solves the cursor again around them. UI thread.</summary>
+    public void SetHoverChanges(IReadOnlyList<double> times)
+    {
+        if (times.SequenceEqual(HoverChangeTimesMs))
+        {
+            return;
+        }
+
+        HoverChangeTimesMs = times;
+        renderDocument = null;
+    }
+
     /// <summary>The face track once loaded or scanned; camera-only framing and zoom follow it.</summary>
     public FaceTrack? FaceTrack { get; set; }
 
@@ -240,10 +255,10 @@ public sealed partial class EditorSession
     }
 
     // Everything the solver reads from the document, and nothing else. Motion runs on edited time, so slices and the crop count
-    // too (ADR-86); a change that leaves cursor and slices alone keeps the solved cursor.
+    // too (ADR-86); a change that leaves cursor and slices alone keeps the solved cursor. Hover highlights count for the cursor.
     private void RequestTrajectory(ProjectDocument document)
     {
-        var cursorKey = ProjectJson.Serialize(new object[] { document.Cursor, document.Timeline.Slices });
+        var cursorKey = ProjectJson.Serialize(new object[] { document.Cursor, document.Timeline.Slices, HoverChangeTimesMs });
         var key = cursorKey + ProjectJson.Serialize(new object[] { document.Motion, document.Timeline.Zooms, document.Timeline.IsZoomTrackHidden, document.Canvas.CropRect01 });
         lock (solveGate)
         {
@@ -284,7 +299,7 @@ public sealed partial class EditorSession
             reusable = trajectory is not null && trajectoryCursorKey == cursorKey ? trajectory : null;
         }
 
-        return new PlaybackTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, document, PointSize, reusable);
+        return new PlaybackTrajectorySolver(SourceDurationMs, CursorEvents, ClickEvents, document, PointSize, reusable, HoverChangeTimesMs);
     }
 
     // One worker that always takes the newest edit, so a drag never queues solves behind itself.

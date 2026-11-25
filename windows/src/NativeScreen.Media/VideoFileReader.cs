@@ -63,8 +63,12 @@ public sealed class VideoFileReader : IDisposable
         Seek(0);
     }
 
-    /// <summary>The next frame, or null at the end of the stream. The buffer comes from the pool when one is given.</summary>
-    public unsafe VideoFrame? ReadNext(VideoFramePool? pool = null)
+    /// <summary>
+    /// The next frame, or null at the end of the stream. The buffer comes from the pool when one is given. A frame at a time
+    /// <paramref name="wanted"/> turns down is decoded but not copied out of the decoder, and comes with no pixels: copying a 4K
+    /// frame back from the GPU costs more than decoding it.
+    /// </summary>
+    public unsafe VideoFrame? ReadNext(VideoFramePool? pool = null, Func<double, bool>? wanted = null)
     {
         while (true)
         {
@@ -82,6 +86,12 @@ public sealed class VideoFileReader : IDisposable
             if (sample is null)
             {
                 continue;
+            }
+
+            var presentationMs = PresentationMs(sample.SampleTime / 10_000.0);
+            if (wanted?.Invoke(presentationMs) == false)
+            {
+                return new VideoFrame([], Width, Height, presentationMs);
             }
 
             var needed = Width * Height * 3 / 2;
@@ -114,7 +124,7 @@ public sealed class VideoFileReader : IDisposable
                 buffer.Unlock();
             }
 
-            return new VideoFrame(data, Width, Height, PresentationMs(sample.SampleTime / 10_000.0));
+            return new VideoFrame(data, Width, Height, presentationMs);
         }
     }
 

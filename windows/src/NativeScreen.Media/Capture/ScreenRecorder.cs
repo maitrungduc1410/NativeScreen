@@ -90,6 +90,9 @@ public sealed class ScreenRecorder : IRecordingEngine
     private CaptureFailure? failure;
     private readonly nint recordedWindow;
     private readonly FramePacer pacer = new(1000.0 / MaxFps, 2);
+    // NS_CAPTURE_STATS=<file>: how late each frame is handled after its time stamp, written when the recording stops.
+    private readonly List<double>? frameLatencies = Environment.GetEnvironmentVariable("NS_CAPTURE_STATS") is { Length: > 0 } ? [] : null;
+    private readonly List<double>? writtenPts = Environment.GetEnvironmentVariable("NS_CAPTURE_STATS") is { Length: > 0 } ? [] : null;
 
     public ScreenRecorder(RecordingOptions options)
     {
@@ -138,7 +141,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         frameView = device.CreateShaderResourceView(frameCopy);
         if (target.Mode == CaptureTargetMode.Window && !cropsMonitor)
         {
-            popups = new PopupLayer(device, context, captureDevice, recordedWindow);
+            popups = new PopupLayer(device, context, captureDevice, recordedWindow) { ScreenDelays = frameLatencies is null ? null : [] };
             windowFrame = device.CreateTexture2D(new Texture2DDescription
             {
                 Width = (uint)width,
@@ -274,6 +277,7 @@ public sealed class ScreenRecorder : IRecordingEngine
             }
         }
 
+        WriteStats();
         telemetry.Dispose();
         systemAudio?.Stop(DurationMs);
         microphone?.Stop(DurationMs);
@@ -297,6 +301,41 @@ public sealed class ScreenRecorder : IRecordingEngine
         device.Dispose();
         frameReady.Dispose();
         firstFrame.Dispose();
+    }
+
+    private void WriteStats()
+    {
+        if (Environment.GetEnvironmentVariable("NS_CAPTURE_STATS") is not { Length: > 0 } file || frameLatencies is null)
+        {
+            return;
+        }
+
+        static string Describe(List<double>? values)
+        {
+            if (values is not { Count: > 0 })
+            {
+                return "none";
+            }
+
+            var sorted = values.Order().ToArray();
+            return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"n {sorted.Length}, median {sorted[sorted.Length / 2]:F1} ms, p90 {sorted[sorted.Length * 9 / 10]:F1} ms, max {sorted[^1]:F1} ms");
+        }
+
+        // Diagnostics only: a folder that does not exist or a locked file must never stop a recording from finishing.
+        try
+        {
+            if (Path.GetDirectoryName(Path.GetFullPath(file)) is { Length: > 0 } folder)
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            // Every written time stamp, one per line, to compare with the file (a gap the file loses moves the video against the cursor).
+            File.WriteAllLines(file + ".pts", (writtenPts ?? []).Select(p => p.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)));
+            File.AppendAllText(file, $"{DateTime.Now:HH:mm:ss} {options.Target.Mode}: frame handled after its stamp: {Describe(frameLatencies)}; screen image for popups read after its stamp: {Describe(popups?.ScreenDelays)}; written {framesWritten}, repeated {framesRepeated}, dropped {framesDropped}; written pts: {string.Join(" ", (writtenPts ?? []).Where((_, i) => i < 4 || i % 100 == 0).Select(p => p.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)))}{Environment.NewLine}");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+        }
     }
 
     private static double NowMs() => Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
@@ -411,6 +450,7 @@ public sealed class ScreenRecorder : IRecordingEngine
         }
 
         var host = frame.SystemRelativeTime.TotalMilliseconds;
+        frameLatencies?.Add(NowMs() - host);
         if (PauseOffset(host) is not { } offset)
         {
             return;
@@ -479,6 +519,7 @@ public sealed class ScreenRecorder : IRecordingEngine
 
     private void WriteCurrent(double pts, double host)
     {
+        writtenPts?.Add(pts);
         writer.WriteFrame(nv12, pts, 1000.0 / MaxFps);
         lastPtsMs = pts;
         lastWriteHostMs = host;

@@ -20,3 +20,6 @@ desktop.ini
 __pycache__/
 *.pyc
 tools/demo-driver/build/
+
+# Visual Studio launch profiles: per machine (environment variables such as NS_CAPTURE_STATS with local paths).
+**/Properties/launchSettings.json

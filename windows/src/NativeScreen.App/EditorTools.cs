@@ -215,6 +215,129 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
         }
     }
 
+    // MARK: Hover highlights
+
+    private Task<IReadOnlyList<double>>? hoverScan;
+    private CancellationTokenSource? hoverScanCancel;
+    private bool hasHoverChanges;
+
+    /// <summary>The hover highlights arrived and the cursor was solved again around them. UI thread.</summary>
+    public event Action? HoverChangesChanged;
+
+    /// <summary>0 to 1 while the screen video is scanned for hover highlights, null otherwise (loading the saved file is not shown).</summary>
+    public double? HoverScanProgress { get; private set; }
+
+    /// <summary>The scan started, moved on or ended. UI thread.</summary>
+    public event Action? HoverScanProgressChanged;
+
+    /// <summary>
+    /// Whether the cursor planner would use hover highlights (spec/06 ADR-108): a smoothed cursor kept in sync with hovers, on a
+    /// screen recording with a recorded cursor.
+    /// </summary>
+    private bool NeedsHoverChanges => session.Document.Cursor is { SmoothMovementEnabled: true, KeepInSyncWithHovers: true }
+        && session.CursorEvents.Count > 0 && !session.IsCameraOnly;
+
+    private string? DisplayVideoPath => source.PackagePath is { } package && source.Project?.Metadata.Tracks.DisplayVideo is { } video
+        ? Path.Combine(package, "recording", video)
+        : null;
+
+    /// <summary>Loads the saved hover highlights, or scans the screen video once. Does nothing until the planner needs them.</summary>
+    public void EnsureHoverChanges()
+    {
+        if (NeedsHoverChanges && !hasHoverChanges && hoverScan is null && DisplayVideoPath is { } video && File.Exists(video))
+        {
+            hoverScan = RunHoverScan(video);
+        }
+    }
+
+    /// <summary>The highlights an export plans the cursor around, scanning first if needed. UI thread.</summary>
+    public Task<IReadOnlyList<double>> WaitForHoverChanges()
+    {
+        EnsureHoverChanges();
+        return hoverScan ?? Task.FromResult(session.HoverChangeTimesMs);
+    }
+
+    private async Task<IReadOnlyList<double>> RunHoverScan(string video)
+    {
+        var file = Path.Combine(source.PackagePath!, "assets", "hover-changes.json");
+        var cursor = session.CursorEvents;
+        var clicks = CursorTelemetry.WithoutDrawing(session.ClickEvents);
+        var points = session.PointSize;
+        hoverScanCancel = new CancellationTokenSource();
+        var cancel = hoverScanCancel.Token;
+        CrashLog.Note("hover scan started");
+        // Until it is done the preview's cursor is not yet planned around the highlights, so the editor says so.
+        if (!File.Exists(file))
+        {
+            HoverScanProgress = 0;
+            HoverScanProgressChanged?.Invoke();
+        }
+
+        var progress = new Progress<double>(fraction =>
+        {
+            if (HoverScanProgress is not null)
+            {
+                HoverScanProgress = fraction;
+                HoverScanProgressChanged?.Invoke();
+            }
+        });
+        try
+        {
+            var stored = await Task.Run(
+                () =>
+                {
+                    if (LoadHoverChanges(file) is { } loaded)
+                    {
+                        return loaded;
+                    }
+
+                    var scanned = HoverChangeScanner.Scan(video, cursor, clicks, points, progress, cancel);
+                    if (scanned is not null)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                        var partial = file + ".part";
+                        File.WriteAllText(partial, System.Text.Json.JsonSerializer.Serialize(scanned));
+                        File.Move(partial, file, overwrite: true);
+                    }
+
+                    return scanned;
+                },
+                cancel);
+            // A video that cannot be read is not scanned again on every edit.
+            hasHoverChanges = true;
+            CrashLog.Note($"hover scan done: {stored?.ChangeTimesMs.Count ?? 0} highlights");
+            if (stored is not null)
+            {
+                session.SetHoverChanges(stored.ChangeTimesMs);
+                HoverChangesChanged?.Invoke();
+            }
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException or System.Runtime.InteropServices.COMException)
+        {
+            hasHoverChanges = exception is not OperationCanceledException;
+            CrashLog.Note("hover scan stopped: " + exception.GetType().Name);
+        }
+
+        hoverScan = null;
+        HoverScanProgress = null;
+        HoverScanProgressChanged?.Invoke();
+        return session.HoverChangeTimesMs;
+    }
+
+    public void CancelHoverScan() => hoverScanCancel?.Cancel();
+
+    private static HoverChangeDetector.Stored? LoadHoverChanges(string file)
+    {
+        try
+        {
+            return File.Exists(file) && System.Text.Json.JsonSerializer.Deserialize<HoverChangeDetector.Stored>(File.ReadAllText(file)) is { Version: HoverChangeDetector.CurrentVersion } stored ? stored : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Copies an image into the package and uses it behind the person. A name marks a built-in image as selected.</summary>
     public async Task SelectCameraBackgroundImage(string file, string? name)
     {

@@ -101,6 +101,9 @@ public static class CursorTelemetry
     /// <summary>The button name of <see cref="DrawStart"/> and <see cref="DrawEnd"/>.</summary>
     public const string DrawButton = "draw";
 
+    /// <summary>The recorded clicks without the drawing strokes <see cref="WithDrawingStrokes"/> added.</summary>
+    public static List<ClickEvent> WithoutDrawing(IReadOnlyList<ClickEvent> clicks) => [.. clicks.Where(click => click.Button != DrawButton)];
+
     /// <summary>
     /// The clicks with each live drawing stroke added as a held span (spec/06 ADR-102). Strokes are logged without clicks, so
     /// the cursor's spring had nothing holding it to the pen and the drawing ran ahead of the cursor in the video.

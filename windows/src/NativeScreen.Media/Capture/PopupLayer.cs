@@ -54,6 +54,12 @@ internal sealed class PopupLayer : IDisposable
         GetWindowThreadProcessId(window, out processId);
     }
 
+    /// <summary>When the screen image the popups are copied from was composed (host ms, like a frame's system relative time).</summary>
+    public double ScreenTimeMs { get; private set; } = double.NaN;
+
+    /// <summary>For NS_CAPTURE_STATS: how long after its time stamp each screen image was read (null when not measured).</summary>
+    public List<double>? ScreenDelays { get; set; }
+
     /// <summary>A popup is over the window and its pixels can be read: frames should come at the screen's rate.</summary>
     public bool Active => !disabled && popups.Count > 0 && hasDesktop;
 
@@ -205,6 +211,8 @@ internal sealed class PopupLayer : IDisposable
                     var size = frame.ContentSize;
                     var box = new Box(0, 0, 0, Math.Min(size.Width, outputBounds.Right - outputBounds.Left), Math.Min(size.Height, outputBounds.Bottom - outputBounds.Top), 1);
                     context.CopySubresourceRegion(desktop!, 0, 0, 0, 0, texture, 0, box);
+                    ScreenTimeMs = frame.SystemRelativeTime.TotalMilliseconds;
+                    ScreenDelays?.Add(Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency - ScreenTimeMs);
                     hasDesktop = true;
                     changed = true;
                 }

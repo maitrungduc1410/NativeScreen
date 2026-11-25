@@ -27,6 +27,16 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-24, ADR-110: Windows recordings keep the length of still moments (Windows only)
+
+### Verifier
+- **Owner's report:** in some recordings the cursor trailed every menu highlight, in the preview and the export, even after the hover scan.
+- **Found:** the file lost up to 200 ms at one still moment and the rest of the video ran ahead of the telemetry. `VideoFileWriter` gave every frame a fixed 16.7 ms duration, and a fragmented MP4 written live takes its times from the durations.
+- **Changed:** `VideoFileWriter.WriteFrame` writes each frame when the next arrives, with the real time between them; `Finish` writes the last. `NS_CAPTURE_STATS` (`ScreenRecorder`, `PopupLayer`) reports frame and popup-image delays and writes every time stamp to `<file>.pts`, and never stops a recording if the file cannot be written. New `FragmentedTimingTests` cases.
+- **Checked:** Media 35, Rendering 43, Core 403. The new real-time test fails on the old writer and passes on the new one. Three sandbox recordings: written and file time stamps equal to 0.1 ms.
+- **Not explained yet:** in a test with a window drawing a bar at the mouse, display and window recordings showed the picture 35 to 200 ms behind the telemetry, varying between recordings and steady within one, while the file matched what was written. Part of it is that window's own drawing delay; the rest was not found. Hover anchors are not affected much by it (they were found at 0 to +50 ms on real recordings).
+- **For macOS:** nothing.
+- **The long way there** (hypotheses that were wrong, test pitfalls, the scan speed experiments): `spec/06` ADR-108 "Speed: what was tried on Windows" and ADR-110 "How it was found".
 ## 2026-11-24, ADR-109: macOS window recordings keep their popups (macOS done, nothing to port)
 
 ### Writer (macOS)
@@ -35,7 +45,7 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Built:** both macOS schemes. Not yet recorded end to end on the external display.
 
 
-## 2026-11-24, ADR-108: The cursor reaches hover highlights in time (macOS done, Windows to do)
+## 2026-11-24, ADR-108: The cursor reaches hover highlights in time (macOS and Windows done)
 
 ### Writer (macOS)
 - **Bug:** hovering down a right-click menu, each item lit up before the drawn cursor reached it. No click and no cursor-shape change there, so the planner had no anchor and the spring trailed by its whole lag (up to 69 pt). The owner sees the same on Windows.
@@ -56,6 +66,15 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Measured** on the owner's recordings (Chrome right-click menus, Retina and 4K): every highlight frame anchored, tip error median 1.7 pt, worst 4.8 pt (no sync: up to 71 pt). Nine projects: click errors and frame-to-frame speed no worse. Scan 0.2 to 1.2 s in Release.
 - **How to verify on Windows:** port the seven hover cases into `MotionRegressionTests` (synthetic NV12 frames 800x600 for 400x300 pt; the inputs are in `MotionRegressionChecks.swift` after "Hover highlights read from the video"). Then record a right-click menu in any app and sweep down it slowly and fast: after the scan, the tip is on each item as it lights up, in preview and export. A Mac project's `assets/hover-changes.json` should load as is.
 - **Risks:** check that menu highlights are in `display.mp4` where the cursor is (ADR-106 popup layer), and that frame times are on the telemetry clock (PTS from the first frame).
+
+### Verifier (Windows)
+- **Ported:** `NativeScreen.Core/Motion/HoverChangeDetector.cs` (cursor path, frames, detector, `Stored` with the macOS JSON names, the scan loop), `NativeScreen.Intelligence/HoverChangeScanner.cs` (Media Foundation NV12 pass; `VideoFileReader` already counts PTS from the first frame), `hoverChangeTimesMs` in `PlaybackTrajectorySolver` (projected through slices like clicks, `start <= t < end`) and `SpringTrajectorySolver.PlanCursor` (`Tolerance.Hover` after the cursor-shape anchors), `CursorTelemetry.WithoutDrawing`, `EditorSession.SetHoverChanges` (part of the cursor key, so the cursor is solved again), `EditorTools.EnsureHoverChanges` / `WaitForHoverChanges` beside the face track, and `ExportSource.HoverChanges` for video and still exports.
+- **Tests:** the seven macOS hover cases in `HoverChangeTests` (synthetic NV12 800x600 for 400x300 pt, resampled like a recording) plus a Mac file loading as is: all pass, the menu sweep finds every row. Core 403, Rendering 41, Media 32. Motion fixtures unchanged.
+- **Real recording** (sandbox, display at 4K/150%, a Notepad context menu swept down with the mouse): 8 highlights, all inside the sweep. Tip error at each: synced 0.5 to 6.3 pt (median about 3.7), unsynced 14.6 to 20.1 pt. The editor wrote `assets/hover-changes.json` with the same times.
+- **Speed:** first version 48 s for that 12 s 4K60 video in Release. Now 14 s: the resampler precomputes spans and splits rows over up to four cores (121 to about 8 ms per frame), and frames more than 1 s before a movement are decoded but not copied back from the GPU. Copying a 4K frame back costs about 9 ms, decoding about 4 ms. A GPU downscale before the copy would be the next step.
+- **Not checked:** export with the scan still running (the code waits like for the face track), a Mac project's file on Windows by hand (covered by a test), very long recordings.
+- **A recording whose video and cursor disagree.** One owner recording (a Chrome window with its context menu) had the menu highlights about 150 ms ahead of the cursor telemetry for the whole recording, so few highlights were found and both preview and export trailed the menu. Scanning with the telemetry moved earlier found 50 highlights instead of 10 (`NS_TEST_HOVER_SHIFT`, which reports the count per offset). Recordings before and after it, and sandbox recordings of Chrome and Notepad windows and of a display, were in sync (most highlights at 0 to +50 ms). The written time stamps match the file's, and `NS_CAPTURE_STATS` showed no backlog on the capture thread, so the cause is not known yet; record with `NS_CAPTURE_STATS` set when it happens again. If it keeps happening, the scan could find the offset itself and move the telemetry in memory, as `LegacyTelemetryEpoch` does for older recordings. Tools: `NS_TEST_HOVER_WHY=<package>;<fromMs>;<toMs>` prints why each frame was or was not a highlight.
+- **Follow-up (owner's report: the preview trailed the highlights right after a recording, export and a reopened project were right):** that is the scan still running. Windows now shows `Syncing cursor with hovers 42%` at the top right of the preview while scanning (new string catalog key, 14 languages), and scans 7.5 times faster: 6.4 s instead of 48 s for the 12 s 4K60 test video, same 8 highlights (`spec/06` ADR-108, Windows). The Mac scan is short (0.2 to 1.2 s), but the same window exists there: **for macOS**, show the same key while `hoverScanTask` runs a real scan (not while the file loads), with the fraction the scan's `progress` gets, also reported inside a long span (every 15 frames: `(doneMs + t - span.start) / totalMs`), not only at span ends.
 
 ## 2026-11-21, Where the app came from, after the version in Settings (Windows and macOS done)
 

@@ -128,6 +128,24 @@
                             <Canvas x:Name="PreviewCanvas" Background="Transparent" />
                         </Grid>
                     </Border>
+                    <!-- While the screen video is scanned for hover highlights (spec/06 ADR-108) the cursor is not yet in sync -->
+                    <Border
+                        x:Name="HoverScanPill"
+                        Visibility="Collapsed"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,10,14,0"
+                        Padding="10,6"
+                        CornerRadius="14"
+                        Background="{ThemeResource SurfaceDock}"
+                        BorderBrush="{ThemeResource Ink10}"
+                        BorderThickness="1"
+                        IsHitTestVisible="False">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ProgressRing x:Name="HoverScanRing" Width="14" Height="14" MinWidth="14" MinHeight="14" IsActive="False" />
+                            <TextBlock x:Name="HoverScanText" FontSize="12" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
                     <Border
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"

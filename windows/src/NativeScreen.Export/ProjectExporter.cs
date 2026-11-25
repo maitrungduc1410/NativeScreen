@@ -21,7 +21,8 @@ public sealed record ExportSource(
     Task<FaceTrack?>? FaceTrack = null,
     Func<IPersonMaskSource?>? PersonMasks = null,
     bool CameraOnly = false,
-    MotionPointSize? PointSize = null);
+    MotionPointSize? PointSize = null,
+    Task<IReadOnlyList<double>>? HoverChanges = null);
 
 /// <summary>
 /// Sequential decode, compose, encode on its own thread and its own compositor, so a running export never touches the
@@ -72,8 +73,9 @@ public sealed class ProjectExporter(ExportSource source)
     });
 
     // Motion runs on edited time: every exported frame passes its timeline time (ADR-86).
+    // The cursor is planned around the hover highlights, which may still be scanning (spec/06 ADR-108).
     private PlaybackTrajectorySolver Solve(ProjectDocument document) =>
-        new(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, document, source.PointSize);
+        new(source.SourceDurationMs, source.CursorEvents, source.ClickEvents, document, source.PointSize, hoverChangeTimesMs: source.HoverChanges?.GetAwaiter().GetResult());
 
     private void Run(string path, ExportSettings settings, IProgress<ExportProgress>? progress, CancellationToken cancel)
     {

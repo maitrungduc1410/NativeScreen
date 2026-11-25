@@ -475,7 +475,8 @@ public sealed partial class EditorWindow
             tools.WaitForFaceTrack(),
             ExportPersonMasks.TryCreate,
             source.Project?.IsCameraOnly == true,
-            session.PointSize);
+            session.PointSize,
+            tools.WaitForHoverChanges());
     }
 
     // MARK: Crop

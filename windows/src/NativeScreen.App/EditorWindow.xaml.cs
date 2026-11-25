@@ -168,6 +168,9 @@ public sealed partial class EditorWindow : Window
         tools.FaceTrackChanged += FaceEffectsChanged;
         tools.PreviewMasks.MaskUpdated += PersonMaskUpdated;
         tools.EnsureFaceTrack();
+        tools.HoverChangesChanged += HoverChangesChanged;
+        tools.HoverScanProgressChanged += ShowHoverScanProgress;
+        tools.EnsureHoverChanges();
         session.SelectionChanged += SelectionChanged;
         Activated += WindowActivated;
         AppTheme.Changed += ThemeChanged;
@@ -701,6 +704,7 @@ public sealed partial class EditorWindow : Window
     {
         ScheduleSave();
         tools.EnsureFaceTrack();
+        tools.EnsureHoverChanges();
         if (CurrentTabAvailability() != railAvailability)
         {
             RefreshTabRail();
@@ -738,6 +742,31 @@ public sealed partial class EditorWindow : Window
             ShowToast("The preview stopped after a graphics or file error. Reopen the project to continue.");
         }
     });
+
+    private void ShowHoverScanProgress()
+    {
+        if (closed)
+        {
+            return;
+        }
+
+        var scanning = tools.HoverScanProgress is not null;
+        HoverScanPill.Visibility = scanning ? Visibility.Visible : Visibility.Collapsed;
+        HoverScanRing.IsActive = scanning;
+        if (tools.HoverScanProgress is { } fraction)
+        {
+            HoverScanText.Text = Loc.T("Syncing cursor with hovers") + " " + ((int)Math.Round(fraction * 100)).ToString(System.Globalization.CultureInfo.CurrentCulture) + "%";
+        }
+    }
+
+    // The cursor was solved again around the highlights read from the video (spec/06 ADR-108).
+    private void HoverChangesChanged()
+    {
+        if (!closed)
+        {
+            DrawPreview();
+        }
+    }
 
     private void FaceEffectsChanged()
     {
@@ -1025,6 +1054,7 @@ public sealed partial class EditorWindow : Window
         tools.FinishVoiceoverRecordingForClose();
         tools.CancelTranscript();
         tools.CancelFaceScan();
+        tools.CancelHoverScan();
         tools.StopMusicPreview();
         tools.Dispose();
         clickSounds.Dispose();
@@ -1073,6 +1103,8 @@ public sealed partial class EditorWindow : Window
         ModelDownloads.Changed -= inspector.Rebuild;
         ModelDownloads.ProgressChanged -= inspector.ShowModelProgress;
         tools.FaceTrackChanged -= FaceEffectsChanged;
+        tools.HoverChangesChanged -= HoverChangesChanged;
+        tools.HoverScanProgressChanged -= ShowHoverScanProgress;
         tools.PreviewMasks.MaskUpdated -= PersonMaskUpdated;
         Root.PreviewKeyDown -= RootKeyDown;
         Root.PreviewKeyUp -= RootKeyUp;

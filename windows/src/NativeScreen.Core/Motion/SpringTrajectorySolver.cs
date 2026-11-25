@@ -244,6 +244,7 @@ public sealed class SpringTrajectorySolver
     /// <param name="startsAtCut">The run begins at a cut: the camera starts at its target, with no discarded history.</param>
     /// <param name="loopTarget01">Where "loop back to the start" returns: the first retained cursor position of the movie.</param>
     /// <param name="telemetryUsesPlaybackTime">The events are already projected onto playback time with pauses expanded.</param>
+    /// <param name="hoverChangeTimesMs">Hover highlights read from the screen video (spec/06 ADR-108), on the same clock as the events.</param>
     public SpringTrajectorySolver(
         double durationMs,
         IReadOnlyList<CursorSampleEvent> cursorEvents,
@@ -253,7 +254,8 @@ public sealed class SpringTrajectorySolver
         SpringTrajectorySolver? reusing = null,
         bool startsAtCut = false,
         Point01? loopTarget01 = null,
-        bool telemetryUsesPlaybackTime = false)
+        bool telemetryUsesPlaybackTime = false,
+        IReadOnlyList<double>? hoverChangeTimesMs = null)
     {
         HasRecordedCursor = cursorEvents.Count > 0;
         this.pointSize = pointSize ?? MotionPointSize.Reference;
@@ -276,7 +278,7 @@ public sealed class SpringTrajectorySolver
         }
         else
         {
-            var (states, planned) = SolveCursor(document, events, clickEvents, cursorSpring, totalDuration, totalSteps, dt, loopTarget01, telemetryUsesPlaybackTime);
+            var (states, planned) = SolveCursor(document, events, clickEvents, hoverChangeTimesMs ?? [], cursorSpring, totalDuration, totalSteps, dt, loopTarget01, telemetryUsesPlaybackTime);
             CursorStates = states;
             PlannedCursor = planned;
         }
@@ -347,6 +349,7 @@ public sealed class SpringTrajectorySolver
         ProjectDocument document,
         IReadOnlyList<CursorSampleEvent> cursorEvents,
         IReadOnlyList<ClickEvent> clickEvents,
+        IReadOnlyList<double> hoverChangeTimesMs,
         SpringConfig cursorSpring,
         double totalDuration,
         int totalSteps,
@@ -408,7 +411,7 @@ public sealed class SpringTrajectorySolver
         }
 
         var planned = document.Cursor.SmoothMovementEnabled
-            ? PlanCursor(cursorEvents, clickEvents, document, cursorSpring, totalDuration, pointSize, !telemetryUsesPlaybackTime, shakePt, stopCutoff, loopStart, stepMs, EndingAdjusted)
+            ? PlanCursor(cursorEvents, clickEvents, hoverChangeTimesMs, document, cursorSpring, totalDuration, pointSize, !telemetryUsesPlaybackTime, shakePt, stopCutoff, loopStart, stepMs, EndingAdjusted)
             : null;
 
         for (var step = 0; step < totalSteps; step++)
@@ -573,6 +576,7 @@ public sealed class SpringTrajectorySolver
     private static PlannedCursorPath PlanCursor(
         IReadOnlyList<CursorSampleEvent> events,
         IReadOnlyList<ClickEvent> clicks,
+        IReadOnlyList<double> hoverChangeTimesMs,
         ProjectDocument document,
         SpringConfig spring,
         double durationMs,
@@ -713,13 +717,25 @@ public sealed class SpringTrajectorySolver
 
         if (!document.Cursor.AlwaysUsePointer)
         {
-            // No hover telemetry is recorded; cursor-shape changes mark where hovered UI reacts.
+            // A cursor-shape change is where hovered UI reacts too (a link, a text field).
             var tolerance = document.Cursor.KeepInSyncWithHovers ? CursorPathPlanner.Tolerance.Hover : CursorPathPlanner.Tolerance.CursorImage;
             for (var i = 1; i < events.Count; i++)
             {
                 if (events[i].C != events[i - 1].C && events[i].T <= syncEndMs)
                 {
                     sync.Add(new CursorPathPlanner.SyncPoint(events[i].T, tolerance));
+                }
+            }
+        }
+
+        if (document.Cursor.KeepInSyncWithHovers)
+        {
+            // Highlights read from the video (ADR-108): a menu item lit before the cursor reaches it looks wrong.
+            foreach (var t in hoverChangeTimesMs)
+            {
+                if (t <= syncEndMs && t >= 0)
+                {
+                    sync.Add(new CursorPathPlanner.SyncPoint(t, CursorPathPlanner.Tolerance.Hover));
                 }
             }
         }
