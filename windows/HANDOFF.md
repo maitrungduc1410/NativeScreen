@@ -36,6 +36,12 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Open VERIFY items:** `ReviewPrompt.cs`, `InitializeWithWindow` line: the dialog opens over the editor and not behind it. `ReviewPrompt.cs`, catch line: what a sideloaded package (not installed from the Store) throws or returns.
 - **Risks / unsure:** the build itself (`TreatWarningsAsErrors`, the `#if NS_STORE` split, `LibraryImport` of `GetForegroundWindow`).
 
+### Verifier (Windows)
+- **Build: PASS.** Debug and the Store build (`NsPackage=true`, `NS_STORE`) compile with 0 warnings. The three Windows strings are in the catalog with `extractionState` manual.
+- **Sideloaded test package (local identity, self-signed), `NS_REVIEW_PROMPT=1`, sandboxed user data:** Settings shows `Version 1.0.11 (Microsoft Store)` and the rating section. A 720p export succeeds and counts (`ReviewSuccessfulExports` 1), but no dialog shows and nothing is recorded as an ask: the Store does not know a sideloaded package, so the call does not end in `Succeeded` or `CanceledByUser`. `Rate on the Microsoft Store` in Settings then opens the Store app, as designed. The catch-line VERIFY is resolved with a comment.
+- **Still open:** whether the dialog opens over the editor needs the Store install (the next Store release, run with `NS_REVIEW_PROMPT=1`). The `InitializeWithWindow` VERIFY stays until then.
+- **Note:** `CrashLog.Note` keeps notes in memory only, so `review prompt: <status>` is visible only in a later crash or error file; settings.json (`ReviewLastAskedUtc`, `ReviewSubmitted`) shows the outcome instead.
+
 ## 2026-11-24, ADR-110: Windows recordings keep the length of still moments (Windows only)
 
 ### Verifier

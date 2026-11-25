@@ -94,11 +94,12 @@ internal static partial class ReviewPrompt
             }
 
             var context = StoreContext.GetDefault();
-            WinRT.Interop.InitializeWithWindow.Initialize(context, hwnd); // VERIFY: the dialog opens over the editor in the installed MSIX, not behind it.
+            WinRT.Interop.InitializeWithWindow.Initialize(context, hwnd); // VERIFY: the dialog opens over the editor in a Store install (a sideloaded package gets no dialog).
             var result = await context.RequestRateAndReviewAppAsync();
             Record(result.Status);
         }
-        catch (Exception exception) when (exception is COMException or InvalidOperationException) // VERIFY: what a non-Store (sideloaded) install throws, if anything.
+        // A sideloaded package (not from the Store) gets no dialog and nothing is counted; from Settings the Store page opens instead.
+        catch (Exception exception) when (exception is COMException or InvalidOperationException)
         {
             CrashLog.Note($"review prompt failed: 0x{exception.HResult:X8}");
         }
