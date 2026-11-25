@@ -27,6 +27,15 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 
 <!-- Entries start below this line. -->
 
+## 2026-11-25, ADR-111: Store rating prompt after successful exports (macOS done, Windows to verify)
+
+### Writer (macOS)
+- **Scope:** `macos/NativeScreen/Document/ReviewPrompt.swift` → `windows/src/NativeScreen.App/ReviewPrompt.cs`. Called after a successful video export (`ProjectEditorWindowView.runHardwareExport`, `EditorWindow.RunExport`), and from a `Rate Native Screen` section in Settings > General (`SettingsWindow.Rating`, `ReviewPrompt.RateFromSettings`). State in `AppSettings` (`Review*`). Store build only (`NS_STORE`).
+- **Built on macOS:** both macOS schemes. No .NET SDK on this machine, so nothing on the Windows side was compiled.
+- **How to verify:** build the MSIX (`package-msix.ps1`), install it, run with `NS_REVIEW_PROMPT=1`, export a video. The rating dialog should open over the editor about 1.5 s after the export toast. Cancel it and check the log note `review prompt: CanceledByUser`. Without the variable, nothing shows before 5 exports and 3 days. Settings > General > `Rate on the Microsoft Store` opens the same dialog over Settings; the section is missing when the app runs unpackaged.
+- **Open VERIFY items:** `ReviewPrompt.cs`, `InitializeWithWindow` line: the dialog opens over the editor and not behind it. `ReviewPrompt.cs`, catch line: what a sideloaded package (not installed from the Store) throws or returns.
+- **Risks / unsure:** the build itself (`TreatWarningsAsErrors`, the `#if NS_STORE` split, `LibraryImport` of `GetForegroundWindow`).
+
 ## 2026-11-24, ADR-110: Windows recordings keep the length of still moments (Windows only)
 
 ### Verifier

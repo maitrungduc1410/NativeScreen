@@ -77,6 +77,7 @@
 - [x] 2-column Export Settings modal (`Format: MP4 | ProRes | GIF`, `Frame rate`, `Resolution: 720p | 1080p | 4K` with dynamic pixel dimensions, `Compression: Studio | Social Media | Web | Web (Low)`, collapsible `Advanced` Codec picker, and non-linear bits-per-pixel file size range & duration estimation).
 - [x] Multi-track audio mixdown (Recorded System Audio + Microphone + Voiceover tracks + Slice speed mapping) via `AVMutableComposition` & `AVAssetReaderAudioMixOutput`.
 - [x] Full-window dark Export Progress overlay (`Exporting video • 33% ⓘ`, purple progress bar, live elapsed & ETA countdown `00:04 • 00:06 left`, macOS Dock progress bar, and instant `Stop export` cancellation with partial file cleanup) + `Export to File` or `Export to Clipboard`.
+- [x] Store rating prompt after successful video exports and a `Rate Native Screen` button in Settings, Mac App Store and Microsoft Store builds only (`spec/06` ADR-111). Windows still needs a check in the installed MSIX (`windows/HANDOFF.md`).
 
 ---
 

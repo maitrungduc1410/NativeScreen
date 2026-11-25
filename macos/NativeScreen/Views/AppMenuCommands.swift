@@ -19,6 +19,9 @@ struct AppMenuCommands: Commands {
                 Button("Check for Updates...") { AppUpdater.shared.checkForUpdates() }
                     .disabled(!AppUpdater.shared.canCheckForUpdates)
             }
+            #if APPSTORE
+            Button("Rate Native Screen") { ReviewPrompt.openStorePage() }
+            #endif
         }
 
         // MARK: File

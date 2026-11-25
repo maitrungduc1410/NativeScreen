@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import StoreKit
 import UniformTypeIdentifiers
 
 /// Full Native macOS Editor Window for a single `.nativescreen` project session.
@@ -37,6 +38,7 @@ public struct ProjectEditorWindowView: View {
     @State private var activeExportDestinationLabel: String = ""
     @State private var activeExportTask: Task<Void, Never>?
     @State private var exportError: String?
+    @Environment(\.requestReview) private var requestReview
     @State private var keyEventMonitor: Any?
     @State private var flagsChangedMonitor: Any?
     @State private var mouseDownMonitor: Any?
@@ -1478,6 +1480,7 @@ public struct ProjectEditorWindowView: View {
                 } else {
                     NSWorkspace.shared.activateFileViewerSelecting([outURL])
                 }
+                ReviewPrompt.noteSuccessfulExport(requestReview)
             } catch is CancellationError {
                 DockProgressIndicatingController.shared.setProgress(nil)
                 isExporting = false

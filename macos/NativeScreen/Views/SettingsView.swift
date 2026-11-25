@@ -211,6 +211,16 @@ private struct GeneralSettingsTab: View {
                 }
             }
 
+            #if APPSTORE
+            SettingsRow(
+                title: "Rate Native Screen",
+                description: "If Native Screen helps you, a rating helps other people find it more easily.",
+                titleLabelsControl: false
+            ) {
+                Button("Rate on the App Store") { ReviewPrompt.openStorePage() }
+            }
+            #endif
+
             SettingsRow(title: "Troubleshooting", description: CrashReports.lastCrashText, titleLabelsControl: false) {
                 HStack(spacing: 8) {
                     Button("Open log folder") { CrashReports.openLogFolder() }

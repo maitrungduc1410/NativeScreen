@@ -73,6 +73,18 @@ public sealed class AppSettings
     /// <summary>The newest crash file the user was told about at launch (spec/06 ADR-98).</summary>
     public string? LastSeenCrashLog { get; set; }
 
+    /// <summary>Store rating prompt state (spec/06 ADR-111, <see cref="ReviewPrompt"/>).</summary>
+    public int ReviewSuccessfulExports { get; set; }
+
+    public DateTimeOffset? ReviewFirstExportUtc { get; set; }
+
+    public DateTimeOffset? ReviewLastAskedUtc { get; set; }
+
+    public string? ReviewLastAskedVersion { get; set; }
+
+    /// <summary>The user rated from the prompt, so it never shows again.</summary>
+    public bool ReviewSubmitted { get; set; }
+
     /// <summary>What Quick export uses, and what agents start from with useQuickExportSettings.</summary>
     public NativeScreen.Core.ExportSettings QuickExport { get; set; } = new();
 

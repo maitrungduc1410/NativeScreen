@@ -388,6 +388,8 @@ public sealed partial class EditorWindow
             {
                 ShowToast(Loc.F("Exported %@", fileName));
             }
+
+            _ = ReviewPrompt.NoteSuccessfulExport(this, () => !closed && !session.IsExportRunning);
         }
         catch (OperationCanceledException)
         {

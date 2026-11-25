@@ -115,7 +115,21 @@ public sealed partial class SettingsWindow : Window
         // Here and not in Updates(), which stops early in a build with no updater.
         var fileVersion = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyFileVersionAttribute>(typeof(SettingsWindow).Assembly)?.Version;
         Body.Children.Add(Ui.Text(NativeScreen.Core.AppVersionText.Format(Loc.T("Version"), AppUpdater.Shared.InstalledVersion ?? McpServer.AppVersion, fileVersion, AppPackage.Channel), 12, "Ink60"));
+        Rating();
         Troubleshooting();
+    }
+
+    /// <summary>Store build only (spec/06 ADR-111).</summary>
+    private void Rating()
+    {
+        if (!ReviewPrompt.IsAvailable)
+        {
+            return;
+        }
+
+        Heading("Rate Native Screen");
+        Body.Children.Add(Ui.Text("If Native Screen helps you, a rating helps other people find it more easily.", 12, "Ink60"));
+        Options(("Rate on the Microsoft Store", false, () => _ = ReviewPrompt.RateFromSettings(this)));
     }
 
     /// <summary>The newest crash file, for a bug report (spec/06 ADR-98).</summary>
