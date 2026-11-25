@@ -102,6 +102,9 @@ public sealed partial class EditorWindow
             return this;
         }
 
+        // Closing would cancel the hover scan while it still reads the video, which can keep the folder from moving, and the
+        // reopened editor would scan again from the start. It takes seconds; waited for as on macOS.
+        await tools.HoverScanInProgress;
         CrashLog.Note("renaming the project folder");
         hasUnsavedChanges = true;
         SaveNow();

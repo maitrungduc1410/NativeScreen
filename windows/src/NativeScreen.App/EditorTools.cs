@@ -326,6 +326,9 @@ internal sealed class EditorTools(Window window, EditorSession session, EditorSo
 
     public void CancelHoverScan() => hoverScanCancel?.Cancel();
 
+    /// <summary>The scan in progress, if any. Renaming waits for it: the scan reads the video the folder move needs free.</summary>
+    public Task HoverScanInProgress => hoverScan ?? Task.CompletedTask;
+
     private static HoverChangeDetector.Stored? LoadHoverChanges(string file)
     {
         try

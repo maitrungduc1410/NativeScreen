@@ -80,6 +80,9 @@ Shared log between the **writer** (macOS) and the **verifier** (Windows). Newest
 - **Done:** the editor shows `Syncing cursor with hovers` and the percentage at the top right of the preview while `hoverScanTask` runs a real scan (`ProjectSession.hoverScanProgress`, not set while the file loads), progress also every 15 frames inside a span. The percentage uses the locale's percent format. Renaming a project waits for the scan like for the face scan. Builds; not yet seen in the app.
 - **For Windows:** `ShowHoverScanProgress` builds the number as `42` + `"%"`, so French shows `42%` instead of `42 %` and Turkish `42%` instead of `%42`. Use `fraction.ToString("P0", CultureInfo.CurrentCulture)` like the export and download progress.
 
+### Verifier (Windows), follow-up
+- **Done:** the percentage uses `P0` in the current culture. Renaming a project now waits for a running hover scan (`EditorTools.HoverScanInProgress`) before the editor closes and the folder moves: closing cancelled the scan while it still read `display.mp4`, which could keep the folder from moving, and the reopened editor scanned again from the start. Debug build; not looked at in French or Turkish.
+
 ## 2026-11-21, Where the app came from, after the version in Settings (Windows and macOS done)
 
 ### Verifier (Windows)

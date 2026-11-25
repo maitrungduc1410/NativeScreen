@@ -755,7 +755,8 @@ public sealed partial class EditorWindow : Window
         HoverScanRing.IsActive = scanning;
         if (tools.HoverScanProgress is { } fraction)
         {
-            HoverScanText.Text = Loc.T("Syncing cursor with hovers") + " " + ((int)Math.Round(fraction * 100)).ToString(System.Globalization.CultureInfo.CurrentCulture) + "%";
+            // The locale's percent format (42 %, %42), like the export and download progress.
+            HoverScanText.Text = Loc.T("Syncing cursor with hovers") + " " + fraction.ToString("P0", System.Globalization.CultureInfo.CurrentCulture);
         }
     }
 
