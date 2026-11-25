@@ -70,16 +70,12 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") langMenu.open = false; });
   }
 
-  // On Windows the Microsoft Store comes first (the signed build), and the Mac download steps back.
+  // On Windows the Microsoft Store badge comes first.
   const isWindows = /Windows/i.test(navigator.userAgent);
   if (isWindows) {
-    const mac = document.querySelector("[data-download-mac]");
+    const mas = document.querySelector("[data-download-mas]");
     const store = document.querySelector("[data-download-store]");
-    if (mac && store) {
-      mac.before(store);
-      mac.classList.remove("primary");
-      mac.textContent = "macOS";
-    }
+    if (mas && store) mas.before(store);
   }
 
   // Before / after switches: one large video, the buttons pick which take plays, at the same moment.

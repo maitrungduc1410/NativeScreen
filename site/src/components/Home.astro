@@ -18,6 +18,11 @@ const store = "https://apps.microsoft.com/detail/9nxxndrd06wq?referrer=appbadge&
 // Microsoft's own badge artwork, served from this site (public/assets/store), one per language: "dark" is the black
 // badge for the light theme, "light" the white one for the dark theme.
 const badge = (variant: "dark" | "light") => `/assets/store/${locale.slug}-${variant}.svg`;
+// The Mac App Store page (no country in the path, so Apple picks the visitor's store).
+const mas = "https://apps.apple.com/app/native-screen/id6834245341";
+// Apple's own badge artwork, also served from this site: "black" for the light theme, "white" for the dark one.
+// Apple has no Arabic or Czech Mac App Store badge, so those languages use the English one.
+const masBadge = (variant: "black" | "white") => `/assets/store/mas-${locale.slug}-${variant}.svg`;
 const older = t.older.replace("{link}", `<a href="${repo}/releases">GitHub Releases</a>`);
 const whyStore = t.whyStore.replace("{link}", `<a href="${store}" target="_blank" rel="noopener noreferrer">Microsoft Store</a>`);
 const ogImage = ogImageOf(locale.slug);
@@ -155,11 +160,15 @@ const jsonLd = {
     <div class="hero-foot">
       <p class="lede">{t.lede}</p>
       <div class="cta">
-        <a class="button primary" data-download-mac href={dmg}>{t.dlMac}</a>
+        <a class="store-badge" data-download-mas href={mas} target="_blank" rel="noopener noreferrer">
+          <img class="badge-for-light" src={masBadge("black")} height="44" alt={t.dlMas}>
+          <img class="badge-for-dark" src={masBadge("white")} height="44" alt={t.dlMas}>
+        </a>
         <a class="store-badge" data-download-store href={store} target="_blank" rel="noopener noreferrer">
           <img class="badge-for-light" src={badge("dark")} width="161" height="44" alt={t.dlStore}>
           <img class="badge-for-dark" src={badge("light")} width="161" height="44" alt={t.dlStore}>
         </a>
+        <p class="fine direct">{t.orDirect} <a href={dmg}>macOS (.dmg)</a> · <a href={exe}>Windows (.exe)</a></p>
         <p class="fine">{t.req}</p>
         <a class="ph-badge" href="https://www.producthunt.com/products/native-screen?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-native-screen" target="_blank" rel="noopener noreferrer">
           <img class="ph-light" alt="Native Screen on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1315177&theme=light">
@@ -432,8 +441,15 @@ const jsonLd = {
         <img class="media shot dl-shot" src="/assets/shots/editor-light.jpg" width="2400" height="1506" loading="lazy" alt={t.macAlt}>
         <h3>macOS</h3>
         <p class="fine">{t.macFine}</p>
-        <a class="button primary" href={dmg}>{t.dlDmg}</a>
+        <div class="dl-actions">
+          <a class="store-badge" href={mas} target="_blank" rel="noopener noreferrer">
+            <img class="badge-for-light" src={masBadge("black")} height="44" alt={t.dlMas}>
+            <img class="badge-for-dark" src={masBadge("white")} height="44" alt={t.dlMas}>
+          </a>
+          <a class="button" href={dmg}>{t.dlDmg}</a>
+        </div>
         <p>{t.macNote}</p>
+        <p class="dl-agents" set:html={t.macAgents}></p>
       </div>
       <div class="dl">
         <img class="media shot dl-shot" src="/assets/shots/editor-windows.jpg" width="2395" height="1504" loading="lazy" alt={t.winAlt}>
