@@ -1,0 +1,35 @@
+{
+  "appVersion" : "1.0.0",
+  "captureTarget" : {
+    "appBundleId" : "local.demodriver",
+    "appName" : "DemoDriver",
+    "displayId" : 1,
+    "logicalBounds" : {
+      "height" : 833,
+      "width" : 1280,
+      "x" : 224,
+      "y" : 146
+    },
+    "mode" : "window",
+    "pixelSize" : {
+      "height" : 1666,
+      "width" : 2560
+    },
+    "refreshRate" : 60,
+    "scaleFactor" : 2,
+    "windowBorderRadius" : 16,
+    "windowId" : 1131,
+    "windowTitle" : "Mapleboard"
+  },
+  "createdAt" : "2026-11-08T07:18:01Z",
+  "durationMs" : 21238.100708,
+  "formatVersion" : "1.0.0",
+  "platform" : "macos",
+  "tracks" : {
+    "clicksTelemetry" : "telemetry\/clicks.jsonl",
+    "cursorTelemetry" : "telemetry\/cursor.jsonl",
+    "displayVideo" : "display.mp4",
+    "keysTelemetry" : "telemetry\/keys.jsonl",
+    "windowTelemetry" : "telemetry\/window.jsonl"
+  }
+}

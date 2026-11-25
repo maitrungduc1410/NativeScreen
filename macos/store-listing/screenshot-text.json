@@ -1,0 +1,167 @@
+{
+  "en-US": [
+    ["Record once. Get a finished demo.", "Automatic zooms, a gliding cursor, captions and backgrounds."],
+    ["Zooms that follow your clicks", "Export as MP4, ProRes or GIF, in wide, square or vertical."],
+    ["Annotations that draw themselves in", "Text, arrows, shapes and images, each on its own track."],
+    ["Draw on the screen while you talk", "Every stroke lands in the editor, ready to change."],
+    ["Shortcuts people can follow", "The keys you press show up as keycaps in the video."],
+    ["Your camera, your way", "Swap the background and add a sticker that follows your face."],
+    ["Edit the video by editing the words", "Captions are made on your Mac. Delete a sentence to cut it."],
+    ["As many tracks as the story needs", "Zooms, masks, captions and shortcuts, each on its own lane."],
+    ["Private by design", "Recording, captions and export all run on your Mac. No account."]
+  ],
+  "vi": [
+    ["Quay một lần. Có ngay video demo.", "Tự zoom, con trỏ lướt mượt, phụ đề và hình nền."],
+    ["Zoom theo từng cú click", "Xuất MP4, ProRes hoặc GIF, khung ngang, vuông hoặc dọc."],
+    ["Chú thích tự vẽ ra", "Chữ, mũi tên, hình khối và ảnh, mỗi loại một track riêng."],
+    ["Vừa nói vừa vẽ lên màn hình", "Mỗi nét vẽ vào trình dựng, vẫn sửa lại được."],
+    ["Phím tắt ai cũng làm theo được", "Phím bạn bấm hiện thành phím trong video."],
+    ["Camera theo ý bạn", "Thay phông nền và gắn sticker bám theo khuôn mặt."],
+    ["Sửa video bằng cách sửa chữ", "Phụ đề tạo ngay trên Mac. Xóa một câu là cắt đoạn đó."],
+    ["Bao nhiêu track cũng được", "Zoom, làm mờ, phụ đề và phím tắt, mỗi thứ một làn riêng."],
+    ["Riêng tư từ gốc", "Quay, phụ đề và xuất video đều chạy trên Mac. Không tài khoản."]
+  ],
+  "zh-Hans": [
+    ["录一次，演示视频就完成了", "自动缩放、顺滑光标、字幕和背景。"],
+    ["缩放跟随你的点击", "导出 MP4、ProRes 或 GIF，横屏、方形或竖屏都行。"],
+    ["自动绘入的标注", "文字、箭头、形状和图片，各占一条轨道。"],
+    ["边讲边在屏幕上画", "每一笔都会进入编辑器，随时可改。"],
+    ["看得懂的快捷键", "你按下的键会以按键图标出现在视频里。"],
+    ["随心使用摄像头", "替换背景，再加一个跟着脸走的贴纸。"],
+    ["改文字就是改视频", "字幕在 Mac 上生成。删掉一句话，就剪掉那一段。"],
+    ["轨道数量随内容而定", "缩放、遮罩、字幕和快捷键，各有自己的轨道。"],
+    ["隐私优先", "录制、字幕和导出都在 Mac 上完成。无需账号。"]
+  ],
+  "zh-Hant": [
+    ["錄一次，示範影片就完成了", "自動縮放、滑順游標、字幕和背景。"],
+    ["縮放跟著你的點擊", "輸出 MP4、ProRes 或 GIF，橫向、方形或直向都可以。"],
+    ["自動繪入的註解", "文字、箭頭、形狀和圖片，各有一條軌道。"],
+    ["邊講邊在螢幕上畫", "每一筆都會進入編輯器，隨時可改。"],
+    ["看得懂的快速鍵", "你按下的鍵會以按鍵圖示出現在影片中。"],
+    ["隨心使用相機", "替換背景，再加上跟著臉移動的貼紙。"],
+    ["改文字就是改影片", "字幕在 Mac 上產生。刪掉一句話，就剪掉那一段。"],
+    ["軌道數量隨內容而定", "縮放、遮罩、字幕和快速鍵，各有自己的軌道。"],
+    ["隱私優先", "錄影、字幕和輸出都在 Mac 上完成。不需帳號。"]
+  ],
+  "ja": [
+    ["一度の収録で、デモ動画が完成", "自動ズーム、なめらかなカーソル、字幕、背景。"],
+    ["クリックを追うズーム", "MP4、ProRes、GIF で書き出し。横長、正方形、縦長に対応。"],
+    ["自分で描かれていく注釈", "テキスト、矢印、図形、画像をそれぞれのトラックに。"],
+    ["話しながら画面に描く", "描いた線はエディタに入り、あとから変更できます。"],
+    ["まねしやすいショートカット", "押したキーが動画にキーキャップで表示されます。"],
+    ["カメラは思いどおりに", "背景を差し替えて、顔についてくるステッカーも。"],
+    ["言葉を編集すると動画も編集される", "字幕は Mac の中で作成。文を消すとその部分がカットされます。"],
+    ["必要なだけトラックを", "ズーム、マスク、字幕、ショートカットをそれぞれのレーンに。"],
+    ["プライバシーを第一に", "収録、字幕、書き出しはすべて Mac の中で。アカウント不要。"]
+  ],
+  "ko": [
+    ["한 번 녹화하면 데모 영상 완성", "자동 줌, 부드러운 커서, 자막과 배경."],
+    ["클릭을 따라가는 줌", "MP4, ProRes, GIF로 가로, 정사각형, 세로 모두 내보내기."],
+    ["스스로 그려지는 주석", "텍스트, 화살표, 도형, 이미지를 각자의 트랙에."],
+    ["말하면서 화면에 그리기", "모든 획이 편집기에 들어가 나중에도 수정할 수 있습니다."],
+    ["따라 하기 쉬운 단축키", "누른 키가 영상에 키캡으로 표시됩니다."],
+    ["카메라는 원하는 대로", "배경을 바꾸고 얼굴을 따라오는 스티커를 붙여 보세요."],
+    ["글을 고치면 영상이 고쳐집니다", "자막은 Mac에서 만들어집니다. 문장을 지우면 그 부분이 잘립니다."],
+    ["필요한 만큼 트랙을", "줌, 마스크, 자막, 단축키가 각자의 레인에."],
+    ["처음부터 프라이버시", "녹화, 자막, 내보내기 모두 Mac에서. 계정이 필요 없습니다."]
+  ],
+  "de-DE": [
+    ["Einmal aufnehmen. Fertige Demo.", "Automatische Zooms, ein gleitender Cursor, Untertitel und Hintergründe."],
+    ["Zooms, die deinen Klicks folgen", "Export als MP4, ProRes oder GIF, im Breit-, Quadrat- oder Hochformat."],
+    ["Anmerkungen, die sich selbst zeichnen", "Text, Pfeile, Formen und Bilder, jeweils auf eigener Spur."],
+    ["Zeichnen, während du sprichst", "Jeder Strich landet im Editor und bleibt änderbar."],
+    ["Tastenkürzel zum Nachmachen", "Gedrückte Tasten erscheinen im Video als Tasten."],
+    ["Deine Kamera, wie du sie willst", "Hintergrund tauschen und einen Sticker, der deinem Gesicht folgt."],
+    ["Video schneiden, indem du Text bearbeitest", "Untertitel entstehen auf deinem Mac. Satz löschen, Szene weg."],
+    ["So viele Spuren, wie du brauchst", "Zooms, Masken, Untertitel und Tastenkürzel, jeweils auf eigener Spur."],
+    ["Privat von Anfang an", "Aufnahme, Untertitel und Export laufen auf deinem Mac. Kein Konto."]
+  ],
+  "fr-FR": [
+    ["Enregistrez une fois. La démo est prête.", "Zooms automatiques, curseur fluide, sous-titres et arrière-plans."],
+    ["Des zooms qui suivent vos clics", "Export en MP4, ProRes ou GIF, en large, carré ou vertical."],
+    ["Des annotations qui se dessinent seules", "Texte, flèches, formes et images, chacun sur sa piste."],
+    ["Dessinez à l’écran pendant que vous parlez", "Chaque trait arrive dans l’éditeur, toujours modifiable."],
+    ["Des raccourcis faciles à suivre", "Les touches que vous tapez apparaissent dans la vidéo."],
+    ["Votre caméra, à votre façon", "Changez l’arrière-plan et ajoutez un autocollant qui suit votre visage."],
+    ["Montez la vidéo en modifiant le texte", "Les sous-titres sont créés sur votre Mac. Supprimez une phrase pour la couper."],
+    ["Autant de pistes que nécessaire", "Zooms, masques, sous-titres et raccourcis, chacun sur sa ligne."],
+    ["Privé par conception", "Enregistrement, sous-titres et export se font sur votre Mac. Sans compte."]
+  ],
+  "es-ES": [
+    ["Graba una vez. La demo está lista.", "Zooms automáticos, un cursor que se desliza, subtítulos y fondos."],
+    ["Zooms que siguen tus clics", "Exporta en MP4, ProRes o GIF, en horizontal, cuadrado o vertical."],
+    ["Anotaciones que se dibujan solas", "Texto, flechas, formas e imágenes, cada uno en su pista."],
+    ["Dibuja en la pantalla mientras hablas", "Cada trazo llega al editor y se puede cambiar."],
+    ["Atajos que cualquiera puede seguir", "Las teclas que pulsas aparecen en el vídeo."],
+    ["Tu cámara, a tu manera", "Cambia el fondo y añade una pegatina que sigue tu cara."],
+    ["Edita el vídeo editando el texto", "Los subtítulos se crean en tu Mac. Borra una frase para cortarla."],
+    ["Tantas pistas como necesites", "Zooms, máscaras, subtítulos y atajos, cada uno en su carril."],
+    ["Privado desde el diseño", "Grabación, subtítulos y exportación en tu Mac. Sin cuenta."]
+  ],
+  "it": [
+    ["Registra una volta. La demo è pronta.", "Zoom automatici, un cursore che scivola, sottotitoli e sfondi."],
+    ["Zoom che seguono i tuoi clic", "Esporta in MP4, ProRes o GIF, orizzontale, quadrato o verticale."],
+    ["Annotazioni che si disegnano da sole", "Testo, frecce, forme e immagini, ognuno sulla sua traccia."],
+    ["Disegna sullo schermo mentre parli", "Ogni tratto arriva nell'editor e resta modificabile."],
+    ["Scorciatoie facili da seguire", "I tasti che premi compaiono nel video."],
+    ["La tua camera, come vuoi tu", "Cambia lo sfondo e aggiungi uno sticker che segue il tuo viso."],
+    ["Modifica il video modificando il testo", "I sottotitoli nascono sul tuo Mac. Cancella una frase per tagliarla."],
+    ["Tutte le tracce che servono", "Zoom, maschere, sottotitoli e scorciatoie, ognuno sulla sua corsia."],
+    ["Privato per scelta", "Registrazione, sottotitoli ed esportazione sul tuo Mac. Nessun account."]
+  ],
+  "pt-BR": [
+    ["Grave uma vez. A demo fica pronta.", "Zoom automático, cursor que desliza, legendas e fundos."],
+    ["Zooms que seguem seus cliques", "Exporte em MP4, ProRes ou GIF, na horizontal, quadrado ou vertical."],
+    ["Anotações que se desenham sozinhas", "Texto, setas, formas e imagens, cada um na sua trilha."],
+    ["Desenhe na tela enquanto fala", "Cada traço vai para o editor e ainda pode mudar."],
+    ["Atalhos que todo mundo consegue seguir", "As teclas que você aperta aparecem no vídeo."],
+    ["Sua câmera, do seu jeito", "Troque o fundo e coloque um adesivo que acompanha seu rosto."],
+    ["Edite o vídeo editando o texto", "As legendas são criadas no seu Mac. Apague uma frase para cortá-la."],
+    ["Quantas trilhas você precisar", "Zooms, máscaras, legendas e atalhos, cada um na sua faixa."],
+    ["Privado desde a origem", "Gravação, legendas e exportação rodam no seu Mac. Sem conta."]
+  ],
+  "ru": [
+    ["Один раз записали. Демо готово.", "Автозум, плавный курсор, субтитры и фоны."],
+    ["Зум, который следует за кликами", "Экспорт в MP4, ProRes или GIF: горизонтально, квадрат или вертикально."],
+    ["Аннотации, которые рисуются сами", "Текст, стрелки, фигуры и картинки, каждое на своей дорожке."],
+    ["Рисуйте на экране, пока говорите", "Каждый штрих попадает в редактор, и его можно изменить."],
+    ["Горячие клавиши, за которыми легко следить", "Нажатые клавиши появляются в видео."],
+    ["Камера так, как вам нужно", "Замените фон и добавьте стикер, который следует за лицом."],
+    ["Монтируйте видео, редактируя текст", "Субтитры создаются на Mac. Удалите фразу, чтобы вырезать её."],
+    ["Столько дорожек, сколько нужно", "Зум, маски, субтитры и клавиши, каждое на своей линии."],
+    ["Приватность с самого начала", "Запись, субтитры и экспорт работают на вашем Mac. Без аккаунта."]
+  ],
+  "cs": [
+    ["Nahrajte jednou. Demo je hotové.", "Automatické zoomy, plynulý kurzor, titulky a pozadí."],
+    ["Zoomy, které sledují vaše kliknutí", "Export do MP4, ProRes nebo GIF, na šířku, čtverec nebo na výšku."],
+    ["Anotace, které se samy nakreslí", "Text, šipky, tvary a obrázky, každé na vlastní stopě."],
+    ["Kreslete na obrazovku, zatímco mluvíte", "Každý tah se objeví v editoru a jde dál upravit."],
+    ["Zkratky, které lze snadno zopakovat", "Stisknuté klávesy se zobrazí ve videu."],
+    ["Kamera podle vás", "Vyměňte pozadí a přidejte nálepku, která sleduje váš obličej."],
+    ["Střihejte video úpravou textu", "Titulky vznikají na vašem Macu. Smažte větu a vystřihnete ji."],
+    ["Tolik stop, kolik potřebujete", "Zoomy, masky, titulky a zkratky, každé na vlastním pruhu."],
+    ["Soukromí od základu", "Nahrávání, titulky i export běží na vašem Macu. Bez účtu."]
+  ],
+  "tr": [
+    ["Bir kez kaydedin. Demo hazır.", "Otomatik yakınlaştırma, süzülen imleç, altyazılar ve arka planlar."],
+    ["Tıklamalarınızı takip eden yakınlaştırmalar", "MP4, ProRes veya GIF olarak geniş, kare ya da dikey dışa aktarın."],
+    ["Kendi kendine çizilen notlar", "Metin, ok, şekil ve görseller, her biri kendi kanalında."],
+    ["Konuşurken ekrana çizin", "Her çizgi düzenleyiciye gelir ve değiştirilebilir."],
+    ["Takip etmesi kolay kısayollar", "Bastığınız tuşlar videoda görünür."],
+    ["Kameranız, istediğiniz gibi", "Arka planı değiştirin, yüzünüzü takip eden bir çıkartma ekleyin."],
+    ["Metni düzenleyerek videoyu düzenleyin", "Altyazılar Mac'inizde oluşur. Bir cümleyi silin, o kısım kesilsin."],
+    ["İhtiyacınız kadar kanal", "Yakınlaştırma, maske, altyazı ve kısayollar, her biri kendi şeridinde."],
+    ["Baştan gizlilik odaklı", "Kayıt, altyazı ve dışa aktarma Mac'inizde çalışır. Hesap yok."]
+  ],
+  "ar-SA": [
+    ["سجّل مرة واحدة، والعرض جاهز", "تكبير تلقائي، ومؤشر سلس، وترجمات، وخلفيات."],
+    ["تكبير يتبع نقراتك", "صدّر بصيغة MP4 أو ProRes أو GIF، عرضيًا أو مربعًا أو عموديًا."],
+    ["تعليقات ترسم نفسها", "نصوص وأسهم وأشكال وصور، لكل منها مسارها."],
+    ["ارسم على الشاشة وأنت تتحدث", "ينتقل كل خط إلى المحرر ويمكنك تعديله."],
+    ["اختصارات يسهل اتباعها", "تظهر المفاتيح التي تضغطها داخل الفيديو."],
+    ["كاميرتك كما تريد", "بدّل الخلفية وأضف ملصقًا يتبع وجهك."],
+    ["حرّر الفيديو بتحرير الكلمات", "تُنشأ الترجمات على جهاز Mac. احذف جملة لتقصّها."],
+    ["مسارات بقدر ما تحتاج", "التكبير والأقنعة والترجمات والاختصارات، لكل منها مساره."],
+    ["الخصوصية أولًا", "التسجيل والترجمات والتصدير كلها على جهاز Mac. بلا حساب."]
+  ]
+}

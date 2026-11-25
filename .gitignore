@@ -9,12 +9,15 @@ desktop.ini
 # Sample / test recordings. Conformance packages under conformance/ stay tracked.
 *.nativescreen/**
 !conformance/**/*.nativescreen/**
+!samples/*.nativescreen/**
 *.mp4
 *.mov
 *.m4s
 *.m3u8
 # Website demos are tracked.
 !site/public/assets/**/*.mp4
+# The sample project keeps its recording.
+!samples/*.nativescreen/**/*.mp4
 
 # Python (tools/)
 __pycache__/

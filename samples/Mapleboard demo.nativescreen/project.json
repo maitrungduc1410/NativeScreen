@@ -1,0 +1,888 @@
+{
+  "audio": {
+    "backgroundMusic": {
+      "duckDuringSpeech": true,
+      "muted": false,
+      "volume": 0.08
+    },
+    "masterVolume": 1,
+    "microphoneAudioPreset": "voice",
+    "microphoneVolume": 1,
+    "muteMicrophone": false,
+    "muteSystemAudio": false,
+    "systemAudioVolume": 1,
+    "voiceEnhancement": true
+  },
+  "background": {
+    "blurRadius": 0,
+    "gradient": {
+      "end01": {
+        "x": 1,
+        "y": 1
+      },
+      "start01": {
+        "x": 0,
+        "y": 0
+      },
+      "stops": [
+        {
+          "color": "#4776E6",
+          "location": 0
+        },
+        {
+          "color": "#8E54E9",
+          "location": 1
+        }
+      ],
+      "type": "linear"
+    },
+    "hideFaces": false,
+    "hideSensitiveData": true,
+    "meshPresetId": "spring-aurora",
+    "noiseIntensity": 0.02,
+    "sensitiveDataCustomPhrases": [],
+    "solidColor": "#1E1E2E",
+    "systemWallpaperName": "sunset-01",
+    "type": "mesh",
+    "wallpaperRelativePath": "assets/background-sunset-01.jpg"
+  },
+  "camera": {
+    "aiPersonCutout": false,
+    "aspectRatioPreset": "1:1",
+    "backgroundBlur": 0,
+    "backgroundMode": "original",
+    "backgroundRemoval": "ai",
+    "borderRadiusRatio": 0.22,
+    "cameraOnlyFraming": "framed",
+    "chromaKeyColor": "#00B140",
+    "chromaSimilarity": 0.4,
+    "chromaSmoothness": 0.3,
+    "chromaSpill": 0.5,
+    "colorGradeIntensity": 1,
+    "colorGradePreset": "Original",
+    "cropRect01": {
+      "height": 1,
+      "width": 1,
+      "x": 0,
+      "y": 0
+    },
+    "customColorPresets": [],
+    "cutoutAvoidEmptyArea": false,
+    "cutoutEdgeInset": 0,
+    "cutoutEdgeSoftness": 0.2,
+    "cutoutPositionX01": 0,
+    "delayAdjustmentMs": 0,
+    "enableFaceTracking": false,
+    "enabled": false,
+    "faceTrackingZoom": 1.3,
+    "layoutMode": "overlay",
+    "makeSmallerDuringZoom": true,
+    "mirror": false,
+    "position01": {
+      "x": 1,
+      "y": 1
+    },
+    "scaleWhenZoomed": 0.66,
+    "shadowIntensity": 0.35,
+    "shape": "squircle",
+    "sharpen01": 0,
+    "sizeRatio": 0.56,
+    "splitEnablePadding": false,
+    "splitFlip": false,
+    "splitScreenRatio01": 0.5
+  },
+  "canvas": {
+    "aspectRatioMode": "preset",
+    "aspectRatioPreset": "16:9",
+    "cropRect01": {
+      "height": 1,
+      "width": 1,
+      "x": 0,
+      "y": 0
+    },
+    "customAspectRatio": {
+      "height": 9,
+      "width": 16
+    },
+    "paddingRatio": 0.1
+  },
+  "captions": {
+    "animationStyle": "word-by-word",
+    "backgroundColor": "#000000CC",
+    "captionBlocks": [
+      {
+        "customText": "This is the team dashboard",
+        "id": "888ED4A9-5EEA-4330-81EB-FD7AAB8260DA",
+        "sourceEndMs": 2900,
+        "sourceStartMs": 400,
+        "trackId": "FB1F8A02-2866-42BD-8F24-26F196E691B9",
+        "wordIds": []
+      },
+      {
+        "customText": "The spring release at a glance",
+        "id": "650AC5EB-41E0-4D41-AD11-E720CAE77239",
+        "sourceEndMs": 8400,
+        "sourceStartMs": 5000,
+        "trackId": "FB1F8A02-2866-42BD-8F24-26F196E691B9",
+        "wordIds": []
+      },
+      {
+        "customText": "Now open Settings",
+        "id": "AA3828A7-3B95-4CD2-BD3B-14AAB34F9853",
+        "sourceEndMs": 11800,
+        "sourceStartMs": 9000,
+        "trackId": "FB1F8A02-2866-42BD-8F24-26F196E691B9",
+        "wordIds": []
+      },
+      {
+        "customText": "and switch to the dark theme",
+        "id": "403B4A71-20C3-41C0-BE6C-4E4FB3DFDE0A",
+        "sourceEndMs": 15500,
+        "sourceStartMs": 12000,
+        "trackId": "FB1F8A02-2866-42BD-8F24-26F196E691B9",
+        "wordIds": []
+      }
+    ],
+    "captionTracks": [
+      {
+        "id": "FB1F8A02-2866-42BD-8F24-26F196E691B9",
+        "isHidden": false,
+        "name": "Captions",
+        "style": {
+          "colorTheme": "dark",
+          "fontSizeRatio": 0.045,
+          "fontStyle": "sans-serif",
+          "lineGrowth": "left-anchored",
+          "position01": {
+            "x": 0.5,
+            "y": 1
+          },
+          "wordAnimation": "appear",
+          "wordsReveal": "line-by-line"
+        }
+      }
+    ],
+    "colorTheme": "dark",
+    "customPrompt": "",
+    "customShortcuts": [
+      {
+        "id": "4F1F1905-D0FF-4815-A6AC-6D9D83A4D876",
+        "isHidden": false,
+        "modifiers": [
+          "Meta"
+        ],
+        "primaryKey": "K",
+        "sourceEndMs": 9200,
+        "sourceStartMs": 7000,
+        "trackId": "default-shortcuts-track"
+      },
+      {
+        "id": "8524A036-5649-4024-BE6A-DB153DE5BD48",
+        "isHidden": false,
+        "modifiers": [
+          "Meta"
+        ],
+        "primaryKey": "S",
+        "sourceEndMs": 17600,
+        "sourceStartMs": 16200,
+        "trackId": "default-shortcuts-track"
+      }
+    ],
+    "defaultShortcutStyle": {
+      "colorMode": "default",
+      "dockPosition": "top",
+      "gradientEndHex": "#8E54E9",
+      "gradientStartHex": "#4776E6",
+      "offsetX": 0,
+      "offsetY": 0,
+      "solidColorHex": "#4D2FF5",
+      "textColorHex": "#FFFFFF"
+    },
+    "deletedShortcutStartMs": [],
+    "enabled": true,
+    "fontFamily": "SF Pro Rounded",
+    "fontSizeRatio": 0.045,
+    "fontStyle": "sans-serif",
+    "hiddenShortcutStartMs": [],
+    "keystrokesPosition01": {
+      "x": 0.5,
+      "y": 0.9
+    },
+    "lineGrowth": "left-anchored",
+    "localModelVariant": "system",
+    "position01": {
+      "x": 0.5,
+      "y": 0.88
+    },
+    "segments": [],
+    "shortcutKeyOverrides": {},
+    "shortcutStyleOverrides": {},
+    "shortcutTimingOverrides": {},
+    "shortcutTracks": [
+      {
+        "id": "default-shortcuts-track",
+        "isHidden": false,
+        "name": "Shortcuts",
+        "style": {
+          "colorMode": "default",
+          "dockPosition": "top",
+          "gradientEndHex": "#8E54E9",
+          "gradientStartHex": "#4776E6",
+          "offsetX": 0,
+          "offsetY": 0,
+          "solidColorHex": "#4D2FF5",
+          "textColorHex": "#FFFFFF"
+        }
+      }
+    ],
+    "shortcutsSizeRatio": 0.11,
+    "showDeletedTextInTranscript": true,
+    "showHiddenWordsInTranscript": true,
+    "showKeystrokes": true,
+    "showSingleKeyShortcuts": false,
+    "textColor": "#FFFFFF",
+    "transcriptLocale": "en_US",
+    "whisperModelTier": "base",
+    "wordAnimation": "appear",
+    "wordsReveal": "line-by-line"
+  },
+  "createdAt": "2026-11-08T07:18:01Z",
+  "cursor": {
+    "alwaysUsePointer": false,
+    "baseRotationDegrees": 0,
+    "clickEffect": {
+      "color": "#FFFFFF",
+      "soundVolume": 0.5,
+      "visualStyle": "ripple"
+    },
+    "hidden": false,
+    "keepInSyncWithHovers": true,
+    "optimizeCursorChanges": true,
+    "removeShakeThresholdPx": 4,
+    "rotationMode": "velocity",
+    "scale": 1.6,
+    "smoothMovementEnabled": true,
+    "spring": {
+      "damping": 70,
+      "mass": 3,
+      "stiffness": 470
+    },
+    "stopMovementInLastPartMs": 0,
+    "themeId": "classic-dark",
+    "velocityRotationEnabled": true,
+    "velocityRotationIntensity": 0.5
+  },
+  "frameStyle": {
+    "borderRadius": 18,
+    "deviceMockup": {
+      "colorVariantId": "space-black",
+      "deviceId": "macbook-pro-16",
+      "enabled": false,
+      "matchMode": "flexible"
+    },
+    "inset": {
+      "color": "#FFFFFF",
+      "enabled": true,
+      "opacity": 0.18,
+      "size": 1.5
+    },
+    "shadow": {
+      "angleDegrees": 90,
+      "blur": 36,
+      "distance": 22,
+      "enabled": true,
+      "intensity": 0.42,
+      "isDirectional": true
+    }
+  },
+  "id": "3652947E-1003-48A3-81E7-C3C5BB81CAC7",
+  "motion": {
+    "avoidEmptyBoundsWhenZooming": true,
+    "cameraSpring": {
+      "damping": 50,
+      "mass": 3,
+      "stiffness": 170
+    },
+    "motionBlurIntensity": 1
+  },
+  "name": "Mapleboard demo",
+  "schemaVersion": "1.0.0",
+  "timeline": {
+    "annotationTracks": [
+      {
+        "id": "46B7708D-F33B-4F3B-AF3E-6165E620B8C2",
+        "isHidden": false,
+        "items": [
+          {
+            "anchor": "screen",
+            "animationMs": 250,
+            "backgroundColor": "#16161D",
+            "bend": 0.18,
+            "bold": true,
+            "color": "#FF5A36",
+            "cornerRatio": 0.012,
+            "disabled": false,
+            "enter": "pop",
+            "exit": "fade",
+            "fillOpacity": 0,
+            "fontSizeRatio": 0.036,
+            "from01": {
+              "x": 0.4,
+              "y": 0.6
+            },
+            "highlighter": false,
+            "id": "6D1B4BEA-7501-4350-834A-BE60F92F9C19",
+            "imagePath": "",
+            "keyframes": [],
+            "kind": "step",
+            "maxWidthRatio": 0.5,
+            "pointTimesMs": [],
+            "points01": [],
+            "position01": {
+              "x": 0.94,
+              "y": 0.15
+            },
+            "rotationDegrees": 0,
+            "size01": {
+              "height": 0.12,
+              "width": 0.22
+            },
+            "sourceEndMs": 5800,
+            "sourceStartMs": 1200,
+            "strokeRatio": 0.007,
+            "strokeStarts": [],
+            "text": "1",
+            "textBackground": "solid",
+            "to01": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          }
+        ],
+        "name": "Annotations"
+      },
+      {
+        "id": "C61E0993-6279-47D4-8C4A-F99E3C75AC11",
+        "isHidden": false,
+        "items": [
+          {
+            "anchor": "screen",
+            "animationMs": 400,
+            "backgroundColor": "#16161D",
+            "bend": 0.18,
+            "bold": true,
+            "color": "#FF5A36",
+            "cornerRatio": 0.012,
+            "disabled": false,
+            "enter": "draw",
+            "exit": "fade",
+            "fillOpacity": 0,
+            "fontSizeRatio": 0.042,
+            "from01": {
+              "x": 0.4,
+              "y": 0.6
+            },
+            "highlighter": false,
+            "id": "861C18F5-8A21-4C0E-97E4-3F9464320F4E",
+            "imagePath": "",
+            "keyframes": [],
+            "kind": "rectangle",
+            "maxWidthRatio": 0.5,
+            "pointTimesMs": [],
+            "points01": [],
+            "position01": {
+              "x": 0.4375,
+              "y": 0.577
+            },
+            "rotationDegrees": 0,
+            "size01": {
+              "height": 0.35,
+              "width": 0.49
+            },
+            "sourceEndMs": 5800,
+            "sourceStartMs": 1400,
+            "strokeRatio": 0.007,
+            "strokeStarts": [],
+            "text": "",
+            "textBackground": "solid",
+            "to01": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          }
+        ],
+        "name": "Annotations 2"
+      },
+      {
+        "id": "2C469FDC-4900-4636-A851-B117CC6A4427",
+        "isHidden": false,
+        "items": [
+          {
+            "anchor": "screen",
+            "animationMs": 250,
+            "backgroundColor": "#16161D",
+            "bend": 0.18,
+            "bold": true,
+            "color": "#FF5A36",
+            "cornerRatio": 0.012,
+            "disabled": false,
+            "enter": "pop",
+            "exit": "fade",
+            "fillOpacity": 0,
+            "fontSizeRatio": 0.036,
+            "from01": {
+              "x": 0.4,
+              "y": 0.6
+            },
+            "highlighter": false,
+            "id": "432DE127-00F3-4187-BE5D-0C0FE86BC968",
+            "imagePath": "",
+            "keyframes": [],
+            "kind": "step",
+            "maxWidthRatio": 0.5,
+            "pointTimesMs": [],
+            "points01": [],
+            "position01": {
+              "x": 0.2,
+              "y": 0.4
+            },
+            "rotationDegrees": 0,
+            "size01": {
+              "height": 0.12,
+              "width": 0.22
+            },
+            "sourceEndMs": 5800,
+            "sourceStartMs": 1600,
+            "strokeRatio": 0.007,
+            "strokeStarts": [],
+            "text": "2",
+            "textBackground": "solid",
+            "to01": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          }
+        ],
+        "name": "Annotations 3"
+      },
+      {
+        "id": "E2A60145-0299-4289-821A-AB7B5ECA324A",
+        "isHidden": false,
+        "items": [
+          {
+            "anchor": "screen",
+            "animationMs": 250,
+            "backgroundColor": "#16161D",
+            "bend": 0.18,
+            "bold": true,
+            "color": "#FF5A36",
+            "cornerRatio": 0.012,
+            "disabled": false,
+            "enter": "fade",
+            "exit": "fade",
+            "fillOpacity": 0,
+            "fontSizeRatio": 0.042,
+            "from01": {
+              "x": 0.74,
+              "y": 0.9
+            },
+            "highlighter": false,
+            "id": "2B736F47-BF3F-43DE-AE64-11CDF4A2B03C",
+            "imagePath": "",
+            "keyframes": [],
+            "kind": "arrow",
+            "maxWidthRatio": 0.5,
+            "pointTimesMs": [],
+            "points01": [],
+            "position01": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "rotationDegrees": 0,
+            "size01": {
+              "height": 0.12,
+              "width": 0.22
+            },
+            "sourceEndMs": 5800,
+            "sourceStartMs": 1800,
+            "strokeRatio": 0.007,
+            "strokeStarts": [],
+            "text": "",
+            "textBackground": "solid",
+            "to01": {
+              "x": 0.645,
+              "y": 0.66
+            }
+          }
+        ],
+        "name": "Annotations 4"
+      },
+      {
+        "id": "1BA75A35-8627-43E2-BE5F-1CAFC716B89B",
+        "isHidden": false,
+        "items": [
+          {
+            "anchor": "screen",
+            "animationMs": 250,
+            "backgroundColor": "#16161D",
+            "bend": 0.18,
+            "bold": true,
+            "color": "#FFFFFF",
+            "cornerRatio": 0.012,
+            "disabled": false,
+            "enter": "fade",
+            "exit": "fade",
+            "fillOpacity": 0,
+            "fontSizeRatio": 0.032,
+            "from01": {
+              "x": 0.4,
+              "y": 0.6
+            },
+            "highlighter": false,
+            "id": "101EC8BB-5F0F-4AFB-B114-F4CA00DFAE90",
+            "imagePath": "",
+            "keyframes": [],
+            "kind": "text",
+            "maxWidthRatio": 0.5,
+            "pointTimesMs": [],
+            "points01": [],
+            "position01": {
+              "x": 0.79,
+              "y": 0.93
+            },
+            "rotationDegrees": 0,
+            "size01": {
+              "height": 0.12,
+              "width": 0.22
+            },
+            "sourceEndMs": 5800,
+            "sourceStartMs": 2000,
+            "strokeRatio": 0.007,
+            "strokeStarts": [],
+            "text": "Best week of the release",
+            "textBackground": "solid",
+            "to01": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          }
+        ],
+        "name": "Annotations 5"
+      },
+      {
+        "id": "080F88C7-D6CF-4C8D-B155-82B8AE8CC982",
+        "isHidden": false,
+        "items": [
+          {
+            "anchor": "screen",
+            "animationMs": 400,
+            "backgroundColor": "#16161D",
+            "bend": 0.18,
+            "bold": true,
+            "color": "#FF5A36",
+            "cornerRatio": 0.012,
+            "disabled": false,
+            "enter": "draw",
+            "exit": "fade",
+            "fillOpacity": 0,
+            "fontSizeRatio": 0.042,
+            "from01": {
+              "x": 0.4,
+              "y": 0.6
+            },
+            "highlighter": false,
+            "id": "59FC638E-8D97-4F0B-A05D-BADA27F00BBD",
+            "imagePath": "",
+            "keyframes": [],
+            "kind": "ellipse",
+            "maxWidthRatio": 0.5,
+            "pointTimesMs": [],
+            "points01": [],
+            "position01": {
+              "x": 0.81,
+              "y": 0.556
+            },
+            "rotationDegrees": 0,
+            "size01": {
+              "height": 0.075,
+              "width": 0.31
+            },
+            "sourceEndMs": 5800,
+            "sourceStartMs": 2200,
+            "strokeRatio": 0.007,
+            "strokeStarts": [],
+            "text": "",
+            "textBackground": "solid",
+            "to01": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          }
+        ],
+        "name": "Annotations 6"
+      },
+      {
+        "id": "24AD118A-CD75-4C55-B073-5229A23B1B9E",
+        "isHidden": false,
+        "items": [
+          {
+            "anchor": "screen",
+            "animationMs": 250,
+            "backgroundColor": "#16161D",
+            "bend": 0.18,
+            "bold": true,
+            "color": "#FF5A36",
+            "cornerRatio": 0.012,
+            "disabled": false,
+            "enter": "pop",
+            "exit": "fade",
+            "fillOpacity": 0,
+            "fontSizeRatio": 0.036,
+            "from01": {
+              "x": 0.4,
+              "y": 0.6
+            },
+            "highlighter": false,
+            "id": "07B9D1C0-6A03-4618-99F4-250913BE0D4B",
+            "imagePath": "",
+            "keyframes": [],
+            "kind": "step",
+            "maxWidthRatio": 0.5,
+            "pointTimesMs": [],
+            "points01": [],
+            "position01": {
+              "x": 0.965,
+              "y": 0.505
+            },
+            "rotationDegrees": 0,
+            "size01": {
+              "height": 0.12,
+              "width": 0.22
+            },
+            "sourceEndMs": 5800,
+            "sourceStartMs": 2400,
+            "strokeRatio": 0.007,
+            "strokeStarts": [],
+            "text": "3",
+            "textBackground": "solid",
+            "to01": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          }
+        ],
+        "name": "Annotations 7"
+      }
+    ],
+    "cameraLayouts": [],
+    "dismissedTypingSuggestionStarts": [],
+    "hiddenVoiceoverTracks": [],
+    "isCameraLayoutsTrackHidden": false,
+    "isShortcutsTrackHidden": false,
+    "isVoiceoversTrackHidden": false,
+    "isZoomTrackHidden": false,
+    "maskTracks": [
+      {
+        "id": "606BA39F-E150-4B28-AD3D-743193B096D0",
+        "isHidden": false,
+        "items": [
+          {
+            "cornerRadius": 12,
+            "disabled": false,
+            "id": "D77D169B-BDB8-4F46-B688-1AD58E20CF10",
+            "intensity": 36,
+            "isAutoFaceMask": false,
+            "isAutoSensitiveMask": false,
+            "keyframes": [
+              {
+                "rect01": {
+                  "height": 0.05,
+                  "width": 0.13,
+                  "x": 0.551,
+                  "y": 0.483
+                },
+                "sourceMs": 9600
+              }
+            ],
+            "sourceEndMs": 15800,
+            "sourceStartMs": 9600,
+            "style": "gaussian",
+            "type": "blur"
+          }
+        ],
+        "name": "Masks"
+      },
+      {
+        "id": "42141276-4BED-4BDC-AB8E-9F44FF3991CC",
+        "isHidden": false,
+        "items": [
+          {
+            "cornerRadius": 12,
+            "disabled": false,
+            "id": "AECF2FC2-8660-4F5D-AAE5-5F51CA2BB945",
+            "intensity": 36,
+            "isAutoFaceMask": false,
+            "isAutoSensitiveMask": false,
+            "keyframes": [
+              {
+                "rect01": {
+                  "height": 0.05,
+                  "width": 0.11,
+                  "x": 0.551,
+                  "y": 0.33
+                },
+                "sourceMs": 10200
+              }
+            ],
+            "sourceEndMs": 14600,
+            "sourceStartMs": 10200,
+            "style": "gaussian",
+            "type": "blur"
+          }
+        ],
+        "name": "Masks 2"
+      },
+      {
+        "id": "99251B98-D8A7-4FBF-B3C2-31E003CA220B",
+        "isHidden": false,
+        "items": [
+          {
+            "cornerRadius": 8,
+            "disabled": false,
+            "id": "FC6FBEA5-3E56-421B-9C74-B16A64782689",
+            "intensity": 44,
+            "isAutoFaceMask": false,
+            "isAutoSensitiveMask": true,
+            "keyframes": [
+              {
+                "rect01": {
+                  "height": 0.026814814814814836,
+                  "width": 0.11298795180722897,
+                  "x": 0.7691084337349398,
+                  "y": 0.6402962962962963
+                },
+                "sourceMs": 0
+              },
+              {
+                "rect01": {
+                  "height": 0.026814814814814836,
+                  "width": 0.11298795180722897,
+                  "x": 0.7691084337349398,
+                  "y": 0.6365925925925926
+                },
+                "sourceMs": 2825
+              },
+              {
+                "rect01": {
+                  "height": 0.026814814814814836,
+                  "width": 0.11298795180722897,
+                  "x": 0.7691084337349398,
+                  "y": 0.6365925925925926
+                },
+                "sourceMs": 5325
+              },
+              {
+                "rect01": {
+                  "height": 0.026814814814814836,
+                  "width": 0.11298795180722897,
+                  "x": 0.7691084337349398,
+                  "y": 0.6365925925925926
+                },
+                "sourceMs": 7825
+              }
+            ],
+            "sourceEndMs": 9325,
+            "sourceStartMs": 0,
+            "style": "gaussian",
+            "type": "blur"
+          }
+        ],
+        "name": "Masks 3"
+      },
+      {
+        "id": "51969E9F-ADCB-40F4-A9FA-AEA60068E8AE",
+        "isHidden": false,
+        "items": [
+          {
+            "cornerRadius": 8,
+            "disabled": false,
+            "id": "839C8A39-8985-4FB1-A7B5-F8BAAFFB4F42",
+            "intensity": 44,
+            "isAutoFaceMask": false,
+            "isAutoSensitiveMask": true,
+            "keyframes": [
+              {
+                "rect01": {
+                  "height": 0.027740740740740722,
+                  "width": 0.15093975903614454,
+                  "x": 0.5510361445783133,
+                  "y": 0.4199259259259259
+                },
+                "sourceMs": 8825
+              },
+              {
+                "rect01": {
+                  "height": 0.027740740740740722,
+                  "width": 0.15093975903614454,
+                  "x": 0.5510361445783133,
+                  "y": 0.4199259259259259
+                },
+                "sourceMs": 12825
+              },
+              {
+                "rect01": {
+                  "height": 0.027740740740740722,
+                  "width": 0.15093975903614454,
+                  "x": 0.5510361445783133,
+                  "y": 0.4199259259259259
+                },
+                "sourceMs": 15325
+              }
+            ],
+            "sourceEndMs": 16825,
+            "sourceStartMs": 8825,
+            "style": "gaussian",
+            "type": "blur"
+          }
+        ],
+        "name": "Masks 4"
+      }
+    ],
+    "slices": [
+      {
+        "disableSmoothCursor": false,
+        "hideCursor": false,
+        "id": "3F04E07D-1D25-4C1B-97EA-CCE1631814FE",
+        "microphoneVolume": 1,
+        "muted": false,
+        "sourceEndMs": 21238.100708,
+        "sourceStartMs": 0,
+        "speed": 1,
+        "systemAudioVolume": 1
+      }
+    ],
+    "voiceovers": [],
+    "zooms": [
+      {
+        "disabled": false,
+        "id": "65CDD0BC-C30E-49A4-A0C8-253738F2C7D1",
+        "instantAnimation": false,
+        "loupe": {
+          "bevelRatio": 0.2,
+          "chromaticAberration": 0.5,
+          "radius01": 0.35
+        },
+        "manualCenter01": {
+          "x": 0.5321275171597583,
+          "y": 0.6151630030752582
+        },
+        "mode": "follow-cursor",
+        "presentation": "screen",
+        "scale": 1.45,
+        "sourceEndMs": 20027.596145609707,
+        "sourceStartMs": 6095.795375334274
+      }
+    ]
+  },
+  "updatedAt": "2026-11-25T04:52:09Z"
+}
