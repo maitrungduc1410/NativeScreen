@@ -76,7 +76,7 @@ nonisolated enum HoverChangeDetector {
         let historyMs = settings.referenceLagMs + settings.settledForMs
         var detector = Detector(path: path, settings: settings)
         var changes: [Double] = []
-        var spanIndex = 0, doneMs = 0.0
+        var spanIndex = 0, doneMs = 0.0, framesInSpans = 0
         var waiting: (pixels: CVPixelBuffer, timeMs: Double)?
         while let buffer = output.copyNextSampleBuffer() {
             guard let pixels = CMSampleBufferGetImageBuffer(buffer) else { continue }
@@ -104,6 +104,12 @@ nonisolated enum HoverChangeDetector {
             guard let frame = autoreleasepool(invoking: { Frame(pixels: pixels, timeMs: t, pointSize: pointSize) }) else { continue }
             if t >= span.start {
                 if let change = detector.add(frame) { changes.append(change) }
+                // Also inside a long movement, not only at the end of each one.
+                framesInSpans += 1
+                if framesInSpans % 15 == 0, !(await progress(min(1, (doneMs + t - span.start) / totalMs))) {
+                    reader.cancelReading()
+                    return nil
+                }
             } else {
                 detector.remember(frame)
             }

@@ -74,6 +74,8 @@ public final class ProjectSession: Identifiable {
     @ObservationIgnored public var onFaceTrackChanged: (() -> Void)?
     /// Hover highlights read from the screen video (ADR-108), in source ms; empty until scanned or loaded.
     public private(set) var hoverChangeTimesMs: [Double] = []
+    /// Fraction done while the screen video is scanned for hover highlights (not while the saved file loads).
+    public private(set) var hoverScanProgress: Double?
     @ObservationIgnored private var hoverScanTask: Task<Void, Never>?
     @ObservationIgnored private var hasHoverChanges = false
     public var transcriptErrorMessage: String?
@@ -1953,14 +1955,20 @@ public final class ProjectSession: Identifiable {
             let loaded = Self.loadHoverChanges(at: fileURL)
             var stored = loaded
             if stored == nil {
+                self?.hoverScanProgress = 0
                 stored = await Task.detached(priority: .utility) {
-                    await HoverChangeDetector.scan(videoURL: videoURL, cursor: cursor, clicks: clicks, pointSize: points) { _ in
-                        !Task.isCancelled
+                    await HoverChangeDetector.scan(videoURL: videoURL, cursor: cursor, clicks: clicks, pointSize: points) { fraction in
+                        guard !Task.isCancelled else { return false }
+                        return await MainActor.run { [weak self] in
+                            self?.hoverScanProgress = fraction
+                            return self != nil
+                        }
                     }
                 }.value
             }
             guard let self else { return }
             self.hoverScanTask = nil
+            self.hoverScanProgress = nil
             guard let stored else { return }
             if loaded == nil, let data = try? JSONEncoder().encode(stored) {
                 try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -2015,7 +2023,7 @@ public final class ProjectSession: Identifiable {
            target.path != packageURL.standardizedFileURL.path {
             // Files the exporter, transcription, scans or a voiceover recording open later would be looked up by the old path.
             let isBusy = isExportRunning || isGeneratingTranscript || isScanningSensitiveData || isScanningFaces
-                || faceScanProgress != nil || isRecordingVoiceover
+                || faceScanProgress != nil || hoverScanProgress != nil || isRecordingVoiceover
             if isBusy {
                 showToast("Renamed. The folder keeps its old name while work on the project is running.", durationMs: 3500)
             } else if movePackage(to: target) {

@@ -563,7 +563,19 @@ public struct ProjectEditorWindowView: View {
 
                                 Spacer()
                             }
+
+                            // Until the scan lands the cursor still trails the highlights (spec/06 ADR-108).
+                            if let progress = session.hoverScanProgress {
+                                hoverScanPill(progress: progress)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                                    .padding(.top, 10)
+                                    .padding(.trailing, 14)
+                                    .allowsHitTesting(false)
+                                    .transition(.opacity)
+                                    .zIndex(61)
+                            }
                         }
+                        .animation(.easeOut(duration: 0.2), value: session.hoverScanProgress == nil)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
 
@@ -1519,6 +1531,29 @@ public struct ProjectEditorWindowView: View {
         withAnimation(.easeOut(duration: 0.15)) {
             isExporting = false
         }
+    }
+
+    private func hoverScanPill(progress: Double) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            HStack(spacing: 4) {
+                Text("Syncing cursor with hovers")
+                Text(progress, format: .percent.precision(.fractionLength(0)))
+                    .monospacedDigit()
+            }
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(.ink.opacity(0.85))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Color.surface(red: 0.11, green: 0.11, blue: 0.13).opacity(0.94),
+            in: Capsule()
+        )
+        .overlay(Capsule().strokeBorder(.ink.opacity(0.10), lineWidth: 1))
+        .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+        .accessibilityElement(children: .combine)
     }
 
     private func fitPreviewCanvas(in container: CGSize, aspect: Double) -> CGSize {
