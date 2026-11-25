@@ -215,6 +215,7 @@ Rules:
 | Low-level hook timeouts | Callbacks over ~1 s get the hook removed; never do I/O in the callback. |
 | Source reader without a device | Software decoding, even with the hardware transforms flag. Give it `MF_SOURCE_READER_D3D_MANAGER` (`spec/06` ADR-26). |
 | Per-frame arrays | 9 MB frames on the Large Object Heap miss frames, and only a 60 s run shows it. Pool them (`spec/06` ADR-26). |
+| Sample durations of a live fragmented MP4 | Written live with a sound track, the sink takes a video frame's time in the file from the durations given, not from the time stamps, so a fixed 1000/60 ms duration loses every still moment. Give each frame its real duration: hold it until the next one arrives (`VideoFileWriter.WriteFrame`, `spec/06` ADR-110). Writing as fast as possible does not show it; test in real time. |
 | Reported times of fragmented MP4 | Media Foundation writes no `tfdt` and then misreports fragment starts by hundreds of ms. Read times from the boxes (`spec/06` ADR-22). |
 | WASAPI loopback during silence | It delivers nothing, and the MP4 sink then holds video back. Write silence yourself and disable sink writer throttling (`spec/06` ADR-23). |
 | Microphone capture on Boot Camp | Froze and reset one Mac three times. Not understood (`spec/06` ADR-23). |

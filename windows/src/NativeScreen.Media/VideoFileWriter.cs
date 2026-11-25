@@ -26,6 +26,9 @@ public sealed class VideoFileWriter : IDisposable
     private bool finished;
     private bool failed;
 
+    // The newest video frame, written once the next one arrives (see WriteFrame).
+    private IMFSample? pendingVideo;
+
     /// <summary>
     /// Recordings set this: a failed write is reported here once and later samples are dropped, and the file keeps its
     /// complete fragments. Without it a failed write throws, as an export needs.
@@ -146,7 +149,49 @@ public sealed class VideoFileWriter : IDisposable
             throw new ArgumentException("Frame is smaller than the configured size.");
         }
 
-        Write(videoStream, nv12[..frameBytes], presentationMs, durationMs);
+        // Each frame is held until the next one comes and then written with the real time between them. A fragmented file
+        // has no decode time per fragment, so its times are the sum of the durations: MF takes a duration from the next
+        // sample's time, but for the last frame of a fragment it uses the duration given here. A recording sends frames only
+        // when the screen changes (and repeats them every 250 ms), so a fragment ending on a still moment lost up to 233 ms
+        // and the rest of the video ran ahead of the cursor (spec/06 ADR-110).
+        lock (writer)
+        {
+            if (finished || failed)
+            {
+                return;
+            }
+
+            var sample = SinkWriterSamples.Create(nv12[..frameBytes], presentationMs, durationMs);
+            if (pendingVideo is { } previous)
+            {
+                previous.SampleDuration = Math.Max(1, sample.SampleTime - previous.SampleTime);
+                WritePending(previous);
+            }
+
+            pendingVideo = sample;
+        }
+    }
+
+    // Called with the writer locked.
+    private void WritePending(IMFSample sample)
+    {
+        try
+        {
+            writer.WriteSample(videoStream, sample);
+        }
+        catch (SharpGen.Runtime.SharpGenException exception) when (WriteFailed is not null)
+        {
+            failed = true;
+            WriteFailed($"0x{exception.HResult:X8}");
+        }
+        finally
+        {
+            sample.Dispose();
+            if (ReferenceEquals(sample, pendingVideo))
+            {
+                pendingVideo = null;
+            }
+        }
     }
 
     /// <summary>Interleaved 16-bit PCM in the format given at construction.</summary>
@@ -162,6 +207,11 @@ public sealed class VideoFileWriter : IDisposable
     {
         lock (writer)
         {
+            if (pendingVideo is { } last && !failed)
+            {
+                WritePending(last);
+            }
+
             if (!finished && !failed)
             {
                 finished = true;
@@ -174,6 +224,8 @@ public sealed class VideoFileWriter : IDisposable
     public void Cancel()
     {
         finished = true;
+        pendingVideo?.Dispose();
+        pendingVideo = null;
         writer.Dispose();
         accelerator?.Dispose();
         if (File.Exists(path))
@@ -228,18 +280,25 @@ public sealed class VideoFileWriter : IDisposable
 
 internal static class SinkWriterSamples
 {
-    public static unsafe void Write(IMFSinkWriter writer, int stream, ReadOnlySpan<byte> data, double presentationMs, double durationMs)
+    public static void Write(IMFSinkWriter writer, int stream, ReadOnlySpan<byte> data, double presentationMs, double durationMs)
+    {
+        using var sample = Create(data, presentationMs, durationMs);
+        writer.WriteSample(stream, sample);
+    }
+
+    /// <summary>A sample holding a copy of <paramref name="data"/>; the caller disposes it.</summary>
+    public static unsafe IMFSample Create(ReadOnlySpan<byte> data, double presentationMs, double durationMs)
     {
         using var buffer = MediaFactory.MFCreateMemoryBuffer(data.Length);
         buffer.Lock(out var pointer, out _, out _);
         data.CopyTo(new Span<byte>((void*)pointer, data.Length));
         buffer.Unlock();
         buffer.CurrentLength = data.Length;
-        using var sample = MediaFactory.MFCreateSample();
+        var sample = MediaFactory.MFCreateSample();
         sample.AddBuffer(buffer);
         sample.SampleTime = (long)(presentationMs * 10_000);
         sample.SampleDuration = (long)(durationMs * 10_000);
-        writer.WriteSample(stream, sample);
+        return sample;
     }
 }
 
